@@ -169,6 +169,8 @@ def tracker_job(job_id):
 
         all_values = sheet.get_all_values()
         ok = errors = 0
+        batch = []
+
         for i, row in enumerate(all_values[1:]):
             url = row[0].strip() if row else ''
             if not url: continue
@@ -181,18 +183,24 @@ def tracker_job(job_id):
                 tipo = 'item' if ids['item_id'] and data else 'product'
                 parsed = parse_item(data, tipo)
                 if not parsed:
-                    sheet.update(values=[['❌ Sin datos']], range_name=f'B{row_num}')
+                    batch.append({'range': f'B{row_num}', 'values': [['❌ Sin datos']]})
                     errors += 1; continue
                 nick = parsed['seller_nick'] or (fetch_seller(parsed['seller_id']) if parsed['seller_id'] else '')
                 now = datetime.now().strftime('%d/%m/%Y %H:%M')
-                sheet.update(values=[[parsed['title'], nick, parsed['price'],
+                batch.append({'range': f'B{row_num}:H{row_num}', 'values': [[
+                    parsed['title'], nick, parsed['price'],
                     parsed['orig_price'] or '', parsed['discount'] or 'Sin descuento',
-                    parsed['cuotas'], now]], range_name=f'B{row_num}:H{row_num}')
+                    parsed['cuotas'], now
+                ]]})
                 log.append(f"✅ {parsed['title'][:40]} | ${parsed['price']:,}")
                 ok += 1
-                time.sleep(0.3)
+                time.sleep(0.5)
             except Exception as e:
                 log.append(f"❌ Fila {row_num}: {e}"); errors += 1
+
+        if batch:
+            log.append(f"📝 Escribiendo {len(batch)} filas en Sheets...")
+            sheet.batch_update(batch)
 
         job_status[job_id] = {"status": "done", "ok": ok, "errors": errors,
                                "log": log, "finished": datetime.now().isoformat()}
