@@ -368,6 +368,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
           <option value="1">Lista 1</option>
           <option value="2">Lista 2</option>
           <option value="3">Lista 3</option>
+          <option value="4">Lista 4</option>
           <option value="5">Lista 5</option>
           <option value="costo">Costo</option>
         </select>
@@ -391,6 +392,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
           <th data-col="l1_tac">L1 Tac</th><th data-col="l1_pm">L1 PM</th><th data-col="dl1">Diff L1</th>
           <th data-col="l2_tac">L2 Tac</th><th data-col="l2_pm">L2 PM</th><th data-col="dl2">Diff L2</th>
           <th data-col="l3_tac">L3 Tac</th><th data-col="l3_pm">L3 PM</th><th data-col="dl3">Diff L3</th>
+          <th data-col="l4_tac">L4 Tac</th><th data-col="l4_pm">L4 PM</th><th data-col="dl4">Diff L4</th>
           <th data-col="l5_tac">L5 Tac</th><th data-col="l5_pm">L5 PM</th><th data-col="dl5">Diff L5</th>
           <th data-col="estado">Estado</th>
         </tr></thead>
@@ -993,22 +995,25 @@ function getTacticaData(){
     // Cruzar cada lista contra su columna PM correspondiente
     var pmL1=pm&&pm.l1||0;
     var pmL2=pm&&pm.l2||0;
+    var pmL3=pm&&pm.l3||0;
+    var pmL4=pm&&pm.l4||0;
     var pmL5=pm&&pm.l5||0;
     var pmCosto=pm&&pm.costo||0;
     // Calcular diffs
     var dcosto=dPct(item.costo,pmCosto);
     var dl1=dPct(item.l1,pmL1);
     var dl2=dPct(item.l2,pmL2);
-    var dl3=null; // Lista 3 no se cruza contra PM
+    var dl3=dPct(item.l3,pmL3);
+    var dl4=dPct(item.l4,pmL4);
     var dl5=dPct(item.l5,pmL5);
     // Alertas de listas con precio que no deberían (3, 4, 6)
     var alertaListas=[];
     if(item.l3>0)alertaListas.push('L3:$'+fmtN(item.l3));
     if(item.l4>0)alertaListas.push('L4:$'+fmtN(item.l4));
     if(item.l6>0)alertaListas.push('L6:$'+fmtN(item.l6));
-    var hasDiff=[dcosto,dl1,dl2,dl5].some(function(d){return d!==null&&Math.abs(d)>1.5;});
+    var hasDiff=[dcosto,dl1,dl2,dl3,dl4,dl5].some(function(d){return d!==null&&Math.abs(d)>1.5;});
     var estado=!pm?'nopm':hasDiff?'diff':'ok';
-    return{item:item,pm:pm,cat:cat,pmL1:pmL1,pmL2:pmL2,pmL5:pmL5,pmCosto:pmCosto,dcosto:dcosto,dl1:dl1,dl2:dl2,dl3:dl3,dl5:dl5,hasDiff:hasDiff,estado:estado,alertaListas:alertaListas};
+    return{item:item,pm:pm,cat:cat,pmL1:pmL1,pmL2:pmL2,pmL3:pmL3,pmL4:pmL4,pmL5:pmL5,pmCosto:pmCosto,dcosto:dcosto,dl1:dl1,dl2:dl2,dl3:dl3,dl4:dl4,dl5:dl5,hasDiff:hasDiff,estado:estado,alertaListas:alertaListas};
   }).filter(function(r){
     if(srch&&!r.item.skuL.includes(srch))return false;
     if(fPM&&(!r.pm||r.pm.pm!==fPM))return false;
@@ -1020,6 +1025,7 @@ function getTacticaData(){
       if(fLista==='1')return r.dl1!==null&&Math.abs(r.dl1)>1.5;
       if(fLista==='2')return r.dl2!==null&&Math.abs(r.dl2)>1.5;
       if(fLista==='3')return r.dl3!==null&&Math.abs(r.dl3)>1.5;
+      if(fLista==='4')return r.dl4!==null&&Math.abs(r.dl4)>1.5;
       if(fLista==='5')return r.dl5!==null&&Math.abs(r.dl5)>1.5;
     }
     return true;
@@ -1047,6 +1053,8 @@ function renderTactica(){
   data.forEach(function(r){
     if(r.dl1!==null&&Math.abs(r.dl1)>1.5)preciosCorr.add(r.item.skuL);
     if(r.dl2!==null&&Math.abs(r.dl2)>1.5)preciosCorr.add(r.item.skuL);
+    if(r.dl3!==null&&Math.abs(r.dl3)>1.5)preciosCorr.add(r.item.skuL);
+    if(r.dl4!==null&&Math.abs(r.dl4)>1.5)preciosCorr.add(r.item.skuL);
     if(r.dl5!==null&&Math.abs(r.dl5)>1.5)preciosCorr.add(r.item.skuL);
     if(r.dcosto!==null&&Math.abs(r.dcosto)>1.5)costosCorr.add(r.item.skuL);
   });
@@ -1059,8 +1067,8 @@ function renderTactica(){
 
   // Sort
   if(S.tSort.col){var col=S.tSort.col,dir=S.tSort.dir;data.sort(function(a,b){
-    var va=col==='sku'?a.item.skuL:col==='cat'?a.cat:col==='pm'?(a.pm&&a.pm.pmName)||'':col==='costo_tac'?a.item.costo:col==='l1_tac'?a.item.l1:col==='l2_tac'?a.item.l2:col==='l3_tac'?a.item.l3:col==='l5_tac'?a.item.l5:col==='dcosto'?a.dcosto||0:col==='dl1'?a.dl1||0:col==='dl2'?a.dl2||0:col==='dl3'?a.dl3||0:col==='dl5'?a.dl5||0:a.estado;
-    var vb=col==='sku'?b.item.skuL:col==='cat'?b.cat:col==='pm'?(b.pm&&b.pm.pmName)||'':col==='costo_tac'?b.item.costo:col==='l1_tac'?b.item.l1:col==='l2_tac'?b.item.l2:col==='l3_tac'?b.item.l3:col==='l5_tac'?b.item.l5:col==='dcosto'?b.dcosto||0:col==='dl1'?b.dl1||0:col==='dl2'?b.dl2||0:col==='dl3'?b.dl3||0:col==='dl5'?b.dl5||0:b.estado;
+    var va=col==='sku'?a.item.skuL:col==='cat'?a.cat:col==='pm'?(a.pm&&a.pm.pmName)||'':col==='costo_tac'?a.item.costo:col==='l1_tac'?a.item.l1:col==='l2_tac'?a.item.l2:col==='l3_tac'?a.item.l3:col==='l4_tac'?a.item.l4:col==='l5_tac'?a.item.l5:col==='dcosto'?a.dcosto||0:col==='dl1'?a.dl1||0:col==='dl2'?a.dl2||0:col==='dl3'?a.dl3||0:col==='dl4'?a.dl4||0:col==='dl5'?a.dl5||0:a.estado;
+    var vb=col==='sku'?b.item.skuL:col==='cat'?b.cat:col==='pm'?(b.pm&&b.pm.pmName)||'':col==='costo_tac'?b.item.costo:col==='l1_tac'?b.item.l1:col==='l2_tac'?b.item.l2:col==='l3_tac'?b.item.l3:col==='l4_tac'?b.item.l4:col==='l5_tac'?b.item.l5:col==='dcosto'?b.dcosto||0:col==='dl1'?b.dl1||0:col==='dl2'?b.dl2||0:col==='dl3'?b.dl3||0:col==='dl4'?b.dl4||0:col==='dl5'?b.dl5||0:b.estado;
     return va<vb?-dir:va>vb?dir:0;
   });}
   document.querySelectorAll('#tactica-table th[data-col]').forEach(function(th){th.classList.remove('sort-asc','sort-desc');if(th.dataset.col===S.tSort.col)th.classList.add(S.tSort.dir===1?'sort-asc':'sort-desc');});
@@ -1087,7 +1095,8 @@ function renderTactica(){
       +'<td>'+dStr(r.dcosto)+'</td>'
       +'<td class="mono">'+fmtP(r.item.l1)+'</td><td class="mono">'+(r.pmL1?'$'+fmtN(r.pmL1):'-')+'</td><td>'+dStr(r.dl1)+'</td>'
       +'<td class="mono">'+fmtP(r.item.l2)+'</td><td class="mono">'+(r.pmL2?'$'+fmtN(r.pmL2):'-')+'</td><td>'+dStr(r.dl2)+'</td>'
-      +'<td class="mono">'+fmtP(r.item.l3)+'</td><td class="mono"><span style="color:var(--muted);font-size:10px">no cruza</span></td><td>-</td>'
+      +'<td class="mono">'+fmtP(r.item.l3)+'</td><td class="mono">'+(r.pmL3?'$'+fmtN(r.pmL3):'-')+'</td><td>'+dStr(r.dl3)+'</td>'
+      +'<td class="mono">'+fmtP(r.item.l4)+'</td><td class="mono">'+(r.pmL4?'$'+fmtN(r.pmL4):'-')+'</td><td>'+dStr(r.dl4)+'</td>'
       +'<td class="mono">'+fmtP(r.item.l5)+'</td><td class="mono">'+(r.pmL5?'$'+fmtN(r.pmL5):'-')+'</td><td>'+dStr(r.dl5)+'</td>'
       +'<td>'+badge+'</td>'
       +'</tr>';
@@ -1101,7 +1110,7 @@ function exportTacticaPrecios(){
   if(!data.length){toast('Sin diferencias de precio','warning');return;}
   var lines=[['Codigo','Precio','Lista'].join(',')];
   data.forEach(function(r){
-    [[r.dl1,1,r.pmL1],[r.dl2,2,r.pmL2],[r.dl5,5,r.pmL5]].forEach(function(pair){
+    [[r.dl1,1,r.pmL1],[r.dl2,2,r.pmL2],[r.dl3,3,r.pmL3],[r.dl4,4,r.pmL4],[r.dl5,5,r.pmL5]].forEach(function(pair){
       var diff=pair[0],lista=pair[1],pmVal=pair[2];
       if(diff!==null&&Math.abs(diff)>1.5&&pmVal>0){
         lines.push([r.item.sku,pmVal,lista].join(','));
@@ -1174,9 +1183,10 @@ async function connectSheet(k){
     var mi=hu.findIndex(function(h){return h==='PRECIOS ECOM';});
     var wi=hu.findIndex(function(h){return h==='WEB NUEVO';});
     var fi=hu.findIndex(function(h){return h.includes('PRECIO CON ENVIO');});
-    // Columnas Táctica
-    var l1i=hu.findIndex(function(h){return h==='L1 USD'||h==='L1USD'||h==='LISTA 1'||h==='L1';});
-    var l2i=hu.findIndex(function(h){return h==='L2 USD'||h==='L2USD'||h==='LISTA 2'||h==='L2';});
+    var ivai=hu.findIndex(function(h){return h==='IVA';});
+    // Columnas Táctica — L3, L4, L5 USD del PM
+    var l3i=hu.findIndex(function(h){return h==='L3 USD'||h==='L3USD'||h==='LISTA 3'||h==='L3';});
+    var l4i=hu.findIndex(function(h){return h==='L4 USD'||h==='L4USD'||h==='LISTA 4'||h==='L4';});
     var l5i=hu.findIndex(function(h){return h==='L5 USD'||h==='L5USD'||h==='LISTA 5'||h==='L5';});
     var ci=hu.findIndex(function(h){return h==='COSTO'||h==='COSTO USD'||h==='COSTO 1';});
     if(si<0||mi<0)throw new Error('No encontre SKU y PRECIOS ECOM');
@@ -1184,17 +1194,23 @@ async function connectSheet(k){
     d.values.slice(hIdx+1).forEach(function(row){
       var sku=String(row[si]||'').trim().toLowerCase();if(!sku)return;
       var ml=mi>=0?parseNum(String(row[mi]||'')):0;
-      var l1=l1i>=0?parseNum(String(row[l1i]||'')):0;
-      var l2=l2i>=0?parseNum(String(row[l2i]||'')):0;
+      var web=wi>=0?parseNum(String(row[wi]||'')):0;
+      var iva=ivai>=0?parseNum(String(row[ivai]||'')):0;
+      var l3=l3i>=0?parseNum(String(row[l3i]||'')):0;
+      var l4=l4i>=0?parseNum(String(row[l4i]||'')):0;
       var l5=l5i>=0?parseNum(String(row[l5i]||'')):0;
       var costo=ci>=0?parseNum(String(row[ci]||'')):0;
-      // Guardar si tiene cualquier precio (no solo ML)
-      if(ml>0||l1>0||l2>0||l5>0||costo>0){
+      // L1 = WEB / IVA, L2 = (WEB * 0.98) / IVA
+      var l1=iva>0&&web>0?Math.round(web/iva):0;
+      var l2=iva>0&&web>0?Math.round((web*0.98)/iva):0;
+      // Guardar si tiene cualquier precio
+      if(ml>0||l1>0||l3>0||l4>0||l5>0||costo>0){
         S.pmData[sku]={
           ml:ml,
-          web:wi>=0?parseNum(String(row[wi]||'')):0,
+          web:web,
           frave:fi>=0?parseNum(String(row[fi]||'')):0,
-          l1:l1,l2:l2,l5:l5,costo:costo,
+          iva:iva,
+          l1:l1,l2:l2,l3:l3,l4:l4,l5:l5,costo:costo,
           pm:k,pmName:S.sheets[k].name
         };
         filas++;
@@ -1210,10 +1226,11 @@ function getEcomData(){
   var srch=(qs('ecom-search').value||'').toLowerCase(),fPM=qs('ecom-filter-pm').value||'',fCat=qs('ecom-filter-cat').value||'',fE=qs('ecom-filter-estado').value||'';
   return S.ecomRows.map(function(item){
     var pm=S.pmData[item.skuL]||null;
-    var dml=dPct(item.ml,pm&&pm.ml),dweb=dPct(item.web,pm&&pm.web),dfrave=dPct(item.frave,pm&&pm.frave);
+    var pmFrave=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;
+    var dml=dPct(item.ml,pm&&pm.ml),dweb=dPct(item.web,pm&&pm.web),dfrave=dPct(item.frave,pmFrave);
     var hasDiff=[dml,dweb,dfrave].some(function(d){return d!==null&&Math.abs(d)>1.5;});
     var estado=!pm?'nopm':hasDiff?'diff':'ok';
-    return{sku:item.sku,skuL:item.skuL,ml:item.ml,web:item.web,frave:item.frave,pm:pm,dml:dml,dweb:dweb,dfrave:dfrave,estado:estado,cat:getCat(item.skuL)};
+    return{sku:item.sku,skuL:item.skuL,ml:item.ml,web:item.web,frave:item.frave,pmFrave:pmFrave,pm:pm,dml:dml,dweb:dweb,dfrave:dfrave,estado:estado,cat:getCat(item.skuL)};
   }).filter(function(r){
     if(srch&&!r.skuL.includes(srch))return false;
     if(fPM&&(!r.pm||r.pm.pm!==fPM))return false;
@@ -1225,7 +1242,7 @@ function getEcomData(){
 function renderEcom(){
   if(!S.ecomRows.length)return;
   qs('ecom-stats-wrap').style.display='block';
-  var all=S.ecomRows.map(function(item){var pm=S.pmData[item.skuL]||null;var hd=[dPct(item.ml,pm&&pm.ml),dPct(item.web,pm&&pm.web),dPct(item.frave,pm&&pm.frave)].some(function(d){return d!==null&&Math.abs(d)>1.5;});return !pm?'nopm':hd?'diff':'ok';});
+  var all=S.ecomRows.map(function(item){var pm=S.pmData[item.skuL]||null;var pmFr=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;var hd=[dPct(item.ml,pm&&pm.ml),dPct(item.web,pm&&pm.web),dPct(item.frave,pmFr)].some(function(d){return d!==null&&Math.abs(d)>1.5;});return !pm?'nopm':hd?'diff':'ok';});
   qs('es-total').textContent=S.ecomRows.length;
   qs('es-ok').textContent=all.filter(function(s){return s==='ok';}).length;
   qs('es-diff').textContent=all.filter(function(s){return s==='diff';}).length;
@@ -1251,7 +1268,7 @@ function renderEcom(){
     return '<tr><td class="sku-cell">'+r.sku+'</td><td style="font-size:11px;color:var(--muted)">'+(r.cat||'-')+'</td>'
       +'<td class="mono">'+(r.ml?'$'+fmtN(r.ml):'-')+'</td><td class="mono">'+(r.pm&&r.pm.ml?'$'+fmtN(r.pm.ml):'-')+'</td><td>'+dStr(r.dml)+'</td>'
       +'<td class="mono">'+(r.web?'$'+fmtN(r.web):'-')+'</td><td class="mono">'+(r.pm&&r.pm.web?'$'+fmtN(r.pm.web):'-')+'</td><td>'+dStr(r.dweb)+'</td>'
-      +'<td class="mono">'+(r.frave?'$'+fmtN(r.frave):'-')+'</td><td class="mono">'+(r.pm&&r.pm.frave?'$'+fmtN(r.pm.frave):'-')+'</td><td>'+dStr(r.dfrave)+'</td>'
+      +'<td class="mono">'+(r.frave?'$'+fmtN(r.frave):'-')+'</td><td class="mono">'+(r.pmFrave?'$'+fmtN(r.pmFrave):'-')+'</td><td>'+dStr(r.dfrave)+'</td>'
       +'<td style="font-size:11px;color:var(--accent)">'+(r.pm?r.pm.pmName:'-')+'</td><td>'+badge+'</td><td>'+btn+'</td></tr>';
   }).join('');
   tbody.querySelectorAll('.ecom-fix-btn').forEach(function(btn){btn.addEventListener('click',function(){var sku=btn.dataset.sku;var sel=btn.closest('td').querySelector('.ecom-lista-fila');fixOneEcom(sku,sel?sel.value:'todas');});});
