@@ -388,3 +388,150 @@ def list_jobs():
 def job_log(job_id: str):
     job = job_status.get(job_id, {})
     return {"log": job.get("log", []), "status": job.get("status")}
+
+# ══════════════════════════════════════════════════════
+# ECOM PROXY
+# ══════════════════════════════════════════════════════
+import httpx
+from urllib.parse import urlencode, quote
+
+ECOM_BASE = "app.ecomexperts.com"
+ECOM_API_BASE = "api.ecomexperts.com"
+
+async def ecom_request(method, hostname, path, headers, body=None):
+    url = f"https://{hostname}{path}"
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        resp = await client.request(method, url, headers=headers, content=body)
+        try:
+            return {"statusCode": resp.status_code, "headers": dict(resp.headers), "body": resp.json()}
+        except:
+            return {"statusCode": resp.status_code, "headers": dict(resp.headers), "body": resp.text}
+
+async def ecom_login(email, password):
+    payload = json.dumps({"User": {"email_address": email, "password": password}}).encode()
+    res = await ecom_request("POST", ECOM_API_BASE, "/users/users/doLogin.json",
+        {"Content-Type": "application/json", "Accept": "application/json"}, payload)
+    set_cookie = res["headers"].get("set-cookie", "")
+    if res["statusCode"] == 200 and set_cookie:
+        parts = [c.split(";")[0] for c in set_cookie.split(",") if "CAKEPHP=" in c and "deleted" not in c]
+        cookie = parts[-1] if parts else set_cookie.split(";")[0]
+        return {"success": True, "cookie": cookie}
+    return {"success": False, "statusCode": res["statusCode"]}
+
+async def ecom_find_listing(cookie, mla):
+    path = f"/api/mt_listings?search_term={quote(mla)}&tab=tabmercadolibre&filter_m_status=active&filter_status=active&page=1"
+    res = await ecom_request("GET", ECOM_BASE, path,
+        {"Cookie": cookie, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"})
+    data = res["body"].get("data", []) if isinstance(res["body"], dict) else []
+    match = next((i for i in data if (i.get("MlItem", {}) or {}).get("id") == mla), None)
+    if match:
+        return {"found": True, "listingId": match.get("MtListing", {}).get("id"),
+                "mla": mla, "priceRuleId": match.get("MtListing", {}).get("mt_listing_price_rule_id"),
+                "catalogListing": (match.get("MlItem") or {}).get("catalog_listing")}
+    return {"found": False, "error": f"MLA no encontrado: {mla}"}
+
+async def ecom_fetch_price_html(cookie, sku_madre):
+    path = f"/gestion/mt_products/MtProducts/prices_index?tab=tabactive&search_term={quote(sku_madre)}&filter_payment=1&order=nuevos&active_search_fields[]="
+    res = await ecom_request("GET", ECOM_BASE, path,
+        {"Cookie": cookie, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"})
+    if isinstance(res["body"], dict):
+        return res["body"].get("html", "")
+    return ""
+
+def ecom_parse_variants(html):
+    import re
+    variants = []
+    variant_order = []
+    seen = set()
+    for m in re.finditer(r'name="data\[MtProductVariant\]\[(\d+)\]\[MtProductPrice\]\[', html):
+        if m.group(1) not in seen:
+            seen.add(m.group(1)); variant_order.append(m.group(1))
+    price_map = {}
+    for m in re.finditer(r'name="data\[MtProductVariant\]\[(\d+)\]\[MtProductPrice\]\[(\d+)\]\[price\]"[^>]*value="([\d.]+)"', html):
+        vId, pId, price = m.group(1), m.group(2), m.group(3)
+        if vId not in price_map: price_map[vId] = []
+        price_map[vId].append({"priceId": pId, "currentPrice": float(price)})
+    vp_map = {}
+    for m in re.finditer(r'name="data\[MtProductVariant\]\[(\d+)\]\[MtProductPrice\]\[(\d+)\]\[variant_price_id\]"\s+value="(\d+)"', html):
+        vp_map[f"{m.group(1)}_{m.group(2)}"] = m.group(3)
+    price_names = [m.group(1) for m in re.finditer(r'<th[^>]*>(.*?)</th>', html)]
+    price_names = [re.sub(r'<[^>]+>', '', n).strip() for n in price_names]
+    for i, vId in enumerate(variant_order):
+        prices = [{"name": price_names[pi] if pi < len(price_names) else f"Lista {pi+1}",
+                   "priceId": p["priceId"], "currentPrice": p["currentPrice"],
+                   "variantPriceId": vp_map.get(f"{vId}_{p['priceId']}", "")}
+                  for pi, p in enumerate(price_map.get(vId, []))]
+        variants.append({"variantId": vId, "position": i+1, "prices": prices})
+    return variants
+
+async def ecom_update_price(cookie, sku, sku_madre, variant_position, price, price_name):
+    name = price_name or "Mercado Libre"
+    search_sku = sku_madre if sku_madre and sku_madre != sku else sku
+    html = await ecom_fetch_price_html(cookie, search_sku)
+    if not html: return {"success": False, "error": "Sin respuesta HTML de Ecom"}
+    variants = ecom_parse_variants(html)
+    if not variants: return {"success": False, "error": f"SKU no encontrado: {search_sku}"}
+    target = variants
+    if len(variants) > 1 and sku_madre and sku_madre != sku:
+        pos = variant_position if isinstance(variant_position, int) else -1
+        if 0 <= pos < len(variants):
+            target = [variants[pos]]
+        else:
+            return {"success": False, "error": f"Se requiere variantPosition. Variantes: {len(variants)}"}
+    results = []
+    for variant in target:
+        entry = next((p for p in variant["prices"] if name.lower() in p["name"].lower() or p["name"].lower() in name.lower()), None)
+        if not entry: continue
+        params = {
+            f"data[MtProductVariant][{variant['variantId']}][MtProductPrice][{entry['priceId']}][price]": str(price),
+            f"data[MtProductVariant][{variant['variantId']}][MtProductPrice][{entry['priceId']}][variant_price_id]": entry["variantPriceId"],
+            f"data[MtProductVariant][{variant['variantId']}][MtProductPrice][{entry['priceId']}][old_price]": str(entry["currentPrice"]),
+        }
+        body = urlencode(params).encode()
+        res = await ecom_request("POST", ECOM_BASE, "/gestion/mt_products/MtProductPrices/save_prices",
+            {"Content-Type": "application/x-www-form-urlencoded", "Cookie": cookie,
+             "Accept": "application/json", "X-Requested-With": "XMLHttpRequest",
+             "Referer": f"https://{ECOM_BASE}/gestion/mt_products/MtProducts/prices_index"}, body)
+        ok = (res["body"].get("success") if isinstance(res["body"], dict) else False) or res["statusCode"] == 200
+        results.append({"variantId": variant["variantId"], "ok": ok})
+    return {"success": all(r["ok"] for r in results), "sku": sku, "price": price, "results": results}
+
+async def ecom_apply_price_rule(cookie, listing_id):
+    res = await ecom_request("POST", ECOM_BASE, f"/mt_listings/MtListings/apply_price_rule_on_listing/{listing_id}.json",
+        {"Cookie": cookie, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest", "Content-Length": "0"})
+    return res["body"]
+
+async def ecom_set_price_rule(cookie, listing_id, price_rule_id):
+    payload = json.dumps({"listing_price_rule_id": str(price_rule_id), "apply": True}).encode()
+    res = await ecom_request("PUT", ECOM_BASE, f"/api/listings/setPriceRule/{listing_id}",
+        {"Content-Type": "application/json", "Cookie": cookie, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}, payload)
+    return {"success": res["statusCode"] == 200, "response": res["body"]}
+
+# ── ECOM ENDPOINTS ──────────────────────────────────────────────────────────
+@app.post("/ecom/login")
+async def ecom_login_endpoint(request: Request):
+    body = await request.json()
+    return await ecom_login(body.get("email"), body.get("password"))
+
+@app.post("/ecom/update-price")
+async def ecom_update_price_endpoint(request: Request):
+    body = await request.json()
+    return await ecom_update_price(
+        body.get("cookie"), body.get("sku"), body.get("skuMadre"),
+        body.get("variantPosition"), body.get("price"), body.get("priceName", "Mercado Libre")
+    )
+
+@app.post("/ecom/find-listing")
+async def ecom_find_listing_endpoint(request: Request):
+    body = await request.json()
+    return await ecom_find_listing(body.get("cookie"), body.get("mla"))
+
+@app.post("/ecom/apply-price-rule")
+async def ecom_apply_price_rule_endpoint(request: Request):
+    body = await request.json()
+    return await ecom_apply_price_rule(body.get("cookie"), body.get("listingId"))
+
+@app.post("/ecom/set-price-rule")
+async def ecom_set_price_rule_endpoint(request: Request):
+    body = await request.json()
+    return await ecom_set_price_rule(body.get("cookie"), body.get("listingId"), body.get("priceRuleId"))
