@@ -3,7 +3,7 @@ Ayala's ERP - Backend API
 FastAPI server para ML Tracker y ML Vendedor
 """
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import requests, re, time, os, gspread
 from datetime import datetime
@@ -400,6 +400,9 @@ ECOM_API_BASE = "api.ecomexperts.com"
 
 async def ecom_request(method, hostname, path, headers, body=None):
     url = f"https://{hostname}{path}"
+    # Strip cookie value to avoid illegal header errors
+    if "Cookie" in headers:
+        headers["Cookie"] = headers["Cookie"].strip()
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         resp = await client.request(method, url, headers=headers, content=body)
         try:
