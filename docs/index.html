@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Maximiliano Ayala</title>
+<title>Price Checker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0a0a0f;--surface:#12121a;--card:#1a1a26;--border:#2a2a3a;--accent:#6c63ff;--text:#e8e8f0;--muted:#7070a0;--green:#00e5a0;--yellow:#ffd166;--red:#ff6b6b;--orange:#ff9632;}
@@ -149,7 +149,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
 </head>
 <body>
 <div class="header">
-  <div class="logo">Vicky<span>TeAmo</span></div>
+  <div class="logo">Maximiliano<span>Ayala</span></div>
   <div class="status-bar">
     <div class="status-dot" id="dot-ecomcsv"></div><span class="status-label" id="lbl-ecomcsv">Ecom CSV</span>
     <div class="status-dot" id="dot-sheets"></div><span class="status-label" id="lbl-sheets">Sheets</span>
@@ -170,6 +170,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
   <div class="tab" data-tab="config">Configuracion</div>
   <div class="tab" data-tab="reglas">Reglas de Precio</div>
   <div class="tab" data-tab="ofertas">🏷 Ofertas</div>
+  <div class="tab" data-tab="competidores">🏆 Competidores</div>
   <div class="tab" data-tab="mltools">🛒 ML Tools</div>
 </div>
 <div class="main">
@@ -703,6 +704,48 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
   <div class="pagination" id="oferta-pag"></div>
 </div>
 
+
+
+  <!-- PÁGINA COMPETIDORES -->
+  <div id="pane-competidores" class="pane">
+    <div class="section-title">🏆 Competidores ML</div>
+    <div class="section-sub">Publicaciones de competidores scrapeadas por el ML Vendedor</div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" id="btn-load-competidores" onclick="loadCompetidores()">🔄 Cargar desde Sheets</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="competidores-filtros" style="display:none">
+        <span style="font-size:12px;color:var(--muted)">Vendedor:</span>
+        <div id="competidores-vendor-btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <span id="competidores-status" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+    </div>
+
+    <div class="filters" id="competidores-search-bar" style="display:none;margin-bottom:14px">
+      <input class="filter-search" type="text" id="competidores-search" placeholder="Buscar producto..." oninput="renderCompetidores()">
+      <select id="competidores-sort" onchange="renderCompetidores()" style="background:var(--card);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace">
+        <option value="precio-asc">Precio ↑</option>
+        <option value="precio-desc">Precio ↓</option>
+        <option value="nombre">Nombre A-Z</option>
+      </select>
+      <span id="competidores-count" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+
+    <div class="table-wrap" id="competidores-table-wrap" style="display:none">
+      <table>
+        <thead><tr>
+          <th>Vendedor</th>
+          <th>Producto</th>
+          <th>Precio</th>
+          <th>Precio Tachado</th>
+          <th>Descuento</th>
+          <th>Cuotas</th>
+          <th>Link</th>
+        </tr></thead>
+        <tbody id="competidores-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="competidores-pag"></div>
+  </div>
 
   <!-- PÁGINA ML TOOLS -->
   <div id="pane-mltools" class="pane">
@@ -2595,6 +2638,169 @@ function pollJob(job_id, baseUrl, logEl, statusEl, btn, btnId) {
     }
   }, 3000);
 }
+
+
+// ——— COMPETIDORES ———
+var COMP = {
+  data: [],       // [{vendedor, titulo, precio, orig_price, discount, cuotas, link}]
+  vendedores: [], // lista de vendedores únicos
+  selected: [],   // vendedores seleccionados
+  page: 1,
+  pageSize: 50
+};
+
+var SHEETS_API_KEY = 'AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
+var COMP_SHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
+
+async function loadCompetidores() {
+  var btn = document.getElementById('btn-load-competidores');
+  var status = document.getElementById('competidores-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Cargando...';
+  status.textContent = 'Leyendo pestañas del Sheets...';
+  COMP.data = [];
+  COMP.vendedores = [];
+
+  try {
+    // 1. Obtener lista de pestañas del Sheets
+    var metaUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + COMP_SHEET_ID + '?key=' + SHEETS_API_KEY;
+    var meta = await (await fetch(metaUrl)).json();
+    var sheets = (meta.sheets || []).map(function(s){ return s.properties.title; });
+    var vendorSheets = sheets.filter(function(s){ return s.startsWith('V - '); });
+
+    if (!vendorSheets.length) {
+      status.textContent = 'No hay pestañas de vendedores (V - NOMBRE). Corré el ML Vendedor bat primero.';
+      btn.disabled = false; btn.textContent = '🔄 Cargar desde Sheets';
+      return;
+    }
+
+    status.textContent = vendorSheets.length + ' vendedores encontrados, cargando productos...';
+
+    // 2. Leer cada pestaña
+    for (var vi = 0; vi < vendorSheets.length; vi++) {
+      var sheetName = vendorSheets[vi];
+      var vendedor = sheetName.replace('V - ', '');
+      var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + COMP_SHEET_ID + 
+                '/values/' + encodeURIComponent(sheetName) + '!A1:F2000?key=' + SHEETS_API_KEY;
+      var resp = await (await fetch(url)).json();
+      var rows = resp.values || [];
+      if (rows.length < 2) continue;
+
+      // headers: Titulo | Precio | Precio Tachado | Descuento | Cuotas | Link
+      rows.slice(1).forEach(function(row) {
+        var precio = parseFloat(String(row[1] || '0').replace(/[^\d.]/g, '')) || 0;
+        if (!precio) return;
+        COMP.data.push({
+          vendedor: vendedor,
+          titulo: row[0] || '',
+          precio: precio,
+          orig_price: parseFloat(String(row[2] || '0').replace(/[^\d.]/g, '')) || 0,
+          discount: row[3] || '',
+          cuotas: row[4] || '',
+          link: row[5] || ''
+        });
+      });
+      status.textContent = (vi+1) + '/' + vendorSheets.length + ' — ' + vendedor + ' (' + (rows.length-1) + ' productos)';
+    }
+
+    COMP.vendedores = [...new Set(COMP.data.map(function(r){ return r.vendedor; }))].sort();
+    COMP.selected = [...COMP.vendedores]; // todos seleccionados por default
+
+    // Render filtro de vendedores
+    var btnsDiv = document.getElementById('competidores-vendor-btns');
+    btnsDiv.innerHTML = COMP.vendedores.map(function(v) {
+      return '<button class="btn btn-primary btn-sm comp-vendor-btn" data-v="' + v + '" ' +
+             'onclick="toggleVendor(this)" style="font-size:10px;padding:4px 10px">' + v + '</button>';
+    }).join('');
+
+    document.getElementById('competidores-filtros').style.display = 'flex';
+    document.getElementById('competidores-search-bar').style.display = 'flex';
+    document.getElementById('competidores-table-wrap').style.display = 'block';
+
+    status.textContent = COMP.data.length + ' productos cargados de ' + COMP.vendedores.length + ' vendedores';
+    btn.textContent = '🔄 Cargar desde Sheets';
+    renderCompetidores();
+
+  } catch(e) {
+    status.textContent = '❌ Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+function toggleVendor(btn) {
+  var v = btn.dataset.v;
+  var idx = COMP.selected.indexOf(v);
+  if (idx >= 0) {
+    COMP.selected.splice(idx, 1);
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-secondary');
+  } else {
+    COMP.selected.push(v);
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-primary');
+  }
+  COMP.page = 1;
+  renderCompetidores();
+}
+
+function renderCompetidores() {
+  var search = (document.getElementById('competidores-search').value || '').toLowerCase();
+  var sort = document.getElementById('competidores-sort').value;
+
+  var data = COMP.data.filter(function(r) {
+    if (COMP.selected.indexOf(r.vendedor) < 0) return false;
+    if (search && !r.titulo.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  // Sort
+  data.sort(function(a, b) {
+    if (sort === 'precio-asc') return a.precio - b.precio;
+    if (sort === 'precio-desc') return b.precio - a.precio;
+    return a.titulo.localeCompare(b.titulo);
+  });
+
+  document.getElementById('competidores-count').textContent = data.length + ' productos';
+
+  var pages = Math.ceil(data.length / COMP.pageSize) || 1;
+  COMP.page = Math.min(COMP.page, pages);
+  var page = data.slice((COMP.page - 1) * COMP.pageSize, COMP.page * COMP.pageSize);
+
+  var tbody = document.getElementById('competidores-tbody');
+  if (!page.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-text">Sin resultados</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = page.map(function(r) {
+    var precioFmt = '$' + Number(r.precio).toLocaleString('es-AR');
+    var origFmt = r.orig_price ? '$' + Number(r.orig_price).toLocaleString('es-AR') : '-';
+    var discFmt = r.discount ? '<span class="off-badge">' + r.discount + '</span>' : '-';
+    var linkCell = r.link ? '<a href="' + r.link + '" target="_blank" class="btn-link" style="font-size:11px">Ver</a>' : '-';
+    return '<tr>' +
+      '<td><span class="badge badge-blue" style="font-size:10px">' + r.vendedor + '</span></td>' +
+      '<td style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + r.titulo + '">' + r.titulo + '</td>' +
+      '<td class="mono price-ok">' + precioFmt + '</td>' +
+      '<td class="mono" style="color:var(--muted);text-decoration:line-through">' + origFmt + '</td>' +
+      '<td>' + discFmt + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + (r.cuotas || '-') + '</td>' +
+      '<td>' + linkCell + '</td>' +
+      '</tr>';
+  }).join('');
+
+  // Pagination
+  var pag = document.getElementById('competidores-pag');
+  if (pages <= 1) { pag.innerHTML = ''; return; }
+  var html = '<span class="page-info">' + data.length + ' resultados</span>';
+  if (COMP.page > 1) html += '<button class="page-btn" onclick="compPage(' + (COMP.page-1) + ')">‹</button>';
+  for (var i = Math.max(1, COMP.page-2); i <= Math.min(pages, COMP.page+2); i++) {
+    html += '<button class="page-btn' + (i === COMP.page ? ' active' : '') + '" onclick="compPage(' + i + ')">' + i + '</button>';
+  }
+  if (COMP.page < pages) html += '<button class="page-btn" onclick="compPage(' + (COMP.page+1) + ')">›</button>';
+  pag.innerHTML = html;
+}
+
+function compPage(p) { COMP.page = p; renderCompetidores(); }
 
 </script>
 </body>
