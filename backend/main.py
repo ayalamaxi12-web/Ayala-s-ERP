@@ -196,7 +196,7 @@ def tracker_job(job_id):
                 ok += 1
                 time.sleep(0.5)
             except Exception as e:
-                log.append(f"❌ Fila {row_num}: {e}"); errors += 1
+                log.append(f"❌ Fila {row_num}: {type(e).__name__}: {e}"); errors += 1
 
         if batch:
             log.append(f"📝 Escribiendo {len(batch)} filas en Sheets...")
@@ -378,3 +378,8 @@ def vendedor_status(job_id: str):
 @app.get("/jobs")
 def list_jobs():
     return {k: {**v, "log": v.get("log", [])[-5:]} for k, v in job_status.items()}
+
+@app.get("/jobs/{job_id}/log")
+def job_log(job_id: str):
+    job = job_status.get(job_id, {})
+    return {"log": job.get("log", []), "status": job.get("status")}
