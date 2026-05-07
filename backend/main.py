@@ -3,7 +3,7 @@ Ayala's ERP - Backend API
 FastAPI server para ML Tracker y ML Vendedor
 """
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import requests, re, time, os, gspread
 from datetime import datetime
@@ -519,10 +519,12 @@ async def ecom_login_endpoint(request: Request):
 @app.post("/ecom/update-price")
 async def ecom_update_price_endpoint(request: Request):
     body = await request.json()
-    return await ecom_update_price(
+    result = await ecom_update_price(
         body.get("cookie"), body.get("sku"), body.get("skuMadre"),
         body.get("variantPosition"), body.get("price"), body.get("priceName", "Mercado Libre")
     )
+    print(f"UPDATE PRICE: sku={body.get('sku')} price={body.get('price')} result={result}")
+    return result
 
 @app.post("/ecom/find-listing")
 async def ecom_find_listing_endpoint(request: Request):
