@@ -3,7 +3,7 @@ Ayala's ERP - Backend API
 FastAPI server para ML Tracker y ML Vendedor
 """
 
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import requests, re, time, os, gspread
 from datetime import datetime
