@@ -177,12 +177,14 @@ def tracker_job(job_id):
             row_num = i + 2
             try:
                 ids = extract_ids(url)
+                log.append(f"🔍 Fila {row_num}: item={ids['item_id']} prod={ids['product_id']}")
                 data = None
                 if ids['item_id']: data = fetch_item(ids['item_id'])
                 if not data and ids['product_id']: data = fetch_product(ids['product_id'])
                 tipo = 'item' if ids['item_id'] and data else 'product'
                 parsed = parse_item(data, tipo)
                 if not parsed:
+                    log.append(f"⚠️ Fila {row_num}: sin datos parseados")
                     batch.append({'range': f'B{row_num}', 'values': [['❌ Sin datos']]})
                     errors += 1; continue
                 nick = parsed['seller_nick'] or (fetch_seller(parsed['seller_id']) if parsed['seller_id'] else '')
@@ -196,7 +198,9 @@ def tracker_job(job_id):
                 ok += 1
                 time.sleep(0.5)
             except Exception as e:
-                log.append(f"❌ Fila {row_num}: {type(e).__name__}: {e}"); errors += 1
+                import traceback
+                log.append(f"❌ Fila {row_num}: {type(e).__name__}: {e} | {traceback.format_exc()[-200:]}")
+                errors += 1
 
         if batch:
             log.append(f"📝 Escribiendo {len(batch)} filas en Sheets...")
