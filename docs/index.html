@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Maximiliano Ayala</title>
+<title>Price Checker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0a0a0f;--surface:#12121a;--card:#1a1a26;--border:#2a2a3a;--accent:#6c63ff;--text:#e8e8f0;--muted:#7070a0;--green:#00e5a0;--yellow:#ffd166;--red:#ff6b6b;--orange:#ff9632;}
@@ -149,7 +149,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
 </head>
 <body>
 <div class="header">
-  <div class="logo">Maximiliano<span>Ayala</span></div>
+  <div class="logo">Price<span>Checker</span></div>
   <div class="status-bar">
     <div class="status-dot" id="dot-ecomcsv"></div><span class="status-label" id="lbl-ecomcsv">Ecom CSV</span>
     <div class="status-dot" id="dot-sheets"></div><span class="status-label" id="lbl-sheets">Sheets</span>
@@ -1279,7 +1279,7 @@ function renderEcom(){
 async function ecomUpd(sku,price,listName,skuMadre,variantPosition){
   var body={cookie:S.ecomCookie,sku:sku,price:price,priceName:listName};
   if(skuMadre&&skuMadre!==sku){body.skuMadre=skuMadre;body.variantPosition=typeof variantPosition==='number'?variantPosition:0;}
-  return (await fetch('/.netlify/functions/ecom-proxy?action=updatePrice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  return (await fetch(''+getBackendUrl()+'/ecom/update-price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
 }
 async function fixOneEcom(sku,listaArg){
   if(!S.ecomCookie){toast('Conecta Ecom primero','error');return;}
@@ -1319,7 +1319,7 @@ async function connectEcom(){
   if(!email||!pass){toast('Ingresa email y contrasena','error');return;}
   setCS('ecom-status','idle','...');
   try{
-    var d=await (await fetch('/.netlify/functions/ecom-proxy?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pass})})).json();
+    var d=await (await fetch(''+getBackendUrl()+'/ecom/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pass})})).json();
     if(d.success&&d.cookie){S.ecomCookie=d.cookie;S.ecomEmail=email;setCS('ecom-status','ok','Conectado');setCS('clean-ecom-status','ok','Ecom ok');setDot('dot-ecomapi',true);setLabel('lbl-ecomapi','Ecom ok');saveStor();toast('Ecom conectado');renderEcom();}
     else throw new Error('Login fallido');
   }catch(e){setCS('ecom-status','err','Error');toast('Error Ecom: '+e.message,'error');}
@@ -1397,14 +1397,14 @@ function buildMLRow(item){
   return{item:item,pm:pm,base:base,exp:exp,mlP:mlP,promoP:promoP,descPct:descPct,activoP:activoP,st:st,diff:diff,reglaOk:chk.ok,reglaMsg:chk.msg,titulo:item.titulo||(mlI&&mlI.title)||'',link:item.link||(item.mla?'https://articulo.mercadolibre.com.ar/'+item.mla:''),cat:cat,skuSt:skuSt};
 }
 function mlSortVal(row,col){switch(col){case'skuAsociado':return row.item.skuAsociado.toLowerCase();case'mla':return row.item.mla.toLowerCase();case'cat':return row.cat.toLowerCase();case'titulo':return row.titulo.toLowerCase();case'regla':return row.item.regla.toLowerCase();case'destacado':return row.item.destacado.toLowerCase();case'reglaOk':return row.reglaOk?1:0;case'skuML':return row.skuSt;case'pm':return row.pm?row.pm.pmName.toLowerCase():'';case'base':return row.base||0;case'exp':return row.exp||0;case'mlP':return row.mlP||0;case'promoP':return row.promoP||0;case'descPct':return row.descPct||0;case'diff':return row.diff!==null?Math.abs(row.diff):0;case'estado':return row.st;default:return 0;}}
-async function ecomFindListing(mla){return (await fetch('/.netlify/functions/ecom-proxy?action=findListingByMLA',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,mla:mla})})).json();}
+async function ecomFindListing(mla){return (await fetch(''+getBackendUrl()+'/ecom/find-listing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,mla:mla})})).json();}
 async function saveReglaEcom(mla,newRegla,cb){
   if(!S.ecomCookie){toast('Conecta Ecom primero','error');return;}
   var ruleId=ECOM_RULES_MAP[newRegla];if(!ruleId){toast('Regla no encontrada','error');return;}
   if(cb)cb('loading');
   try{
     var d1=await ecomFindListing(mla);if(!d1.found)throw new Error('Listing no encontrado');
-    var d2=await (await fetch('/.netlify/functions/ecom-proxy?action=setPriceRule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,listingId:d1.listingId,priceRuleId:ruleId})})).json();
+    var d2=await (await fetch(''+getBackendUrl()+'/ecom/set-price-rule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,listingId:d1.listingId,priceRuleId:ruleId})})).json();
     if(!d2.success)throw new Error('Error al guardar regla');
     var pub=S.pubData.find(function(p){return p.mla===mla;});if(pub)pub.regla=newRegla;
     toast('Regla actualizada: '+mla);renderML();if(cb)cb('ok');
@@ -1498,7 +1498,7 @@ async function applyEcomRule(item){
   var d1=await ecomUpd(item.skuAsociado,base,'Mercado Libre',ecomItem.skuMadre,ecomItem.variantPosition);
   if(!d1||!d1.success)throw new Error((d1&&d1.error)||'Error precio base');
   var d2=await ecomFindListing(item.mla);if(!d2.found)throw new Error('Listing no encontrado');
-  var d3=await (await fetch('/.netlify/functions/ecom-proxy?action=applyPriceRule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,listingId:d2.listingId})})).json();
+  var d3=await (await fetch(''+getBackendUrl()+'/ecom/apply-price-rule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,listingId:d2.listingId})})).json();
   if(!d3||(!d3.success&&d3.error!==false))throw new Error((d3&&d3.setFlash)||'Error regla');
   return{ok:true};
 }
@@ -1599,7 +1599,7 @@ async function enrichCatalog(){
     qs('enrich-txt').textContent=(i+1)+'/'+total;
     var pct=Math.round((i+1)/total*100);
     qs('enrich-fill').style.width=pct+'%';qs('enrich-pct').textContent=pct+'%';
-    try{var d=await (await fetch('/.netlify/functions/ecom-proxy?action=findListingByMLA',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,mla:item.mla})})).json();item.catalog=d.found&&(d.catalogListing==='1'||d.catalogListing===true)?'si':'no';}catch(e){item.catalog='?';}
+    try{var d=await (await fetch(''+getBackendUrl()+'/ecom/find-listing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:S.ecomCookie,mla:item.mla})})).json();item.catalog=d.found&&(d.catalogListing==='1'||d.catalogListing===true)?'si':'no';}catch(e){item.catalog='?';}
   }
   btn.disabled=false;btn.textContent='🔍 Enriquecer con Ecom';renderClean();toast('Enriquecimiento completado');
 }
