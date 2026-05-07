@@ -170,6 +170,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
   <div class="tab" data-tab="config">Configuracion</div>
   <div class="tab" data-tab="reglas">Reglas de Precio</div>
   <div class="tab" data-tab="ofertas">🏷 Ofertas</div>
+  <div class="tab" data-tab="mltools">🛒 ML Tools</div>
 </div>
 <div class="main">
 
@@ -701,6 +702,42 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(108,99,255,.04)
   </div>
   <div class="pagination" id="oferta-pag"></div>
 </div>
+
+
+  <!-- PÁGINA ML TOOLS -->
+  <div id="pane-mltools" class="pane" style="display:none">
+    <div style="display:flex;flex-direction:column;gap:16px;max-width:800px">
+      <div class="card">
+        <div class="card-title">⚙️ Configuración del Backend</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">URL del servidor Railway</p>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="text" id="backend-url-input" placeholder="https://tu-app.railway.app"
+            style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:9px 12px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace">
+          <button class="btn btn-primary btn-sm" onclick="saveBackendUrl()">Guardar</button>
+          <button class="btn btn-secondary btn-sm" onclick="testBackend()">Testear</button>
+        </div>
+        <div id="backend-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📊 ML Tracker</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Actualiza precios de la pestaña "ML Competencia" en Google Sheets</p>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="runTracker()" id="btn-tracker">▶ Ejecutar</button>
+          <span id="tracker-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">Listo</span>
+        </div>
+        <div id="tracker-log" style="margin-top:12px;background:var(--surface);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;max-height:200px;overflow-y:auto;display:none"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🏪 ML Vendedor</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Trae publicaciones de la pestaña "Vendedores" en Google Sheets</p>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="runVendedor()" id="btn-vendedor">▶ Ejecutar</button>
+          <span id="vendedor-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">Listo</span>
+        </div>
+        <div id="vendedor-log" style="margin-top:12px;background:var(--surface);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;max-height:200px;overflow-y:auto;display:none"></div>
+      </div>
+    </div>
+  </div>
 
 </div><!-- .main -->
 
@@ -2437,6 +2474,10 @@ function init(){
   ['tactica-search','tactica-filter-pm','tactica-filter-cat','tactica-filter-lista','tactica-filter-estado'].forEach(function(id){var el=qs(id);if(el){el.addEventListener('input',function(){S.tPage=1;renderTactica();});el.addEventListener('change',function(){S.tPage=1;renderTactica();});}});
   ['arbol-search','arbol-filter-cat','arbol-filter-pm','arbol-filter-tipo','arbol-filter-estado'].forEach(function(id){var el=qs(id);if(el){el.addEventListener('input',renderArbol);el.addEventListener('change',renderArbol);}});
   loadCats();
+  // Restore backend URL
+  var savedUrl = localStorage.getItem('erp_backend_url') || '';
+  var urlInput = document.getElementById('backend-url-input');
+  if (savedUrl && urlInput) urlInput.value = savedUrl;
 }
 init();
 })();
