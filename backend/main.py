@@ -180,11 +180,12 @@ def tracker_job(job_id):
                 log.append(f"🔍 Fila {row_num}: item={ids['item_id']} prod={ids['product_id']}")
                 data = None
                 if ids['item_id']: data = fetch_item(ids['item_id'])
+                log.append(f"📦 fetch_item result: {str(data)[:100] if data else 'None'}")
                 if not data and ids['product_id']: data = fetch_product(ids['product_id'])
                 tipo = 'item' if ids['item_id'] and data else 'product'
                 parsed = parse_item(data, tipo)
                 if not parsed:
-                    log.append(f"⚠️ Fila {row_num}: sin datos parseados")
+                    log.append(f"⚠️ Fila {row_num}: sin datos parseados. data={str(data)[:100]}")
                     batch.append({'range': f'B{row_num}', 'values': [['❌ Sin datos']]})
                     errors += 1; continue
                 nick = parsed['seller_nick'] or (fetch_seller(parsed['seller_id']) if parsed['seller_id'] else '')
