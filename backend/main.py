@@ -400,7 +400,6 @@ ECOM_API_BASE = "api.ecomexperts.com"
 
 async def ecom_request(method, hostname, path, headers, body=None):
     url = f"https://{hostname}{path}"
-    # Strip cookie value to avoid illegal header errors
     if "Cookie" in headers:
         headers["Cookie"] = headers["Cookie"].strip()
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
@@ -540,3 +539,21 @@ async def ecom_apply_price_rule_endpoint(request: Request):
 async def ecom_set_price_rule_endpoint(request: Request):
     body = await request.json()
     return await ecom_set_price_rule(body.get("cookie"), body.get("listingId"), body.get("priceRuleId"))
+
+# ── ECOM DEBUG ──────────────────────────────────────────────────────────────
+@app.post("/ecom/debug-html")
+async def ecom_debug_html(request: Request):
+    body = await request.json()
+    cookie = body.get("cookie", "").strip()
+    sku = body.get("sku", "")
+    try:
+        html = await ecom_fetch_price_html(cookie, sku)
+        variants = ecom_parse_variants(html)
+        return {
+            "html_length": len(html),
+            "html_snippet": html[:3000],
+            "variants_found": len(variants),
+            "variants": variants[:3]
+        }
+    except Exception as e:
+        return {"error": str(e)}
