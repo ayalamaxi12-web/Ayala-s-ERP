@@ -472,6 +472,7 @@ async def ecom_update_price(cookie, sku, sku_madre, variant_position, price, pri
     html = await ecom_fetch_price_html(cookie, search_sku)
     if not html: return {"success": False, "error": "Sin respuesta HTML de Ecom"}
     variants = ecom_parse_variants(html)
+    print(f"HTML:{len(html)} variants:{len(variants)} prices:{variants[0]['prices'] if variants else 'EMPTY'}")
     if not variants: return {"success": False, "error": f"SKU no encontrado: {search_sku}"}
     target = variants
     if len(variants) > 1 and sku_madre and sku_madre != sku:
