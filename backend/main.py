@@ -441,7 +441,6 @@ async def ecom_fetch_price_html(cookie, sku_madre):
     return ""
 
 def ecom_parse_variants(html):
-    import re
     variants = []
     variant_order = []
     seen = set()
@@ -467,12 +466,27 @@ def ecom_parse_variants(html):
     return variants
 
 async def ecom_update_price(cookie, sku, sku_madre, variant_position, price, price_name):
-    name = price_name or "Mercado Libre"
+    # Mapeo de nombres del frontend a nombres reales en Ecom
+    name_map = {
+        'mercado libre': 'Mercado Libre',
+        'ml': 'Mercado Libre',
+        'fravega': 'Mercado Libre',
+        'frave': 'Mercado Libre',
+        'precio web': 'Precio Web',
+        'web': 'Precio Web',
+        'precio web 2': 'Precio Web 2',
+        'web2': 'Precio Web 2',
+        'lista 1 tactica con iva': 'Lista 1 Tactica Con IVA',
+        'lista 1': 'Lista 1 Tactica Con IVA',
+        'lista 2 tactica con iva': 'Lista 2 Tactica Con IVA',
+        'lista 2': 'Lista 2 Tactica Con IVA',
+    }
+    name = name_map.get((price_name or '').lower().strip(), price_name or 'Mercado Libre')
     search_sku = sku_madre if sku_madre and sku_madre != sku else sku
     html = await ecom_fetch_price_html(cookie, search_sku)
     if not html: return {"success": False, "error": "Sin respuesta HTML de Ecom"}
     variants = ecom_parse_variants(html)
-    print(f"HTML:{len(html)} variants:{len(variants)} prices:{variants[0]['prices'] if variants else 'EMPTY'}")
+    print(f"HTML:{len(html)} variants:{len(variants)} name='{name}' prices:{variants[0]['prices'] if variants else 'EMPTY'}")
     if not variants: return {"success": False, "error": f"SKU no encontrado: {search_sku}"}
     target = variants
     if len(variants) > 1 and sku_madre and sku_madre != sku:
@@ -484,6 +498,7 @@ async def ecom_update_price(cookie, sku, sku_madre, variant_position, price, pri
     results = []
     for variant in target:
         entry = next((p for p in variant["prices"] if name.lower() in p["name"].lower() or p["name"].lower() in name.lower()), None)
+        print(f"Variant {variant['variantId']}: buscando '{name}' -> entry={entry}")
         if not entry: continue
         params = {
             f"data[MtProductVariant][{variant['variantId']}][MtProductPrice][{entry['priceId']}][price]": str(price),
@@ -496,6 +511,7 @@ async def ecom_update_price(cookie, sku, sku_madre, variant_position, price, pri
              "Accept": "application/json", "X-Requested-With": "XMLHttpRequest",
              "Referer": f"https://{ECOM_BASE}/gestion/mt_products/MtProducts/prices_index"}, body)
         ok = (res["body"].get("success") if isinstance(res["body"], dict) else False) or res["statusCode"] == 200
+        print(f"save_prices status={res['statusCode']} ok={ok} body={str(res['body'])[:200]}")
         results.append({"variantId": variant["variantId"], "ok": ok})
     return {"success": all(r["ok"] for r in results), "sku": sku, "price": price, "results": results}
 
@@ -523,7 +539,7 @@ async def ecom_update_price_endpoint(request: Request):
         body.get("cookie"), body.get("sku"), body.get("skuMadre"),
         body.get("variantPosition"), body.get("price"), body.get("priceName", "Mercado Libre")
     )
-    print(f"UPDATE PRICE: sku={body.get('sku')} price={body.get('price')} result={result}")
+    print(f"UPDATE PRICE: sku={body.get('sku')} price={body.get('price')} priceName={body.get('priceName')} result={result}")
     return result
 
 @app.post("/ecom/find-listing")
