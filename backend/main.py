@@ -448,7 +448,7 @@ def ecom_parse_variants(html):
         if m.group(1) not in seen:
             seen.add(m.group(1)); variant_order.append(m.group(1))
     price_map = {}
-    for m in re.finditer(r'name="data\[MtProductVariant\]\[(\d+)\]\[MtProductPrice\]\[(\d+)\]\[price\]"[^>]*value="([\d.]+)"', html):
+    for m in re.finditer(r'name="data\[MtProductVariant\]\[(\d+)\]\[MtProductPrice\]\[(\d+)\]\[price\]"[^>]*value="([\d.]*)"', html):
         vId, pId, price = m.group(1), m.group(2), m.group(3)
         if vId not in price_map: price_map[vId] = []
         price_map[vId].append({"priceId": pId, "currentPrice": float(price)})
