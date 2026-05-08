@@ -568,7 +568,7 @@ async def ecom_debug_html(request: Request):
         variants = ecom_parse_variants(html)
         return {
             "html_length": len(html),
-            "html_snippet": html[:3000],
+            "html_snippet": html[:8000],
             "variants_found": len(variants),
             "variants": variants[:3]
         }
