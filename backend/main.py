@@ -470,8 +470,8 @@ async def ecom_update_price(cookie, sku, sku_madre, variant_position, price, pri
     name_map = {
         'mercado libre': 'Mercado Libre',
         'ml': 'Mercado Libre',
-        'fravega': 'Mercado Libre',
-        'frave': 'Mercado Libre',
+        'fravega': 'Fravega',
+        'frave': 'Fravega',
         'precio web': 'Precio Web',
         'web': 'Precio Web',
         'precio web 2': 'Precio Web 2',
