@@ -165,51 +165,48 @@ async def ml_proxy_all_ids(seller_id: str, request: Request, token: str = ""):
         token = request.headers.get("x-vk-token", "")
     headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
     ids = []
-    scroll_id = None
     total = 0
-    intentos = 0
-    last_response = {}
+    seen = set()
+
+    def fetch_page(url):
+        r = requests.get(url, headers=headers, timeout=20)
+        return r.json()
+
     try:
-        while intentos < 60:
-            intentos += 1
-            if scroll_id:
-                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&scroll_id={scroll_id}"
-            else:
-                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset=0"
-            r = requests.get(url, headers=headers, timeout=15)
-            d = r.json()
-            last_response = d
+        # Paso 1: offset 0-900 (limite de ML es 1000)
+        for offset in range(0, 1000, 100):
+            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}"
+            d = fetch_page(url)
             if "paging" in d:
                 total = d["paging"].get("total", 0)
             results = d.get("results", [])
             if not results:
                 break
             for rid in results:
-                if rid not in ids:
+                if rid not in seen:
+                    seen.add(rid)
                     ids.append(rid)
-            scroll_id = d.get("scroll_id")
-            if not scroll_id:
-                # sin scroll_id usamos offset clasico
-                if len(ids) >= total:
+            if len(results) < 100:
+                break
+
+        # Paso 2: si hay mas de 1000, usar order=start_time asc para buscar los restantes
+        if total > 1000:
+            for offset in range(0, total, 100):
+                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&order=start_time&sort=asc"
+                d = fetch_page(url)
+                results = d.get("results", [])
+                if not results:
                     break
-                # fallback paginacion clasica
-                offset = len(ids)
-                if offset >= 1000:
-                    break
-                url2 = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}"
-                r2 = requests.get(url2, headers=headers, timeout=15)
-                d2 = r2.json()
-                results2 = d2.get("results", [])
-                if not results2:
-                    break
-                for rid in results2:
-                    if rid not in ids:
+                for rid in results:
+                    if rid not in seen:
+                        seen.add(rid)
                         ids.append(rid)
-                if len(ids) >= total or len(results2) < 100:
+                if len(ids) >= total or len(results) < 100:
                     break
-        return {"ids": ids, "total": total, "fetched": len(ids), "debug_first": last_response if not ids else {}}
+
+        return {"ids": ids, "total": total, "fetched": len(ids)}
     except Exception as e:
-        return {"ids": ids, "total": total, "fetched": len(ids), "error": str(e), "debug": last_response}
+        return {"ids": ids, "total": total, "fetched": len(ids), "error": str(e)}
 
 @app.get("/ml-proxy/visits")
 async def ml_proxy_visits(ids: str, request: Request):
@@ -874,51 +871,48 @@ async def ml_proxy_all_ids(seller_id: str, request: Request, token: str = ""):
         token = request.headers.get("x-vk-token", "")
     headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
     ids = []
-    scroll_id = None
     total = 0
-    intentos = 0
-    last_response = {}
+    seen = set()
+
+    def fetch_page(url):
+        r = requests.get(url, headers=headers, timeout=20)
+        return r.json()
+
     try:
-        while intentos < 60:
-            intentos += 1
-            if scroll_id:
-                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&scroll_id={scroll_id}"
-            else:
-                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset=0"
-            r = requests.get(url, headers=headers, timeout=15)
-            d = r.json()
-            last_response = d
+        # Paso 1: offset 0-900 (limite de ML es 1000)
+        for offset in range(0, 1000, 100):
+            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}"
+            d = fetch_page(url)
             if "paging" in d:
                 total = d["paging"].get("total", 0)
             results = d.get("results", [])
             if not results:
                 break
             for rid in results:
-                if rid not in ids:
+                if rid not in seen:
+                    seen.add(rid)
                     ids.append(rid)
-            scroll_id = d.get("scroll_id")
-            if not scroll_id:
-                # sin scroll_id usamos offset clasico
-                if len(ids) >= total:
+            if len(results) < 100:
+                break
+
+        # Paso 2: si hay mas de 1000, usar order=start_time asc para buscar los restantes
+        if total > 1000:
+            for offset in range(0, total, 100):
+                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&order=start_time&sort=asc"
+                d = fetch_page(url)
+                results = d.get("results", [])
+                if not results:
                     break
-                # fallback paginacion clasica
-                offset = len(ids)
-                if offset >= 1000:
-                    break
-                url2 = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}"
-                r2 = requests.get(url2, headers=headers, timeout=15)
-                d2 = r2.json()
-                results2 = d2.get("results", [])
-                if not results2:
-                    break
-                for rid in results2:
-                    if rid not in ids:
+                for rid in results:
+                    if rid not in seen:
+                        seen.add(rid)
                         ids.append(rid)
-                if len(ids) >= total or len(results2) < 100:
+                if len(ids) >= total or len(results) < 100:
                     break
-        return {"ids": ids, "total": total, "fetched": len(ids), "debug_first": last_response if not ids else {}}
+
+        return {"ids": ids, "total": total, "fetched": len(ids)}
     except Exception as e:
-        return {"ids": ids, "total": total, "fetched": len(ids), "error": str(e), "debug": last_response}
+        return {"ids": ids, "total": total, "fetched": len(ids), "error": str(e)}
 
 @app.get("/ml-proxy/visits")
 async def ml_proxy_visits(ids: str, request: Request):
