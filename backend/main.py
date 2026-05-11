@@ -129,6 +129,80 @@ def root():
 def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
 
+
+# ══════════════════════════════════════════════════════
+# ML PROXY para Velkron
+# ══════════════════════════════════════════════════════
+
+@app.get("/ml-proxy")
+async def ml_proxy_get(request: Request, path: str):
+    token = request.headers.get("x-vk-token", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
+    try:
+        r = requests.get(f"https://api.mercadolibre.com/{path.lstrip('/')}", headers=headers, timeout=20)
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/ml-proxy/{mla}")
+async def ml_proxy_put(mla: str, request: Request):
+    token = request.headers.get("x-vk-token", "")
+    auth = f"Bearer {token}" if token else ml_headers()["Authorization"]
+    body = await request.json()
+    try:
+        r = requests.put(
+            f"https://api.mercadolibre.com/items/{mla}",
+            headers={"Authorization": auth, "Content-Type": "application/json"},
+            json=body, timeout=20
+        )
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ml-proxy/all-ids/{seller_id}")
+async def ml_proxy_all_ids(seller_id: str, request: Request):
+    """Trae todos los IDs de publicaciones activas usando scroll sin limite de 1000"""
+    token = request.headers.get("x-vk-token", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
+    ids = []
+    scroll_id = None
+    total = 9999
+    intentos = 0
+    try:
+        while len(ids) < total and intentos < 60:
+            intentos += 1
+            if scroll_id:
+                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&scroll_id={scroll_id}"
+            else:
+                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset=0"
+            r = requests.get(url, headers=headers, timeout=15)
+            d = r.json()
+            if "paging" in d:
+                total = d["paging"].get("total", 0)
+            results = d.get("results", [])
+            if not results:
+                break
+            for rid in results:
+                if rid not in ids:
+                    ids.append(rid)
+            scroll_id = d.get("scroll_id")
+            if not scroll_id:
+                break
+        return {"ids": ids, "total": total, "fetched": len(ids)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ml-proxy/visits")
+async def ml_proxy_visits(ids: str, request: Request):
+    """Trae visitas para una lista de MLAs separados por coma"""
+    token = request.headers.get("x-vk-token", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
+    try:
+        r = requests.get(f"https://api.mercadolibre.com/items/visits?ids={ids}", headers=headers, timeout=15)
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/ml/tracker/run")
 async def run_tracker(background_tasks: BackgroundTasks):
     job_id = f"tracker_{int(time.time())}"
@@ -741,6 +815,80 @@ async def ml_proxy_put(mla: str, request: Request):
             json=body,
             timeout=20
         )
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# ML PROXY para Velkron
+# ══════════════════════════════════════════════════════
+
+@app.get("/ml-proxy")
+async def ml_proxy_get(request: Request, path: str):
+    token = request.headers.get("x-vk-token", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
+    try:
+        r = requests.get(f"https://api.mercadolibre.com/{path.lstrip('/')}", headers=headers, timeout=20)
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/ml-proxy/{mla}")
+async def ml_proxy_put(mla: str, request: Request):
+    token = request.headers.get("x-vk-token", "")
+    auth = f"Bearer {token}" if token else ml_headers()["Authorization"]
+    body = await request.json()
+    try:
+        r = requests.put(
+            f"https://api.mercadolibre.com/items/{mla}",
+            headers={"Authorization": auth, "Content-Type": "application/json"},
+            json=body, timeout=20
+        )
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ml-proxy/all-ids/{seller_id}")
+async def ml_proxy_all_ids(seller_id: str, request: Request):
+    """Trae todos los IDs de publicaciones activas usando scroll sin limite de 1000"""
+    token = request.headers.get("x-vk-token", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
+    ids = []
+    scroll_id = None
+    total = 9999
+    intentos = 0
+    try:
+        while len(ids) < total and intentos < 60:
+            intentos += 1
+            if scroll_id:
+                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&scroll_id={scroll_id}"
+            else:
+                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset=0"
+            r = requests.get(url, headers=headers, timeout=15)
+            d = r.json()
+            if "paging" in d:
+                total = d["paging"].get("total", 0)
+            results = d.get("results", [])
+            if not results:
+                break
+            for rid in results:
+                if rid not in ids:
+                    ids.append(rid)
+            scroll_id = d.get("scroll_id")
+            if not scroll_id:
+                break
+        return {"ids": ids, "total": total, "fetched": len(ids)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ml-proxy/visits")
+async def ml_proxy_visits(ids: str, request: Request):
+    """Trae visitas para una lista de MLAs separados por coma"""
+    token = request.headers.get("x-vk-token", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else ml_headers()
+    try:
+        r = requests.get(f"https://api.mercadolibre.com/items/visits?ids={ids}", headers=headers, timeout=15)
         return r.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
