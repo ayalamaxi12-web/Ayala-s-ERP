@@ -1326,8 +1326,8 @@ async function connectEcom(){
 }
 
 // ── ML API ───────────────────────────────────────────────────
-async function mlFetch(path,token){var t=token||S.mlToken;return (await fetch('/.netlify/functions/ml-proxy?path='+encodeURIComponent(path.replace(/^\//,'')),{headers:{'Authorization':'Bearer '+t}})).json();}
-async function mlPut(id,body,token){var t=token||S.mlToken;return (await fetch('/.netlify/functions/ml-proxy?path='+encodeURIComponent('items/'+id),{method:'PUT',headers:{'Authorization':'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(body)})).json();}
+async function mlFetch(path,token){var t=token||S.mlToken;var bu=getBackendUrl();return (await fetch(bu+'/ml-proxy?path='+encodeURIComponent(path.replace(/^\//,'')),{headers:{'x-vk-token':t}})).json();}
+async function mlPut(id,body,token){var t=token||S.mlToken;var bu=getBackendUrl();return (await fetch(bu+'/ml-proxy/'+id,{method:'PUT',headers:{'x-vk-token':t,'Content-Type':'application/json'},body:JSON.stringify(body)})).json();}
 async function mlClose(mla){return mlPut(mla,{status:'closed'});}
 async function connectML(){
   var token=qs('ml-token').value.trim();if(!token){toast('Ingresa el token','error');return;}
