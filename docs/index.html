@@ -2698,7 +2698,7 @@ async function loadCompetidores() {
       var sheetName = vendorSheets[vi];
       var vendedor = sheetName.replace('V - ', '');
       var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + COMP_SHEET_ID + 
-                '/values/' + encodeURIComponent(sheetName) + '!A1:F2000?key=' + SHEETS_API_KEY;
+                '/values/' + encodeURIComponent(sheetName) + '!A1:H2000?key=' + SHEETS_API_KEY;
       var resp = await (await fetch(url)).json();
       var rows = resp.values || [];
       if (rows.length < 2) continue;
