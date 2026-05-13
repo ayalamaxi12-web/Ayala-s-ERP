@@ -1242,7 +1242,7 @@ function getEcomData(){
 function renderEcom(){
   if(!S.ecomRows.length)return;
   qs('ecom-stats-wrap').style.display='block';
-  var all=S.ecomRows.map(function(item){var pm=S.pmData[item.skuL]||null;var pmFr=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;var hd=[dPct(item.ml,pm&&pm.ml),dPct(item.web,pm&&pm.web),dPct(item.frave,pmFr)].some(function(d){return d!==null&&Math.abs(d)>1.5;});return !pm?'nopm':hd?'diff':'ok';});
+  var all=S.ecomRows.map(function(item){var pm=S.pmData[item.skuL]||null;var pmFr=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;var hd=[dPct(item.ml,pm&&pm.ml),dPct(item.web,pm&&pm.web),dPct(item.frave,pmFr)].some(function(d){return d!==null&&Math.abs(d)>1.5;})||(pm&&!pm.ml&&item.ml>0)||(pm&&!pm.web&&item.web>0)||(pm&&!pmFr&&item.frave>0);return !pm?'nopm':hd?'diff':'ok';});
   qs('es-total').textContent=S.ecomRows.length;
   qs('es-ok').textContent=all.filter(function(s){return s==='ok';}).length;
   qs('es-diff').textContent=all.filter(function(s){return s==='diff';}).length;
