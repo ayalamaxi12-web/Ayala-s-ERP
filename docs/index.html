@@ -2713,8 +2713,9 @@ async function loadCompetidores() {
           precio: precio,
           orig_price: parseFloat(String(row[2] || '0').replace(/[^\d.]/g, '')) || 0,
           discount: row[3] || '',
-          cuotas: row[4] || '',
-          link: row[5] || ''
+         cuotas: row[4] || '',
+          ventas: parseInt(row[5]) || 0,
+          link: row[6] || ''
         });
       });
       status.textContent = (vi+1) + '/' + vendorSheets.length + ' — ' + vendedor + ' (' + (rows.length-1) + ' productos)';
