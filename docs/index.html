@@ -1113,7 +1113,7 @@ function exportTacticaPrecios(){
   data.forEach(function(r){
     [[r.dl1,1,r.pmL1],[r.dl2,2,r.pmL2],[r.dl3,3,r.pmL3],[r.dl4,4,r.pmL4],[r.dl5,5,r.pmL5]].forEach(function(pair){
       var diff=pair[0],lista=pair[1],pmVal=pair[2];
-      if(diff!==null&&Math.abs(diff)>1.5&&pmVal>0){
+      if((diff!==null&&Math.abs(diff)>1.5&&pmVal>0)||(pmVal>0&&pair[3]===0)){
         lines.push([r.item.sku,pmVal,lista].join(','));
       }
     });
