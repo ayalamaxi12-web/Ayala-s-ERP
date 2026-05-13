@@ -1352,7 +1352,7 @@ async function fetchMLPrices(){
   var count=0;
   var tokens=S.mlToken2?[S.mlToken,S.mlToken2]:[S.mlToken];
   for(var i=0;i<mlas.length;i+=20){try{for(var t=0;t<tokens.length;t++){var d=await mlFetch('items?ids='+mlas.slice(i,i+20).join(',')+'&attributes=id,price,title,listing_type_id',tokens[t]);if(Array.isArray(d))d.forEach(function(item){if(item.code===200&&item.body){S.mlPrices[item.body.id]={price:item.body.price,title:item.body.title,listing_type_id:item.body.listing_type_id,promo_price:null,regular_amount:null};count++;}});}}catch(e){}}
-  for(var i=0;i<mlas.length;i+=10){try{for(var t=0;t<tokens.length;t++){var d=await (await fetch('/.netlify/functions/ml-proxy?prices='+mlas.slice(i,i+10).join(','),{headers:{'Authorization':'Bearer '+tokens[t]}})).json();if(Array.isArray(d))d.forEach(function(item){if(S.mlPrices[item.id]){if(item.price)S.mlPrices[item.id].price=item.price;S.mlPrices[item.id].promo_price=item.promo_price;S.mlPrices[item.id].regular_amount=item.regular_amount;}});}}catch(e){}}
+  for(var i=0;i<mlas.length;i+=10){try{for(var t=0;t<tokens.length;t++){var d=await mlFetch('items?ids='+mlas.slice(i,i+10).join(',')+'&attributes=id,price,original_price',tokens[t]);if(Array.isArray(d))d.forEach(function(item){if(S.mlPrices[item.id]){if(item.price)S.mlPrices[item.id].price=item.price;S.mlPrices[item.id].promo_price=item.promo_price;S.mlPrices[item.id].regular_amount=item.regular_amount;}});}}catch(e){}}
   btn.textContent='Actualizar precios ML';btn.disabled=false;renderML();toast(count+' publicaciones actualizadas');
 }
 
