@@ -1228,7 +1228,7 @@ function getEcomData(){
     var pm=S.pmData[item.skuL]||null;
     var pmFrave=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;
     var dml=dPct(item.ml,pm&&pm.ml),dweb=dPct(item.web,pm&&pm.web),dfrave=dPct(item.frave,pmFrave);
-    var hasDiff=[dml,dweb,dfrave].some(function(d){return d!==null&&Math.abs(d)>1.5;});
+    var hasDiff=[dml,dweb,dfrave].some(function(d){return d!==null&&Math.abs(d)>1.5;})||(pm&&!pm.ml&&item.ml>0)||(pm&&!pm.web&&item.web>0)||(pm&&!pmFrave&&item.frave>0);
     var estado=!pm?'nopm':hasDiff?'diff':'ok';
     return{sku:item.sku,skuL:item.skuL,ml:item.ml,web:item.web,frave:item.frave,pmFrave:pmFrave,pm:pm,dml:dml,dweb:dweb,dfrave:dfrave,estado:estado,cat:getCat(item.skuL)};
   }).filter(function(r){
