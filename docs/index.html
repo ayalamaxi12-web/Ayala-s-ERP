@@ -1012,7 +1012,7 @@ function getTacticaData(){
     if(item.l3>0)alertaListas.push('L3:$'+fmtN(item.l3));
     if(item.l4>0)alertaListas.push('L4:$'+fmtN(item.l4));
     if(item.l6>0)alertaListas.push('L6:$'+fmtN(item.l6));
-    var hasDiff=[dcosto,dl1,dl2,dl3,dl4,dl5].some(function(d){return d!==null&&Math.abs(d)>1.5;});
+    var hasDiff=[dcosto,dl1,dl2,dl3,dl4,dl5].some(function(d){return d!==null&&Math.abs(d)>1.5;})||(pmCosto>0&&item.costo===0)||(pmL1>0&&item.l1===0)||(pmL2>0&&item.l2===0)||(pmL3>0&&item.l3===0)||(pmL4>0&&item.l4===0)||(pmL5>0&&item.l5===0);
     var estado=!pm?'nopm':hasDiff?'diff':'ok';
     return{item:item,pm:pm,cat:cat,pmL1:pmL1,pmL2:pmL2,pmL3:pmL3,pmL4:pmL4,pmL5:pmL5,pmCosto:pmCosto,dcosto:dcosto,dl1:dl1,dl2:dl2,dl3:dl3,dl4:dl4,dl5:dl5,hasDiff:hasDiff,estado:estado,alertaListas:alertaListas};
   }).filter(function(r){
