@@ -428,13 +428,13 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
 <!-- VERIFICAR WEB -->
 <div id="page-verificar-web" class="page">
-  <div class="section-hdr">Verificar Precios Web (WooCommerce)</div>
+  <div class="section-hdr">Verificar Web (WooCommerce)</div>
   <div class="card">
     <div class="card-title">Cargar CSV de WooCommerce</div>
-    <div class="dropzone" id="dz-web-csv" onclick="document.getElementById('fi-web-csv').click()"><div style="font-size:22px;margin-bottom:5px">📁</div>Arrastrá el CSV exportado de WooCommerce</div>
+    <div class="dropzone" id="dz-web-csv" onclick="document.getElementById('fi-web-csv').click()"><div style="font-size:22px;margin-bottom:5px">&#128193;</div>Arrastrá el CSV exportado de WooCommerce</div>
     <input type="file" id="fi-web-csv" accept=".csv" style="display:none">
     <div id="web-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
-    <div style="margin-top:6px;font-size:10px;color:var(--text3)">Columnas: SKU · Regular price · Sale price · Stock · Published · Name · Meta: _wcgm_lista1/2/3_price</div>
+    <div style="margin-top:6px;font-size:10px;color:var(--text3)">Columnas: ID · SKU · Name · Regular price · Sale price · Stock · Published · Categories · Tags · Meta: _wcgm_lista1/2/3_price</div>
   </div>
   <div id="web-stats-wrap" style="display:none">
     <div class="stats-row" style="grid-template-columns:repeat(6,1fr);margin-bottom:10px">
@@ -446,20 +446,32 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div class="stat-card"><div class="stat-value" id="ws-stock" style="color:var(--accent)">0</div><div class="stat-label">Con stock</div></div>
     </div>
     <div class="erp-filters">
-      <input type="text" id="web-search" placeholder="Buscar SKU o nombre..." style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+      <input type="text" id="web-search" placeholder="Buscar SKU, nombre, categoría o etiqueta..." style="flex:1;min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
       <select id="web-filter-estado" class="fi"><option value="">Todos</option><option value="diff">Con diferencia</option><option value="ok">OK</option><option value="nopm">Sin PM</option><option value="offstock">Sin stock</option></select>
       <select id="web-filter-pub" class="fi"><option value="">Pub. y no</option><option value="1">Solo publicados</option><option value="0">No publicados</option></select>
-      <button class="btn" id="btn-export-web">⬇ CSV</button>
+      <button class="btn primary" id="btn-export-web">&#11015; Excel WooCommerce</button>
+      <button class="btn" id="btn-web-reset-changes" style="color:var(--yellow);border-color:rgba(255,209,102,.3)">&#8634; Deshacer cambios</button>
     </div>
-    <div class="table-wrap">
-      <table id="web-table">
+    <div style="padding:6px 12px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:10px;font-family:'DM Mono',monospace;color:var(--text3)">
+      &#9998; Campos en <span style="color:var(--accent)">celeste</span> son editables · Categorías y etiquetas separadas por coma · Dot naranja = cambio pendiente · El Excel se sube directamente a WooCommerce
+    </div>
+    <div class="table-wrap" style="overflow-x:auto">
+      <table id="web-table" style="min-width:1400px">
         <thead><tr>
-          <th data-col="sku">SKU</th><th data-col="name">Nombre</th>
-          <th data-col="regular">Precio Regular</th><th data-col="sale">Precio Oferta</th>
-          <th data-col="pmPrice">Precio PM</th><th data-col="diff">Diff</th>
-          <th data-col="stock">Stock</th><th data-col="published">Estado</th><th>Nuevo precio</th>
+          <th data-col="sku" style="min-width:110px">SKU</th>
+          <th data-col="name" style="min-width:180px">Nombre</th>
+          <th data-col="regular" style="min-width:105px">Precio Regular</th>
+          <th data-col="sale" style="min-width:105px">Precio Tachado</th>
+          <th style="min-width:65px">% Oferta</th>
+          <th data-col="pmPrice" style="min-width:100px">PM Web</th>
+          <th data-col="diff" style="min-width:65px">Diff</th>
+          <th data-col="categories" style="min-width:200px">Categorías</th>
+          <th data-col="tags" style="min-width:200px">Etiquetas</th>
+          <th data-col="stock" style="min-width:60px">Stock</th>
+          <th data-col="published" style="min-width:75px">Estado</th>
+          <th style="min-width:60px">Link</th>
         </tr></thead>
-        <tbody id="web-tbody"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Cargá el CSV de WooCommerce</td></tr></tbody>
+        <tbody id="web-tbody"><tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Cargá el CSV de WooCommerce</td></tr></tbody>
       </table>
       <div class="pagination" id="web-pag"></div>
     </div>
@@ -777,25 +789,128 @@ function exportTacticaPrecios(){const data=getTacticaData().filter(r=>r.estado==
 function exportTacticaCostos(){const data=getTacticaData().filter(r=>(r.dcosto!==null&&Math.abs(r.dcosto)>1.5&&r.pmCosto>0)||(r.pmCosto>0&&r.item.costo===0));if(!data.length){toast('Sin diferencias de costo','warning');return;}const lines=[['Codigo','Precio','Lista'].join(',')];data.forEach(r=>lines.push([r.item.sku,r.pmCosto,1].join(',')));const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`tactica-costos-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast(`Exportado (${lines.length-1} filas)`);}
 
 // ── WEB MODULE ──
-function processWebCSV(text){const rows=parseCSV(text);if(!rows.length){toast('CSV vacío','error');return;}S.webRows=rows.filter(r=>r.Type==='variation'||r.Type==='simple').map(r=>({id:r.ID||'',type:r.Type||'',sku:r.SKU||'',skuL:(r.SKU||'').toLowerCase(),name:r.Name||'',published:r.Published==='1',regular:parseNum(r['Regular price']),sale:parseNum(r['Sale price']),stock:parseInt(r.Stock)||0,inStock:r['In stock?']==='1',l1:parseNum(r['Meta: _wcgm_lista1_price']),l2:parseNum(r['Meta: _wcgm_lista2_price']),l3:parseNum(r['Meta: _wcgm_lista3_price'])}));qs('web-csv-info').textContent=S.webRows.length+' SKUs cargados';qs('web-stats-wrap').style.display='block';toast(S.webRows.length+' productos Web cargados');renderWeb();}
-
-function getWebData(){const srch=(qs('web-search').value||'').toLowerCase();const fE=qs('web-filter-estado').value||'';const fP=qs('web-filter-pub').value||'';return S.webRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmPrice=pm?pm.ml:0;const diff=dPct(item.regular,pmPrice);const hasDiff=diff!==null&&Math.abs(diff)>1.5||(pm&&!pmPrice&&item.regular>0);const estado=!pm?'nopm':hasDiff?'diff':'ok';return{...item,pm,pmPrice,diff,estado};}).filter(r=>{if(srch&&!r.skuL.includes(srch)&&!r.name.toLowerCase().includes(srch))return false;if(fE==='diff'&&r.estado!=='diff')return false;if(fE==='ok'&&r.estado!=='ok')return false;if(fE==='nopm'&&r.estado!=='nopm')return false;if(fE==='offstock'&&r.stock>0)return false;if(fP==='1'&&!r.published)return false;if(fP==='0'&&r.published)return false;return true;});}
-
+function processWebCSV(text){
+  const rows=parseCSV(text);
+  if(!rows.length){toast('CSV vacío','error');return;}
+  S.webRows=rows.filter(r=>r.Type==='variation'||r.Type==='simple').map(r=>({
+    id:r.ID||'',type:r.Type||'',sku:r.SKU||'',skuL:(r.SKU||'').toLowerCase(),
+    name:r.Name||'',slug:r.Slug||'',published:r.Published==='1',
+    regular:parseNum(r['Regular price']),sale:parseNum(r['Sale price']),
+    stock:parseInt(r.Stock)||0,inStock:r['In stock?']==='1',
+    categories:r.Categories||'',tags:r.Tags||'',
+    l1:parseNum(r['Meta: _wcgm_lista1_price']),l2:parseNum(r['Meta: _wcgm_lista2_price']),l3:parseNum(r['Meta: _wcgm_lista3_price']),
+    _regular:null,_sale:null,_categories:null,_tags:null,
+  }));
+  qs('web-csv-info').textContent=S.webRows.length+' SKUs cargados ('+rows.filter(r=>r.Type==='variable').length+' padres ignorados)';
+  qs('web-stats-wrap').style.display='block';
+  toast(S.webRows.length+' productos Web cargados');
+  renderWeb();
+}
+function getWebPmPrice(item){const pm=S.pmData[item.skuL]||null;return pm?pm.web:0;}
+function getWebData(){
+  const srch=(qs('web-search').value||'').toLowerCase();
+  const fE=qs('web-filter-estado').value||'';const fP=qs('web-filter-pub').value||'';
+  return S.webRows.map(item=>{
+    const pmPrice=getWebPmPrice(item);const pm=S.pmData[item.skuL]||null;
+    const actualReg=item._regular!==null?item._regular:item.regular;
+    const diff=dPct(actualReg,pmPrice);
+    const hasDiff=diff!==null&&Math.abs(diff)>1.5||(pm&&!pmPrice&&actualReg>0);
+    const estado=!pm?'nopm':hasDiff?'diff':'ok';
+    const editSale=item._sale!==null?item._sale:item.sale;
+    return{...item,pmPrice,pm,diff,estado,
+      editRegular:item._regular!==null?item._regular:item.regular,
+      editSale:editSale,saleNum:editSale||0,
+      editCats:item._categories!==null?item._categories:item.categories,
+      editTags:item._tags!==null?item._tags:item.tags,
+    };
+  }).filter(r=>{
+    if(srch&&!r.skuL.includes(srch)&&!r.name.toLowerCase().includes(srch)&&!r.editCats.toLowerCase().includes(srch)&&!r.editTags.toLowerCase().includes(srch))return false;
+    if(fE==='diff'&&r.estado!=='diff')return false;
+    if(fE==='ok'&&r.estado!=='ok')return false;
+    if(fE==='nopm'&&r.estado!=='nopm')return false;
+    if(fE==='offstock'&&r.stock>0)return false;
+    if(fP==='1'&&!r.published)return false;
+    if(fP==='0'&&r.published)return false;
+    return true;
+  });
+}
+function webSlug(item){return item.slug?'https://globalecom.ar/product/'+item.slug+'/':'';}
 function renderWeb(){
   if(!S.webRows.length)return;
-  const all=S.webRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmP=pm?pm.ml:0;const d=dPct(item.regular,pmP);const hd=d!==null&&Math.abs(d)>1.5||(pm&&!pmP&&item.regular>0);return !pm?'nopm':hd?'diff':'ok';});
-  qs('ws-total').textContent=S.webRows.length;qs('ws-ok').textContent=all.filter(s=>s==='ok').length;qs('ws-diff').textContent=all.filter(s=>s==='diff').length;qs('ws-nopm').textContent=all.filter(s=>s==='nopm').length;qs('ws-pub').textContent=S.webRows.filter(r=>r.published).length;qs('ws-stock').textContent=S.webRows.filter(r=>r.stock>0).length;
+  const all=S.webRows.map(item=>{const pmP=getWebPmPrice(item);const r2=item._regular!==null?item._regular:item.regular;const d=dPct(r2,pmP);const hd=d!==null&&Math.abs(d)>1.5||(S.pmData[item.skuL]&&!pmP&&r2>0);const pm=S.pmData[item.skuL]||null;return !pm?'nopm':hd?'diff':'ok';});
+  qs('ws-total').textContent=S.webRows.length;qs('ws-ok').textContent=all.filter(s=>s==='ok').length;
+  qs('ws-diff').textContent=all.filter(s=>s==='diff').length;qs('ws-nopm').textContent=all.filter(s=>s==='nopm').length;
+  qs('ws-pub').textContent=S.webRows.filter(r=>r.published).length;qs('ws-stock').textContent=S.webRows.filter(r=>r.stock>0).length;
   let data=getWebData();
-  if(S.wSort.col){const col=S.wSort.col,dir=S.wSort.dir;data.sort((a,b)=>{const va=col==='sku'?a.skuL:col==='name'?a.name:col==='regular'?a.regular:col==='sale'?a.sale:col==='pmPrice'?a.pmPrice||0:col==='diff'?Math.abs(a.diff||0):col==='stock'?a.stock:col==='published'?a.published?1:0:a.estado;const vb=col==='sku'?b.skuL:col==='name'?b.name:col==='regular'?b.regular:col==='sale'?b.sale:col==='pmPrice'?b.pmPrice||0:col==='diff'?Math.abs(b.diff||0):col==='stock'?b.stock:col==='published'?b.published?1:0:b.estado;return va<vb?-dir:va>vb?dir:0;});}
+  if(S.wSort.col){const col=S.wSort.col,dir=S.wSort.dir;data.sort((a,b)=>{const va=col==='sku'?a.skuL:col==='name'?a.name:col==='regular'?a.editRegular:col==='sale'?a.editSale||0:col==='pmPrice'?a.pmPrice||0:col==='diff'?Math.abs(a.diff||0):col==='categories'?a.editCats:col==='tags'?a.editTags:col==='stock'?a.stock:col==='published'?a.published?1:0:a.estado;const vb=col==='sku'?b.skuL:col==='name'?b.name:col==='regular'?b.editRegular:col==='sale'?b.editSale||0:col==='pmPrice'?b.pmPrice||0:col==='diff'?Math.abs(b.diff||0):col==='categories'?b.editCats:col==='tags'?b.editTags:col==='stock'?b.stock:col==='published'?b.published?1:0:b.estado;return va<vb?-dir:va>vb?dir:0;});}
   document.querySelectorAll('#web-table th[data-col]').forEach(th=>{th.classList.remove('sort-asc','sort-desc');if(th.dataset.col===S.wSort.col)th.classList.add(S.wSort.dir===1?'sort-asc':'sort-desc');});
   const pages=Math.ceil(data.length/S.pageSize)||1;S.wPage=Math.min(S.wPage,pages);
   const page=data.slice((S.wPage-1)*S.pageSize,S.wPage*S.pageSize);
   const tbody=qs('web-tbody');
-  if(!page.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';renderPag('web-pag',0,0,'wPage','renderWeb');return;}
-  tbody.innerHTML=page.map(r=>{const badge=r.estado==='ok'?'<span class="badge badge-green">OK</span>':r.estado==='diff'?'<span class="badge badge-red">Difiere</span>':'<span class="badge badge-gray">Sin PM</span>';const pubBadge=r.published?'<span class="badge badge-green">Publicado</span>':'<span class="badge badge-gray">No pub.</span>';const stockBadge=r.stock>0?`<span class="badge badge-blue">${r.stock}</span>`:'<span class="badge badge-red">0</span>';const diffStr=r.diff!==null?`<span class="${Math.abs(r.diff)<=S.tolGreen?'price-ok':'price-bad'}">${r.diff>0?'+':''}${r.diff.toFixed(1)}%</span>`:'<span style="color:var(--text3)">—</span>';const editCell=`<input class="edit-inp" data-sku="${r.sku}" placeholder="Nuevo $" style="width:80px" title="Campo de referencia — editar manualmente en WooCommerce">`;return`<tr><td class="sku-cell">${r.sku}</td><td style="font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td><td class="mono" style="font-size:10px">${r.regular?'$'+fmtN(r.regular):'-'}</td><td class="mono" style="font-size:10px">${r.sale?'<span class="off-badge">$'+fmtN(r.sale)+'</span>':'-'}</td><td class="mono" style="font-size:10px">${r.pmPrice?'$'+fmtN(r.pmPrice):'-'}</td><td>${diffStr}</td><td>${stockBadge}</td><td>${pubBadge}</td><td>${editCell}</td></tr>`;}).join('');
+  if(!page.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';renderPag('web-pag',0,0,'wPage','renderWeb');return;}
+  const ES='background:rgba(0,157,188,0.08);border:1px solid rgba(0,157,188,0.25);border-radius:4px;padding:3px 6px;color:var(--text);font-size:10px;font-family:DM Mono,monospace;width:100%;box-sizing:border-box;outline:none;';
+  tbody.innerHTML=page.map(r=>{
+    const badge=r.estado==='ok'?'<span class="badge badge-green">OK</span>':r.estado==='diff'?'<span class="badge badge-red">Difiere</span>':'<span class="badge badge-gray">Sin PM</span>';
+    const pubBadge=r.published?'<span class="badge badge-green">Pub.</span>':'<span class="badge badge-gray">No pub.</span>';
+    const stockBadge=r.stock>0?`<span class="badge badge-blue">${r.stock}</span>`:'<span class="badge badge-red">0</span>';
+    const diffStr=r.diff!==null?`<span class="${Math.abs(r.diff)<=S.tolGreen?'price-ok':Math.abs(r.diff)<=S.tolYellow?'price-warn':'price-bad'}">${r.diff>0?'+':''}${r.diff.toFixed(1)}%</span>`:'<span style="color:var(--text3)">—</span>';
+    const ofertaPct=r.editRegular>0&&r.saleNum>0?((r.editRegular-r.saleNum)/r.editRegular*100).toFixed(0)+'%':'—';
+    const link=webSlug(r);
+    const changed=r._regular!==null||r._sale!==null||r._categories!==null||r._tags!==null;
+    const dot=changed?'<span style="width:6px;height:6px;background:var(--accent3);border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle"></span>':'';
+    const sku=r.sku.replace(/'/g,"\\'");
+    return`<tr style="${changed?'background:rgba(245,158,11,0.04)':''}">
+      <td class="sku-cell">${dot}${r.sku}</td>
+      <td style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
+      <td><input style="${ES}" type="number" value="${r.editRegular||''}" data-sku="${r.sku}" data-field="regular" onchange="webEdit(this)" placeholder="$"></td>
+      <td><input style="${ES}" type="number" value="${r.saleNum||''}" data-sku="${r.sku}" data-field="sale" onchange="webEdit(this)" placeholder="$"></td>
+      <td style="font-size:10px;text-align:center;color:var(--text2)" class="web-oferta-${r.sku.replace(/[^a-z0-9]/gi,'')}">${ofertaPct}</td>
+      <td class="mono" style="font-size:10px;color:var(--accent)">${r.pmPrice?'$'+fmtN(r.pmPrice):'-'}</td>
+      <td>${diffStr}</td>
+      <td><input style="${ES}" type="text" value="${(r.editCats||'').replace(/"/g,'')}" data-sku="${r.sku}" data-field="categories" onchange="webEdit(this)" placeholder="Cat1, Cat2..."></td>
+      <td><input style="${ES}" type="text" value="${(r.editTags||'').replace(/"/g,'')}" data-sku="${r.sku}" data-field="tags" onchange="webEdit(this)" placeholder="tag1, tag2..."></td>
+      <td>${stockBadge}</td>
+      <td>${pubBadge}</td>
+      <td>${link?`<a href="${link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'<span style="color:var(--text3);font-size:9px">—</span>'}</td>
+    </tr>`;
+  }).join('');
   renderPag('web-pag',pages,data.length,'wPage','renderWeb');
 }
-function exportWeb(){const data=getWebData();if(!data.length){toast('Sin datos','error');return;}const h='SKU,Nombre,Precio_Regular,Precio_Oferta,Precio_PM,Diff_Pct,Stock,Publicado,Estado';const lines=data.map(r=>[r.sku,`"${r.name}"`,r.regular,r.sale||'',r.pmPrice||'',r.diff!==null?r.diff.toFixed(2):'',r.stock,r.published?'SI':'NO',r.estado].join(','));const blob=new Blob([[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`web-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast('Exportado');}
+function webEdit(input){
+  const sku=input.dataset.sku;const field=input.dataset.field;const val=input.value.trim();
+  const item=S.webRows.find(r=>r.sku===sku);if(!item)return;
+  if(field==='regular'){const n=parseFloat(val)||0;item._regular=n!==item.regular?n:null;}
+  else if(field==='sale'){const n=parseFloat(val)||0;item._sale=n!==item.sale?n:null;}
+  else if(field==='categories'){item._categories=val!==item.categories?val:null;}
+  else if(field==='tags'){item._tags=val!==item.tags?val:null;}
+  const row=input.closest('tr');if(!row)return;
+  const changed=item._regular!==null||item._sale!==null||item._categories!==null||item._tags!==null;
+  row.style.background=changed?'rgba(245,158,11,0.04)':'';
+  const reg=parseFloat(row.querySelector('[data-field="regular"]').value)||0;
+  const sal=parseFloat(row.querySelector('[data-field="sale"]').value)||0;
+  const cells=[...row.querySelectorAll('td')];
+  if(cells[4])cells[4].textContent=reg>0&&sal>0?((reg-sal)/reg*100).toFixed(0)+'%':'—';
+}
+function webResetChanges(){S.webRows.forEach(r=>{r._regular=null;r._sale=null;r._categories=null;r._tags=null;});toast('Cambios descartados');renderWeb();}
+function exportWeb(){
+  const allData=getWebData();if(!allData.length){toast('Sin datos','error');return;}
+  const changed=allData.filter(r=>r._regular!==null||r._sale!==null||r._categories!==null||r._tags!==null);
+  const exportData=changed.length>0?changed:allData;
+  const headers=['ID','SKU','Regular price','Sale price','Categories','Tags'];
+  const lines=[headers.join(',')];
+  exportData.forEach(r=>{
+    const reg=r._regular!==null?r._regular:r.regular;
+    const sal=r._sale!==null?r._sale:(r.sale||'');
+    const cats=r._categories!==null?r._categories:r.categories;
+    const tags=r._tags!==null?r._tags:r.tags;
+    lines.push([r.id,r.sku,reg||'',sal||'','"'+(cats||'').replace(/"/g,'""')+'"','"'+(tags||'').replace(/"/g,'""')+'"'].join(','));
+  });
+  const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='woo-import-'+(changed.length>0?changed.length+'-cambios':allData.length+'-productos')+'-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  toast(changed.length>0?'Exportados '+changed.length+' productos con cambios':'Exportados '+exportData.length+' productos');
+}
 
 // ── COMPETIDORES ──
 async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${API_KEY}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:H2000?key=${API_KEY}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;rows.slice(1).forEach(row=>{const precio=parseFloat(String(row[1]||'0').replace(/[^\d.]/g,''))||0;if(!precio)return;COMP.data.push({vendedor,titulo:row[0]||'',precio,orig_price:parseFloat(String(row[2]||'0').replace(/[^\d.]/g,''))||0,discount:row[3]||'',cuotas:row[4]||'',ventas:parseInt(row[5])||0,link:row[6]||''});});status.textContent=`${vi+1}/${vendorSheets.length} — ${vendedor}`;}COMP.vendedores=[...new Set(COMP.data.map(r=>r.vendedor))].sort();COMP.selected=[...COMP.vendedores];const btnsDiv=qs('competidores-vendor-btns');btnsDiv.innerHTML=COMP.vendedores.map(v=>`<button class="btn-xs comp-v-btn" data-v="${v}" onclick="toggleVendor(this)">${v}</button>`).join('');qs('competidores-search-bar').style.display='flex';qs('competidores-table-wrap').style.display='block';status.textContent=`${COMP.data.length} productos · ${COMP.vendedores.length} vendedores`;btn.textContent='🔄 Cargar desde Sheets';renderCompetidores();}catch(e){status.textContent='❌ Error: '+e.message;}btn.disabled=false;}
@@ -921,6 +1036,7 @@ function init(){
   qs('btn-export-ecom').addEventListener('click',exportEcom);
   qs('btn-export-ml').addEventListener('click',exportML);
   qs('btn-export-web').addEventListener('click',exportWeb);
+  qs('btn-web-reset-changes').addEventListener('click',webResetChanges);
   qs('btn-export-tactica-precios').addEventListener('click',exportTacticaPrecios);
   qs('btn-export-tactica-costos').addEventListener('click',exportTacticaCostos);
   qs('btn-save-config').addEventListener('click',()=>{S.tolGreen=parseFloat(qs('tol-green').value)||0.5;S.tolYellow=parseFloat(qs('tol-yellow').value)||2;S.shippingThreshold=parseFloat(qs('shipping-threshold').value)||33000;S.shippingCost=parseFloat(qs('shipping-cost').value)||8500;saveStor();toast('Configuración guardada');});
