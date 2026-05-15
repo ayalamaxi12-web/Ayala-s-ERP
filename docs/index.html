@@ -195,10 +195,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="sidebar-section">
     <div class="sidebar-section-label">🛠 Gestión de Precios</div>
     <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
-    <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
     <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">📋</span> Verificar Táctica</div>
     <div class="sidebar-item" data-page="verificar-web" onclick="goPage('verificar-web',this)"><span class="icon">🌐</span> Verificar Web</div>
     <div class="sidebar-item" data-page="verificar-fravega" onclick="goPage('verificar-fravega',this)"><span class="icon">🏪</span> Verificar Fravega</div>
+    <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
   </div>
   <div class="sidebar-sep"></div>
@@ -739,6 +739,7 @@ function fmtN(n){return Number(n).toLocaleString('es-AR');}
 function fmt$(v){return'$'+Math.round(v).toLocaleString('es-AR');}
 function fmtUSD(v){return'USD '+Math.round(v).toLocaleString('es-AR');}
 function toast(msg,type){const el=qs('toast');el.textContent=msg;el.className='toast show '+(type||'success');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3500);}
+function normSku(s){return(s||"").trim().toLowerCase().replace(/[\u200b\u00a0\ufeff]/g,"");}
 function parseNum(s){if(!s)return 0;let str=String(s).replace(/^"|"$/g,'').trim();const hasDot=str.includes('.');const hasCom=str.includes(',');if(hasDot&&hasCom){str=str.replace(/\./g,'').replace(',','.');}else if(hasCom){str=str.replace(',','.');}str=str.replace(/[^\d.]/g,'');return parseFloat(str)||0;}
 function dPct(a,r){if(!a||!r)return null;return(a-r)/r*100;}
 function dStr(pct){if(pct===null)return'<span style="color:var(--text3)">—</span>';const cls=Math.abs(pct)<0.01?'price-ok':'price-bad';return`<span class="${cls}">${pct>0?'+':''}${pct.toFixed(2)}%</span>`;}
@@ -819,7 +820,7 @@ async function loadCats(){
     const pi=hdrs.indexOf('PM');
     S.catData={};
     d.values.slice(1).forEach(row=>{
-      const sku=String(row[si]||'').trim().toLowerCase();if(!sku||sku==='sku')return;
+      const sku=normSku(String(row[si]||''));if(!sku||sku==='sku')return;
       const cat=ci>=0?String(row[ci]||'').trim():'';
       const subcat=sc2i>=0?String(row[sc2i]||'').trim():'';
       const pm=pi>=0?String(row[pi]||'').trim():'';
@@ -846,10 +847,10 @@ async function connectEcom(){const email=qs('ecom-email').value.trim(),pass=qs('
 </script>
 <script>
 // ── ECOM CSV ──
-function processEcomCSV(text){const rows=parseCSV(text);if(!rows.length){toast('CSV vacío','error');return;}const hdrs=Object.keys(rows[0]);const svCol=hdrs.find(h=>h.toLowerCase().includes('sku variante'));const smCol=hdrs.find(h=>h.toLowerCase()==='sku');const skuCol=svCol||smCol;const mlCol=hdrs.find(h=>h.toLowerCase()==='precio mercado libre')||hdrs.find(h=>h.toLowerCase().includes('mercado libre'));const webCol=hdrs.find(h=>h.toLowerCase().includes('precio web'));const fraveCol=hdrs.find(h=>h.toLowerCase().includes('fravega'));if(!skuCol||!mlCol){toast('No encontré SKU o Precio ML','error');return;}S.ecomRows=[];const mc={};rows.forEach(row=>{const sku=(row[skuCol]||'').trim();if(!sku)return;const sm=smCol&&svCol?(row[smCol]||'').trim():'';let pos=0;if(sm&&sm!==sku){if(mc[sm]===undefined)mc[sm]=0;pos=mc[sm]++;}S.ecomRows.push({sku,skuL:sku.toLowerCase(),skuMadre:sm,variantPosition:pos,ml:parseNum(row[mlCol]),web:webCol?parseNum(row[webCol]):0,frave:fraveCol?parseNum(row[fraveCol]):0});});qs('ecom-csv-info').textContent=S.ecomRows.length+' SKUs cargados';toast(S.ecomRows.length+' SKUs de Ecom');qs('ecom-stats-wrap').style.display='block';renderEcom();}
+function processEcomCSV(text){const rows=parseCSV(text);if(!rows.length){toast('CSV vacío','error');return;}const hdrs=Object.keys(rows[0]);const svCol=hdrs.find(h=>h.toLowerCase().includes('sku variante'));const smCol=hdrs.find(h=>h.toLowerCase()==='sku');const skuCol=svCol||smCol;const mlCol=hdrs.find(h=>h.toLowerCase()==='precio mercado libre')||hdrs.find(h=>h.toLowerCase().includes('mercado libre'));const webCol=hdrs.find(h=>h.toLowerCase().includes('precio web'));const fraveCol=hdrs.find(h=>h.toLowerCase().includes('fravega'));if(!skuCol||!mlCol){toast('No encontré SKU o Precio ML','error');return;}S.ecomRows=[];const mc={};rows.forEach(row=>{const sku=(row[skuCol]||'').trim();if(!sku)return;const sm=smCol&&svCol?(row[smCol]||'').trim():'';let pos=0;if(sm&&sm!==sku){if(mc[sm]===undefined)mc[sm]=0;pos=mc[sm]++;}S.ecomRows.push({sku,skuL:normSku(sku),skuMadre:sm,variantPosition:pos,ml:parseNum(row[mlCol]),web:webCol?parseNum(row[webCol]):0,frave:fraveCol?parseNum(row[fraveCol]):0});});qs('ecom-csv-info').textContent=S.ecomRows.length+' SKUs cargados';toast(S.ecomRows.length+' SKUs de Ecom');qs('ecom-stats-wrap').style.display='block';renderEcom();}
 
 // ── ECOM TABLE ──
-function getEcomData(){const srch=(qs('ecom-search').value||'').toLowerCase();const fE=qs('ecom-filter-estado').value||'';return S.ecomRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmFrave=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;const dml=dPct(item.ml,pm&&pm.ml),dweb=dPct(item.web,pm&&pm.web),dfrave=dPct(item.frave,pmFrave);const hasDiff=[dml,dweb,dfrave].some(d=>d!==null&&Math.abs(d)>1.5)||(pm&&!pm.ml&&item.ml>0)||(pm&&!pm.web&&item.web>0)||(pm&&!pmFrave&&item.frave>0);const estado=!pm?'nopm':hasDiff?'diff':'ok';return{sku:item.sku,skuL:item.skuL,ml:item.ml,web:item.web,frave:item.frave,pmFrave,pm,dml,dweb,dfrave,estado,cat:getCat(item.skuL)};}).filter(r=>{if(srch&&!r.skuL.includes(srch))return false;if(fE&&r.estado!==fE)return false;return true;});}
+function getEcomData(){const srch=(qs('ecom-search').value||'').toLowerCase();const fE=qs('ecom-filter-estado').value||'';return S.ecomRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmFrave=pm?(item.frave>0&&item.frave<S.shippingThreshold?item.frave:pm.frave):null;const dml=dPct(item.ml,pm&&pm.ml),dweb=dPct(item.web,pm&&pm.web),dfrave=dPct(item.frave,pmFrave);const hasDiff=[dml,dweb,dfrave].some(d=>d!==null&&Math.abs(d)>1.5)||(pm&&pm.ml>0&&item.ml>0&&dml===null)||(pm&&pm.web>0&&item.web>0&&dweb===null)||(pm&&pmFrave>0&&item.frave>0&&dfrave===null);const estado=!pm?'nopm':hasDiff?'diff':'ok';return{sku:item.sku,skuL:item.skuL,ml:item.ml,web:item.web,frave:item.frave,pmFrave,pm,dml,dweb,dfrave,estado,cat:getCat(item.skuL)};}).filter(r=>{if(srch&&!r.skuL.includes(srch))return false;if(fE&&r.estado!==fE)return false;return true;});}
 
 function renderEcom(){
   if(!S.ecomRows.length)return;
@@ -911,7 +912,7 @@ function exportML(){if(!S.pubData.length){toast('Sin datos','error');return;}con
 </script>
 <script>
 // ── TÁCTICA ──
-function processTacticaCSV(text){const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());if(lines.length<2){toast('CSV vacío','error');return;}let sep=',';if(lines[0].split(';').length>lines[0].split(',').length)sep=';';function splitRow(line){const r=[];let cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur);cur='';}else cur+=c;}r.push(cur);return r.map(v=>v.replace(/^"|"$/g,'').trim());}const hdrs=splitRow(lines[0].replace(/^\uFEFF/,''));function findIdx(exactos){const norm=s=>s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const ne=exactos.map(norm);return hdrs.findIndex(h=>ne.includes(norm(h)));}const iSku=findIdx(['Código','Codigo','SKU','CÓDIGO']),iCosto=findIdx(['Costo 1','COSTO 1','Costo1']),iL1=findIdx(['Precio de Venta1','Precio De Venta1','PRECIO DE VENTA1','Precio de Venta 1']),iL2=findIdx(['Precio de Venta2','Precio De Venta2','PRECIO DE VENTA2','Precio de Venta 2']),iL3=findIdx(['Precio de Venta3','Precio De Venta3','PRECIO DE VENTA3','Precio de Venta 3']),iL4=findIdx(['Precio de Venta4','Precio De Venta4','PRECIO DE VENTA4','Precio de Venta 4']),iL5=findIdx(['Precio de Venta5','Precio De Venta5','PRECIO DE VENTA5','Precio de Venta 5']);if(iSku<0){toast('No encontré columna Código','error');return;}function pn(vals,idx){if(idx<0||idx>=vals.length)return 0;return parseNum(vals[idx]);}S.tacticaRows=[];lines.slice(1).forEach(line=>{const v=splitRow(line);const sku=(v[iSku]||'').trim();if(!sku)return;S.tacticaRows.push({sku,skuL:sku.toLowerCase(),costo:pn(v,iCosto),l1:pn(v,iL1),l2:pn(v,iL2),l3:pn(v,iL3),l4:pn(v,iL4),l5:pn(v,iL5)});});qs('tactica-csv-info').textContent=S.tacticaRows.length+' SKUs cargados';qs('tactica-stats-wrap').style.display='block';toast(S.tacticaRows.length+' SKUs de Táctica');renderTactica();}
+function processTacticaCSV(text){const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());if(lines.length<2){toast('CSV vacío','error');return;}let sep=',';const l0sep=lines[0]||'';if(l0sep.split(';').length>l0sep.split(',').length)sep=';';else if(l0sep.split('\t').length>3&&l0sep.split('\t').length>l0sep.split(',').length)sep='\t';function splitRow(line){const r=[];let cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur);cur='';}else cur+=c;}r.push(cur);return r.map(v=>v.replace(/^"|"$/g,'').trim());}const hdrs=splitRow(lines[0].replace(/^\uFEFF/,''));function findIdx(exactos){const norm=s=>s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const ne=exactos.map(norm);return hdrs.findIndex(h=>ne.includes(norm(h)));}const iSku=findIdx(['Código','Codigo','SKU','CÓDIGO']),iCosto=findIdx(['Costo 1','COSTO 1','Costo1','costo 1','COSTO1']),iL1=findIdx(['Precio de Venta1','Precio De Venta1','PRECIO DE VENTA1','Precio de Venta 1']),iL2=findIdx(['Precio de Venta2','Precio De Venta2','PRECIO DE VENTA2','Precio de Venta 2']),iL3=findIdx(['Precio de Venta3','Precio De Venta3','PRECIO DE VENTA3','Precio de Venta 3']),iL4=findIdx(['Precio de Venta4','Precio De Venta4','PRECIO DE VENTA4','Precio de Venta 4']),iL5=findIdx(['Precio de Venta5','Precio De Venta5','PRECIO DE VENTA5','Precio de Venta 5']);if(iSku<0){toast('No encontré columna Código','error');return;}function pn(vals,idx){if(idx<0||idx>=vals.length)return 0;return parseNum(vals[idx]);}S.tacticaRows=[];lines.slice(1).forEach(line=>{const v=splitRow(line);const sku=(v[iSku]||'').trim();if(!sku)return;S.tacticaRows.push({sku,skuL:normSku(sku),costo:pn(v,iCosto),l1:pn(v,iL1),l2:pn(v,iL2),l3:pn(v,iL3),l4:pn(v,iL4),l5:pn(v,iL5)});});qs('tactica-csv-info').textContent=S.tacticaRows.length+' SKUs cargados';qs('tactica-stats-wrap').style.display='block';toast(S.tacticaRows.length+' SKUs de Táctica');renderTactica();}
 
 function getTacticaData(){const srch=(qs('tactica-search').value||'').toLowerCase();const fE=qs('tactica-filter-estado').value||'';const fL=qs('tactica-filter-lista').value||'';const fPM=getMSValues('ms-tactica-pm');return S.tacticaRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmL1=pm&&pm.l1||0,pmL2=pm&&pm.l2||0,pmL3=pm&&pm.l3||0,pmL4=pm&&pm.l4||0,pmL5=pm&&pm.l5||0,pmCosto=pm&&pm.costo||0;const dcosto=dPct(item.costo,pmCosto),dl1=dPct(item.l1,pmL1),dl2=dPct(item.l2,pmL2),dl3=dPct(item.l3,pmL3),dl4=dPct(item.l4,pmL4),dl5=dPct(item.l5,pmL5);const hasDiff=[dcosto,dl1,dl2,dl3,dl4,dl5].some(d=>d!==null&&Math.abs(d)>1.5)||(pmCosto>0&&item.costo===0)||(pmL1>0&&item.l1===0)||(pmL2>0&&item.l2===0)||(pmL3>0&&item.l3===0)||(pmL4>0&&item.l4===0)||(pmL5>0&&item.l5===0);const estado=!pm?'nopm':hasDiff?'diff':'ok';return{item,pm,pmL1,pmL2,pmL3,pmL4,pmL5,pmCosto,dcosto,dl1,dl2,dl3,dl4,dl5,hasDiff,estado};}).filter(r=>{if(srch&&!r.item.skuL.includes(srch))return false;if(fE&&r.estado!==fE)return false;if(fPM&&r.pm&&!fPM.includes(r.pm.pmName))return false;if(fL){if(fL==='costo')return r.dcosto!==null&&Math.abs(r.dcosto)>1.5||(r.pmCosto>0&&r.item.costo===0);if(fL==='1')return r.dl1!==null&&Math.abs(r.dl1)>1.5||(r.pmL1>0&&r.item.l1===0);if(fL==='2')return r.dl2!==null&&Math.abs(r.dl2)>1.5||(r.pmL2>0&&r.item.l2===0);if(fL==='3')return r.dl3!==null&&Math.abs(r.dl3)>1.5||(r.pmL3>0&&r.item.l3===0);if(fL==='4')return r.dl4!==null&&Math.abs(r.dl4)>1.5||(r.pmL4>0&&r.item.l4===0);if(fL==='5')return r.dl5!==null&&Math.abs(r.dl5)>1.5||(r.pmL5>0&&r.item.l5===0);}return true;});}
 
@@ -957,7 +958,7 @@ function processWebCSV(text){
   const rows=parseCSV(text);
   if(!rows.length){toast('CSV vacío','error');return;}
   S.webRows=rows.filter(r=>r.Type==='variation'||r.Type==='simple').map(r=>({
-    id:r.ID||'',type:r.Type||'',sku:r.SKU||'',skuL:(r.SKU||'').toLowerCase(),
+    id:r.ID||'',type:r.Type||'',sku:(r.SKU||'').trim(),skuL:normSku(r.SKU),
     name:r.Name||'',slug:r.Slug||'',published:r.Published==='1',
     regular:parseNum(r['Regular price']),sale:parseNum(r['Sale price']),
     stock:parseInt(r.Stock)||0,inStock:r['In stock?']==='1',
@@ -1177,7 +1178,7 @@ function processWebPubCSV(text){
   const estadoCol=Object.keys(first).find(k=>k.toLowerCase()==='estado')||'Estado';
   S.webPubRows=normRows.filter(r=>(r[skuCol]||'').trim()).map(r=>({
     sku:(r[skuCol]||'').trim(),
-    skuL:(r[skuCol]||'').trim().toLowerCase(),
+    skuL:normSku(r[skuCol]),
     titulo:(r[tituloCol]||r['Título']||r['Titulo']||'').trim(),
     regla:(r[reglaCol]||'').trim(),
     precioActual:parseNum(r[precioCol]),
@@ -1305,7 +1306,7 @@ function processFraveCSV(text){
   function splitL(line){const r=[];let cur='',q=false;for(const c of line){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur.trim());cur='';}else cur+=c;}r.push(cur.trim());return r.map(v=>v.replace(/^"|"$/g,'').trim());}
   const hdrs=splitL(lines[1]);
   const rows=lines.slice(2).map(l=>{const v=splitL(l);const o={};hdrs.forEach((h,i)=>{o[h]=(v[i]||'').trim();});return o;}).filter(r=>Object.values(r).some(v=>v));
-  const skuCol=hdrs.find(h=>h.toLowerCase().includes('sku'));
+  const skuCol=hdrs.find(h=>h.toLowerCase().includes('sku asociado'))||hdrs.find(h=>h.toLowerCase()==='sku')||hdrs[7];
   const precioCol=hdrs.find(h=>h.toLowerCase()==='precio');
   const reglaCol=hdrs.find(h=>h.toLowerCase().includes('regla de precio'));
   const tituloCol=hdrs.find(h=>h.toLowerCase().includes('titulo')||h.toLowerCase()==='título');
@@ -1313,7 +1314,7 @@ function processFraveCSV(text){
   const estadoCol=hdrs.find(h=>h.toLowerCase()==='estado');
   const stockCol=hdrs.find(h=>h.toLowerCase().includes('cantidad'));
   S.fraveRows=rows.filter(r=>(r[skuCol]||'').trim()).map(r=>({
-    sku:(r[skuCol]||'').trim(),skuL:(r[skuCol]||'').trim().toLowerCase(),
+    sku:(r[skuCol]||'').trim(),skuL:normSku(r[skuCol]),
     titulo:(r[tituloCol]||'').trim(),regla:(r[reglaCol]||'').trim(),
     precioActual:parseNum(r[precioCol]),link:(r[linkCol]||'').trim(),
     estado:(r[estadoCol]||'').trim(),stock:parseInt(r[stockCol])||0,
@@ -1482,6 +1483,55 @@ function applyFilters(){activeFilters={desde:qs('f-desde').value,hasta:qs('f-has
 function resetFilters(){['f-desde','f-hasta','f-desde2','f-hasta2','f-sku'].forEach(id=>qs(id).value='');['ms-canal','ms-categoria','ms-pm'].forEach(id=>clearMS(id));activeFilters={};renderDashboard();}
 function getFiltered(){const f=activeFilters;let data1=[...allSalesData];if(f.canal)data1=data1.filter(d=>f.canal.includes(d.canal));if(f.categoria)data1=data1.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data1=data1.filter(d=>f.pm.includes(d.pm));if(f.sku)data1=data1.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde)data1=data1.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data1=data1.filter(d=>d.fechaStr<=f.hasta);let data2=null;if(f.desde2||f.hasta2){data2=[...allSalesData];if(f.canal)data2=data2.filter(d=>f.canal.includes(d.canal));if(f.categoria)data2=data2.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data2=data2.filter(d=>f.pm.includes(d.pm));if(f.sku)data2=data2.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde2)data2=data2.filter(d=>d.fechaStr>=f.desde2);if(f.hasta2)data2=data2.filter(d=>d.fechaStr<=f.hasta2);}return{data1,data2};}
 
+
+function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap){
+  if(!topCats.length)return'';
+  let html='<div><div class="section-hdr">Top Categorías</div><div class="table-wrap"><table>';
+  html+='<thead><tr><th style="width:22px"></th><th>Categoría</th><th>Facturación P1</th>';
+  if(useComparison)html+='<th>Facturación P2</th><th>Var.</th>';
+  html+='<th>Participación</th><th>Rent. %</th></tr></thead><tbody>';
+  topCats.forEach(([cat,fact])=>{
+    const pct=totalFact?(fact/totalFact*100).toFixed(1):0;
+    const rp=fact>0?(rentMap[cat]||0)/fact:0;
+    const rc=rp>0.6?'badge-green':rp>0.4?'badge-blue':rp>0.2?'badge-yellow':'badge-red';
+    const fact2=useComparison?(groupSum(data2,'categoria','precioFinal')[cat]||0):0;
+    const varPct=useComparison&&fact2>0?((fact-fact2)/fact2*100).toFixed(1):null;
+    const varStr=varPct!==null?'<span style="color:'+(+varPct>=0?'var(--green)':'var(--red)')+';font-size:9px;font-family:DM Mono,monospace">'+(+varPct>=0?'↑':'↓')+Math.abs(+varPct)+'%</span>':'';
+    // Top SKUs for this cat
+    const skuMap={};data.filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap[s]=(skuMap[s]||0)+d.precioFinal;}));
+    const topSkus=Object.entries(skuMap).sort((a,b)=>b[1]-a[1]).slice(0,15);
+    const skuMap2={};if(useComparison)(data2||[]).filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap2[s]=(skuMap2[s]||0)+d.precioFinal;}));
+    const catId='cat-'+cat.replace(/[^a-z0-9]/gi,'');
+    html+='<tr class="cat-row" onclick="toggleCatSkus(\''+catId+'\')" style="cursor:pointer">';
+    html+='<td style="color:var(--text3);font-size:11px;text-align:center" id="arr-'+catId+'">▶</td>';
+    html+='<td style="font-weight:600;font-size:11px">'+cat+'</td>';
+    html+='<td class="mono" style="font-size:10px">'+fmt$(fact)+'</td>';
+    if(useComparison){html+='<td class="mono" style="font-size:10px">'+(fact2?fmt$(fact2):'-')+'</td><td>'+varStr+'</td>';}
+    html+='<td><div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-size:9px;font-family:DM Mono,monospace;color:var(--text2)">'+pct+'%</span></div></td>';
+    html+='<td><span class="badge '+rc+'">'+(rp*100).toFixed(1)+'%</span></td></tr>';
+    // Collapsible SKU rows
+    html+='<tr id="'+catId+'" style="display:none"><td colspan="'+(useComparison?6:4)+'" style="padding:0">';
+    html+='<table style="width:100%;background:var(--surface2)"><thead><tr style="background:rgba(0,157,188,0.08)">';
+    html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">SKU</th>';
+    html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P1</th>';
+    if(useComparison){html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P2</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Var.</th>';}
+    html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">% cat</th></tr></thead><tbody>';
+    topSkus.forEach(([sku,sv])=>{
+      const sv2=skuMap2[sku]||0;
+      const sp=fact>0?(sv/fact*100).toFixed(1):0;
+      const svar=useComparison&&sv2>0?((sv-sv2)/sv2*100).toFixed(1):null;
+      const svarStr=svar!==null?'<span style="color:'+(+svar>=0?'var(--green)':'var(--red)')+'font-size:9px">'+(+svar>=0?'↑':'↓')+Math.abs(+svar)+'%</span>':'';
+      html+='<tr><td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent)">'+sku+'</td>';
+      html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+fmt$(sv)+'</td>';
+      if(useComparison){html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+(sv2?fmt$(sv2):'-')+'</td><td style="padding:4px 10px">'+svarStr+'</td>';}
+      html+='<td style="padding:4px 10px;font-size:9px;color:var(--text3);font-family:DM Mono,monospace">'+sp+'%</td></tr>';
+    });
+    html+='</tbody></table></td></tr>';
+  });
+  html+='</tbody></table></div></div>';
+  return html;
+}
+
 function renderDashboard(){
   const{data1,data2}=getFiltered();const data=data1;
   const pg=qs('page-dashboard');if(!data.length){pg.innerHTML='<div class="loading-block"><span>Sin datos para los filtros seleccionados</span></div>';return;}
@@ -1514,52 +1564,7 @@ function renderDashboard(){
     <div><div class="section-hdr">Evolución Diaria</div><div class="chart-card"><h3>Facturación por Día</h3><p>${useComparison?`<span style="color:var(--accent2)">●</span> ${label1} &nbsp; <span style="color:var(--accent3)">●</span> ${label2}`:`${Object.keys(byDay1).length} días con ventas`}</p><div style="position:relative;height:240px"><canvas id="chartDiario"></canvas></div></div></div>
     <div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final en $</p><div style="position:relative;height:220px"><canvas id="chartCanal"></canvas></div></div><div class="chart-card"><h3>Mix de Canales</h3><p>Distribución %</p><div style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="chartDonut"></canvas></div></div></div>
     <div><div class="section-hdr">Histórico por Período</div><div class="chart-card"><h3>Facturación · Rentabilidad · Rent. %</h3><p>Todos los períodos · línea amarilla = Rent %</p><div style="position:relative;height:220px"><canvas id="chartCross"></canvas></div></div></div>
-    <div><div class="section-hdr">Top Categorías</div><div class="table-wrap"><table><thead><tr><th style="width:22px"></th><th>Categoría</th><th>Facturación P1</th>${useComparison?'<th>Facturación P2</th><th>Var.</th>':''}<th>Participación</th><th>Rent. %</th></tr></thead>
-      <tbody id="cats-tbody">${topCats.map(([cat,fact])=>{
-        const pct=totalFact?(fact/totalFact*100).toFixed(1):0;
-        const rp=fact>0?(rentMap[cat]||0)/fact:0;
-        const rc=rp>0.6?'badge-green':rp>0.4?'badge-blue':rp>0.2?'badge-yellow':'badge-red';
-        const fact2=useComparison?(groupSum(data2,'categoria','precioFinal')[cat]||0):0;
-        const varPct=useComparison&&fact2>0?((fact-fact2)/fact2*100).toFixed(1):null;
-        const varStr=varPct!==null?`<span style="color:${+varPct>=0?'var(--green)':'var(--red)'};font-size:9px;font-family:DM Mono,monospace">${+varPct>=0?'↑':'↓'}${Math.abs(+varPct)}%</span>`:'';
-        // Top SKUs for this category
-        const catSkus=data.filter(d=>d.categoria===cat);
-        const skuMap={};catSkus.forEach(d=>d.skus.forEach(s=>{skuMap[s]=(skuMap[s]||0)+d.precioFinal;}));
-        const topSkus=Object.entries(skuMap).sort((a,b)=>b[1]-a[1]).slice(0,15);
-        const skuMap2={};if(useComparison){(data2||[]).filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap2[s]=(skuMap2[s]||0)+d.precioFinal;}));}
-        const catId='cat-'+cat.replace(/[^a-z0-9]/gi,'');
-        return\`<tr class="cat-row" onclick="toggleCatSkus('${catId}')" style="cursor:pointer">
-          <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${catId}">▶</td>
-          <td style="font-weight:600;font-size:11px">${cat}</td>
-          <td class="mono" style="font-size:10px">${fmt$(fact)}</td>
-          \${useComparison?\`<td class="mono" style="font-size:10px">\${fact2?fmt$(fact2):'-'}</td><td>\${varStr}</td>\`:''}
-          <td><div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-size:9px;font-family:DM Mono,monospace;color:var(--text2)">${pct}%</span></div></td>
-          <td><span class="badge ${rc}">${(rp*100).toFixed(1)}%</span></td>
-        </tr>
-        <tr id="${catId}" style="display:none"><td colspan="${useComparison?6:4}" style="padding:0">
-          <table style="width:100%;background:var(--surface2)">
-            <thead><tr style="background:rgba(0,157,188,0.08)">
-              <th style="padding:5px 10px;font-size:9px;color:var(--text3)">SKU</th>
-              <th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P1</th>
-              \${useComparison?'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P2</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Var.</th>':''}
-              <th style="padding:5px 10px;font-size:9px;color:var(--text3)">% del total</th>
-            </tr></thead>
-            <tbody>\${topSkus.map(([sku,sv])=>{
-              const sv2=skuMap2[sku]||0;
-              const sp=fact>0?(sv/fact*100).toFixed(1):0;
-              const svar=useComparison&&sv2>0?((sv-sv2)/sv2*100).toFixed(1):null;
-              const svarStr=svar!==null?\`<span style="color:\${+svar>=0?'var(--green)':'var(--red)'};font-size:9px">\${+svar>=0?'↑':'↓'}\${Math.abs(+svar)}%</span>\`:'';
-              return\`<tr>
-                <td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent)">\${sku}</td>
-                <td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">\${fmt$(sv)}</td>
-                \${useComparison?\`<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">\${sv2?fmt$(sv2):'-'}</td><td style="padding:4px 10px">\${svarStr}</td>\`:''}
-                <td style="padding:4px 10px;font-size:9px;color:var(--text3);font-family:DM Mono,monospace">\${sp}%</td>
-              </tr>\`;
-            }).join('')}</tbody>
-          </table>
-        </td></tr>\`;
-      }).join('')}
-      </tbody></table></div></div>
+    ${buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap)}
   `;
   const ds=[{label:label1,data:chartDays.map(d=>byDay1[d]??null),borderColor:'#3b82f6',backgroundColor:'#3b82f615',borderWidth:2,pointRadius:3,tension:0.1,fill:!useComparison,spanGaps:false}];
   if(useComparison)ds.push({label:label2,data:chartDays.map(d=>byDay2[d]??null),borderColor:'#f59e0b',backgroundColor:'#f59e0b15',borderWidth:2,pointRadius:3,tension:0.1,fill:false,spanGaps:false});
@@ -1599,8 +1604,8 @@ async function loadCobranzas(){const el=qs('page-cobranzas');try{const url=`http
 function renderCobranzas(){const el=qs('page-cobranzas');if(!cobrData.length)return;if(dashCharts.cobr){try{dashCharts.cobr.destroy();}catch(e){}}const totalCobr=cobrData.reduce((s,d)=>s+d.total,0);const maxCobr=Math.max(...cobrData.map(d=>d.total));const minCobr=Math.min(...cobrData.map(d=>d.total));const promCobr=totalCobr/cobrData.length;el.innerHTML=`<div class="stats-row" style="grid-template-columns:repeat(4,1fr)"><div class="stat-card"><div class="stat-value">${fmt$(totalCobr)}</div><div class="stat-label">Total cobrado</div></div><div class="stat-card"><div class="stat-value">${fmt$(promCobr)}</div><div class="stat-label">Promedio semanal</div></div><div class="stat-card"><div class="stat-value price-ok">${fmt$(maxCobr)}</div><div class="stat-label">Mejor semana</div></div><div class="stat-card"><div class="stat-value price-bad">${fmt$(minCobr)}</div><div class="stat-label">Menor semana</div></div></div><div class="chart-card"><h3>Cobranzas por Semana</h3><p>Total cobrado en $</p><div style="position:relative;height:280px"><canvas id="chartCobr"></canvas></div></div><div class="table-wrap"><div style="padding:10px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">Detalle semanal</div></div><table><thead><tr><th>Semana</th><th>Total Cobrado</th><th>vs Promedio</th></tr></thead><tbody>${cobrData.map(d=>{const diff=d.total-promCobr;const pct=(diff/promCobr*100).toFixed(1);const col=diff>=0?'var(--green)':'var(--red)';return`<tr><td>${d.semana}</td><td class="mono">${fmt$(d.total)}</td><td style="color:${col};font-family:'DM Mono',monospace;font-size:10px">${diff>=0?'↑':'↓'} ${Math.abs(pct)}%</td></tr>`;}).join('')}</tbody></table></div>`;window._cobrChart=new Chart(qs('chartCobr'),{type:'bar',data:{labels:cobrData.map(d=>d.semana),datasets:[{label:'Cobranza',data:cobrData.map(d=>d.total),backgroundColor:cobrData.map(d=>d.total>=promCobr?'#00e5a055':'#ef444455'),borderColor:cobrData.map(d=>d.total>=promCobr?'#00e5a0':'#ef4444'),borderWidth:1,borderRadius:4},{label:'Promedio',data:cobrData.map(()=>promCobr),type:'line',borderColor:'#ffe600',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:8}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxRotation:45}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}}}});}
 
 // ── BRASIL ──
-const SHEETS_BR=['Base Brasil'];
-async function loadBrasil(){const el=qs('page-brasil');try{brData=[];for(const sheet of SHEETS_BR){try{const rows=await fetchSheet(DASH_SHEET_ID,sheet);if(rows.length<2)continue;const H=rows[0].map(h=>(h||'').trim());const ci=name=>H.findIndex(h=>h.trim()===name);const IDX={fecha:ci('Fecha Creación Venta'),canal:ci('Canal De Venta'),skus:ci("Sku's Vendidos"),precio:ci('Precio Final'),rent:ci('Rentabilidad Final'),costo:ci('Costo Sin Iva (total de productos)')};if(IDX.precio<0)IDX.precio=H.findIndex(h=>h.includes('Precio Final'));if(IDX.rent<0)IDX.rent=H.findIndex(h=>h.includes('Utilidad Venta'));if(IDX.costo<0)IDX.costo=H.findIndex(h=>h.includes('Costo Sin'));const pnBr=v=>{if(!v)return 0;let s=String(v).trim().replace(/R\$|\s/g,'').replace(/,/g,'');if(s.includes('%'))return 0;return parseFloat(s)||0;};const parseDateBr=str=>{if(!str)return null;const s=String(str).trim();const parts=s.split('/');if(parts.length===3)return new Date(+parts[2],+parts[1]-1,+parts[0]);return parseDate(str);};for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pnBr(r[IDX.precio]);if(!pf)continue;const fecha=parseDateBr(r[IDX.fecha]);const skuRaw=(IDX.skus>=0?r[IDX.skus]||'':'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);brData.push({sheet,fecha,fechaStr:dateToStr(fecha),canal:(IDX.canal>=0?(r[IDX.canal]||'Sin canal'):'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pnBr(r[IDX.rent]),costo:pnBr(r[IDX.costo]),facturUSD:0,pm:'',vendedor:'',categoria:'Sin categoría'});};}catch(e){console.warn(e);}}brLoaded=true;const canalesBr=[...new Set(brData.map(d=>d.canal))].sort();canalesBr.forEach((c,i)=>{if(!canalColors[c])canalColors[c]=PALETTE[i%PALETTE.length];});initMS('ms-br-canal',new Set(brData.map(d=>d.canal)));renderBrasil();}catch(e){el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error Brasil: ${e.message}</span></div>`;}}
+const SHEETS_BR=['Base Brasil','Brasil','base brasil'];
+async function loadBrasil(){const el=qs('page-brasil');try{brData=[];for(const sheet of SHEETS_BR){try{const rows=await fetchSheet(DASH_SHEET_ID,sheet);if(!rows||rows.length<2)continue;if(rows.length<2)continue;const H=rows[0].map(h=>(h||'').trim());const ci=name=>H.findIndex(h=>h.trim()===name);const IDX={fecha:ci('Fecha Creación Venta'),canal:ci('Canal De Venta'),skus:ci("Sku's Vendidos"),precio:ci('Precio Final'),rent:ci('Rentabilidad Final'),costo:ci('Costo Sin Iva (total de productos)')};if(IDX.precio<0)IDX.precio=H.findIndex(h=>h.includes('Precio Final'));if(IDX.rent<0)IDX.rent=H.findIndex(h=>h.includes('Utilidad Venta'));if(IDX.costo<0)IDX.costo=H.findIndex(h=>h.includes('Costo Sin'));const pnBr=v=>{if(!v)return 0;let s=String(v).trim().replace(/R\$|\s/g,'').replace(/,/g,'');if(s.includes('%'))return 0;return parseFloat(s)||0;};const parseDateBr=str=>{if(!str)return null;const s=String(str).trim();const parts=s.split('/');if(parts.length===3)return new Date(+parts[2],+parts[1]-1,+parts[0]);return parseDate(str);};for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pnBr(r[IDX.precio]);if(!pf)continue;const fecha=parseDateBr(r[IDX.fecha]);const skuRaw=(IDX.skus>=0?r[IDX.skus]||'':'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);brData.push({sheet,fecha,fechaStr:dateToStr(fecha),canal:(IDX.canal>=0?(r[IDX.canal]||'Sin canal'):'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pnBr(r[IDX.rent]),costo:pnBr(r[IDX.costo]),facturUSD:0,pm:'',vendedor:'',categoria:'Sin categoría'});};}catch(e){console.warn(e);}}brLoaded=true;const canalesBr=[...new Set(brData.map(d=>d.canal))].sort();canalesBr.forEach((c,i)=>{if(!canalColors[c])canalColors[c]=PALETTE[i%PALETTE.length];});initMS('ms-br-canal',new Set(brData.map(d=>d.canal)));renderBrasil();}catch(e){el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error Brasil: ${e.message}</span></div>`;}}
 let brFilters={};
 function applyBrFilters(){brFilters={desde:qs('br-desde').value,hasta:qs('br-hasta').value,canal:getMSValues('ms-br-canal'),sku:qs('br-sku').value.trim().toLowerCase()};renderBrasil();}
 function resetBrFilters(){['br-desde','br-hasta','br-sku'].forEach(id=>qs(id).value='');clearMS('ms-br-canal');brFilters={};renderBrasil();}
