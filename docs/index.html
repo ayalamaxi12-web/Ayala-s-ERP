@@ -877,7 +877,25 @@ function renderEcom(){
     const accion=`<div style="display:flex;gap:4px;align-items:center"><input class="edit-inp ecom-new-price" data-sku="${r.sku}" placeholder="Nuevo $" style="width:80px"><button class="btn-xs ecom-fix-btn" data-sku="${r.sku}">✓</button></div>`;
     return`<tr><td class="sku-cell">${r.sku}</td><td style="font-size:10px;color:var(--text2)">${r.cat||'-'}</td>${mkP(r.ml,r.pm&&r.pm.ml,r.dml)}${mkP(r.web,r.pm&&r.pm.web,r.dweb)}${mkP(r.frave,r.pmFrave,r.dfrave)}<td style="font-size:10px;color:var(--accent)">${r.pm?r.pm.pmName:'-'}</td><td>${badge}</td><td>${accion}</td></tr>`;
   }).join('');
-  tbody.querySelectorAll('.ecom-fix-btn').forEach(btn=>{btn.addEventListener('click',async()=>{const sku=btn.dataset.sku;const inp=btn.closest('td').querySelector('.ecom-new-price');const newPrice=parseNum(inp.value);const lista=(qs('ecom-lista-global').value||'todas');if(newPrice){const item=S.ecomRows.find(x=>x.skuL===sku.toLowerCase());if(item){if(lista==='todas'||lista==='ml')item.ml=newPrice;if(lista==='todas'||lista==='web')item.web=newPrice;if(lista==='todas'||lista==='frave')item.frave=newPrice;}toast('Precio actualizado localmente','warning');}else{await fixOneEcom(sku,lista);}inp.value='';renderEcom();});});
+  tbody.querySelectorAll('.ecom-fix-btn').forEach(btn=>{btn.addEventListener('click',async()=>{const sku=btn.dataset.sku;const inp=btn.closest('td').querySelector('.ecom-new-price');const newPrice=parseNum(inp.value);const lista=(qs('ecom-lista-global').value||'todas');if(newPrice){
+  // Apply manual price to Ecom directly
+  if(!S.ecomCookie){toast('Conectá Ecom primero','error');return;}
+  const item=S.ecomRows.find(x=>x.skuL===normSku(sku));if(!item)return;
+  const errs=[];const lista2=lista.toLowerCase();
+  const listaNamesToFix=[];
+  if(lista2==='todas'||lista2==='ml')listaNamesToFix.push({key:'ml',name:'Mercado Libre'});
+  if(lista2==='todas'||lista2==='web')listaNamesToFix.push({key:'web',name:'Precio Web'});
+  if(lista2==='todas'||lista2==='frave')listaNamesToFix.push({key:'frave',name:'Fravega'});
+  for(const l of listaNamesToFix){
+    try{
+      const d=await ecomUpd(sku,newPrice,l.name,item.skuMadre,item.variantPosition);
+      if(d&&d.success)item[l.key]=newPrice;
+      else errs.push(l.name);
+    }catch(e){errs.push(l.name);}
+  }
+  if(errs.length)toast('Errores en: '+errs.join(', '),'error');
+  else toast('✓ '+sku+' → $'+fmtN(newPrice)+' en Ecom');
+}else{await fixOneEcom(sku,lista);}inp.value='';renderEcom();});});
   renderPag('ecom-pag',pages,data.length,'ePage','renderEcom');
 }
 
