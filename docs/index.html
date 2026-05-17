@@ -243,7 +243,12 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div class="filter-group"><span class="filter-label">Sistema</span><select id="hist-sheet-sel" class="fi" style="min-width:130px;"><option value="CONJUNTO">Conjunto (ambos)</option><option value="IT">IT (Ecom)</option><option value="TACTICA">Tactica</option></select></div>
       <div class="filter-group"><span class="filter-label">Desde mes</span><select id="hist-desde-mes" class="fi" style="min-width:110px;"><option value="">Desde el inicio</option></select></div>
       <div class="filter-group"><span class="filter-label">Hasta mes</span><select id="hist-hasta-mes" class="fi" style="min-width:110px;"><option value="">Hasta hoy</option></select></div>
-      <div class="filter-group"><span class="filter-label">Buscar SKU</span><input type="text" id="hist-sku-input" placeholder="SKU + Enter..." style="width:160px;" onkeydown="if(event.key==='Enter')addHistSku()"></div>
+      <div class="filter-group"><span class="filter-label">Buscar SKU</span><div style="position:relative;display:inline-block">
+        <input type="text" id="hist-sku-input" placeholder="SKU + Enter..." style="width:200px;" 
+          onkeydown="if(event.key==='Enter'){addHistSku();histAcHide();}else{histAcShow(this.value);}"
+          oninput="histAcShow(this.value)" autocomplete="off">
+        <div id="hist-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:280px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
+      </div></div>
       <button class="btn primary" onclick="addHistSku()">+ Agregar</button>
       <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-hist-cat"><div class="ms-trigger" onclick="toggleMS('ms-hist-cat')">Todas</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-hist-cat')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-hist-cat')">Todos</button><button onclick="clearMS('ms-hist-cat')">Ninguno</button></div></div></div></div>
       <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-hist-pm"><div class="ms-trigger" onclick="toggleMS('ms-hist-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-hist-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-hist-pm')">Todos</button><button onclick="clearMS('ms-hist-pm')">Ninguno</button></div></div></div></div>
@@ -914,8 +919,60 @@ function exportML(){if(!S.pubData.length){toast('Sin datos','error');return;}con
 </script>
 <script>
 // ── TÁCTICA ──
-function processTacticaCSV(text){const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());if(lines.length<2){toast('CSV vacío','error');return;}let sep=',';const l0sep=lines[0]||'';if(l0sep.split(';').length>l0sep.split(',').length)sep=';';else if(l0sep.split('\t').length>3&&l0sep.split('\t').length>l0sep.split(',').length)sep='\t';function splitRow(line){const r=[];let cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur);cur='';}else cur+=c;}r.push(cur);return r.map(v=>v.replace(/^"|"$/g,'').trim());}const hdrs=splitRow(lines[0].replace(/^\uFEFF/,''));function findIdx(exactos){const norm=s=>s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const ne=exactos.map(norm);return hdrs.findIndex(h=>ne.includes(norm(h)));}const iSku=findIdx(['Código','Codigo','SKU','CÓDIGO']),iCosto=findIdx(['Costo 1','COSTO 1','Costo1','costo 1','COSTO1']),iL1=findIdx(['Precio de Venta1','Precio De Venta1','PRECIO DE VENTA1','Precio de Venta 1']),iL2=findIdx(['Precio de Venta2','Precio De Venta2','PRECIO DE VENTA2','Precio de Venta 2']),iL3=findIdx(['Precio de Venta3','Precio De Venta3','PRECIO DE VENTA3','Precio de Venta 3']),iL4=findIdx(['Precio de Venta4','Precio De Venta4','PRECIO DE VENTA4','Precio de Venta 4']),iL5=findIdx(['Precio de Venta5','Precio De Venta5','PRECIO DE VENTA5','Precio de Venta 5']);if(iSku<0){toast('No encontré columna Código','error');return;}function pn(vals,idx){if(idx<0||idx>=vals.length)return 0;return parseNum(vals[idx]);}S.tacticaRows=[];lines.slice(1).forEach(line=>{const v=splitRow(line);const sku=(v[iSku]||'').trim();if(!sku)return;S.tacticaRows.push({sku,skuL:normSku(sku),costo:pn(v,iCosto),l1:pn(v,iL1),l2:pn(v,iL2),l3:pn(v,iL3),l4:pn(v,iL4),l5:pn(v,iL5)});});qs('tactica-csv-info').textContent=S.tacticaRows.length+' SKUs cargados';qs('tactica-stats-wrap').style.display='block';toast(S.tacticaRows.length+' SKUs de Táctica');renderTactica();}
-
+function processTacticaCSV(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2){toast('CSV vacío','error');return;}
+  // Detect separator
+  const l0=lines[0]||'';
+  let sep=',';
+  if(l0.split(';').length>l0.split(',').length)sep=';';
+  else if(l0.split('\t').length>3&&l0.split('\t').length>l0.split(',').length)sep='\t';
+  function splitRow(line){
+    const r=[];let cur='',q=false;
+    for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur);cur='';}else cur+=c;}
+    r.push(cur);return r.map(v=>v.replace(/^"|"$/g,'').trim());
+  }
+  const hdrs=splitRow(lines[0].replace(/^\uFEFF/,''));
+  // Normalize header for matching
+  const norm=s=>s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  function findIdx(variants){const nv=variants.map(norm);return hdrs.findIndex(h=>nv.includes(norm(h)));}
+  // SKU column
+  const iSku=findIdx(['Código','Codigo','SKU','CÓDIGO','codigo']);
+  if(iSku<0){toast('No encontré columna Código/SKU','error');return;}
+  // Costo: col 18 = "Costo 1"
+  const iCosto=findIdx(['Costo 1','COSTO 1','Costo1','costo 1','COSTO1']);
+  // Listas: use POSITIONAL fallback based on known Tactica export structure
+  // L1=col21 "Precio de Venta1", L2=col31, L3=col41, L4=col51, L5=col61
+  let iL1=findIdx(['Precio de Venta1','Precio De Venta1','Precio de Venta 1']);
+  let iL2=findIdx(['Precio de Venta2','Precio De Venta2','Precio de Venta 2']);
+  let iL3=findIdx(['Precio de Venta3','Precio De Venta3','Precio de Venta 3','L3 USD','L3USD']);
+  let iL4=findIdx(['Precio de Venta4','Precio De Venta4','Precio de Venta 4','L4 USD','L4USD']);
+  let iL5=findIdx(['Precio de Venta5','Precio De Venta5','Precio de Venta 5','L5 USD','L5USD']);
+  // If header has duplicates (Táctica repeats "Valor % 1" etc), findIdx gets first match
+  // For Precio de Venta1-5, each appears once so findIdx works
+  // But if L1 not found, try positional (col 21 for standard Tactica export)
+  if(iL1<0&&hdrs.length>21)iL1=21;
+  if(iL2<0&&hdrs.length>31)iL2=31;
+  if(iL3<0&&hdrs.length>41)iL3=41;
+  if(iL4<0&&hdrs.length>51)iL4=51;
+  if(iL5<0&&hdrs.length>61)iL5=61;
+  function pn(vals,idx){if(idx<0||idx>=vals.length)return 0;return parseNum(vals[idx]);}
+  S.tacticaRows=[];
+  lines.slice(1).forEach(line=>{
+    const v=splitRow(line);
+    const sku=(v[iSku]||'').trim();if(!sku)return;
+    S.tacticaRows.push({
+      sku,skuL:normSku(sku),
+      costo:pn(v,iCosto),
+      l1:pn(v,iL1),l2:pn(v,iL2),
+      l3:pn(v,iL3),l4:pn(v,iL4),l5:pn(v,iL5)
+    });
+  });
+  qs('tactica-csv-info').textContent=S.tacticaRows.length+' SKUs cargados ('+lines.length+' filas)';
+  qs('tactica-stats-wrap').style.display='block';
+  toast(S.tacticaRows.length+' SKUs de Táctica');
+  renderTactica();
+}
 function getTacticaData(){const srch=(qs('tactica-search').value||'').toLowerCase();const fE=qs('tactica-filter-estado').value||'';const fL=qs('tactica-filter-lista').value||'';const fPM=getMSValues('ms-tactica-pm');return S.tacticaRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmL1=pm&&pm.l1||0,pmL2=pm&&pm.l2||0,pmL3=pm&&pm.l3||0,pmL4=pm&&pm.l4||0,pmL5=pm&&pm.l5||0,pmCosto=pm&&pm.costo||0;const dcosto=dPct(item.costo,pmCosto),dl1=dPct(item.l1,pmL1),dl2=dPct(item.l2,pmL2),dl3=dPct(item.l3,pmL3),dl4=dPct(item.l4,pmL4),dl5=dPct(item.l5,pmL5);const hasDiff=[dcosto,dl1,dl2,dl3,dl4,dl5].some(d=>d!==null&&Math.abs(d)>1.5)||(pmCosto>0&&item.costo===0)||(pmL1>0&&item.l1===0)||(pmL2>0&&item.l2===0)||(pmL3>0&&item.l3===0)||(pmL4>0&&item.l4===0)||(pmL5>0&&item.l5===0);const estado=!pm?'nopm':hasDiff?'diff':'ok';return{item,pm,pmL1,pmL2,pmL3,pmL4,pmL5,pmCosto,dcosto,dl1,dl2,dl3,dl4,dl5,hasDiff,estado};}).filter(r=>{if(srch&&!r.item.skuL.includes(srch))return false;if(fE&&r.estado!==fE)return false;if(fPM&&r.pm&&!fPM.includes(r.pm.pmName))return false;if(fL){if(fL==='costo')return r.dcosto!==null&&Math.abs(r.dcosto)>1.5||(r.pmCosto>0&&r.item.costo===0);if(fL==='1')return r.dl1!==null&&Math.abs(r.dl1)>1.5||(r.pmL1>0&&r.item.l1===0);if(fL==='2')return r.dl2!==null&&Math.abs(r.dl2)>1.5||(r.pmL2>0&&r.item.l2===0);if(fL==='3')return r.dl3!==null&&Math.abs(r.dl3)>1.5||(r.pmL3>0&&r.item.l3===0);if(fL==='4')return r.dl4!==null&&Math.abs(r.dl4)>1.5||(r.pmL4>0&&r.item.l4===0);if(fL==='5')return r.dl5!==null&&Math.abs(r.dl5)>1.5||(r.pmL5>0&&r.item.l5===0);}return true;});}
 
 function renderTactica(){
@@ -1311,43 +1368,131 @@ function exportWebPub(){
 }
 
 // ── FRAVEGA MODULE ──
-function processFraveCSV(text){
-  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
-  if(lines.length<3){toast('Archivo muy corto','error');return;}
-  // Skip first row (filter/date row), use second row as headers
-  const sep=lines[1].split(';').length>lines[1].split(',').length?';':',';
-  function splitL(line){const r=[];let cur='',q=false;for(const c of line){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur.trim());cur='';}else cur+=c;}r.push(cur.trim());return r.map(v=>v.replace(/^"|"$/g,'').trim());}
-  const hdrs=splitL(lines[1]);
-  const rows=lines.slice(2).map(l=>{const v=splitL(l);const o={};hdrs.forEach((h,i)=>{o[h]=(v[i]||'').trim();});return o;}).filter(r=>Object.values(r).some(v=>v));
-  const skuCol=hdrs.find(h=>h.toLowerCase().includes('sku asociado'))||hdrs.find(h=>h.toLowerCase()==='sku')||hdrs[7];
-  const precioCol=hdrs.find(h=>h.toLowerCase()==='precio');
-  const reglaCol=hdrs.find(h=>h.toLowerCase().includes('regla de precio'));
-  const tituloCol=hdrs.find(h=>h.toLowerCase().includes('titulo')||h.toLowerCase()==='título');
-  const linkCol=hdrs.find(h=>h.toLowerCase()==='link');
-  const estadoCol=hdrs.find(h=>h.toLowerCase()==='estado');
-  const stockCol=hdrs.find(h=>h.toLowerCase().includes('cantidad'));
-  // Extract SKU variante from link URL: /p/SKU-NUMEROID
-  function extractFraveSku(link,fallback){
-    if(!link)return(fallback||'').trim();
-    const m=link.match(/\/p\/(.+)-\d+(?:\?|$)/);
-    if(m&&m[1])return m[1].trim();
-    // try without query
-    const m2=link.match(/\/p\/([^?#]+)/);
-    if(m2&&m2[1]){const parts=m2[1].split('-');if(parts.length>1){parts.pop();return parts.join('-').trim();}return m2[1].trim();}
-    return(fallback||'').trim();
+function processFraveCSV(file){
+  // If called with text (legacy), handle it; if File object, use SheetJS
+  if(typeof file === 'string'){
+    _parseFraveText(file);
+    return;
   }
-  S.fraveRows=rows.filter(r=>(r[skuCol]||r[linkCol]||'').trim()).map(r=>({
-    sku:extractFraveSku(r[linkCol],(r[skuCol]||'').trim()),
-    skuL:normSku(extractFraveSku(r[linkCol],(r[skuCol]||'').trim())),
-    skuMadre:(r[skuCol]||'').trim(),
-    titulo:(r[tituloCol]||'').trim(),regla:(r[reglaCol]||'').trim(),
-    precioActual:parseNum(r[precioCol]),link:(r[linkCol]||'').trim(),
-    estado:(r[estadoCol]||'').trim(),stock:parseInt(r[stockCol])||0,
-  }));
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      // Try SheetJS for XLSX
+      if(typeof XLSX!=='undefined'){
+        const wb=XLSX.read(e.target.result,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        _parseFraveRows(raw);
+      } else {
+        // Fallback: read as text
+        const text=new TextDecoder('utf-8').decode(new Uint8Array(e.target.result));
+        _parseFraveText(text);
+      }
+    }catch(err){
+      // Fallback to text
+      const text=new TextDecoder('utf-8').decode(new Uint8Array(e.target.result));
+      _parseFraveText(text);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function _extractFraveSku(link){
+  if(!link)return'';
+  // Extract SKU variante: between /p/ and the last -DIGITS
+  const m=String(link).match(/\/p\/(.+)-\d{5,}(?:[/?#]|$)/);
+  if(m&&m[1])return m[1].trim();
+  // Fallback: between /p/ and last hyphen+digits
+  const m2=String(link).match(/\/p\/([^?#]+)/);
+  if(m2&&m2[1]){
+    const s=m2[1].replace(/\/$/, '');
+    const lastDash=s.lastIndexOf('-');
+    if(lastDash>0&&/^\d+$/.test(s.slice(lastDash+1)))return s.slice(0,lastDash).trim();
+    return s.trim();
+  }
+  return'';
+}
+
+function _parseFraveRows(raw){
+  // Find header row (contains 'SKU asociado' or 'Titulo')
+  let hdrIdx=0;
+  for(let i=0;i<Math.min(5,raw.length);i++){
+    const r=raw[i].map(c=>String(c||'').toLowerCase());
+    if(r.some(c=>c.includes('sku')||c.includes('titulo')||c.includes('precio'))){hdrIdx=i;break;}
+  }
+  const hdrs=raw[hdrIdx].map(c=>String(c||'').trim());
+  const fi=name=>hdrs.findIndex(h=>h.toLowerCase().includes(name.toLowerCase()));
+  const iSku=fi('SKU asociado');
+  const iTitulo=fi('Titulo');
+  const iTituloArt=fi('Título Artículo');
+  const iPrecio=fi('Precio');
+  const iLink=fi('Link');
+  const iRegla=fi('Regla de Precio');
+  const iEstado=fi('Estado');
+  const iStock=fi('Cantidad');
+  S.fraveRows=[];
+  raw.slice(hdrIdx+1).forEach(row=>{
+    const skuMadre=String(row[iSku>=0?iSku:7]||'').trim();
+    const link=String(row[iLink>=0?iLink:9]||'').trim();
+    const skuVariante=_extractFraveSku(link)||skuMadre;
+    if(!skuVariante&&!skuMadre)return;
+    const titulo=String(row[iTituloArt>=0?iTituloArt:(iTitulo>=0?iTitulo:2)]||'').trim();
+    const regla=String(row[iRegla>=0?iRegla:10]||'').trim();
+    const precio=parseNum(String(row[iPrecio>=0?iPrecio:4]||''));
+    const estado=String(row[iEstado>=0?iEstado:6]||'').trim();
+    const stock=parseInt(String(row[iStock>=0?iStock:5]||''))||0;
+    if(!precio&&!skuVariante)return;
+    S.fraveRows.push({
+      sku:skuVariante,skuL:normSku(skuVariante),
+      skuMadre,titulo,regla,
+      precioActual:precio,link,estado,stock,
+    });
+  });
+  _finishFraveLoad();
+}
+
+function _parseFraveText(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2){toast('Archivo muy corto','error');return;}
+  const l0=lines[0]||'';
+  let sep=',';
+  if(l0.split(';').length>l0.split(',').length)sep=';';
+  function splitL(line){const r=[];let cur='',q=false;for(const c of line){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur.trim());cur='';}else cur+=c;}r.push(cur.trim());return r.map(v=>v.replace(/^"|"$/g,'').trim());}
+  // Find header row (skip Estado/Activo filter row)
+  let hdrLine=0;
+  for(let i=0;i<Math.min(4,lines.length);i++){
+    const cols=splitL(lines[i]);
+    if(cols.some(c=>c.toLowerCase().includes('sku')||c.toLowerCase().includes('precio'))){hdrLine=i;break;}
+  }
+  const hdrs=splitL(lines[hdrLine]);
+  const fi=name=>hdrs.findIndex(h=>h.toLowerCase().includes(name.toLowerCase()));
+  const iSku=fi('sku asociado');
+  const iTitArt=fi('título artículo');const iTit=fi('titulo');
+  const iPrecio=fi('precio');const iLink=fi('link');
+  const iRegla=fi('regla de precio');const iEstado=fi('estado');const iStock=fi('cantidad');
+  S.fraveRows=[];
+  lines.slice(hdrLine+1).forEach(line=>{
+    const v=splitL(line);
+    const skuMadre=(v[iSku>=0?iSku:7]||'').trim();
+    const link=(v[iLink>=0?iLink:9]||'').trim();
+    const skuVariante=_extractFraveSku(link)||skuMadre;
+    if(!skuVariante)return;
+    S.fraveRows.push({
+      sku:skuVariante,skuL:normSku(skuVariante),skuMadre,
+      titulo:(v[iTitArt>=0?iTitArt:(iTit>=0?iTit:2)]||'').trim(),
+      regla:(v[iRegla>=0?iRegla:10]||'').trim(),
+      precioActual:parseNum(v[iPrecio>=0?iPrecio:4]),
+      link,estado:(v[iEstado>=0?iEstado:6]||'').trim(),
+      stock:parseInt(v[iStock>=0?iStock:5])||0,
+    });
+  });
+  _finishFraveLoad();
+}
+
+function _finishFraveLoad(){
   const reglas=[...new Set(S.fraveRows.map(r=>r.regla).filter(Boolean))].sort();
   const sel=qs('frave-filter-regla');
-  sel.innerHTML='<option value="">Todas las reglas</option>';
-  reglas.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o);});
+  if(sel){sel.innerHTML='<option value="">Todas las reglas</option>';reglas.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o);});}
   qs('frave-csv-info').textContent=S.fraveRows.length+' publicaciones cargadas';
   qs('frave-stats-wrap').style.display='block';
   const pmConectados=Object.entries(S.sheets).filter(e=>e[1].id).map(e=>e[1].name);
@@ -1355,7 +1500,6 @@ function processFraveCSV(text){
   toast(S.fraveRows.length+' publicaciones Fravega');
   renderFrave();
 }
-
 function buildFraveRow(item){
   const pm=S.pmData[item.skuL]||null;
   const base=pm?pm.frave:0;
@@ -1618,12 +1762,142 @@ function populateHistFilters(parsed){initMS('ms-hist-cat',new Set(parsed.items.m
 function addHistSku(skuVal){const val=(skuVal||qs('hist-sku-input').value).trim().toUpperCase();if(!val||histSkus.includes(val)){if(!skuVal)qs('hist-sku-input').value='';return;}histSkus.push(val);if(!skuVal)qs('hist-sku-input').value='';renderSkuTags();renderHistorico();}
 function removeHistSku(sku){histSkus=histSkus.filter(s=>s!==sku);renderSkuTags();renderHistorico();}
 function renderSkuTags(){const el=qs('sku-tags');if(!el)return;el.innerHTML=histSkus.length?histSkus.map((s,i)=>`<div style="display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid ${PALETTE[i%PALETTE.length]}"><span style="color:${PALETTE[i%PALETTE.length]}">${s}</span><button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1" onclick="removeHistSku('${s}')">×</button></div>`).join(''):`<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">Agregá SKUs para comparar</span>`;}
-function renderHistorico(){const el=qs('hist-content');if(!histLoaded){el.innerHTML='<div class="loading-block"><span style="color:var(--accent3)">Cargando...</span></div>';return;}const sheet=qs('hist-sheet-sel')?.value||'CONJUNTO';const activeData=histAllData[sheet]||histDataParsed;if(!activeData||!activeData.items)return;let items=activeData.items;const cats=getMSValues('ms-hist-cat');const pms=getMSValues('ms-hist-pm');if(cats)items=items.filter(d=>cats.includes(d.categoria));if(pms)items=items.filter(d=>pms.includes(d.pm));const months=activeData.months;const desdeVal=qs('hist-desde-mes')?.value||'';const hastaVal=qs('hist-hasta-mes')?.value||'';const di=desdeVal?months.indexOf(desdeVal):0;const hi=hastaVal?months.indexOf(hastaVal):months.length-1;const filteredMonths=months.slice(di>=0?di:0,hi>=0?hi+1:months.length);let chartItems=[];if(histSkus.length>0){chartItems=histSkus.map((sku,si)=>{const matches=activeData.items.filter(d=>d.sku.toUpperCase()===sku||d.skuVar.toUpperCase()===sku);if(!matches.length)return null;const monthly=filteredMonths.map(label=>{const mi=activeData.months.indexOf(label);return{label,units:matches.reduce((s,m)=>s+(m.monthly[mi]?.units||0),0)};});return{sku,label:matches[0].titulo?.slice(0,50)||sku,monthly};}).filter(Boolean);}else if(cats||pms){const aggMap={};items.forEach(d=>{const key=d.categoria||'Sin categoría';if(!aggMap[key])aggMap[key]={sku:key,label:key,monthly:activeData.months.map(l=>({label:l,units:0}))};d.monthly.forEach((m,i)=>{if(aggMap[key].monthly[i])aggMap[key].monthly[i].units+=m.units;});});chartItems=Object.values(aggMap).map(item=>({...item,monthly:filteredMonths.map(label=>{const mi=activeData.months.indexOf(label);return{label,units:item.monthly[mi]?.units||0};})})).sort((a,b)=>b.monthly.reduce((s,m)=>s+m.units,0)-a.monthly.reduce((s,m)=>s+m.units,0)).slice(0,8);}
-  const tableSKUs=items.map(d=>({sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,pm:d.pm,total:d.monthly.reduce((s,m)=>s+m.units,0),monthly:d.monthly})).sort((a,b)=>b.total-a.total).slice(0,50);
-  el.innerHTML=`${chartItems.length?`<div class="chart-card"><h3>Evolución Histórica de Unidades</h3><p>${chartItems.map(c=>c.sku).join(', ')}</p><div style="position:relative;height:280px"><canvas id="chartHist"></canvas></div></div>`:''}${(cats||pms||items.length>0)?`<div class="table-wrap"><div style="padding:12px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">SKUs de la selección</div><div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">Click en un SKU para agregar al gráfico · ${tableSKUs.length} resultados</div></div><table><thead><tr><th>SKU Variante</th><th>Título</th><th>PM</th>${filteredMonths.slice(-6).map(m=>`<th>${m}</th>`).join('')}<th>Total</th></tr></thead><tbody>${tableSKUs.map(item=>{const last6=item.monthly.filter(m=>filteredMonths.slice(-6).includes(m.label));const isSelected=histSkus.includes(item.sku);return`<tr style="cursor:pointer;${isSelected?'background:rgba(59,130,246,0.06);':''}" onclick="addHistSku('${item.sku.replace(/'/g,"\\'")}')"><td style="font-weight:700;color:${isSelected?'var(--accent)':'var(--text)'};font-family:'DM Mono',monospace;font-size:10px">${item.sku}${isSelected?' ✓':''}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:10px">${item.titulo}</td><td style="font-size:10px;color:var(--text3)">${item.pm}</td>${last6.map(m=>`<td class="mono" style="font-size:10px">${m.units.toLocaleString()}</td>`).join('')}<td style="font-weight:700;font-family:'DM Mono',monospace;font-size:10px">${item.total.toLocaleString()}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="loading-block"><span>Seleccioná una categoría o PM para ver los SKUs</span></div>'}`;
-  if(!chartItems.length)return;if(dashCharts.hist){try{dashCharts.hist.destroy();}catch(e){}}
-  dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:24}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});}
 
+function histAcShow(val){
+  const dd=qs('hist-ac-dropdown');if(!dd)return;
+  if(!val||val.length<2){dd.style.display='none';return;}
+  const sheet=qs('hist-sheet-sel')?.value||'CONJUNTO';
+  const activeData=histAllData[sheet]||histDataParsed;
+  if(!activeData?.items){dd.style.display='none';return;}
+  const q=val.toUpperCase();
+  const matches=[];const seen=new Set();
+  activeData.items.forEach(d=>{
+    const sku=(d.skuVar||d.sku||'').toUpperCase();
+    if(sku.includes(q)&&!seen.has(sku)){seen.add(sku);matches.push({sku:d.skuVar||d.sku,titulo:d.titulo||'',cat:d.categoria||''});}
+    if(matches.length>=12)return;
+  });
+  if(!matches.length){dd.style.display='none';return;}
+  dd.innerHTML=matches.map(m=>`<div onclick="histAcSelect('${m.sku.replace(/'/g,"\\'")}');histAcHide()" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-family:'DM Mono',monospace" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
+    <div style="font-size:10px;font-weight:700;color:var(--accent)">${m.sku}</div>
+    <div style="font-size:9px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.titulo.slice(0,60)}</div>
+  </div>`).join('');
+  dd.style.display='block';
+}
+function histAcSelect(sku){const inp=qs('hist-sku-input');if(inp)inp.value=sku;addHistSku(sku);}
+function histAcHide(){const dd=qs('hist-ac-dropdown');if(dd)dd.style.display='none';}
+document.addEventListener('click',e=>{if(!e.target.closest('#hist-sku-input')&&!e.target.closest('#hist-ac-dropdown'))histAcHide();});
+function renderHistorico(){
+  const el=qs('hist-content');
+  if(!histLoaded){el.innerHTML='<div class="loading-block"><span style="color:var(--accent3)">Cargando...</span></div>';return;}
+  const sheet=qs('hist-sheet-sel')?.value||'CONJUNTO';
+  const activeData=histAllData[sheet]||histDataParsed;
+  if(!activeData||!activeData.items)return;
+  let items=activeData.items;
+  const cats=getMSValues('ms-hist-cat');const pms=getMSValues('ms-hist-pm');
+  if(cats)items=items.filter(d=>cats.includes(d.categoria));
+  if(pms)items=items.filter(d=>pms.includes(d.pm));
+  const months=activeData.months;
+  const desdeVal=qs('hist-desde-mes')?.value||'';const hastaVal=qs('hist-hasta-mes')?.value||'';
+  const di=desdeVal?months.indexOf(desdeVal):0;const hi=hastaVal?months.indexOf(hastaVal):months.length-1;
+  const filteredMonths=months.slice(di>=0?di:0,hi>=0?hi+1:months.length);
+  let chartItems=[];
+  if(histSkus.length>0){
+    chartItems=histSkus.map((sku,si)=>{
+      const matches=activeData.items.filter(d=>d.sku.toUpperCase()===sku||d.skuVar.toUpperCase()===sku);
+      if(!matches.length)return null;
+      const monthly=filteredMonths.map(label=>{const mi=activeData.months.indexOf(label);return{label,units:matches.reduce((s,m)=>s+(m.monthly[mi]?.units||0),0)};});
+      return{sku,label:matches[0].titulo?.slice(0,50)||sku,monthly,categoria:matches[0].categoria||''};
+    }).filter(Boolean);
+  }else if(cats||pms){
+    const aggMap={};
+    items.forEach(d=>{const key=d.categoria||'Sin categoría';if(!aggMap[key])aggMap[key]={sku:key,label:key,monthly:activeData.months.map(l=>({label:l,units:0})),categoria:key};d.monthly.forEach((m,i)=>{if(aggMap[key].monthly[i])aggMap[key].monthly[i].units+=m.units;});});
+    chartItems=Object.values(aggMap).map(item=>({...item,monthly:filteredMonths.map(label=>{const mi=activeData.months.indexOf(label);return{label,units:item.monthly[mi]?.units||0};})})).sort((a,b)=>b.monthly.reduce((s,m)=>s+m.units,0)-a.monthly.reduce((s,m)=>s+m.units,0)).slice(0,8);
+  }
+
+  // ── Build SKU stats cards (when specific SKUs selected) ──
+  let statsHTML='';
+  if(histSkus.length>0&&chartItems.length>0){
+    statsHTML='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px">';
+    chartItems.forEach((item,idx)=>{
+      const vals=item.monthly.map(m=>m.units);
+      const total=vals.reduce((s,v)=>s+v,0);
+      const avg=vals.length>0?(total/vals.filter(v=>v>0).length||0):0;
+      const maxVal=Math.max(...vals);const minVal=Math.min(...vals.filter(v=>v>0));
+      const maxIdx=vals.indexOf(maxVal);const minIdx=vals.findIndex(v=>v===minVal&&v>0);
+      const bestMonth=item.monthly[maxIdx]?.label||'—';
+      const worstMonth=minIdx>=0?item.monthly[minIdx]?.label:'—';
+      // Best canal from allSalesData
+      const skuLow=item.sku.toLowerCase();
+      const skuSales=allSalesData.filter(d=>d.skus.some(s=>s.toLowerCase()===skuLow));
+      const canalMap={};skuSales.forEach(d=>{canalMap[d.canal]=(canalMap[d.canal]||0)+d.precioFinal;});
+      const bestCanal=Object.entries(canalMap).sort((a,b)=>b[1]-a[1])[0];
+      const canalName=bestCanal?bestCanal[0].toLowerCase().replace(/\bit\b/gi,'Web').replace(/ecom/gi,'Web'):'—';
+      statsHTML+=`<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${PALETTE[idx%PALETTE.length]};border-radius:8px;padding:12px 14px;min-width:220px;flex:1">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:${PALETTE[idx%PALETTE.length]};font-weight:700;margin-bottom:8px">${item.sku}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px">
+          <div><div style="color:var(--text3);font-size:9px;margin-bottom:2px">👑 Mejor mes</div><div style="font-weight:700;color:var(--green)">${bestMonth}</div><div style="color:var(--text2);font-family:'DM Mono',monospace">${fmtN(maxVal)} u.</div></div>
+          <div><div style="color:var(--text3);font-size:9px;margin-bottom:2px">📉 Peor mes</div><div style="font-weight:700;color:var(--red)">${worstMonth}</div><div style="color:var(--text2);font-family:'DM Mono',monospace">${minVal?fmtN(minVal):'-'} u.</div></div>
+          <div><div style="color:var(--text3);font-size:9px;margin-bottom:2px">📊 Media mensual</div><div style="font-weight:700">${fmtN(Math.round(avg))} u.</div></div>
+          <div><div style="color:var(--text3);font-size:9px;margin-bottom:2px">🏆 Mejor canal</div><div style="font-weight:700;color:var(--accent)">${canalName}</div></div>
+        </div>
+      </div>`;
+    });
+    statsHTML+='</div>';
+  }
+
+  // ── Table: show SKUs from same category when filtered ──
+  let tableSKUs=[];
+  if(histSkus.length>0&&chartItems.length>0){
+    // Show top SKUs of the same category as the first selected SKU
+    const firstCat=chartItems[0]?.categoria;
+    const catItems=firstCat?activeData.items.filter(d=>d.categoria===firstCat):activeData.items;
+    tableSKUs=catItems.map(d=>({
+      sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,
+      pm:d.pm,categoria:d.categoria,
+      total:d.monthly.reduce((s,m)=>s+m.units,0),monthly:d.monthly
+    })).sort((a,b)=>b.total-a.total).slice(0,50);
+  }else{
+    tableSKUs=items.map(d=>({
+      sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,
+      pm:d.pm,categoria:d.categoria,
+      total:d.monthly.reduce((s,m)=>s+m.units,0),monthly:d.monthly
+    })).sort((a,b)=>b.total-a.total).slice(0,50);
+  }
+
+  const tableTitle=histSkus.length>0&&chartItems.length>0&&chartItems[0]?.categoria
+    ?`Top SKUs — ${chartItems[0].categoria}`
+    :'SKUs de la selección';
+
+  el.innerHTML=statsHTML+`
+    ${chartItems.length?`<div class="chart-card"><h3>Evolución Histórica de Unidades</h3><p>${chartItems.map(c=>c.sku).join(', ')}</p><div style="position:relative;height:280px"><canvas id="chartHist"></canvas></div></div>`:''}
+    ${tableSKUs.length?`
+    <div class="table-wrap">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-size:12px;font-weight:700">${tableTitle}</div><div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">Click en un SKU para agregar al gráfico · ${tableSKUs.length} resultados</div></div>
+      </div>
+      <table><thead><tr>
+        <th>SKU Variante</th><th>Título</th><th>PM</th><th>Categoría</th>
+        ${filteredMonths.slice(-6).map(m=>`<th>${m}</th>`).join('')}<th>Total</th>
+      </tr></thead>
+      <tbody>${tableSKUs.map(item=>{
+        const last6=item.monthly.filter(m=>filteredMonths.slice(-6).includes(m.label));
+        const isSelected=histSkus.includes(item.sku);
+        return`<tr style="cursor:pointer;${isSelected?'background:rgba(59,130,246,0.06);':''}" onclick="addHistSku('${item.sku.replace(/'/g,"\\'")}')">
+          <td style="font-weight:700;color:${isSelected?'var(--accent)':'var(--text)'};font-family:'DM Mono',monospace;font-size:10px">${item.sku}${isSelected?' ✓':''}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:10px">${item.titulo}</td>
+          <td style="font-size:10px;color:var(--text3)">${item.pm}</td>
+          <td style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">${item.categoria||'-'}</td>
+          ${last6.map(m=>`<td class="mono" style="font-size:10px">${m.units.toLocaleString()}</td>`).join('')}
+          <td style="font-weight:700;font-family:'DM Mono',monospace;font-size:10px">${item.total.toLocaleString()}</td>
+        </tr>`;
+      }).join('')}</tbody></table>
+    </div>`:'<div class="loading-block"><span>Seleccioná una categoría o PM para ver los SKUs</span></div>'}
+  `;
+
+  if(!chartItems.length)return;
+  if(dashCharts.hist){try{dashCharts.hist.destroy();}catch(e){}}
+  dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:24}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
+}
 // ── COBRANZAS ──
 async function loadCobranzas(){const el=qs('page-cobranzas');try{const url=`https://sheets.googleapis.com/v4/spreadsheets/${DASH_SHEET_ID}/values/${encodeURIComponent('Cobranza')}?key=${API_KEY}&valueRenderOption=UNFORMATTED_VALUE`;const res=await fetch(url);const rows=(await res.json()).values||[];cobrData=rows.slice(1).filter(r=>r[0]&&r[1]).map(r=>({semana:String(r[0]).trim(),total:parseFloat(String(r[1]).replace(/[^0-9.]/g,''))||0}));cobrLoaded=true;renderCobranzas();}catch(e){el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error cobranzas: ${e.message}</span></div>`;}}
 function renderCobranzas(){const el=qs('page-cobranzas');if(!cobrData.length)return;if(dashCharts.cobr){try{dashCharts.cobr.destroy();}catch(e){}}const totalCobr=cobrData.reduce((s,d)=>s+d.total,0);const maxCobr=Math.max(...cobrData.map(d=>d.total));const minCobr=Math.min(...cobrData.map(d=>d.total));const promCobr=totalCobr/cobrData.length;el.innerHTML=`<div class="stats-row" style="grid-template-columns:repeat(4,1fr)"><div class="stat-card"><div class="stat-value">${fmt$(totalCobr)}</div><div class="stat-label">Total cobrado</div></div><div class="stat-card"><div class="stat-value">${fmt$(promCobr)}</div><div class="stat-label">Promedio semanal</div></div><div class="stat-card"><div class="stat-value price-ok">${fmt$(maxCobr)}</div><div class="stat-label">Mejor semana</div></div><div class="stat-card"><div class="stat-value price-bad">${fmt$(minCobr)}</div><div class="stat-label">Menor semana</div></div></div><div class="chart-card"><h3>Cobranzas por Semana</h3><p>Total cobrado en $</p><div style="position:relative;height:280px"><canvas id="chartCobr"></canvas></div></div><div class="table-wrap"><div style="padding:10px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">Detalle semanal</div></div><table><thead><tr><th>Semana</th><th>Total Cobrado</th><th>vs Promedio</th></tr></thead><tbody>${cobrData.map(d=>{const diff=d.total-promCobr;const pct=(diff/promCobr*100).toFixed(1);const col=diff>=0?'var(--green)':'var(--red)';return`<tr><td>${d.semana}</td><td class="mono">${fmt$(d.total)}</td><td style="color:${col};font-family:'DM Mono',monospace;font-size:10px">${diff>=0?'↑':'↓'} ${Math.abs(pct)}%</td></tr>`;}).join('')}</tbody></table></div>`;window._cobrChart=new Chart(qs('chartCobr'),{type:'bar',data:{labels:cobrData.map(d=>d.semana),datasets:[{label:'Cobranza',data:cobrData.map(d=>d.total),backgroundColor:cobrData.map(d=>d.total>=promCobr?'#00e5a055':'#ef444455'),borderColor:cobrData.map(d=>d.total>=promCobr?'#00e5a0':'#ef4444'),borderWidth:1,borderRadius:4},{label:'Promedio',data:cobrData.map(()=>promCobr),type:'line',borderColor:'#ffe600',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:8}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxRotation:45}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}}}});}
@@ -1643,7 +1917,7 @@ function init(){
   setupDZ('dz-pub','fi-pub',f=>readFile(f,showPubMapper));
   setupDZ('dz-tactica','fi-tactica',f=>readFile(f,processTacticaCSV));
   setupDZ('dz-web-csv','fi-web-csv',f=>readFile(f,processWebCSV));
-  setupDZ('dz-frave','fi-frave',f=>readFile(f,processFraveCSV));
+  setupDZ('dz-frave','fi-frave',f=>processFraveCSV(f));
   setupDZ('dz-webpub','fi-webpub',f=>readFile(f,processWebPubCSV));
   qs('btn-connect-ecom').addEventListener('click',connectEcom);
   qs('btn-connect-ml').addEventListener('click',connectML);
