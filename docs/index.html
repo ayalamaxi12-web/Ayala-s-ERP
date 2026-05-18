@@ -267,10 +267,13 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="section-hdr">Verificar Precios Ecom</div>
   <div class="grid-2" style="margin-bottom:4px">
     <div class="card">
-      <div class="card-title">1. Cargar CSV de Ecom</div>
-      <div class="dropzone" id="dz-ecom" onclick="document.getElementById('fi-ecom').click()"><div style="font-size:22px;margin-bottom:5px">📁</div>Arrastrá el CSV de Ecom</div>
-      <input type="file" id="fi-ecom" accept=".csv,.tsv" style="display:none">
+      <div class="card-title">1. Conectar Sheets Ecom</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="btn-load-ecom-sheets" onclick="loadEcomSheets()">🔄 Cargar desde Sheets</button>
+        <span class="conn-status idle" id="ecom-sheets-status">No cargado</span>
+      </div>
       <div id="ecom-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text3)">Planilla: <span style="color:var(--accent);font-family:'DM Mono',monospace">Ecom publicaciones</span></div>
     </div>
     <div class="card">
       <div class="card-title">2. Planillas PM</div>
@@ -326,15 +329,13 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="section-hdr">Verificar Precios ML</div>
   <div class="grid-2" style="margin-bottom:4px">
     <div class="card">
-      <div class="card-title">1. CSV de publicaciones</div>
-      <div class="dropzone" id="dz-pub" onclick="document.getElementById('fi-pub').click()"><div style="font-size:22px;margin-bottom:5px">📁</div>Arrastrá el CSV de publicaciones ML</div>
-      <input type="file" id="fi-pub" accept=".csv,.tsv" style="display:none">
-      <div id="pub-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
-      <div id="pub-mapper-wrap" style="display:none;margin-top:12px">
-        <div class="card-title">Mapear columnas</div>
-        <div id="pub-mapper-content" style="background:var(--surface2);border-radius:6px;padding:10px"></div>
-        <button class="btn primary" style="margin-top:8px" id="btn-apply-pub">Confirmar y cargar</button>
+      <div class="card-title">1. Conectar Sheets ML</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="btn-load-ml-sheets" onclick="loadMLSheets()">🔄 Cargar desde Sheets</button>
+        <span class="conn-status idle" id="ml-sheets-status">No cargado</span>
       </div>
+      <div id="pub-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text3)">Planilla: <span style="color:var(--accent);font-family:'DM Mono',monospace">Ecom publicaciones ML</span></div>
     </div>
     <div class="card">
       <div class="card-title">2. Conectar ML</div>
@@ -441,10 +442,12 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="section-hdr">Verificar Web (WooCommerce)</div>
   <div class="card">
     <div class="card-title">Cargar CSV de WooCommerce</div>
-    <div class="dropzone" id="dz-web-csv" onclick="document.getElementById('fi-web-csv').click()"><div style="font-size:22px;margin-bottom:5px">&#128193;</div>Arrastrá el CSV exportado de WooCommerce</div>
-    <input type="file" id="fi-web-csv" accept=".csv" style="display:none">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn primary" id="btn-load-woo-sheets" onclick="loadWooSheets()">🔄 Cargar desde Sheets</button>
+      <span class="conn-status idle" id="woo-sheets-status">No cargado</span>
+    </div>
     <div id="web-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
-    <div style="margin-top:6px;font-size:10px;color:var(--text3)">Columnas: ID · SKU · Name · Regular price · Sale price · Stock · Published · Categories · Tags · Slug</div>
+    <div style="margin-top:6px;font-size:10px;color:var(--text3)">Planilla: <span style="color:var(--accent);font-family:'DM Mono',monospace">Web Global WooCommerce</span></div>
   </div>
   <div id="web-stats-wrap" style="display:none">
     <div class="stats-row" style="grid-template-columns:repeat(6,1fr);margin-bottom:10px">
@@ -499,8 +502,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="card-title">Cargar CSV de Publicaciones Web (exportado de Ecom)</div>
     <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
       <div style="flex:1;min-width:220px">
-        <div class="dropzone" id="dz-webpub" onclick="document.getElementById('fi-webpub').click()"><div style="font-size:22px;margin-bottom:5px">&#128193;</div>Arrastrá el CSV de Publicaciones Web</div>
-        <input type="file" id="fi-webpub" accept=".csv" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn primary" id="btn-load-webpub-sheets" onclick="loadWebPubSheets()">🔄 Cargar desde Sheets</button>
+          <span class="conn-status idle" id="webpub-sheets-status">No cargado</span>
+        </div>
         <div id="webpub-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
       </div>
       <div style="font-size:10px;color:var(--text3);line-height:1.8;padding-top:4px">
@@ -558,10 +563,12 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="grid-2" style="margin-bottom:4px">
     <div class="card">
       <div class="card-title">CSV de Publicaciones Fravega</div>
-      <div class="dropzone" id="dz-frave" onclick="document.getElementById('fi-frave').click()"><div style="font-size:22px;margin-bottom:5px">&#128193;</div>Arrastrá el XLSX/CSV de Fravega</div>
-      <input type="file" id="fi-frave" accept=".csv,.xlsx,.xls" style="display:none">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn primary" id="btn-load-frave-sheets" onclick="loadFraveSheets()">🔄 Cargar desde Sheets</button>
+        <span class="conn-status idle" id="frave-sheets-status">No cargado</span>
+      </div>
       <div id="frave-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
-      <div style="margin-top:4px;font-size:10px;color:var(--text3)">Columnas: SKU asociado · Precio · Regla de Precio · Link · Estado · Cantidad Disponible · Titulo<br>Nota: las primeras 2 filas de encabezado se ignoran automáticamente</div>
+      <div style="margin-top:4px;font-size:10px;color:var(--text3)">Planilla: <span style="color:var(--accent);font-family:'DM Mono',monospace">Publicaciones Fravega</span></div>
     </div>
     <div class="card">
       <div class="card-title">Estado</div>
@@ -1472,6 +1479,201 @@ function exportWebPub(){
   const blob=new Blob(['\uFEFF'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='webpub-verificacion-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   toast('Exportado');
+}
+
+
+// ── SHEETS LOADERS ──
+
+async function loadEcomSheets(){
+  const btn=qs('btn-load-ecom-sheets'),status=qs('ecom-sheets-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';
+  status.className='conn-status idle';status.textContent='Conectando...';
+  try{
+    const{values}=await fetchSheetByGid(ECOM_PUB_ID,ECOM_PUB_GID,'A1:Z3000');
+    if(!values||values.length<2)throw new Error('Sin datos');
+    const hdrIdx=findHdrRow(values,['sku','precio','mercado','ecom']);
+    const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
+    const hm=hdrMap(hdrs);
+    const iSkuVar=findCol(hm,['SKU Variante','SKU variante','sku variante']);
+    const iSku=iSkuVar>=0?iSkuVar:findCol(hm,['SKU','Sku','sku']);
+    const iSkuMadre=findCol(hm,['SKU','Sku','sku']);
+    const iML=findCol(hm,['Precio Mercado Libre','precio mercado libre','ML','Precio ML']);
+    const iWeb=findCol(hm,['Precio Web','precio web','WEB']);
+    const iFrave=findCol(hm,['Fravega','fravega','FRAVEGA','Precio Fravega']);
+    S.ecomRows=[];const mc={};
+    values.slice(hdrIdx+1).forEach(row=>{
+      const sku=String(row[iSku>=0?iSku:0]||'').trim();if(!sku)return;
+      const sm=iSkuMadre>=0&&iSkuVar>=0?String(row[iSkuMadre]||'').trim():'';
+      let pos=0;if(sm&&sm!==sku){if(mc[sm]===undefined)mc[sm]=0;pos=mc[sm]++;}
+      S.ecomRows.push({sku,skuL:normSku(sku),skuMadre:sm,variantPosition:pos,
+        ml:parseNum(String(row[iML>=0?iML:0]||'')),
+        web:parseNum(String(row[iWeb>=0?iWeb:0]||'')),
+        frave:parseNum(String(row[iFrave>=0?iFrave:0]||'')),
+      });
+    });
+    qs('ecom-csv-info').textContent=S.ecomRows.length+' SKUs cargados';
+    qs('ecom-stats-wrap').style.display='block';
+    status.className='conn-status ok';status.textContent=S.ecomRows.length+' SKUs';
+    toast(S.ecomRows.length+' SKUs Ecom ✓');
+    renderEcom();
+  }catch(e){
+    status.className='conn-status err';status.textContent='Error';
+    toast('Error Ecom: '+e.message,'error');
+  }
+  btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
+}
+
+async function loadMLSheets(){
+  const btn=qs('btn-load-ml-sheets'),status=qs('ml-sheets-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';
+  status.className='conn-status idle';status.textContent='Conectando...';
+  try{
+    const{values}=await fetchSheetByGid(ECOM_PUB_ID,ECOM_PUB_GID,'A1:Z3000');
+    if(!values||values.length<2)throw new Error('Sin datos');
+    const hdrIdx=findHdrRow(values,['sku','mla','regla','publicacion']);
+    const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
+    const hm=hdrMap(hdrs);
+    const iSkuVar=findCol(hm,['SKU Variante','SKU variante','SKU asociado','sku asociado','SKU']);
+    const iMLA=findCol(hm,['MLA','ML Item ID','ml_item_id','Item ID']);
+    const iRegla=findCol(hm,['Regla de Precio','regla de precio','Regla']);
+    const iTitulo=findCol(hm,['Titulo','Título','titulo','Title']);
+    const iTipo=findCol(hm,['Tipo','tipo','Listing Type']);
+    S.pubData=[];
+    values.slice(hdrIdx+1).forEach(row=>{
+      const sku=String(row[iSkuVar>=0?iSkuVar:0]||'').trim();if(!sku)return;
+      S.pubData.push({
+        skuAsociado:sku,
+        mla:String(row[iMLA>=0?iMLA:1]||'').trim(),
+        regla:String(row[iRegla>=0?iRegla:2]||'').trim(),
+        titulo:String(row[iTitulo>=0?iTitulo:3]||'').trim(),
+        tipo:String(row[iTipo>=0?iTipo:4]||'').trim(),
+        comboQty:1,
+      });
+    });
+    // Populate regla filter
+    const reglas=[...new Set(S.pubData.map(r=>r.regla).filter(Boolean))].sort();
+    const sel=qs('ml-filter-regla');
+    if(sel){sel.innerHTML='<option value="">Todas las reglas</option>';reglas.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o);});}
+    qs('pub-csv-info').textContent=S.pubData.length+' publicaciones cargadas';
+    status.className='conn-status ok';status.textContent=S.pubData.length+' pubs';
+    toast(S.pubData.length+' publicaciones ML ✓');
+    renderML();
+  }catch(e){
+    status.className='conn-status err';status.textContent='Error';
+    toast('Error ML Sheets: '+e.message,'error');
+  }
+  btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
+}
+
+async function loadWooSheets(){
+  const btn=qs('btn-load-woo-sheets'),status=qs('woo-sheets-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';
+  status.className='conn-status idle';status.textContent='Conectando...';
+  try{
+    const{values}=await fetchSheetByGid(WEB_WOO_ID,WEB_WOO_GID,'A1:BZ3000');
+    if(!values||values.length<2)throw new Error('Sin datos');
+    const hdrIdx=findHdrRow(values,['sku','type','regular price','published']);
+    const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
+    const hm=hdrMap(hdrs);
+    const iID=findCol(hm,['ID']);
+    const iType=findCol(hm,['Type']);
+    const iSKU=findCol(hm,['SKU']);
+    const iName=findCol(hm,['Name']);
+    const iSlug=findCol(hm,['Slug']);
+    const iPub=findCol(hm,['Published']);
+    const iReg=findCol(hm,['Regular price']);
+    const iSale=findCol(hm,['Sale price']);
+    const iStock=findCol(hm,['Stock']);
+    const iInStock=findCol(hm,["In stock?"]);
+    const iCats=findCol(hm,['Categories']);
+    const iTags=findCol(hm,['Tags']);
+    const iL1=findCol(hm,['Meta: _wcgm_lista1_price']);
+    const iL2=findCol(hm,['Meta: _wcgm_lista2_price']);
+    const iL3=findCol(hm,['Meta: _wcgm_lista3_price']);
+    function v(row,i){return i>=0&&i<row.length?String(row[i]||'').trim():'';}
+    S.webRows=values.slice(hdrIdx+1).filter(row=>{
+      const t=v(row,iType);return t==='variation'||t==='simple';
+    }).map(row=>({
+      id:v(row,iID),type:v(row,iType),
+      sku:v(row,iSKU),skuL:normSku(v(row,iSKU)),
+      name:v(row,iName),slug:v(row,iSlug),
+      published:v(row,iPub)==='1',
+      regular:parseNum(v(row,iReg)),sale:parseNum(v(row,iSale)),
+      stock:parseInt(v(row,iStock))||0,inStock:v(row,iInStock)==='1',
+      categories:v(row,iCats),
+      tags:(v(row,iTags)||'').replace(/\|/g,','),
+      l1:parseNum(v(row,iL1)),l2:parseNum(v(row,iL2)),l3:parseNum(v(row,iL3)),
+      _regular:null,_sale:null,_categories:null,_tags:null,
+    }));
+    qs('web-csv-info').textContent=S.webRows.length+' SKUs cargados';
+    qs('web-stats-wrap').style.display='block';
+    status.className='conn-status ok';status.textContent=S.webRows.length+' SKUs';
+    toast(S.webRows.length+' productos Web ✓');
+    renderWeb();
+  }catch(e){
+    status.className='conn-status err';status.textContent='Error';
+    toast('Error WooCommerce Sheets: '+e.message,'error');
+  }
+  btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
+}
+
+async function loadWebPubSheets(){
+  const btn=qs('btn-load-webpub-sheets'),status=qs('webpub-sheets-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';
+  status.className='conn-status idle';status.textContent='Conectando...';
+  try{
+    const{values}=await fetchSheetByGid(WEB_ECOM_ID,WEB_ECOM_GID,'A1:Z3000');
+    if(!values||values.length<2)throw new Error('Sin datos');
+    const hdrIdx=findHdrRow(values,['sku','precio','regla','link']);
+    const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
+    const hm=hdrMap(hdrs);
+    const iSku=findCol(hm,['SKU asociado','sku asociado','SKU','sku']);
+    const iPrecio=findCol(hm,['Precio','precio']);
+    const iRegla=findCol(hm,['Regla de Precio','regla de precio','Regla']);
+    const iTitulo=findCol(hm,['Titulo','Título','titulo']);
+    const iLink=findCol(hm,['Link','link']);
+    const iEstado=findCol(hm,['Estado','estado']);
+    S.webPubRows=[];
+    values.slice(hdrIdx+1).forEach(row=>{
+      const sku=String(row[iSku>=0?iSku:0]||'').trim();if(!sku)return;
+      S.webPubRows.push({
+        sku,skuL:normSku(sku),
+        titulo:String(row[iTitulo>=0?iTitulo:1]||'').trim(),
+        regla:String(row[iRegla>=0?iRegla:2]||'').trim(),
+        precioActual:parseNum(String(row[iPrecio>=0?iPrecio:3]||'')),
+        link:String(row[iLink>=0?iLink:4]||'').trim(),
+        estado:String(row[iEstado>=0?iEstado:5]||'').trim(),
+      });
+    });
+    const reglas=[...new Set(S.webPubRows.map(r=>r.regla).filter(Boolean))].sort();
+    const sel=qs('webpub-filter-regla');
+    if(sel){sel.innerHTML='<option value="">Todas las reglas</option>';reglas.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o);});}
+    qs('webpub-csv-info').textContent=S.webPubRows.length+' publicaciones cargadas';
+    qs('webpub-stats-wrap').style.display='block';
+    status.className='conn-status ok';status.textContent=S.webPubRows.length+' pubs';
+    toast(S.webPubRows.length+' pubs Web Ecom ✓');
+    renderWebPub();
+  }catch(e){
+    status.className='conn-status err';status.textContent='Error';
+    toast('Error Web Pub Sheets: '+e.message,'error');
+  }
+  btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
+}
+
+async function loadFraveSheets(){
+  const btn=qs('btn-load-frave-sheets'),status=qs('frave-sheets-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';
+  status.className='conn-status idle';status.textContent='Conectando...';
+  try{
+    const{values}=await fetchSheetByGid(FRAVE_PUB_ID,FRAVE_PUB_GID,'A1:N3000');
+    if(!values||values.length<2)throw new Error('Sin datos');
+    _parseFraveRows(values);
+    status.className='conn-status ok';status.textContent=S.fraveRows.length+' pubs';
+  }catch(e){
+    status.className='conn-status err';status.textContent='Error';
+    toast('Error Fravega Sheets: '+e.message,'error');
+  }
+  btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
 }
 
 // ── FRAVEGA MODULE ──
