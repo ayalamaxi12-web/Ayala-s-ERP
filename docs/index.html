@@ -1159,8 +1159,8 @@ function getWebData(){
     if(fP==='0'&&r.published)return false;
     return true;
   });
+  }); // end requestAnimationFrame
 }
-
 function renderWeb(){
   const unified=buildWebUnified();
   if(!unified.length)return;
@@ -1795,15 +1795,22 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap){
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">SKU</th>';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P1</th>';
     if(useComparison){html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P2</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Var.</th>';}
+    html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. %</th>';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">% cat</th></tr></thead><tbody>';
     topSkus.forEach(([sku,sv])=>{
       const sv2=skuMap2[sku]||0;
       const sp=fact>0?(sv/fact*100).toFixed(1):0;
       const svar=useComparison&&sv2>0?((sv-sv2)/sv2*100).toFixed(1):null;
-      const svarStr=svar!==null?'<span style="color:'+(+svar>=0?'var(--green)':'var(--red)')+'font-size:9px">'+(+svar>=0?'↑':'↓')+Math.abs(+svar)+'%</span>':'';
+      const svarStr=svar!==null?'<span style="color:'+(+svar>=0?'var(--green)':'var(--red)')+';font-size:9px">'+(+svar>=0?'↑':'↓')+Math.abs(+svar)+'%</span>':'';
+      // Rent% for this SKU
+      const skuSales=data.filter(d=>d.skus&&d.skus.some(s=>s===sku));
+      const skuRent=skuSales.reduce((s,d)=>s+d.rentabilidad,0);
+      const skuRentPct=sv>0?(skuRent/sv*100):0;
+      const rentColor=skuRentPct>50?'var(--green)':skuRentPct>30?'var(--accent)':skuRentPct>15?'var(--yellow)':'var(--red)';
       html+='<tr><td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent)">'+sku+'</td>';
       html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+fmt$(sv)+'</td>';
       if(useComparison){html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+(sv2?fmt$(sv2):'-')+'</td><td style="padding:4px 10px">'+svarStr+'</td>';}
+      html+='<td style="padding:4px 10px;font-size:9px;font-family:DM Mono,monospace;font-weight:700;color:'+rentColor+'">'+skuRentPct.toFixed(1)+'%</td>';
       html+='<td style="padding:4px 10px;font-size:9px;color:var(--text3);font-family:DM Mono,monospace">'+sp+'%</td></tr>';
     });
     html+='</tbody></table></td></tr>';
@@ -1867,13 +1874,22 @@ async function pedirAnalisis(){const ctx=window._dashCtx;if(!ctx)return;const bt
 </script>
 <script>
 // ── HISTORICO ──
-function parseHistorico(rows){if(rows.length<2)return{months:[],items:[]};const FIRST_MONTH=0,FIRST_YEAR=2023;const MON=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const H=rows[0];let monthCount=0;for(let i=5;i<H.length;i++){const v=String(H[i]||'').trim().toLowerCase();if(v.includes('venta')||v.includes('maximo')||v.includes('media')||v.includes('minimo')||v.includes('ltim')||v.includes('ultim'))break;monthCount++;}const monthCols=[];for(let i=0;i<monthCount;i++){const totalMonth=FIRST_MONTH+i;const year=FIRST_YEAR+Math.floor(totalMonth/12);const month=totalMonth%12;monthCols.push({idx:5+i,label:`${MON[month]} ${year}`});}const items=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[0])continue;const monthly=monthCols.map(m=>({label:m.label,units:parseFloat(r[m.idx])||0}));items.push({sku:(r[0]||'').trim(),skuVar:(r[1]||'').trim(),pm:(r[2]||'').trim(),categoria:(r[3]||'').trim(),titulo:(r[4]||'').trim(),monthly});}return{months:monthCols.map(m=>m.label),items};}
+function parseHistorico(rows){if(rows.length<2)return{months:[],items:[]};const FIRST_MONTH=0,FIRST_YEAR=2023;const MON=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const H=rows[0];let monthCount=0;for(let i=5;i<H.length;i++){const v=String(H[i]||'').trim().toLowerCase();if(v.includes('venta')||v.includes('maximo')||v.includes('media')||v.includes('minimo')||v.includes('ltim')||v.includes('ultim'))break;monthCount++;}const monthCols=[];for(let i=0;i<monthCount;i++){const totalMonth=FIRST_MONTH+i;const year=FIRST_YEAR+Math.floor(totalMonth/12);const month=totalMonth%12;monthCols.push({idx:5+i,label:`${MON[month]} ${year}`});}const items=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[0])continue;const monthly=monthCols.map(m=>({label:m.label,units:parseNum(String(r[m.idx]||'0'))}));items.push({sku:(r[0]||'').trim(),skuVar:(r[1]||'').trim(),pm:(r[2]||'').trim(),categoria:(r[3]||'').trim(),titulo:(r[4]||'').trim(),monthly});}return{months:monthCols.map(m=>m.label),items};}
 async function loadHistorico(){const el=qs('hist-content');el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando histórico...</span></div>';try{for(const name of['CONJUNTO','IT','TACTICA']){try{const rows=await fetchSheet(HIST_ID,`${name}!A1:AZ2000`);histAllData[name]=parseHistorico(rows);}catch(e){console.warn(e);}}histDataParsed=histAllData['CONJUNTO']||{items:[],months:[]};histLoaded=true;populateHistFilters(histDataParsed);qs('hist-sheet-sel').addEventListener('change',()=>{const sel=qs('hist-sheet-sel').value;const d=histAllData[sel]||histDataParsed;populateHistFilters(d);renderHistorico();});el.innerHTML='<div class="loading-block"><span>Seleccioná una categoría o PM para ver los SKUs</span></div>';}catch(e){el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error: ${e.message}</span></div>`;}}
 function populateHistFilters(parsed){initMS('ms-hist-cat',new Set(parsed.items.map(d=>d.categoria).filter(Boolean)));initMS('ms-hist-pm',new Set(parsed.items.map(d=>d.pm).filter(Boolean)));const desde=qs('hist-desde-mes'),hasta=qs('hist-hasta-mes');if(!desde||!hasta)return;const curD=desde.value,curH=hasta.value;desde.innerHTML='<option value="">Desde el inicio</option>';hasta.innerHTML='<option value="">Hasta hoy</option>';parsed.months.forEach(m=>{desde.innerHTML+=`<option value="${m}">${m}</option>`;hasta.innerHTML+=`<option value="${m}">${m}</option>`;});if(curD)desde.value=curD;if(curH)hasta.value=curH;}
 function addHistSku(skuVal){const raw=(skuVal||qs('hist-sku-input').value).trim();const val=raw.toUpperCase().replace(/[\r\n]/g,'');if(!val||histSkus.includes(val)){if(!skuVal)qs('hist-sku-input').value='';return;}histSkus.push(val);if(!skuVal)qs('hist-sku-input').value='';renderSkuTags();renderHistorico();}
 function removeHistSku(sku){histSkus=histSkus.filter(s=>s!==sku);renderSkuTags();renderHistorico();}
 function renderSkuTags(){const el=qs('sku-tags');if(!el)return;el.innerHTML=histSkus.length?histSkus.map((s,i)=>`<div style="display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid ${PALETTE[i%PALETTE.length]}"><span style="color:${PALETTE[i%PALETTE.length]}">${s}</span><button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1" onclick="removeHistSku('${s}')">×</button></div>`).join(''):`<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">Agregá SKUs para comparar</span>`;}
 
+let histSortState={col:'total',dir:-1};
+function histSortTable(col,th){
+  if(histSortState.col===col)histSortState.dir*=-1;
+  else{histSortState.col=col;histSortState.dir=-1;}
+  // Update arrow indicators
+  document.querySelectorAll('#hist-content th[onclick]').forEach(t=>t.textContent=t.textContent.replace(' ↑','').replace(' ↓',''));
+  if(th)th.textContent=th.textContent.replace(' ↕','')+' '+(histSortState.dir===-1?'↓':'↑');
+  renderHistorico();
+}
 function histAcShow(val){
   const dd=qs('hist-ac-dropdown');if(!dd)return;
   if(!val||val.length<2){dd.style.display='none';return;}
@@ -1973,14 +1989,16 @@ function renderHistorico(){
     tableSKUs=catItems.map(d=>({
       sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,
       pm:d.pm,categoria:d.categoria,
-      total:d.monthly.reduce((s,m)=>s+m.units,0),monthly:d.monthly
-    })).sort((a,b)=>b.total-a.total).slice(0,50);
+      total:d.monthly.filter(m=>filteredMonths.includes(m.label)).reduce((s,m)=>s+m.units,0),
+      monthly:d.monthly
+    })).sort((a,b)=>{const dir=histSortState.dir;const col=histSortState.col;if(col==='sku')return a.sku.localeCompare(b.sku)*dir;return(b.total-a.total)*Math.abs(dir)*(histSortState.dir===-1?1:-1);}).slice(0,50);
   }else{
     tableSKUs=items.map(d=>({
       sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,
       pm:d.pm,categoria:d.categoria,
-      total:d.monthly.reduce((s,m)=>s+m.units,0),monthly:d.monthly
-    })).sort((a,b)=>b.total-a.total).slice(0,50);
+      total:d.monthly.filter(m=>filteredMonths.includes(m.label)).reduce((s,m)=>s+m.units,0),
+      monthly:d.monthly
+    })).sort((a,b)=>{const dir=histSortState.dir;const col=histSortState.col;if(col==='sku')return a.sku.localeCompare(b.sku)*dir;return(b.total-a.total)*Math.abs(dir)*(histSortState.dir===-1?1:-1);}).slice(0,50);
   }
 
   const tableTitle=histSkus.length>0&&chartItems.length>0&&chartItems[0]?.categoria
@@ -1995,8 +2013,10 @@ function renderHistorico(){
         <div><div style="font-size:12px;font-weight:700">${tableTitle}</div><div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">Click en un SKU para agregar al gráfico · ${tableSKUs.length} resultados</div></div>
       </div>
       <table><thead><tr>
-        <th>SKU Variante</th><th>Título</th><th>PM</th><th>Categoría</th>
-        ${filteredMonths.slice(-6).map(m=>`<th>${m}</th>`).join('')}<th>Total</th>
+        <th style="cursor:pointer" onclick="histSortTable('sku',this)">SKU Variante</th>
+        <th>Título</th><th>PM</th><th>Categoría</th>
+        ${filteredMonths.slice(-6).map(m=>`<th>${m}</th>`).join('')}
+        <th style="cursor:pointer" onclick="histSortTable('total',this)">Total ↕</th>
       </tr></thead>
       <tbody>${tableSKUs.map(item=>{
         const last6=item.monthly.filter(m=>filteredMonths.slice(-6).includes(m.label));
@@ -2015,6 +2035,9 @@ function renderHistorico(){
 
   if(!chartItems.length)return;
   if(dashCharts.hist){try{dashCharts.hist.destroy();}catch(e){}}
+  // Wait for DOM to update before creating chart
+  requestAnimationFrame(()=>{
+  if(!qs('chartHist'))return;
   dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:24}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
 }
 // ── COBRANZAS ──
