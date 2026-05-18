@@ -1716,17 +1716,49 @@ function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInter
 <script>
 // ── DASHBOARD ──
 async function fetchSheet(sheetId,name){const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${API_KEY}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
-function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].map(h=>(h||'').trim());const ci=name=>H.indexOf(name);const IDX={fecha:ci('FechaCreaciónVenta'),canal:ci('Canal De Venta'),skus:ci("Sku's Vendidos"),precioFinal:ci('Precio Final'),rentabilidad:ci('Rentabilidad'),categoria:ci('Categoria'),utilidad:ci('Utilidad Venta'),facturUSD:ci('Facturacion USD'),costo:ci('Costo Total'),pm:ci('PM'),vendedor:ci('Responsable De Ventas')};if(IDX.precioFinal<0)return[];const parsed=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;const fecha=parseDate(r[IDX.fecha]);const skuRaw=(r[IDX.skus]||'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}return parsed;}
+function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].map(h=>(h||'').trim());const ci=name=>H.indexOf(name);// Try multiple column name variants
+  function ciMulti(...names){for(const n of names){const i=ci(n);if(i>=0)return i;}return -1;}
+  const IDX={
+    fecha:ciMulti('FechaCreaciónVenta','Fecha Creación Venta','Fecha Creacion Venta','FechaCreacionVenta','Fecha'),
+    canal:ciMulti('Canal De Venta','Canal de Venta','Canal'),
+    skus:ciMulti("Sku's Vendidos","SKU's Vendidos","Skus Vendidos","SKU"),
+    precioFinal:ciMulti('Precio Final','PrecioFinal','Precio final'),
+    rentabilidad:ciMulti('Rentabilidad','Rentabilidad Venta'),
+    categoria:ciMulti('Categoria','Categoría','Category'),
+    utilidad:ciMulti('Utilidad Venta','Utilidad'),
+    facturUSD:ciMulti('Facturacion USD','Facturación USD','FacturacionUSD'),
+    costo:ciMulti('Costo Total','Costo','CostoTotal'),
+    pm:ciMulti('PM','Pm'),
+    vendedor:ciMulti('Responsable De Ventas','Vendedor','Responsable')
+  };
+  if(IDX.precioFinal<0){console.warn('No se encontró columna Precio Final en',sheetName,'Headers:',H);return[];}const parsed=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;const fecha=parseDate(r[IDX.fecha]);const skuRaw=(r[IDX.skus]||'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}return parsed;}
 async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';allSalesData=[];
   // Auto-detect all "Base X - Y" sheets dynamically
   let sheetsToLoad=DASH_SHEETS;
   try{
     const meta=await(await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${DASH_SHEET_ID}?key=${API_KEY}`)).json();
+    if(meta.error){
+      qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error accediendo al Sheets: ${meta.error.message}<br><small>Verificá que el Sheets esté compartido como "cualquier persona con el enlace puede ver"</small></span></div>`;
+      return;
+    }
     const allTabs=(meta.sheets||[]).map(s=>s.properties.title);
     const baseTabs=allTabs.filter(t=>t.toLowerCase().startsWith('base '));
     if(baseTabs.length>0)sheetsToLoad=baseTabs;
-  }catch(e){console.warn('Could not auto-detect sheets, using default list');}
-  for(const sheet of sheetsToLoad){try{allSalesData=allSalesData.concat(parseVentas(await fetchSheet(DASH_SHEET_ID,sheet),sheet));}catch(e){console.warn(e);}}if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span style="color:var(--red)">Sin datos</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} órdenes`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
+    console.log('Pestañas encontradas:', sheetsToLoad);
+  }catch(e){console.warn('Could not auto-detect sheets:',e);}
+  let loadErrors=[];
+  for(const sheet of sheetsToLoad){
+    try{
+      const rows=await fetchSheet(DASH_SHEET_ID,sheet);
+      const parsed=parseVentas(rows,sheet);
+      allSalesData=allSalesData.concat(parsed);
+      console.log(`${sheet}: ${parsed.length} ventas`);
+    }catch(e){loadErrors.push(sheet+': '+e.message);console.warn(e);}
+  }
+  if(!allSalesData.length&&loadErrors.length){
+    qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">No se pudo cargar ninguna pestaña.<br><small>${loadErrors.join('<br>')}</small></span></div>`;
+    return;
+  }if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span style="color:var(--red)">Sin datos</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} órdenes`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
 function applyFilters(){activeFilters={desde:qs('f-desde').value,hasta:qs('f-hasta').value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues('ms-canal'),categoria:getMSValues('ms-categoria'),pm:getMSValues('ms-pm'),sku:qs('f-sku').value.trim().toLowerCase()};renderDashboard();}
 function resetFilters(){['f-desde','f-hasta','f-desde2','f-hasta2','f-sku'].forEach(id=>qs(id).value='');['ms-canal','ms-categoria','ms-pm'].forEach(id=>clearMS(id));activeFilters={};renderDashboard();}
 function getFiltered(){const f=activeFilters;let data1=[...allSalesData];if(f.canal)data1=data1.filter(d=>f.canal.includes(d.canal));if(f.categoria)data1=data1.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data1=data1.filter(d=>f.pm.includes(d.pm));if(f.sku)data1=data1.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde)data1=data1.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data1=data1.filter(d=>d.fechaStr<=f.hasta);let data2=null;if(f.desde2||f.hasta2){data2=[...allSalesData];if(f.canal)data2=data2.filter(d=>f.canal.includes(d.canal));if(f.categoria)data2=data2.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data2=data2.filter(d=>f.pm.includes(d.pm));if(f.sku)data2=data2.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde2)data2=data2.filter(d=>d.fechaStr>=f.desde2);if(f.hasta2)data2=data2.filter(d=>d.fechaStr<=f.hasta2);}return{data1,data2};}
