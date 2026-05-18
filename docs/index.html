@@ -1732,7 +1732,8 @@ function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].m
     vendedor:ciMulti('Responsable De Ventas','Vendedor','Responsable')
   };
   if(IDX.precioFinal<0){console.warn('No se encontró columna Precio Final en',sheetName,'Headers:',H);return[];}const parsed=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;const fecha=parseDate(r[IDX.fecha]);const skuRaw=(r[IDX.skus]||'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}return parsed;}
-async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';allSalesData=[];
+async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';if(dashLoaded)return;
+  allSalesData=[];
   // Auto-detect all "Base X - Y" sheets dynamically
   let sheetsToLoad=DASH_SHEETS;
   try{
@@ -1872,7 +1873,7 @@ async function pedirAnalisis(){const ctx=window._dashCtx;if(!ctx)return;const bt
 <script>
 // ── HISTORICO ──
 function parseHistorico(rows){if(rows.length<2)return{months:[],items:[]};const FIRST_MONTH=0,FIRST_YEAR=2023;const MON=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const H=rows[0];let monthCount=0;for(let i=5;i<H.length;i++){const v=String(H[i]||'').trim().toLowerCase();if(v.includes('venta')||v.includes('maximo')||v.includes('media')||v.includes('minimo')||v.includes('ltim')||v.includes('ultim'))break;monthCount++;}const monthCols=[];for(let i=0;i<monthCount;i++){const totalMonth=FIRST_MONTH+i;const year=FIRST_YEAR+Math.floor(totalMonth/12);const month=totalMonth%12;monthCols.push({idx:5+i,label:`${MON[month]} ${year}`});}const items=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[0])continue;const monthly=monthCols.map(m=>({label:m.label,units:parseNum(String(r[m.idx]||'0'))}));items.push({sku:(r[0]||'').trim(),skuVar:(r[1]||'').trim(),pm:(r[2]||'').trim(),categoria:(r[3]||'').trim(),titulo:(r[4]||'').trim(),monthly});}return{months:monthCols.map(m=>m.label),items};}
-async function loadHistorico(){const el=qs('hist-content');el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando histórico...</span></div>';try{await Promise.all(['CONJUNTO','IT','TACTICA'].map(async name=>{
+async function loadHistorico(){if(histLoaded)return;const el=qs('hist-content');el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando histórico...</span></div>';try{await Promise.all(['CONJUNTO','IT','TACTICA'].map(async name=>{
     try{const rows=await fetchSheet(HIST_ID,`${name}!A1:AZ2000`);histAllData[name]=parseHistorico(rows);}
     catch(e){console.warn('Historico',name,e.message);}
   }));histDataParsed=histAllData['CONJUNTO']||{items:[],months:[]};
@@ -1885,8 +1886,8 @@ async function loadHistorico(){const el=qs('hist-content');el.innerHTML='<div cl
     qs('hist-sheet-sel').removeEventListener&&qs('hist-sheet-sel').removeEventListener('change',()=>{});
     qs('hist-sheet-sel').addEventListener('change',()=>{const sel=qs('hist-sheet-sel').value;const d=histAllData[sel]||histDataParsed;populateHistFilters(d);renderHistorico();});
     el.innerHTML='<div class="loading-block"><span>Seleccioná una categoría o PM para ver los SKUs</span></div>';}catch(e){
-    el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error histórico: ${e.message}<br><small>Sheets ID: ${HIST_ID}</small></span></div>`;
-    console.error('loadHistorico',e);
+    histLoaded=false;
+    el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">❌ Error histórico: ${e.message}<br><small>Sheets ID: ${HIST_ID} — Verificá que esté compartido</small></span></div>`;
   }}
 function populateHistFilters(parsed){initMS('ms-hist-cat',new Set(parsed.items.map(d=>d.categoria).filter(Boolean)));initMS('ms-hist-pm',new Set(parsed.items.map(d=>d.pm).filter(Boolean)));const desde=qs('hist-desde-mes'),hasta=qs('hist-hasta-mes');if(!desde||!hasta)return;const curD=desde.value,curH=hasta.value;desde.innerHTML='<option value="">Desde el inicio</option>';hasta.innerHTML='<option value="">Hasta hoy</option>';parsed.months.forEach(m=>{desde.innerHTML+=`<option value="${m}">${m}</option>`;hasta.innerHTML+=`<option value="${m}">${m}</option>`;});if(curD)desde.value=curD;if(curH)hasta.value=curH;}
 function addHistSku(skuVal){const raw=(skuVal||qs('hist-sku-input').value).trim();const val=raw.toUpperCase().replace(/[\r\n]/g,'');if(!val||histSkus.includes(val)){if(!skuVal)qs('hist-sku-input').value='';return;}histSkus.push(val);if(!skuVal)qs('hist-sku-input').value='';renderSkuTags();renderHistorico();}
@@ -2054,14 +2055,19 @@ function renderHistorico(){
 }
 // ── COBRANZAS ──
 async function loadCobranzas(){
+  if(cobrLoaded)return;
   const el=qs('page-cobranzas');
+  el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando cobranzas...</span></div>';
   try{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),15000);
     const url=`https://sheets.googleapis.com/v4/spreadsheets/${DASH_SHEET_ID}/values/${encodeURIComponent('Cobranza')}?key=${API_KEY}`;
-    const res=await fetch(url);
+    const res=await fetch(url,{signal:ctrl.signal});
+    clearTimeout(timer);
     const json=await res.json();
-    if(json.error)throw new Error(json.error.message);
+    if(json.error)throw new Error('Sheets: '+json.error.message+' — Verificá que el Sheets esté compartido públicamente');
     const rows=json.values||[];
-    if(!rows.length)throw new Error('Pestaña Cobranza vacía');
+    if(!rows.length)throw new Error('Pestaña "Cobranza" no encontrada o vacía en el Sheets');
     cobrData=rows.slice(1).filter(r=>r[0]&&r[1]).map(r=>({
       semana:String(r[0]).trim(),
       total:parseNum(String(r[1]||'0'))
@@ -2069,8 +2075,8 @@ async function loadCobranzas(){
     cobrLoaded=true;
     renderCobranzas();
   }catch(e){
-    el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error cobranzas: ${e.message}</span></div>`;
-    console.error('loadCobranzas',e);
+    cobrLoaded=false;
+    el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">❌ ${e.message}</span></div>`;
   }
 }
 
@@ -2131,11 +2137,12 @@ function renderCobranzas(){
 }
 
 async function loadBrasil(){
+  if(brLoaded)return;
   const el=qs('page-brasil');
   try{brData=[];for(const sheet of SHEETS_BR){try{const rows=await fetchSheet(DASH_SHEET_ID,sheet);if(!rows||rows.length<2)continue;if(rows.length<2)continue;const H=rows[0].map(h=>(h||'').trim());const ciM2=(...ns)=>{for(const n of ns){const i=H.findIndex(h=>h.trim().toLowerCase()===n.toLowerCase());if(i>=0)return i;}return H.findIndex(h=>ns.some(n=>h.toLowerCase().includes(n.toLowerCase())));};
               const IDX={fecha:ciM2('Fecha Creación Venta','Fecha Creacion Venta','FechaCreaciónVenta','Fecha'),canal:ciM2('Canal De Venta','Canal de Venta','Canal'),skus:ciM2("Sku's Vendidos","SKU's Vendidos","Skus Vendidos","SKU"),precio:ciM2('Precio Final','PrecioFinal'),rent:ciM2('Rentabilidad Final','Rentabilidad','Utilidad Venta','Utilidad'),costo:ciM2('Costo Sin Iva (total de productos)','Costo Total','Costo Sin')};const pnBr=v=>{if(!v)return 0;let s=String(v).trim().replace(/R\$|\s/g,'').replace(/,/g,'');if(s.includes('%'))return 0;return parseFloat(s)||0;};const parseDateBr=str=>{if(!str)return null;const s=String(str).trim();const parts=s.split('/');if(parts.length===3)return new Date(+parts[2],+parts[1]-1,+parts[0]);return parseDate(str);};for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pnBr(r[IDX.precio]);if(!pf)continue;const fecha=parseDateBr(r[IDX.fecha]);const skuRaw=(IDX.skus>=0?r[IDX.skus]||'':'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);brData.push({sheet,fecha,fechaStr:dateToStr(fecha),canal:(IDX.canal>=0?(r[IDX.canal]||'Sin canal'):'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pnBr(r[IDX.rent]),costo:pnBr(r[IDX.costo]),facturUSD:0,pm:'',vendedor:'',categoria:'Sin categoría'});};}catch(e){console.warn(e);}}brLoaded=true;const canalesBr=[...new Set(brData.map(d=>d.canal))].sort();canalesBr.forEach((c,i)=>{if(!canalColors[c])canalColors[c]=PALETTE[i%PALETTE.length];});initMS('ms-br-canal',new Set(brData.map(d=>d.canal)));renderBrasil();}catch(e){
-    el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error Brasil: ${e.message}<br><small>Verificá que el Sheets esté compartido</small></span></div>`;
-    console.error('loadBrasil',e);
+    brLoaded=false;
+    el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">❌ Error Brasil: ${e.message}</span></div>`;
   }}
 let brFilters={};
 function applyBrFilters(){brFilters={desde:qs('br-desde').value,hasta:qs('br-hasta').value,canal:getMSValues('ms-br-canal'),sku:qs('br-sku').value.trim().toLowerCase()};renderBrasil();}
