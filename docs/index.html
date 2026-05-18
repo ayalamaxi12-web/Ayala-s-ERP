@@ -1873,7 +1873,7 @@ async function pedirAnalisis(){const ctx=window._dashCtx;if(!ctx)return;const bt
 <script>
 // ── HISTORICO ──
 function parseHistorico(rows){if(rows.length<2)return{months:[],items:[]};const FIRST_MONTH=0,FIRST_YEAR=2023;const MON=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const H=rows[0];let monthCount=0;for(let i=5;i<H.length;i++){const v=String(H[i]||'').trim().toLowerCase();if(v.includes('venta')||v.includes('maximo')||v.includes('media')||v.includes('minimo')||v.includes('ltim')||v.includes('ultim'))break;monthCount++;}const monthCols=[];for(let i=0;i<monthCount;i++){const totalMonth=FIRST_MONTH+i;const year=FIRST_YEAR+Math.floor(totalMonth/12);const month=totalMonth%12;monthCols.push({idx:5+i,label:`${MON[month]} ${year}`});}const items=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[0])continue;const monthly=monthCols.map(m=>({label:m.label,units:parseNum(String(r[m.idx]||'0'))}));items.push({sku:(r[0]||'').trim(),skuVar:(r[1]||'').trim(),pm:(r[2]||'').trim(),categoria:(r[3]||'').trim(),titulo:(r[4]||'').trim(),monthly});}return{months:monthCols.map(m=>m.label),items};}
-async function loadHistorico(){if(histLoaded)return;const el=qs('hist-content');el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando histórico...</span></div>';try{await Promise.all(['CONJUNTO','IT','TACTICA'].map(async name=>{
+async function loadHistorico(){const el=qs('hist-content');el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando histórico...</span></div>';try{await Promise.all(['CONJUNTO','IT','TACTICA'].map(async name=>{
     try{const rows=await fetchSheet(HIST_ID,`${name}!A1:AZ2000`);histAllData[name]=parseHistorico(rows);}
     catch(e){console.warn('Historico',name,e.message);}
   }));histDataParsed=histAllData['CONJUNTO']||{items:[],months:[]};
@@ -2055,7 +2055,6 @@ function renderHistorico(){
 }
 // ── COBRANZAS ──
 async function loadCobranzas(){
-  if(cobrLoaded)return;
   const el=qs('page-cobranzas');
   el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando cobranzas...</span></div>';
   try{
@@ -2137,7 +2136,6 @@ function renderCobranzas(){
 }
 
 async function loadBrasil(){
-  if(brLoaded)return;
   const el=qs('page-brasil');
   try{brData=[];for(const sheet of SHEETS_BR){try{const rows=await fetchSheet(DASH_SHEET_ID,sheet);if(!rows||rows.length<2)continue;if(rows.length<2)continue;const H=rows[0].map(h=>(h||'').trim());const ciM2=(...ns)=>{for(const n of ns){const i=H.findIndex(h=>h.trim().toLowerCase()===n.toLowerCase());if(i>=0)return i;}return H.findIndex(h=>ns.some(n=>h.toLowerCase().includes(n.toLowerCase())));};
               const IDX={fecha:ciM2('Fecha Creación Venta','Fecha Creacion Venta','FechaCreaciónVenta','Fecha'),canal:ciM2('Canal De Venta','Canal de Venta','Canal'),skus:ciM2("Sku's Vendidos","SKU's Vendidos","Skus Vendidos","SKU"),precio:ciM2('Precio Final','PrecioFinal'),rent:ciM2('Rentabilidad Final','Rentabilidad','Utilidad Venta','Utilidad'),costo:ciM2('Costo Sin Iva (total de productos)','Costo Total','Costo Sin')};const pnBr=v=>{if(!v)return 0;let s=String(v).trim().replace(/R\$|\s/g,'').replace(/,/g,'');if(s.includes('%'))return 0;return parseFloat(s)||0;};const parseDateBr=str=>{if(!str)return null;const s=String(str).trim();const parts=s.split('/');if(parts.length===3)return new Date(+parts[2],+parts[1]-1,+parts[0]);return parseDate(str);};for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pnBr(r[IDX.precio]);if(!pf)continue;const fecha=parseDateBr(r[IDX.fecha]);const skuRaw=(IDX.skus>=0?r[IDX.skus]||'':'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);brData.push({sheet,fecha,fechaStr:dateToStr(fecha),canal:(IDX.canal>=0?(r[IDX.canal]||'Sin canal'):'Sin canal').trim(),skuRaw,skus,precioFinal:pf,rentabilidad:pnBr(r[IDX.rent]),costo:pnBr(r[IDX.costo]),facturUSD:0,pm:'',vendedor:'',categoria:'Sin categoría'});};}catch(e){console.warn(e);}}brLoaded=true;const canalesBr=[...new Set(brData.map(d=>d.canal))].sort();canalesBr.forEach((c,i)=>{if(!canalColors[c])canalColors[c]=PALETTE[i%PALETTE.length];});initMS('ms-br-canal',new Set(brData.map(d=>d.canal)));renderBrasil();}catch(e){
@@ -2204,11 +2202,8 @@ function init(){
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
   const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;
   renderSkuTags();
-  // Load everything on startup
+  // Load dashboard on startup, others load lazily when visited
   loadDashboard();
-  loadHistorico();
-  loadCobranzas();
-  loadBrasil();
 }
 init();
 </script>
