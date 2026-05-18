@@ -387,10 +387,13 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="section-hdr">Verificar Precios Táctica</div>
   <div class="grid-2" style="margin-bottom:4px">
     <div class="card">
-      <div class="card-title">1. CSV de Táctica</div>
-      <div class="dropzone" id="dz-tactica" onclick="document.getElementById('fi-tactica').click()"><div style="font-size:22px;margin-bottom:5px">📁</div>Arrastrá el CSV exportado de Táctica</div>
-      <input type="file" id="fi-tactica" accept=".csv,.tsv,.txt" style="display:none">
+      <div class="card-title">1. Conectar Sheets Táctica</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="btn-load-tactica-sheets" onclick="loadTacticaSheets()">🔄 Cargar desde Sheets</button>
+        <span class="conn-status idle" id="tactica-sheets-status">No cargado</span>
+      </div>
       <div id="tactica-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text3)">Planilla: <span style="color:var(--accent);font-family:'DM Mono',monospace">Táctica · pestaña Articulos Tactica</span></div>
     </div>
     <div class="card">
       <div class="card-title">Estado PMs</div>
@@ -712,6 +715,16 @@ const S={
   eSort:{col:null,dir:1},mlSort:{col:null,dir:1},tSort:{col:null,dir:1},wSort:{col:null,dir:1},cSort:{col:null,dir:1},
 };
 const CATS_ID='1pog-ebeTNUkIaXHnTsYa5C6SfdFdH4-R-fQ7umIRefg';
+const TACTICA_ID='14g8uYut4uMdTs709wrHb6TLh_IG1DI1ygu053VXk_f8';
+const TACTICA_GID='841347258';
+const ECOM_PUB_ID='1Iudu2dwN1s8Bal5-fDusD844ox3ME56-dSPZWLG8NmE';
+const ECOM_PUB_GID='1571413828';
+const WEB_WOO_ID='1szOjECuWvozUQSrEnugzat859XCf95zRHtVjce55l-U';
+const WEB_WOO_GID='74441620';
+const WEB_ECOM_ID='1iBjLqhtGFChzmT6KZnIVfgVOvbo1oUwu7MzxLXJsVXM';
+const WEB_ECOM_GID='549628677';
+const FRAVE_PUB_ID='1xkSdLzkCpsNLwWoF6kucGBJ5QYj7D1GeBdTxw3ccsJE';
+const FRAVE_PUB_GID='34864329';
 const CATS_TAB='GRAL CATEGORIAS';
 const RULES=[
   {key:'ML Unitario',pct:1.00},{key:'ML Unitario Sin Envio',pct:1.00},
@@ -936,60 +949,136 @@ async function fixAllML(){if(!S.mlToken){toast('Conectá ML primero','error');re
 function exportML(){if(!S.pubData.length){toast('Sin datos','error');return;}const h='SKU,MLA,Regla,PM,Precio_Ecom,Esperado_ML,Precio_ML,Oferta_ML,Diff_Pct,Estado';const lines=S.pubData.map(item=>{const r=buildMLRow(item);return[item.skuAsociado,item.mla,item.regla,r.pm?r.pm.pmName:'',r.base||'',r.exp||'',r.mlP||'',r.promoP||'',r.diff!==null?r.diff.toFixed(2):'',r.st].join(',');});const blob=new Blob([[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ml-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast('Exportado');}
 </script>
 <script>
-// ── TÁCTICA ──
-function processTacticaCSV(text){
-  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
-  if(lines.length<2){toast('CSV vacío','error');return;}
-  // Detect separator
-  const l0=lines[0]||'';
-  let sep=',';
-  if(l0.split(';').length>l0.split(',').length)sep=';';
-  else if(l0.split('\t').length>3&&l0.split('\t').length>l0.split(',').length)sep='\t';
-  function splitRow(line){
-    const r=[];let cur='',q=false;
-    for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur);cur='';}else cur+=c;}
-    r.push(cur);return r.map(v=>v.replace(/^"|"$/g,'').trim());
+
+// ── SHEETS FETCH HELPER ──
+async function fetchSheetByGid(sheetId, gid, range){
+  const key=S.sheetsKey||API_KEY;
+  // First get tab name from gid
+  const meta=await(await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?key=${key}`)).json();
+  const tab=meta.sheets?.find(s=>String(s.properties.sheetId)===String(gid));
+  if(!tab)throw new Error('No se encontró la pestaña gid='+gid);
+  const tabName=tab.properties.title;
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(tabName)}!${range||'A1:BZ3000'}?key=${key}`;
+  const d=await(await fetch(url)).json();
+  if(d.error)throw new Error(d.error.message);
+  return{values:d.values||[],tabName};
+}
+
+// Find header row that contains a specific keyword
+function findHdrRow(rows, keywords){
+  for(let i=0;i<Math.min(5,rows.length);i++){
+    const r=rows[i].map(c=>String(c||'').toLowerCase());
+    if(keywords.some(kw=>r.some(c=>c.includes(kw.toLowerCase())))){return i;}
   }
-  const hdrs=splitRow(lines[0].replace(/^\uFEFF/,''));
-  // Normalize header for matching
-  const norm=s=>s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  function findIdx(variants){const nv=variants.map(norm);return hdrs.findIndex(h=>nv.includes(norm(h)));}
-  // SKU column
-  const iSku=findIdx(['Código','Codigo','SKU','CÓDIGO','codigo']);
-  if(iSku<0){toast('No encontré columna Código/SKU','error');return;}
-  // Costo: col 18 = "Costo 1"
-  const iCosto=findIdx(['Costo 1','COSTO 1','Costo1','costo 1','COSTO1']);
-  // Listas: use POSITIONAL fallback based on known Tactica export structure
-  // L1=col21 "Precio de Venta1", L2=col31, L3=col41, L4=col51, L5=col61
-  let iL1=findIdx(['Precio de Venta1','Precio De Venta1','Precio de Venta 1']);
-  let iL2=findIdx(['Precio de Venta2','Precio De Venta2','Precio de Venta 2']);
-  let iL3=findIdx(['Precio de Venta3','Precio De Venta3','Precio de Venta 3','L3 USD','L3USD']);
-  let iL4=findIdx(['Precio de Venta4','Precio De Venta4','Precio de Venta 4','L4 USD','L4USD']);
-  let iL5=findIdx(['Precio de Venta5','Precio De Venta5','Precio de Venta 5','L5 USD','L5USD']);
-  // If header has duplicates (Táctica repeats "Valor % 1" etc), findIdx gets first match
-  // For Precio de Venta1-5, each appears once so findIdx works
-  // But if L1 not found, try positional (col 21 for standard Tactica export)
+  return 0;
+}
+function hdrMap(row){
+  const m={};
+  row.forEach((h,i)=>{if(h)m[String(h).trim()]=i;});
+  return m;
+}
+function findCol(hm, variants){
+  for(const v of variants){
+    for(const [k,i] of Object.entries(hm)){
+      if(k.toLowerCase().includes(v.toLowerCase())||v.toLowerCase()===k.toLowerCase())return i;
+    }
+  }
+  return -1;
+}
+
+// ── TÁCTICA ──
+async function loadTacticaSheets(){
+  const btn=qs('btn-load-tactica-sheets');
+  const status=qs('tactica-sheets-status');
+  btn.disabled=true; btn.textContent='⏳ Cargando...';
+  status.className='conn-status idle'; status.textContent='Conectando...';
+  try{
+    const{values}=await fetchSheetByGid(TACTICA_ID, TACTICA_GID, 'A1:BZ5000');
+    if(!values||values.length<2)throw new Error('Sin datos en la planilla');
+    _parseTacticaRows(values);
+    status.className='conn-status ok';
+    status.textContent=S.tacticaRows.length+' SKUs';
+  }catch(e){
+    status.className='conn-status err';
+    status.textContent='Error';
+    toast('Error Táctica: '+e.message,'error');
+  }
+  btn.disabled=false; btn.textContent='🔄 Cargar desde Sheets';
+}
+
+function _parseTacticaRows(values){
+  // Find header row
+  const hdrIdx=findHdrRow(values,['código','codigo','sku','precio de venta']);
+  const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
+  const hm=hdrMap(hdrs);
+  
+  // Map columns
+  const iSku=findCol(hm,['Código','Codigo','SKU','CÓDIGO']);
+  if(iSku<0){toast('No encontré columna Código/SKU en Táctica','error');return;}
+  
+  const iCosto=findCol(hm,['Costo 1','COSTO 1','Costo1']);
+  
+  // L1-L5: find all "Precio de VentaN" columns
+  // They may appear multiple times — we want the FIRST occurrence of each
+  const findFirst=(keyword)=>{
+    for(let i=0;i<hdrs.length;i++){
+      if(hdrs[i].toLowerCase().replace(/\s/g,'')===keyword.toLowerCase().replace(/\s/g,''))return i;
+    }
+    // partial match
+    for(let i=0;i<hdrs.length;i++){
+      if(hdrs[i].toLowerCase().includes(keyword.toLowerCase()))return i;
+    }
+    return -1;
+  };
+  
+  let iL1=findFirst('Precio de Venta1');
+  let iL2=findFirst('Precio de Venta2');
+  let iL3=findFirst('Precio de Venta3');
+  let iL4=findFirst('Precio de Venta4');
+  let iL5=findFirst('Precio de Venta5');
+  
+  // Positional fallback based on known Táctica export structure
   if(iL1<0&&hdrs.length>21)iL1=21;
   if(iL2<0&&hdrs.length>31)iL2=31;
   if(iL3<0&&hdrs.length>41)iL3=41;
   if(iL4<0&&hdrs.length>51)iL4=51;
   if(iL5<0&&hdrs.length>61)iL5=61;
-  function pn(vals,idx){if(idx<0||idx>=vals.length)return 0;return parseNum(vals[idx]);}
+  
+  function pv(row,idx){if(idx<0||idx>=row.length)return 0;return parseNum(String(row[idx]||''));}
+  
   S.tacticaRows=[];
-  lines.slice(1).forEach(line=>{
-    const v=splitRow(line);
-    const sku=(v[iSku]||'').trim();if(!sku)return;
+  values.slice(hdrIdx+1).forEach(row=>{
+    if(!row||!row[iSku])return;
+    const sku=String(row[iSku]||'').trim();
+    if(!sku||sku.toLowerCase()==='código'||sku.toLowerCase()==='codigo')return;
     S.tacticaRows.push({
-      sku,skuL:normSku(sku),
-      costo:pn(v,iCosto),
-      l1:pn(v,iL1),l2:pn(v,iL2),
-      l3:pn(v,iL3),l4:pn(v,iL4),l5:pn(v,iL5)
+      sku, skuL:normSku(sku),
+      costo:pv(row,iCosto),
+      l1:pv(row,iL1), l2:pv(row,iL2),
+      l3:pv(row,iL3), l4:pv(row,iL4), l5:pv(row,iL5),
     });
   });
-  qs('tactica-csv-info').textContent=S.tacticaRows.length+' SKUs cargados ('+lines.length+' filas)';
+  
+  const pmNames=Object.entries(S.sheets).filter(e=>e[1].id).map(e=>e[1].name);
+  if(!msState['ms-tactica-pm']||msState['ms-tactica-pm'].all.length===0)
+    initMS('ms-tactica-pm',new Set(pmNames));
+  
+  qs('tactica-csv-info').textContent=S.tacticaRows.length+' SKUs cargados';
   qs('tactica-stats-wrap').style.display='block';
-  toast(S.tacticaRows.length+' SKUs de Táctica');
+  toast(S.tacticaRows.length+' SKUs de Táctica ✓');
   renderTactica();
+}
+
+// Keep CSV fallback for compatibility (used nowhere now but harmless)
+function processTacticaCSV(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2){toast('CSV vacío','error');return;}
+  const rows=lines.map(l=>{
+    const r=[];let cur='',q=false,sep=lines[0].split(';').length>lines[0].split(',').length?';':',';
+    for(const c of l){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur);cur='';}else cur+=c;}
+    r.push(cur);return r.map(v=>v.replace(/^"|"$/g,'').trim());
+  });
+  _parseTacticaRows(rows);
 }
 function getTacticaData(){const srch=(qs('tactica-search').value||'').toLowerCase();const fE=qs('tactica-filter-estado').value||'';const fL=qs('tactica-filter-lista').value||'';const fPM=getMSValues('ms-tactica-pm');return S.tacticaRows.map(item=>{const pm=S.pmData[item.skuL]||null;const pmL1=pm&&pm.l1||0,pmL2=pm&&pm.l2||0,pmL3=pm&&pm.l3||0,pmL4=pm&&pm.l4||0,pmL5=pm&&pm.l5||0,pmCosto=pm&&pm.costo||0;const dcosto=dPct(item.costo,pmCosto),dl1=dPct(item.l1,pmL1),dl2=dPct(item.l2,pmL2),dl3=dPct(item.l3,pmL3),dl4=dPct(item.l4,pmL4),dl5=dPct(item.l5,pmL5);const hasDiff=[dcosto,dl1,dl2,dl3,dl4,dl5].some(d=>d!==null&&Math.abs(d)>1.5)||(pmCosto>0&&item.costo===0)||(pmL1>0&&item.l1===0)||(pmL2>0&&item.l2===0)||(pmL3>0&&item.l3===0)||(pmL4>0&&item.l4===0)||(pmL5>0&&item.l5===0);const estado=!pm?'nopm':hasDiff?'diff':'ok';return{item,pm,pmL1,pmL2,pmL3,pmL4,pmL5,pmCosto,dcosto,dl1,dl2,dl3,dl4,dl5,hasDiff,estado};}).filter(r=>{if(srch&&!r.item.skuL.includes(srch))return false;if(fE&&r.estado!==fE)return false;if(fPM&&r.pm&&!fPM.includes(r.pm.pmName))return false;if(fL){if(fL==='costo')return r.dcosto!==null&&Math.abs(r.dcosto)>1.5||(r.pmCosto>0&&r.item.costo===0);if(fL==='1')return r.dl1!==null&&Math.abs(r.dl1)>1.5||(r.pmL1>0&&r.item.l1===0);if(fL==='2')return r.dl2!==null&&Math.abs(r.dl2)>1.5||(r.pmL2>0&&r.item.l2===0);if(fL==='3')return r.dl3!==null&&Math.abs(r.dl3)>1.5||(r.pmL3>0&&r.item.l3===0);if(fL==='4')return r.dl4!==null&&Math.abs(r.dl4)>1.5||(r.pmL4>0&&r.item.l4===0);if(fL==='5')return r.dl5!==null&&Math.abs(r.dl5)>1.5||(r.pmL5>0&&r.item.l5===0);}return true;});}
 
@@ -1777,7 +1866,7 @@ async function pedirAnalisis(){const ctx=window._dashCtx;if(!ctx)return;const bt
 function parseHistorico(rows){if(rows.length<2)return{months:[],items:[]};const FIRST_MONTH=0,FIRST_YEAR=2023;const MON=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const H=rows[0];let monthCount=0;for(let i=5;i<H.length;i++){const v=String(H[i]||'').trim().toLowerCase();if(v.includes('venta')||v.includes('maximo')||v.includes('media')||v.includes('minimo')||v.includes('ltim')||v.includes('ultim'))break;monthCount++;}const monthCols=[];for(let i=0;i<monthCount;i++){const totalMonth=FIRST_MONTH+i;const year=FIRST_YEAR+Math.floor(totalMonth/12);const month=totalMonth%12;monthCols.push({idx:5+i,label:`${MON[month]} ${year}`});}const items=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[0])continue;const monthly=monthCols.map(m=>({label:m.label,units:parseFloat(r[m.idx])||0}));items.push({sku:(r[0]||'').trim(),skuVar:(r[1]||'').trim(),pm:(r[2]||'').trim(),categoria:(r[3]||'').trim(),titulo:(r[4]||'').trim(),monthly});}return{months:monthCols.map(m=>m.label),items};}
 async function loadHistorico(){const el=qs('hist-content');el.innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando histórico...</span></div>';try{for(const name of['CONJUNTO','IT','TACTICA']){try{const rows=await fetchSheet(HIST_ID,`${name}!A1:AZ2000`);histAllData[name]=parseHistorico(rows);}catch(e){console.warn(e);}}histDataParsed=histAllData['CONJUNTO']||{items:[],months:[]};histLoaded=true;populateHistFilters(histDataParsed);qs('hist-sheet-sel').addEventListener('change',()=>{const sel=qs('hist-sheet-sel').value;const d=histAllData[sel]||histDataParsed;populateHistFilters(d);renderHistorico();});el.innerHTML='<div class="loading-block"><span>Seleccioná una categoría o PM para ver los SKUs</span></div>';}catch(e){el.innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error: ${e.message}</span></div>`;}}
 function populateHistFilters(parsed){initMS('ms-hist-cat',new Set(parsed.items.map(d=>d.categoria).filter(Boolean)));initMS('ms-hist-pm',new Set(parsed.items.map(d=>d.pm).filter(Boolean)));const desde=qs('hist-desde-mes'),hasta=qs('hist-hasta-mes');if(!desde||!hasta)return;const curD=desde.value,curH=hasta.value;desde.innerHTML='<option value="">Desde el inicio</option>';hasta.innerHTML='<option value="">Hasta hoy</option>';parsed.months.forEach(m=>{desde.innerHTML+=`<option value="${m}">${m}</option>`;hasta.innerHTML+=`<option value="${m}">${m}</option>`;});if(curD)desde.value=curD;if(curH)hasta.value=curH;}
-function addHistSku(skuVal){const val=(skuVal||qs('hist-sku-input').value).trim().toUpperCase();if(!val||histSkus.includes(val)){if(!skuVal)qs('hist-sku-input').value='';return;}histSkus.push(val);if(!skuVal)qs('hist-sku-input').value='';renderSkuTags();renderHistorico();}
+function addHistSku(skuVal){const raw=(skuVal||qs('hist-sku-input').value).trim();const val=raw.toUpperCase().replace(/[\r\n]/g,'');if(!val||histSkus.includes(val)){if(!skuVal)qs('hist-sku-input').value='';return;}histSkus.push(val);if(!skuVal)qs('hist-sku-input').value='';renderSkuTags();renderHistorico();}
 function removeHistSku(sku){histSkus=histSkus.filter(s=>s!==sku);renderSkuTags();renderHistorico();}
 function renderSkuTags(){const el=qs('sku-tags');if(!el)return;el.innerHTML=histSkus.length?histSkus.map((s,i)=>`<div style="display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid ${PALETTE[i%PALETTE.length]}"><span style="color:${PALETTE[i%PALETTE.length]}">${s}</span><button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1" onclick="removeHistSku('${s}')">×</button></div>`).join(''):`<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">Agregá SKUs para comparar</span>`;}
 
@@ -1821,7 +1910,11 @@ function renderHistorico(){
   let chartItems=[];
   if(histSkus.length>0){
     chartItems=histSkus.map((sku,si)=>{
-      const matches=activeData.items.filter(d=>d.sku.toUpperCase()===sku||d.skuVar.toUpperCase()===sku);
+      const skuN=normSku(sku);
+      const matches=activeData.items.filter(d=>
+        d.sku.toUpperCase()===sku||d.skuVar.toUpperCase()===sku||
+        normSku(d.sku)===skuN||normSku(d.skuVar)===skuN
+      );
       if(!matches.length)return null;
       const monthly=filteredMonths.map(label=>{const mi=activeData.months.indexOf(label);return{label,units:matches.reduce((s,m)=>s+(m.monthly[mi]?.units||0),0)};});
       return{sku,label:matches[0].titulo?.slice(0,50)||sku,monthly,categoria:matches[0].categoria||''};
@@ -1839,10 +1932,14 @@ function renderHistorico(){
     chartItems.forEach((item,idx)=>{
       const vals=item.monthly.map(m=>m.units);
       const total=vals.reduce((s,v)=>s+v,0);
-      const avg=vals.length>0?(total/vals.filter(v=>v>0).length||0):0;
-      const maxVal=Math.max(...vals);const minVal=Math.min(...vals.filter(v=>v>0));
-      const maxIdx=vals.indexOf(maxVal);const minIdx=vals.findIndex(v=>v===minVal&&v>0);
-      const bestMonth=item.monthly[maxIdx]?.label||'—';
+      const nonZero=vals.filter(v=>v>0);
+      const avg=nonZero.length>0?total/nonZero.length:0;
+      const maxVal=nonZero.length>0?Math.max(...nonZero):0;
+      const minVal=nonZero.length>0?Math.min(...nonZero):0;
+      // Find indices correctly
+      const maxIdx=vals.indexOf(maxVal);
+      const minIdx=vals.findIndex((v,i)=>v===minVal&&v>0&&i!==maxIdx);
+      const bestMonth=maxIdx>=0?item.monthly[maxIdx]?.label:'—';
       const worstMonth=minIdx>=0?item.monthly[minIdx]?.label:'—';
       // Best canal from allSalesData
       const skuLow=item.sku.toLowerCase();
@@ -1899,7 +1996,7 @@ function renderHistorico(){
       </tr></thead>
       <tbody>${tableSKUs.map(item=>{
         const last6=item.monthly.filter(m=>filteredMonths.slice(-6).includes(m.label));
-        const isSelected=histSkus.includes(item.sku);
+        const isSelected=histSkus.some(s=>s===item.sku||normSku(s)===normSku(item.sku));
         return`<tr style="cursor:pointer;${isSelected?'background:rgba(59,130,246,0.06);':''}" onclick="addHistSku('${item.sku.replace(/'/g,"\\'")}')">
           <td style="font-weight:700;color:${isSelected?'var(--accent)':'var(--text)'};font-family:'DM Mono',monospace;font-size:10px">${item.sku}${isSelected?' ✓':''}</td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:10px">${item.titulo}</td>
