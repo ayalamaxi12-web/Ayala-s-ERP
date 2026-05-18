@@ -2074,6 +2074,62 @@ async function loadCobranzas(){
   }
 }
 
+function renderCobranzas(){
+  const el=qs('page-cobranzas');
+  if(!cobrData.length)return;
+  if(window._cobrChart){try{window._cobrChart.destroy();}catch(e){}}
+  const totalCobr=cobrData.reduce((s,d)=>s+d.total,0);
+  const maxCobr=Math.max(...cobrData.map(d=>d.total));
+  const minCobr=Math.min(...cobrData.map(d=>d.total));
+  const promCobr=totalCobr/cobrData.length;
+  el.innerHTML=`
+    <div class="stats-row" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat-card"><div class="stat-value">${fmt$(totalCobr)}</div><div class="stat-label">Total cobrado</div></div>
+      <div class="stat-card"><div class="stat-value">${fmt$(promCobr)}</div><div class="stat-label">Promedio semanal</div></div>
+      <div class="stat-card"><div class="stat-value price-ok">${fmt$(maxCobr)}</div><div class="stat-label">Mejor semana</div></div>
+      <div class="stat-card"><div class="stat-value price-bad">${fmt$(minCobr)}</div><div class="stat-label">Menor semana</div></div>
+    </div>
+    <div class="chart-card"><h3>Cobranzas por Semana</h3><p>Total cobrado en $</p>
+      <div style="position:relative;height:280px"><canvas id="chartCobr"></canvas></div>
+    </div>
+    <div class="table-wrap">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">Detalle semanal</div></div>
+      <table><thead><tr><th>Semana</th><th>Total Cobrado</th><th>vs Promedio</th></tr></thead>
+      <tbody>${cobrData.map(d=>{
+        const diff=d.total-promCobr;
+        const pct=(diff/promCobr*100).toFixed(1);
+        const col=diff>=0?'var(--green)':'var(--red)';
+        return`<tr><td>${d.semana}</td><td class="mono">${fmt$(d.total)}</td>
+          <td style="color:${col};font-family:'DM Mono',monospace;font-size:10px">${diff>=0?'↑':'↓'} ${Math.abs(pct)}%</td></tr>`;
+      }).join('')}</tbody></table>
+    </div>`;
+  requestAnimationFrame(()=>{
+    if(!qs('chartCobr'))return;
+    window._cobrChart=new Chart(qs('chartCobr'),{
+      type:'bar',
+      data:{
+        labels:cobrData.map(d=>d.semana),
+        datasets:[
+          {label:'Cobranza',data:cobrData.map(d=>d.total),
+            backgroundColor:cobrData.map(d=>d.total>=promCobr?'#00e5a055':'#ef444455'),
+            borderColor:cobrData.map(d=>d.total>=promCobr?'#00e5a0':'#ef4444'),
+            borderWidth:1,borderRadius:4},
+          {label:'Promedio',data:cobrData.map(()=>promCobr),type:'line',
+            borderColor:'#ffe600',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false}
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:8}},
+          tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},
+        scales:{
+          x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxRotation:45}},
+          y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}
+        }
+      }
+    });
+  });
+}
+
 async function loadBrasil(){
   const el=qs('page-brasil');
   try{brData=[];for(const sheet of SHEETS_BR){try{const rows=await fetchSheet(DASH_SHEET_ID,sheet);if(!rows||rows.length<2)continue;if(rows.length<2)continue;const H=rows[0].map(h=>(h||'').trim());const ciM2=(...ns)=>{for(const n of ns){const i=H.findIndex(h=>h.trim().toLowerCase()===n.toLowerCase());if(i>=0)return i;}return H.findIndex(h=>ns.some(n=>h.toLowerCase().includes(n.toLowerCase())));};
@@ -2141,13 +2197,11 @@ function init(){
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
   const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;
   renderSkuTags();
-  // Load all dashboard sections in parallel on startup
+  // Load everything on startup
   loadDashboard();
-  setTimeout(()=>{
-    if(!histLoaded)loadHistorico();
-    if(!cobrLoaded)loadCobranzas();
-    if(!brLoaded)loadBrasil();
-  },1500); // slight delay so dashboard gets priority
+  loadHistorico();
+  loadCobranzas();
+  loadBrasil();
 }
 init();
 </script>
