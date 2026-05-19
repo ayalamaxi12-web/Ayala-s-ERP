@@ -1160,7 +1160,6 @@ function getWebData(){
     if(fP==='0'&&r.published)return false;
     return true;
   });
-  }); // end requestAnimationFrame
 }
 function renderWeb(){
   const unified=buildWebUnified();
@@ -2092,6 +2091,7 @@ function renderHistorico(){
   requestAnimationFrame(()=>{
   if(!qs('chartHist'))return;
   dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:24}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
+  }); // end requestAnimationFrame
 }
 // ── COBRANZAS ──
 async function loadCobranzas(){
