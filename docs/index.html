@@ -244,9 +244,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div class="filter-group"><span class="filter-label">Desde mes</span><select id="hist-desde-mes" class="fi" style="min-width:110px;"><option value="">Desde el inicio</option></select></div>
       <div class="filter-group"><span class="filter-label">Hasta mes</span><select id="hist-hasta-mes" class="fi" style="min-width:110px;"><option value="">Hasta hoy</option></select></div>
       <div class="filter-group"><span class="filter-label">Buscar SKU</span><div style="position:relative;display:inline-block">
-        <input type="text" id="hist-sku-input" placeholder="SKU + Enter..." style="width:200px;" 
-          onkeydown="if(event.key==='Enter'){addHistSku();histAcHide();}else{histAcShow(this.value);}"
-          oninput="histAcShow(this.value)" autocomplete="off">
+        <input type="text" id="hist-sku-input" placeholder="SKU + Enter..." style="width:200px;" autocomplete="off">
         <div id="hist-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:280px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
       </div></div>
       <button class="btn primary" onclick="addHistSku()">+ Agregar</button>
@@ -840,8 +838,9 @@ async function mlPut(id,body,token){const t=token||S.mlToken;const bu=getBackend
 async function connectML(){const token=qs('ml-token').value.trim();if(!token){toast('Ingresá el token','error');return;}S.mlToken=token;qs('ml-status').className='conn-status idle';qs('ml-status').textContent='...';try{const d=await mlFetch('users/me',token);if(d.id){S.mlSellerId=String(d.id);qs('ml-seller').value=S.mlSellerId;qs('ml-status').className='conn-status ok';qs('ml-status').textContent=d.nickname||d.id;saveStor();toast('ML conectado');}else throw new Error(d.message||'Error auth');}catch(e){qs('ml-status').className='conn-status err';qs('ml-status').textContent='Error';toast('Error ML: '+e.message,'error');}}
 async function connectML2(){const token=qs('ml-token2').value.trim();if(!token){toast('Ingresá el token de cuenta 2','error');return;}S.mlToken2=token;qs('ml-status2').className='conn-status idle';qs('ml-status2').textContent='...';try{const d=await mlFetch('users/me',token);if(d.id){S.mlSellerId2=String(d.id);qs('ml-status2').className='conn-status ok';qs('ml-status2').textContent=d.nickname||d.id;saveStor();toast('ML2 conectado');}else throw new Error(d.message||'Error auth');}catch(e){qs('ml-status2').className='conn-status err';qs('ml-status2').textContent='Error';toast('Error ML2: '+e.message,'error');}}
 async function connectEcom(){const email=qs('ecom-email').value.trim(),pass=qs('ecom-pass').value.trim();if(!email||!pass){toast('Ingresá email y contraseña','error');return;}qs('ecom-status').className='conn-status idle';qs('ecom-status').textContent='...';try{const d=await(await fetch(`${getBackendUrl()}/ecom/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})})).json();if(d.success&&d.cookie){S.ecomCookie=d.cookie;S.ecomEmail=email;qs('ecom-status').className='conn-status ok';qs('ecom-status').textContent='Conectado';saveStor();toast('Ecom conectado');renderEcom();}else throw new Error('Login fallido');}catch(e){qs('ecom-status').className='conn-status err';qs('ecom-status').textContent='Error';toast('Error Ecom: '+e.message,'error');}}
-</script>
-<script>
+
+// ──────────────────────
+
 // ── ECOM CSV ──
 function processEcomCSV(text){const rows=parseCSV(text);if(!rows.length){toast('CSV vacío','error');return;}const hdrs=Object.keys(rows[0]);const svCol=hdrs.find(h=>h.toLowerCase().includes('sku variante'));const smCol=hdrs.find(h=>h.toLowerCase()==='sku');const skuCol=svCol||smCol;const mlCol=hdrs.find(h=>h.toLowerCase()==='precio mercado libre')||hdrs.find(h=>h.toLowerCase().includes('mercado libre'));const webCol=hdrs.find(h=>h.toLowerCase().includes('precio web'));const fraveCol=hdrs.find(h=>h.toLowerCase().includes('fravega'));if(!skuCol||!mlCol){toast('No encontré SKU o Precio ML','error');return;}S.ecomRows=[];const mc={};rows.forEach(row=>{const sku=(row[skuCol]||'').trim();if(!sku)return;const sm=smCol&&svCol?(row[smCol]||'').trim():'';let pos=0;if(sm&&sm!==sku){if(mc[sm]===undefined)mc[sm]=0;pos=mc[sm]++;}S.ecomRows.push({sku,skuL:normSku(sku),skuMadre:sm,variantPosition:pos,ml:parseNum(row[mlCol]),web:webCol?parseNum(row[webCol]):0,frave:fraveCol?parseNum(row[fraveCol]):0});});qs('ecom-csv-info').textContent=S.ecomRows.length+' SKUs cargados';toast(S.ecomRows.length+' SKUs de Ecom');qs('ecom-stats-wrap').style.display='block';renderEcom();}
 
@@ -923,8 +922,9 @@ function renderML(){
 }
 async function fixAllML(){if(!S.mlToken){toast('Conectá ML primero','error');return;}const allRows=S.pubData.map(buildMLRow).filter(r=>r.st==='bad'||r.st==='warn');if(!allRows.length){toast('Sin diferencias','warning');return;}const btn=qs('btn-fix-ml-all');btn.disabled=true;btn.textContent='Corrigiendo...';qs('ml-progress-wrap').style.display='block';const log=qs('ml-fix-log');log.innerHTML='';let ok=0,err=0;for(const row of allRows){if(!row.exp||!row.item.mla)continue;try{const d=await mlPut(row.item.mla,{price:row.exp});if(d&&(d.id||d.price!==undefined)){ok++;S.mlPrices[row.item.mla]=Object.assign({},S.mlPrices[row.item.mla],{price:row.exp});log.innerHTML+=`<div style="color:var(--green)">✓ ${row.item.mla}</div>`;}else throw new Error(JSON.stringify(d));}catch(e){err++;log.innerHTML+=`<div style="color:var(--red)">✗ ${row.item.skuAsociado}: ${e.message}</div>`;}log.scrollTop=log.scrollHeight;}btn.disabled=false;btn.textContent='Corregir todos en ML';renderML();toast(`ML: ${ok} ok, ${err} err`);}
 function exportML(){if(!S.pubData.length){toast('Sin datos','error');return;}const h='SKU,MLA,Regla,PM,Precio_Ecom,Esperado_ML,Precio_ML,Oferta_ML,Diff_Pct,Estado';const lines=S.pubData.map(item=>{const r=buildMLRow(item);return[item.skuAsociado,item.mla,item.regla,r.pm?r.pm.pmName:'',r.base||'',r.exp||'',r.mlP||'',r.promoP||'',r.diff!==null?r.diff.toFixed(2):'',r.st].join(',');});const blob=new Blob([[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ml-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast('Exportado');}
-</script>
-<script>
+
+// ──────────────────────
+
 
 // ── SHEETS FETCH HELPER ──
 async function fetchSheetByGid(sheetId, gid, range){
@@ -1713,8 +1713,9 @@ function populateRuleFilter(){const sel=qs('ml-filter-regla');if(!sel)return;RUL
 async function runTracker(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-tracker');const status=qs('tracker-status');const logEl=qs('tracker-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/tracker/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'tracker');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
 async function runVendedor(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-vendedor');const status=qs('vendedor-status');const logEl=qs('vendedor-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/vendedor/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'vendedor');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
 function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInterval(async()=>{try{const res=await fetch(`${baseUrl}/ml/${type}/status/${job_id}`);const data=await res.json();if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}if(data.status==='done'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--green)">✅ Listo — ${data.ok||0} OK · ${data.errors||0} errores</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${data.message}</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else statusEl.textContent=`● corriendo... (${data.log?.length||0} líneas)`;}catch(e){console.warn(e);}},3000);}
-</script>
-<script>
+
+// ──────────────────────
+
 // ── DASHBOARD ──
 async function fetchSheet(sheetId,name){const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${API_KEY}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
 function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].map(h=>(h||'').trim());const ci=name=>H.indexOf(name);// Try multiple column name variants
@@ -1870,8 +1871,9 @@ function toggleCatSkus(id){
   if(arr)arr.textContent=isOpen?'▶':'▼';
 }
 async function pedirAnalisis(){const ctx=window._dashCtx;if(!ctx)return;const btn=qs('btn-analisis');const box=qs('ai-analisis');if(!btn||!box)return;btn.textContent='● analizando...';btn.disabled=true;box.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);padding:6px">Procesando...</div>`;const prompt=`Sos analista de ventas de Global Electronics Argentina. Comparás dos períodos en español rioplatense.\n\nPERÍODO 1 (${ctx.label1}): Facturación $${Math.round(ctx.k1.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k1.rent).toLocaleString('es-AR')} (${(ctx.k1.rent/ctx.k1.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal1.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nPERÍODO 2 (${ctx.label2}): Facturación $${Math.round(ctx.k2.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k2.rent).toLocaleString('es-AR')} (${(ctx.k2.rent/ctx.k2.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal2.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nAnálisis de 4-5 oraciones: qué cambió, qué canal explica la diferencia, si la rentabilidad mejoró. Números concretos. Sin bullets.`;try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});const json=await res.json();const text=json.content?.[0]?.text||'No se pudo generar el análisis.';box.innerHTML=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;}catch(e){box.innerHTML=`<div style="font-size:10px;color:var(--red)">Error: ${e.message}</div>`;}btn.textContent='✦ Analizar con IA';btn.disabled=false;}
-</script>
-<script>
+
+// ──────────────────────
+
 // ── HISTORICO ──
 function parseHistorico(rows){
   if(rows.length<2)return{months:[],items:[]};
@@ -2280,6 +2282,15 @@ function init(){
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
   const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;
   renderSkuTags();
+  // Wire SKU autocomplete
+  const histInp=qs('hist-sku-input');
+  if(histInp){
+    histInp.addEventListener('input',e=>histAcShow(e.target.value));
+    histInp.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){addHistSku();histAcHide();}
+      else histAcShow(e.target.value);
+    });
+  }
   // Load dashboard on startup, others load lazily when visited
   loadDashboard();
 }
