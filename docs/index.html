@@ -244,7 +244,9 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div class="filter-group"><span class="filter-label">Desde mes</span><select id="hist-desde-mes" class="fi" style="min-width:110px;"><option value="">Desde el inicio</option></select></div>
       <div class="filter-group"><span class="filter-label">Hasta mes</span><select id="hist-hasta-mes" class="fi" style="min-width:110px;"><option value="">Hasta hoy</option></select></div>
       <div class="filter-group"><span class="filter-label">Buscar SKU</span><div style="position:relative;display:inline-block">
-        <input type="text" id="hist-sku-input" placeholder="SKU + Enter..." style="width:200px;" autocomplete="off">
+        <input type="text" id="hist-sku-input" placeholder="SKU + Enter..." style="width:200px;" 
+          onkeydown="if(event.key==='Enter'){addHistSku();histAcHide();}else{histAcShow(this.value);}"
+          oninput="histAcShow(this.value)" autocomplete="off">
         <div id="hist-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:280px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
       </div></div>
       <button class="btn primary" onclick="addHistSku()">+ Agregar</button>
@@ -1898,7 +1900,7 @@ function parseHistorico(rows){
   const items=[];
   for(let i=1;i<rows.length;i++){
     const r=rows[i];if(!r||!r[0])continue;
-    const monthly=monthCols.map(m=>({label:m.label,units:Math.round(parseNum(String(r[m.idx]||'0')))}));
+    const monthly=monthCols.map(m=>({label:m.label,units:parseNum(String(r[m.idx]||'0'))}));
     items.push({
       sku:(r[0]||'').trim(),
       skuVar:(r[1]||'').trim(),
@@ -2014,12 +2016,10 @@ function renderHistorico(){
       const worstMonth=minIdx>=0?item.monthly[minIdx]?.label:'—';
       // Best canal from allSalesData
       const skuLow=item.sku.toLowerCase();
-      const skuSales=allSalesData.filter(d=>d.skus&&d.skus.some(s=>s.toLowerCase()===skuLow));
+      const skuSales=allSalesData.filter(d=>d.skus.some(s=>s.toLowerCase()===skuLow));
       const canalMap={};skuSales.forEach(d=>{canalMap[d.canal]=(canalMap[d.canal]||0)+d.precioFinal;});
-      const topCanalEntry=Object.entries(canalMap).sort((a,b)=>b[1]-a[1])[0];
-      // Fallback: use sheet name (CONJUNTO/IT=Web, TACTICA=Táctica)
-      const sheetCanal=sheet==='IT'?'Web':sheet==='TACTICA'?'Táctica':null;
-      const canalName=topCanalEntry?topCanalEntry[0].toLowerCase().replace(/\bit\b/gi,'Web').replace(/ecom/gi,'Web'):(sheetCanal||'—');
+      const bestCanal=Object.entries(canalMap).sort((a,b)=>b[1]-a[1])[0];
+      const canalName=bestCanal?bestCanal[0].toLowerCase().replace(/\bit\b/gi,'Web').replace(/ecom/gi,'Web'):'—';
       statsHTML+=`<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${PALETTE[idx%PALETTE.length]};border-radius:8px;padding:12px 14px;min-width:220px;flex:1">
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:${PALETTE[idx%PALETTE.length]};font-weight:700;margin-bottom:8px">${item.sku}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px">
@@ -2042,14 +2042,14 @@ function renderHistorico(){
     tableSKUs=catItems.map(d=>({
       sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,
       pm:d.pm,categoria:d.categoria,
-      total:(filteredMonths.length?d.monthly.filter(m=>filteredMonths.includes(m.label)):d.monthly).reduce((s,m)=>s+m.units,0),
+      total:d.monthly.filter(m=>filteredMonths.includes(m.label)).reduce((s,m)=>s+m.units,0),
       monthly:d.monthly
     })).sort((a,b)=>{const dir=histSortState.dir;const col=histSortState.col;if(col==='sku')return a.sku.localeCompare(b.sku)*dir;return(b.total-a.total)*Math.abs(dir)*(histSortState.dir===-1?1:-1);}).slice(0,50);
   }else{
     tableSKUs=items.map(d=>({
       sku:d.skuVar||d.sku,titulo:d.titulo?.slice(0,60)||d.sku,
       pm:d.pm,categoria:d.categoria,
-      total:(filteredMonths.length?d.monthly.filter(m=>filteredMonths.includes(m.label)):d.monthly).reduce((s,m)=>s+m.units,0),
+      total:d.monthly.filter(m=>filteredMonths.includes(m.label)).reduce((s,m)=>s+m.units,0),
       monthly:d.monthly
     })).sort((a,b)=>{const dir=histSortState.dir;const col=histSortState.col;if(col==='sku')return a.sku.localeCompare(b.sku)*dir;return(b.total-a.total)*Math.abs(dir)*(histSortState.dir===-1?1:-1);}).slice(0,50);
   }
@@ -2079,8 +2079,8 @@ function renderHistorico(){
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:10px">${item.titulo}</td>
           <td style="font-size:10px;color:var(--text3)">${item.pm}</td>
           <td style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">${item.categoria||'-'}</td>
-          ${last6.map(m=>`<td class="mono" style="font-size:10px">${Math.round(m.units).toLocaleString('es-AR')}</td>`).join('')}
-          <td style="font-weight:700;font-family:'DM Mono',monospace;font-size:10px">${Math.round(item.total).toLocaleString('es-AR')}</td>
+          ${last6.map(m=>`<td class="mono" style="font-size:10px">${m.units.toLocaleString()}</td>`).join('')}
+          <td style="font-weight:700;font-family:'DM Mono',monospace;font-size:10px">${item.total.toLocaleString()}</td>
         </tr>`;
       }).join('')}</tbody></table>
     </div>`:'<div class="loading-block"><span>Seleccioná una categoría o PM para ver los SKUs</span></div>'}
@@ -2092,7 +2092,7 @@ function renderHistorico(){
   requestAnimationFrame(()=>{
   if(!qs('chartHist'))return;
   dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:24}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
-  }); // end requestAnimationFrame
+  });
 }
 // ── COBRANZAS ──
 async function loadCobranzas(){
@@ -2283,18 +2283,8 @@ function init(){
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
   const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;
   renderSkuTags();
-  // Wire SKU autocomplete
-  const histInp=qs('hist-sku-input');
-  if(histInp){
-    histInp.addEventListener('input',e=>histAcShow(e.target.value));
-    histInp.addEventListener('keydown',e=>{
-      if(e.key==='Enter'){addHistSku();histAcHide();}
-      else histAcShow(e.target.value);
-    });
-  }
-  // Load dashboard on startup, others load lazily when visited
-  // Small delay to ensure DOM is fully ready before loading
-  setTimeout(loadDashboard, 100);
+  // Trigger initial page load
+  goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
 }
 init();
 </script>
