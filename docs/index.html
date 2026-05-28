@@ -2338,19 +2338,27 @@ const FVG_BASE_ORDERS = 'https://seller-center-api.fravega.com';
 
 function fvgCreds(){
   return {
-    sellerId: localStorage.getItem('fvg_seller_id')||'',
-    apiKey:   localStorage.getItem('fvg_api_key')||'',
-    apiToken: localStorage.getItem('fvg_api_token')||''
+    sellerId:  localStorage.getItem('fvg_seller_id')||'',
+    apiKey:    localStorage.getItem('fvg_api_key')||'',
+    apiToken:  localStorage.getItem('fvg_api_token')||'',
+    vtexKey:   localStorage.getItem('fvg_vtex_key')||'',
+    vtexToken: localStorage.getItem('fvg_vtex_token')||''
   };
 }
 function fvgHeaders(){
   const c=fvgCreds();
   return {'Content-Type':'application/json','accept':'application/json','seller-id':c.sellerId,'x-fvg-api-key':c.apiKey,'x-fvg-api-token':c.apiToken};
 }
+function fvgVtexHeaders(){
+  const c=fvgCreds();
+  return {'Content-Type':'application/json','accept':'application/json','X-VTEX-API-AppKey':c.vtexKey,'X-VTEX-API-AppToken':c.vtexToken};
+}
 function fvgSaveCreds(){
-  localStorage.setItem('fvg_seller_id', qs('fvg-seller-id').value.trim());
-  localStorage.setItem('fvg_api_key',   qs('fvg-api-key').value.trim());
-  localStorage.setItem('fvg_api_token', qs('fvg-api-token').value.trim());
+  localStorage.setItem('fvg_seller_id',  qs('fvg-seller-id').value.trim());
+  localStorage.setItem('fvg_api_key',    qs('fvg-api-key').value.trim());
+  localStorage.setItem('fvg_api_token',  qs('fvg-api-token').value.trim());
+  localStorage.setItem('fvg_vtex_key',   qs('fvg-vtex-key').value.trim());
+  localStorage.setItem('fvg_vtex_token', qs('fvg-vtex-token').value.trim());
   qs('fvg-creds-status').innerHTML='<span style="color:var(--green)">✅ Credenciales guardadas</span>';
 }
 function fvgLoadCreds(){
@@ -2358,6 +2366,10 @@ function fvgLoadCreds(){
   if(c.sellerId) qs('fvg-seller-id').value=c.sellerId;
   if(c.apiKey)   qs('fvg-api-key').value=c.apiKey;
   if(c.apiToken) qs('fvg-api-token').value=c.apiToken;
+  const vtexKey=localStorage.getItem('fvg_vtex_key')||'';
+  const vtexTok=localStorage.getItem('fvg_vtex_token')||'';
+  if(vtexKey)  qs('fvg-vtex-key').value=vtexKey;
+  if(vtexTok)  qs('fvg-vtex-token').value=vtexTok;
 }
 async function fvgTestCreds(){
   const st=qs('fvg-creds-status');
@@ -2506,18 +2518,30 @@ async function fvgInvoiceOrder(){
       <!-- Credenciales -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-title">🔑 Credenciales</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+        <p style="font-size:12px;color:var(--text-muted);margin:8px 0">Credenciales de <b>Catálogo e Inventario</b> (Seller Center)</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px">
           <div>
             <label style="font-size:12px;color:var(--text-muted)">Seller ID</label>
-            <input id="fvg-seller-id" class="input-field" placeholder="ID de vendedor" style="width:100%">
+            <input id="fvg-seller-id" class="input-field" placeholder="fravegasellerprod1266" style="width:100%">
           </div>
           <div>
-            <label style="font-size:12px;color:var(--text-muted)">API Key (x-fvg-api-key)</label>
+            <label style="font-size:12px;color:var(--text-muted)">API Key</label>
             <input id="fvg-api-key" class="input-field" placeholder="API Key" style="width:100%">
           </div>
           <div>
-            <label style="font-size:12px;color:var(--text-muted)">API Token (x-fvg-api-token)</label>
+            <label style="font-size:12px;color:var(--text-muted)">API Token</label>
             <input id="fvg-api-token" class="input-field" placeholder="API Token" style="width:100%">
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:12px 0 8px">Credenciales de <b>VTEX</b> (Pedidos y Facturación)</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:12px;color:var(--text-muted)">VTEX Key</label>
+            <input id="fvg-vtex-key" class="input-field" placeholder="vtexappkey-..." style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-muted)">VTEX Token</label>
+            <input id="fvg-vtex-token" class="input-field" placeholder="VTEX Token" style="width:100%">
           </div>
         </div>
         <div style="margin-top:10px;display:flex;gap:10px">
