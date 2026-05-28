@@ -198,6 +198,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">📋</span> Verificar Táctica</div>
     <div class="sidebar-item" data-page="verificar-web" onclick="goPage('verificar-web',this)"><span class="icon">🌐</span> Verificar Web</div>
     <div class="sidebar-item" data-page="verificar-fravega" onclick="goPage('verificar-fravega',this)"><span class="icon">🏪</span> Verificar Fravega</div>
+    <div class="sidebar-item" data-page="fravega-api" onclick="goPage('fravega-api',this)"><span class="icon">🔌</span> Fravega API</div>
     <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
   </div>
@@ -2327,6 +2328,331 @@ function init(){
   goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
 }
 init();
+
+// ============================================================
+// FRAVEGA API — SELLER CENTER
+// ============================================================
+const FVG_BASE = 'https://seller-center-integration.production.fravega.com';
+const FVG_BASE_ORDERS = 'https://seller-center-api.fravega.com';
+
+function fvgCreds(){
+  return {
+    sellerId: localStorage.getItem('fvg_seller_id')||'',
+    apiKey:   localStorage.getItem('fvg_api_key')||'',
+    apiToken: localStorage.getItem('fvg_api_token')||''
+  };
+}
+function fvgHeaders(){
+  const c=fvgCreds();
+  return {'Content-Type':'application/json','accept':'application/json','seller-id':c.sellerId,'x-fvg-api-key':c.apiKey,'x-fvg-api-token':c.apiToken};
+}
+function fvgSaveCreds(){
+  localStorage.setItem('fvg_seller_id', qs('fvg-seller-id').value.trim());
+  localStorage.setItem('fvg_api_key',   qs('fvg-api-key').value.trim());
+  localStorage.setItem('fvg_api_token', qs('fvg-api-token').value.trim());
+  qs('fvg-creds-status').innerHTML='<span style="color:var(--green)">✅ Credenciales guardadas</span>';
+}
+function fvgLoadCreds(){
+  const c=fvgCreds();
+  if(c.sellerId) qs('fvg-seller-id').value=c.sellerId;
+  if(c.apiKey)   qs('fvg-api-key').value=c.apiKey;
+  if(c.apiToken) qs('fvg-api-token').value=c.apiToken;
+}
+async function fvgTestCreds(){
+  const st=qs('fvg-creds-status');
+  st.innerHTML='⏳ Probando...';
+  try{
+    const r=await fetch(`${FVG_BASE}/api/v1/item?page=1&size=1`,{headers:fvgHeaders()});
+    if(r.ok){st.innerHTML='<span style="color:var(--green)">✅ Conexión exitosa</span>';}
+    else{st.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
+  }catch(e){st.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+function fvgTab(tab){
+  ['productos','precios','stock','ordenes','facturacion'].forEach(t=>{
+    qs(`fvg-section-${t}`).style.display=t===tab?'':'none';
+    const btn=qs(`fvg-tab-${t}`);
+    if(btn){btn.className=t===tab?'btn':'btn btn-secondary';}
+  });
+}
+
+// PRODUCTOS
+async function fvgListProducts(){
+  const pg=qs('fvg-prod-page').value||1, sz=qs('fvg-prod-size').value||20;
+  const el=qs('fvg-prod-result');
+  el.innerHTML='⏳ Cargando...';
+  try{
+    const r=await fetch(`${FVG_BASE}/api/v1/item?page=${pg}&size=${sz}`,{headers:fvgHeaders()});
+    const data=await r.json();
+    if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
+    const items=Array.isArray(data)?data:(data.items||data.data||[]);
+    if(!items.length){el.innerHTML='Sin productos';return;}
+    el.innerHTML=`<table class="tabla-ecom"><thead><tr><th>RefID</th><th>SKU</th><th>Título</th><th>Estado</th><th>Precio Venta</th><th>Precio Tachado</th><th>Stock</th><th>Activo</th></tr></thead><tbody>`+
+      items.map(i=>`<tr><td>${i.refId||'-'}</td><td>${i.sku||'-'}</td><td>${i.title||'-'}</td><td>${i.itemState||'-'}</td><td>${i.price?.sale??'-'}</td><td>${i.price?.list??'-'}</td><td>${i.stock?.quantity??'-'}</td><td>${i.active?'✅':'❌'}</td></tr>`).join('')+
+      '</tbody></table>';
+  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+async function fvgGetByRefId(){
+  const refId=qs('fvg-refid-input').value.trim();
+  const el=qs('fvg-refid-result');
+  if(!refId){el.innerHTML='Ingresá un RefID';return;}
+  el.innerHTML='⏳ Buscando...';
+  try{
+    const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId)}`,{headers:fvgHeaders()});
+    const data=await r.json();
+    if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
+    const i=Array.isArray(data)?data[0]:data;
+    el.innerHTML=`<div class="card" style="margin-top:8px">
+      <b>${i.title}</b><br>
+      <span style="color:var(--text-muted);font-size:12px">RefID: ${i.refId} | SKU: ${i.sku} | Estado: ${i.itemState}</span><br>
+      <span>💲 Venta: <b>$${i.price?.sale}</b> | Tachado: <b>$${i.price?.list}</b> | Stock: <b>${i.stock?.quantity}</b></span>
+    </div>`;
+  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+
+// PRECIOS
+async function fvgUpdatePrice(){
+  const refId=qs('fvg-price-refid').value.trim();
+  const list=parseFloat(qs('fvg-price-list').value)||0;
+  const sale=parseFloat(qs('fvg-price-sale').value)||0;
+  const el=qs('fvg-price-result');
+  if(!refId||!sale){el.innerHTML='<span style="color:var(--red)">Completá RefID y precio de venta</span>';return;}
+  el.innerHTML='⏳ Actualizando...';
+  try{
+    const body={list,sale};
+    const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId)}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify(body)});
+    if(r.status===203||r.ok){el.innerHTML=`<span style="color:var(--green)">✅ Precio actualizado — ${refId}: venta $${sale}, tachado $${list}</span>`;}
+    else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
+  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+async function fvgBulkPrice(){
+  const lines=qs('fvg-bulk-price').value.trim().split('\n').filter(Boolean);
+  const el=qs('fvg-bulk-result');
+  el.innerHTML='⏳ Procesando...';
+  let ok=0,err=0,log=[];
+  for(const line of lines){
+    const [refId,listStr,saleStr]=line.split('\t');
+    if(!refId||!saleStr)continue;
+    const list=parseFloat(listStr)||0, sale=parseFloat(saleStr)||0;
+    try{
+      const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId.trim())}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({list,sale})});
+      if(r.status===203||r.ok){ok++;log.push(`<span style="color:var(--green)">✅ ${refId}</span>`);}
+      else{err++;log.push(`<span style="color:var(--red)">❌ ${refId}: ${r.status}</span>`);}
+    }catch(e){err++;log.push(`<span style="color:var(--red)">❌ ${refId}: ${e.message}</span>`);}
+    await new Promise(res=>setTimeout(res,200));
+  }
+  el.innerHTML=`<b>${ok} OK, ${err} errores</b><br>${log.join('<br>')}`;
+}
+
+// STOCK
+async function fvgUpdateStock(){
+  const refId=qs('fvg-stock-refid').value.trim();
+  const qty=parseInt(qs('fvg-stock-qty').value)||0;
+  const el=qs('fvg-stock-result');
+  if(!refId){el.innerHTML='<span style="color:var(--red)">Ingresá un RefID</span>';return;}
+  el.innerHTML='⏳ Actualizando...';
+  try{
+    const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId)}/stock`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({quantity:qty})});
+    if(r.ok||r.status===200){el.innerHTML=`<span style="color:var(--green)">✅ Stock actualizado — ${refId}: ${qty} unidades</span>`;}
+    else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
+  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+
+// ORDENES
+async function fvgGetOrder(){
+  const orderId=qs('fvg-order-id').value.trim();
+  const el=qs('fvg-order-result');
+  if(!orderId){el.innerHTML='Ingresá un ID de orden';return;}
+  el.innerHTML='⏳ Buscando...';
+  try{
+    const r=await fetch(`${FVG_BASE_ORDERS}/api/v1/orders/${encodeURIComponent(orderId)}`,{headers:fvgHeaders()});
+    const data=await r.json();
+    if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
+    el.innerHTML=`<pre style="background:var(--bg-card);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto">${JSON.stringify(data,null,2)}</pre>`;
+  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+
+// FACTURACION
+async function fvgInvoiceOrder(){
+  const el=qs('fvg-inv-result');
+  const body=[{
+    orderId:qs('fvg-inv-order-id').value.trim(),
+    invoiceNumber:qs('fvg-inv-number').value.trim(),
+    issuanceDate:qs('fvg-inv-date').value.trim(),
+    invoiceUrl:qs('fvg-inv-url').value.trim(),
+    invoiceKey:'',
+    trackingNumber:qs('fvg-inv-tracking').value.trim(),
+    trackingUrl:'',
+    courier:qs('fvg-inv-courier').value.trim()
+  }];
+  if(!body[0].orderId||!body[0].invoiceNumber||!body[0].issuanceDate||!body[0].invoiceUrl){
+    el.innerHTML='<span style="color:var(--red)">Completá los campos obligatorios (ID Orden, Número, Fecha, URL)</span>';return;
+  }
+  el.innerHTML='⏳ Facturando...';
+  try{
+    const r=await fetch(`${FVG_BASE_ORDERS}/api/v1/invoice`,{method:'POST',headers:fvgHeaders(),body:JSON.stringify(body)});
+    const data=await r.json();
+    if(r.status===202||r.ok){el.innerHTML=`<span style="color:var(--green)">✅ Factura enviada correctamente. ID: ${data.id||'-'}</span>`;}
+    else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${JSON.stringify(data)}</span>`;}
+  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
 </script>
 </body>
 </html>
+    <!-- FRAVEGA API PAGE -->
+    <div id="page-fravega-api" class="page" style="display:none">
+      <h2 style="margin-bottom:16px">🔌 Fravega API — Seller Center</h2>
+
+      <!-- Credenciales -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">🔑 Credenciales</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+          <div>
+            <label style="font-size:12px;color:var(--text-muted)">Seller ID</label>
+            <input id="fvg-seller-id" class="input-field" placeholder="ID de vendedor" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-muted)">API Key (x-fvg-api-key)</label>
+            <input id="fvg-api-key" class="input-field" placeholder="API Key" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-muted)">API Token (x-fvg-api-token)</label>
+            <input id="fvg-api-token" class="input-field" placeholder="API Token" style="width:100%">
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px">
+          <button class="btn" onclick="fvgSaveCreds()">💾 Guardar credenciales</button>
+          <button class="btn btn-secondary" onclick="fvgTestCreds()">🧪 Probar conexión</button>
+        </div>
+        <div id="fvg-creds-status" style="margin-top:8px;font-size:13px"></div>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn" onclick="fvgTab('productos')" id="fvg-tab-productos">📦 Productos</button>
+        <button class="btn btn-secondary" onclick="fvgTab('precios')" id="fvg-tab-precios">💲 Precios</button>
+        <button class="btn btn-secondary" onclick="fvgTab('stock')" id="fvg-tab-stock">📊 Stock</button>
+        <button class="btn btn-secondary" onclick="fvgTab('ordenes')" id="fvg-tab-ordenes">🛒 Órdenes</button>
+        <button class="btn btn-secondary" onclick="fvgTab('facturacion')" id="fvg-tab-facturacion">🧾 Facturación</button>
+      </div>
+
+      <!-- PRODUCTOS -->
+      <div id="fvg-section-productos">
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">📦 Listar Productos</div>
+          <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+            <input id="fvg-prod-page" class="input-field" placeholder="Página (ej: 1)" style="width:120px" value="1">
+            <input id="fvg-prod-size" class="input-field" placeholder="Tamaño (máx 100)" style="width:140px" value="20">
+            <button class="btn" onclick="fvgListProducts()">🔄 Cargar productos</button>
+          </div>
+          <div id="fvg-prod-result" style="margin-top:12px;overflow-x:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">🔍 Buscar producto por RefID (SKU)</div>
+          <div style="display:flex;gap:10px;margin-top:10px">
+            <input id="fvg-refid-input" class="input-field" placeholder="RefID / SKU" style="width:200px">
+            <button class="btn" onclick="fvgGetByRefId()">Buscar</button>
+          </div>
+          <div id="fvg-refid-result" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- PRECIOS -->
+      <div id="fvg-section-precios" style="display:none">
+        <div class="card">
+          <div class="card-title">💲 Actualizar Precio por RefID (SKU)</div>
+          <p style="font-size:13px;color:var(--text-muted);margin:8px 0">
+            <b>list</b> = precio tachado (precio de lista) | <b>sale</b> = precio de venta actual
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">RefID / SKU</label>
+              <input id="fvg-price-refid" class="input-field" placeholder="Ej: TN1060COMP" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Precio Tachado (list)</label>
+              <input id="fvg-price-list" class="input-field" placeholder="Ej: 15000" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Precio Venta (sale)</label>
+              <input id="fvg-price-sale" class="input-field" placeholder="Ej: 12000" style="width:100%">
+            </div>
+            <button class="btn" onclick="fvgUpdatePrice()">✅ Actualizar</button>
+          </div>
+          <div id="fvg-price-result" style="margin-top:12px;font-size:13px"></div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">💲 Actualizar Precios Masivo (desde tabla)</div>
+          <p style="font-size:13px;color:var(--text-muted);margin:8px 0">Pegá una tabla con columnas: RefID, Precio Tachado, Precio Venta (separadas por tab)</p>
+          <textarea id="fvg-bulk-price" class="input-field" rows="6" placeholder="RefID&#9;PrecioTachado&#9;PrecioVenta&#10;TN1060COMP&#9;15000&#9;12000" style="width:100%;font-family:monospace;font-size:12px"></textarea>
+          <button class="btn" style="margin-top:10px" onclick="fvgBulkPrice()">⚡ Actualizar todos</button>
+          <div id="fvg-bulk-result" style="margin-top:12px;font-size:13px;max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- STOCK -->
+      <div id="fvg-section-stock" style="display:none">
+        <div class="card">
+          <div class="card-title">📊 Actualizar Stock por RefID</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">RefID / SKU</label>
+              <input id="fvg-stock-refid" class="input-field" placeholder="Ej: TN1060COMP" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Cantidad</label>
+              <input id="fvg-stock-qty" class="input-field" placeholder="Ej: 10" style="width:100%">
+            </div>
+            <button class="btn" onclick="fvgUpdateStock()">✅ Actualizar</button>
+          </div>
+          <div id="fvg-stock-result" style="margin-top:12px;font-size:13px"></div>
+        </div>
+      </div>
+
+      <!-- ORDENES -->
+      <div id="fvg-section-ordenes" style="display:none">
+        <div class="card">
+          <div class="card-title">🛒 Consultar Órdenes</div>
+          <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap">
+            <input id="fvg-order-id" class="input-field" placeholder="ID de orden (opcional)" style="width:200px">
+            <button class="btn" onclick="fvgGetOrder()">🔍 Buscar orden</button>
+          </div>
+          <div id="fvg-order-result" style="margin-top:12px;overflow-x:auto"></div>
+        </div>
+      </div>
+
+      <!-- FACTURACION -->
+      <div id="fvg-section-facturacion" style="display:none">
+        <div class="card">
+          <div class="card-title">🧾 Facturar Orden</div>
+          <p style="font-size:13px;color:var(--text-muted);margin:8px 0">Completá los datos para facturar una orden en Fravega</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">ID de Orden</label>
+              <input id="fvg-inv-order-id" class="input-field" placeholder="Ej: IIII-prueba" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Número de Factura</label>
+              <input id="fvg-inv-number" class="input-field" placeholder="Ej: 0005-00136332" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Fecha de Emisión (DD-MM-AAAA)</label>
+              <input id="fvg-inv-date" class="input-field" placeholder="Ej: 16-05-2024" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">URL de la Factura</label>
+              <input id="fvg-inv-url" class="input-field" placeholder="https://mi-empresa.com/factura.pdf" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Número de Tracking (opcional)</label>
+              <input id="fvg-inv-tracking" class="input-field" placeholder="Número de seguimiento" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted)">Courier (opcional)</label>
+              <input id="fvg-inv-courier" class="input-field" placeholder="Ej: OCA" style="width:100%">
+            </div>
+          </div>
+          <button class="btn" style="margin-top:12px" onclick="fvgInvoiceOrder()">🧾 Facturar</button>
+          <div id="fvg-inv-result" style="margin-top:12px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
