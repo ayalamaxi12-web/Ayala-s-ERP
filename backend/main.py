@@ -1368,12 +1368,22 @@ def fvg_headers(request: Request):
         "x-fvg-api-token": request.headers.get("x-fvg-api-token", ""),
     }
 
+def fvg_parse(r):
+    """Parse Fravega response safely — return dict/list or raise with text."""
+    try:
+        return r.json()
+    except Exception:
+        raise HTTPException(status_code=r.status_code or 500,
+                            detail=f"Fravega {r.status_code}: {r.text[:300]}")
+
 @app.get("/fvg/items")
 async def fvg_list_items(request: Request, page: int = 1, size: int = 20):
     try:
         r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item?page={page}&size={size}",
                          headers=fvg_headers(request), timeout=20)
-        return r.json()
+        return fvg_parse(r)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1382,7 +1392,9 @@ async def fvg_get_item(ref_id: str, request: Request):
     try:
         r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}",
                          headers=fvg_headers(request), timeout=20)
-        return r.json()
+        return fvg_parse(r)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
