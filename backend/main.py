@@ -168,17 +168,14 @@ async def ml_proxy_all_ids(seller_id: str, request: Request, token: str = ""):
     total = 0
     seen = set()
 
-    def fetch_page(url):
-        r = requests.get(url, headers=headers, timeout=20)
-        return r.json()
-
-    try:
-        # Paso 1: offset 0-900 (limite de ML es 1000)
+    def fetch_range(sort_order="desc"):
         for offset in range(0, 1000, 100):
-            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}"
-            d = fetch_page(url)
+            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&sort=start_time_{sort_order}"
+            r = requests.get(url, headers=headers, timeout=20)
+            d = r.json()
+            nonlocal total
             if "paging" in d:
-                total = d["paging"].get("total", 0)
+                total = d["paging"].get("total", total)
             results = d.get("results", [])
             if not results:
                 break
@@ -189,20 +186,25 @@ async def ml_proxy_all_ids(seller_id: str, request: Request, token: str = ""):
             if len(results) < 100:
                 break
 
-        # Paso 2: si hay mas de 1000, usar order=start_time asc para buscar los restantes
-        if total > 1000:
-            for offset in range(0, total, 100):
-                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&order=start_time&sort=asc"
-                d = fetch_page(url)
-                results = d.get("results", [])
-                if not results:
-                    break
-                for rid in results:
-                    if rid not in seen:
-                        seen.add(rid)
-                        ids.append(rid)
-                if len(ids) >= total or len(results) < 100:
-                    break
+    try:
+        fetch_range("desc")   # 1000 mas nuevas
+        fetch_range("asc")    # 1000 mas viejas
+        # Tercera pasada por precio desc para cubrir el medio
+        for offset in range(0, 1000, 100):
+            if len(ids) >= total:
+                break
+            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&sort=price_desc"
+            r = requests.get(url, headers=headers, timeout=20)
+            d = r.json()
+            results = d.get("results", [])
+            if not results:
+                break
+            for rid in results:
+                if rid not in seen:
+                    seen.add(rid)
+                    ids.append(rid)
+            if len(results) < 100:
+                break
 
         return {"ids": ids, "total": total, "fetched": len(ids)}
     except Exception as e:
@@ -874,17 +876,14 @@ async def ml_proxy_all_ids(seller_id: str, request: Request, token: str = ""):
     total = 0
     seen = set()
 
-    def fetch_page(url):
-        r = requests.get(url, headers=headers, timeout=20)
-        return r.json()
-
-    try:
-        # Paso 1: offset 0-900 (limite de ML es 1000)
+    def fetch_range(sort_order="desc"):
         for offset in range(0, 1000, 100):
-            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}"
-            d = fetch_page(url)
+            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&sort=start_time_{sort_order}"
+            r = requests.get(url, headers=headers, timeout=20)
+            d = r.json()
+            nonlocal total
             if "paging" in d:
-                total = d["paging"].get("total", 0)
+                total = d["paging"].get("total", total)
             results = d.get("results", [])
             if not results:
                 break
@@ -895,20 +894,25 @@ async def ml_proxy_all_ids(seller_id: str, request: Request, token: str = ""):
             if len(results) < 100:
                 break
 
-        # Paso 2: si hay mas de 1000, usar order=start_time asc para buscar los restantes
-        if total > 1000:
-            for offset in range(0, total, 100):
-                url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&order=start_time&sort=asc"
-                d = fetch_page(url)
-                results = d.get("results", [])
-                if not results:
-                    break
-                for rid in results:
-                    if rid not in seen:
-                        seen.add(rid)
-                        ids.append(rid)
-                if len(ids) >= total or len(results) < 100:
-                    break
+    try:
+        fetch_range("desc")   # 1000 mas nuevas
+        fetch_range("asc")    # 1000 mas viejas
+        # Tercera pasada por precio desc para cubrir el medio
+        for offset in range(0, 1000, 100):
+            if len(ids) >= total:
+                break
+            url = f"https://api.mercadolibre.com/users/{seller_id}/items/search?status=active&limit=100&offset={offset}&sort=price_desc"
+            r = requests.get(url, headers=headers, timeout=20)
+            d = r.json()
+            results = d.get("results", [])
+            if not results:
+                break
+            for rid in results:
+                if rid not in seen:
+                    seen.add(rid)
+                    ids.append(rid)
+            if len(results) < 100:
+                break
 
         return {"ids": ids, "total": total, "fetched": len(ids)}
     except Exception as e:
@@ -1346,3 +1350,77 @@ async def ecom_debug_html(request: Request):
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+# ══════════════════════════════════════════════════════
+# FRAVEGA PROXY — evita CORS desde GitHub Pages
+# ══════════════════════════════════════════════════════
+
+FVG_BASE_CATALOG = "https://seller-center-integration.production.fravega.com"
+FVG_BASE_ORDERS  = "https://seller-center-api.fravega.com"
+
+def fvg_headers(request: Request):
+    return {
+        "Content-Type":    "application/json",
+        "accept":          "application/json",
+        "seller-id":       request.headers.get("seller-id", ""),
+        "x-fvg-api-key":   request.headers.get("x-fvg-api-key", ""),
+        "x-fvg-api-token": request.headers.get("x-fvg-api-token", ""),
+    }
+
+@app.get("/fvg/items")
+async def fvg_list_items(request: Request, page: int = 1, size: int = 20):
+    try:
+        r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item?page={page}&size={size}",
+                         headers=fvg_headers(request), timeout=20)
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/fvg/items/{ref_id}")
+async def fvg_get_item(ref_id: str, request: Request):
+    try:
+        r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}",
+                         headers=fvg_headers(request), timeout=20)
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/fvg/items/{ref_id}/price")
+async def fvg_update_price(ref_id: str, request: Request):
+    body = await request.json()
+    try:
+        r = requests.put(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}/price",
+                         headers=fvg_headers(request), json=body, timeout=20)
+        return {"status": r.status_code, "body": r.json() if r.content else {}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/fvg/items/{ref_id}/stock")
+async def fvg_update_stock(ref_id: str, request: Request):
+    body = await request.json()
+    try:
+        r = requests.put(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}/stock",
+                         headers=fvg_headers(request), json=body, timeout=20)
+        return {"status": r.status_code, "body": r.json() if r.content else {}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/fvg/orders/{order_id}")
+async def fvg_get_order(order_id: str, request: Request):
+    try:
+        r = requests.get(f"{FVG_BASE_ORDERS}/api/v1/orders/{order_id}",
+                         headers=fvg_headers(request), timeout=20)
+        return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/fvg/invoice")
+async def fvg_invoice(request: Request):
+    body = await request.json()
+    try:
+        r = requests.post(f"{FVG_BASE_ORDERS}/api/v1/invoice",
+                          headers=fvg_headers(request), json=body, timeout=20)
+        return {"status": r.status_code, "body": r.json() if r.content else {}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
