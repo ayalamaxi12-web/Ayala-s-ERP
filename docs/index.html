@@ -693,7 +693,7 @@ const CATS_ID='1pog-ebeTNUkIaXHnTsYa5C6SfdFdH4-R-fQ7umIRefg';
 const TACTICA_ID='14g8uYut4uMdTs709wrHb6TLh_IG1DI1ygu053VXk_f8';
 const TACTICA_GID='841347258';
 const ECOM_PUB_ID='1Iudu2dwN1s8Bal5-fDusD844ox3ME56-dSPZWLG8NmE';
-const ECOM_PUB_GID='1923017903';
+const ECOM_PUB_GID='1078169413'; // gid actualizado - usar nombre de pestaña como fallback
 const WEB_WOO_ID='1szOjECuWvozUQSrEnugzat859XCf95zRHtVjce55l-U';
 const WEB_WOO_GID='74441620';
 const WEB_ECOM_ID='1iBjLqhtGFChzmT6KZnIVfgVOvbo1oUwu7MzxLXJsVXM';
@@ -1295,7 +1295,7 @@ async function loadEcomSheets(){
   btn.disabled=true;btn.textContent='⏳ Cargando...';
   status.className='conn-status idle';status.textContent='Conectando...';
   try{
-    const{values}=await fetchSheetByGid(ECOM_PUB_ID,ECOM_PUB_GID,'A1:Z3000');
+    const rows2=await fetchSheet(ECOM_PUB_ID,'Worksheet!A1:Z3000');const values=rows2;
     if(!values||values.length<2)throw new Error('Sin datos');
     const hdrIdx=findHdrRow(values,['sku','precio','mercado','ecom']);
     const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
@@ -1330,7 +1330,7 @@ async function loadMLSheets(){
   btn.disabled=true;btn.textContent='⏳ Cargando...';
   status.className='conn-status idle';status.textContent='Conectando...';
   try{
-    const{values}=await fetchSheetByGid(ECOM_PUB_ID,ECOM_PUB_GID,'A1:Z3000');
+    const rows2=await fetchSheet(ECOM_PUB_ID,'Worksheet!A1:Z3000');const values=rows2;
     if(!values||values.length<2)throw new Error('Sin datos');
     const hdrIdx=findHdrRow(values,['sku','mla','regla','publicacion','item']);
     const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
