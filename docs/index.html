@@ -2333,8 +2333,8 @@ init();
 // ============================================================
 // FRAVEGA API — SELLER CENTER
 // ============================================================
-const FVG_BASE = 'https://seller-center-integration.production.fravega.com';
-const FVG_BASE_ORDERS = 'https://seller-center-api.fravega.com';
+const FVG_BASE = 'https://ayala-s-erp-production.up.railway.app';
+const FVG_BASE_ORDERS = 'https://ayala-s-erp-production.up.railway.app';
 
 function fvgCreds(){
   return {
@@ -2347,7 +2347,8 @@ function fvgCreds(){
 }
 function fvgHeaders(){
   const c=fvgCreds();
-  return {'Content-Type':'application/json','accept':'application/json','seller-id':c.sellerId,'x-fvg-api-key':c.apiKey,'x-fvg-api-token':c.apiToken};
+  return {'Content-Type':'application/json','accept':'application/json',
+    'seller-id':c.sellerId,'x-fvg-api-key':c.apiKey,'x-fvg-api-token':c.apiToken};
 }
 function fvgVtexHeaders(){
   const c=fvgCreds();
@@ -2394,7 +2395,7 @@ async function fvgListProducts(){
   const el=qs('fvg-prod-result');
   el.innerHTML='⏳ Cargando...';
   try{
-    const r=await fetch(`${FVG_BASE}/api/v1/item?page=${pg}&size=${sz}`,{headers:fvgHeaders()});
+    const r=await fetch(`${FVG_BASE}/fvg/items?page=${pg}&size=${sz}`,{headers:fvgHeaders()});
     const data=await r.json();
     if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
     const items=Array.isArray(data)?data:(data.items||data.data||[]);
@@ -2410,7 +2411,7 @@ async function fvgGetByRefId(){
   if(!refId){el.innerHTML='Ingresá un RefID';return;}
   el.innerHTML='⏳ Buscando...';
   try{
-    const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId)}`,{headers:fvgHeaders()});
+    const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId)}`,{headers:fvgHeaders()});
     const data=await r.json();
     if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
     const i=Array.isArray(data)?data[0]:data;
@@ -2432,7 +2433,7 @@ async function fvgUpdatePrice(){
   el.innerHTML='⏳ Actualizando...';
   try{
     const body={list,sale};
-    const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId)}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify(body)});
+    const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId)}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify(body)});
     if(r.status===203||r.ok){el.innerHTML=`<span style="color:var(--green)">✅ Precio actualizado — ${refId}: venta $${sale}, tachado $${list}</span>`;}
     else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
   }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
@@ -2464,7 +2465,7 @@ async function fvgUpdateStock(){
   if(!refId){el.innerHTML='<span style="color:var(--red)">Ingresá un RefID</span>';return;}
   el.innerHTML='⏳ Actualizando...';
   try{
-    const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId)}/stock`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({quantity:qty})});
+    const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId)}/stock`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({quantity:qty})});
     if(r.ok||r.status===200){el.innerHTML=`<span style="color:var(--green)">✅ Stock actualizado — ${refId}: ${qty} unidades</span>`;}
     else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
   }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
@@ -2477,7 +2478,7 @@ async function fvgGetOrder(){
   if(!orderId){el.innerHTML='Ingresá un ID de orden';return;}
   el.innerHTML='⏳ Buscando...';
   try{
-    const r=await fetch(`${FVG_BASE_ORDERS}/api/v1/orders/${encodeURIComponent(orderId)}`,{headers:fvgHeaders()});
+    const r=await fetch(`${FVG_BASE_ORDERS}/fvg/orders/${encodeURIComponent(orderId)}`,{headers:fvgHeaders()});
     const data=await r.json();
     if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
     el.innerHTML=`<pre style="background:var(--bg-card);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto">${JSON.stringify(data,null,2)}</pre>`;
@@ -2502,7 +2503,7 @@ async function fvgInvoiceOrder(){
   }
   el.innerHTML='⏳ Facturando...';
   try{
-    const r=await fetch(`${FVG_BASE_ORDERS}/api/v1/invoice`,{method:'POST',headers:fvgHeaders(),body:JSON.stringify(body)});
+    const r=await fetch(`${FVG_BASE_ORDERS}/fvg/invoice`,{method:'POST',headers:fvgHeaders(),body:JSON.stringify(body)});
     const data=await r.json();
     if(r.status===202||r.ok){el.innerHTML=`<span style="color:var(--green)">✅ Factura enviada correctamente. ID: ${data.id||'-'}</span>`;}
     else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${JSON.stringify(data)}</span>`;}
