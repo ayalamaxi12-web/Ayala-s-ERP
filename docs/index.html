@@ -2305,14 +2305,14 @@ function init(){
   ['tactica-search','tactica-filter-estado','tactica-filter-lista'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.tPage=1;renderTactica();});el.addEventListener('change',()=>{S.tPage=1;renderTactica();});}});
   ['web-search','web-filter-estado','web-filter-pub'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.wPage=1;renderWeb();});el.addEventListener('change',()=>{S.wPage=1;renderWeb();});}});
   ['frave-search','frave-filter-estado','frave-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.fPage=1;renderFrave();});el.addEventListener('change',()=>{S.fPage=1;renderFrave();});}});
-  ['webpub-search','webpub-filter-estado','webpub-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.wpPage=1;renderWebPub();});el.addEventListener('change',()=>{S.wpPage=1;renderWebPub();});}});
+  ['webpub-search','webpub-filter-estado','webpub-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.wpPage=1;renderWeb();});el.addEventListener('change',()=>{S.wpPage=1;renderWeb();});}});
   ['competidores-search','competidores-sort'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{COMP.page=1;renderCompetidores();});el.addEventListener('change',()=>{COMP.page=1;renderCompetidores();});}});
   setupSortHeaders('ecom-table',S.eSort,renderEcom);
   setupSortHeaders('ml-table',S.mlSort,renderML);
   setupSortHeaders('tactica-table',S.tSort,renderTactica);
   // ms-tactica-pm is already wired via toggleMS onclick
   setupSortHeaders('web-table',S.wSort,renderWeb);
-  setupSortHeaders('webpub-table',S.wpSort,renderWebPub);
+  setupSortHeaders('webpub-table',S.wpSort,renderWeb);
   setupSortHeaders('frave-table',S.fSort,renderFrave);
   setupSortHeaders('comp-table',S.cSort,renderCompetidores);
   if(S.mlToken)qs('ml-token').value=S.mlToken;
@@ -2500,7 +2500,7 @@ async function fvgInvoiceOrder(){
 </body>
 </html>
     <!-- FRAVEGA API PAGE -->
-    <div id="page-fravega-api" class="page" style="display:none">
+    <div id="page-fravega-api" class="page">
       <h2 style="margin-bottom:16px">🔌 Fravega API — Seller Center</h2>
 
       <!-- Credenciales -->
