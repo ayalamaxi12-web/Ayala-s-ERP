@@ -2376,7 +2376,7 @@ async function fvgTestCreds(){
   const st=qs('fvg-creds-status');
   st.innerHTML='⏳ Probando...';
   try{
-    const r=await fetch(`${FVG_BASE}/api/v1/item?page=1&size=1`,{headers:fvgHeaders()});
+    const r=await fetch(`${FVG_BASE}/fvg/items?page=1&size=1`,{headers:fvgHeaders()});
     if(r.ok){st.innerHTML='<span style="color:var(--green)">✅ Conexión exitosa</span>';}
     else{st.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
   }catch(e){st.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
@@ -2448,7 +2448,7 @@ async function fvgBulkPrice(){
     if(!refId||!saleStr)continue;
     const list=parseFloat(listStr)||0, sale=parseFloat(saleStr)||0;
     try{
-      const r=await fetch(`${FVG_BASE}/api/v1/item/${encodeURIComponent(refId.trim())}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({list,sale})});
+      const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId.trim())}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({list,sale})});
       if(r.status===203||r.ok){ok++;log.push(`<span style="color:var(--green)">✅ ${refId}</span>`);}
       else{err++;log.push(`<span style="color:var(--red)">❌ ${refId}: ${r.status}</span>`);}
     }catch(e){err++;log.push(`<span style="color:var(--red)">❌ ${refId}: ${e.message}</span>`);}
