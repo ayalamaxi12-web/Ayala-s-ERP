@@ -698,7 +698,7 @@ const WEB_WOO_ID='1szOjECuWvozUQSrEnugzat859XCf95zRHtVjce55l-U';
 const WEB_WOO_GID='74441620';
 const WEB_ECOM_ID='1iBjLqhtGFChzmT6KZnIVfgVOvbo1oUwu7MzxLXJsVXM';
 const WEB_ECOM_GID='549628677';
-const FRAVE_PUB_ID='1xkSdLzkCpsNLwWoF6kucGBJ5QYj7D1GeBdTxw3ccsJE';
+const FRAVE_PUB_ID='1QnMqMfn6Yw6en2G3G8h2Nl2QYseDG-JsqI1J46CZLbQ';
 const FRAVE_PUB_GID='34864329';
 const CATS_TAB='GRAL CATEGORIAS';
 const RULES=[
@@ -1434,7 +1434,7 @@ async function loadFraveSheets(){
   btn.disabled=true;btn.textContent='⏳ Cargando...';
   status.className='conn-status idle';status.textContent='Conectando...';
   try{
-    const{values}=await fetchSheetByGid(FRAVE_PUB_ID,FRAVE_PUB_GID,'A1:N3000');
+    const rows2=await fetchSheet(FRAVE_PUB_ID,'Worksheet!A1:N3000');const values=rows2;
     if(!values||values.length<2)throw new Error('Sin datos');
     _parseFraveRows(values);
     status.className='conn-status ok';status.textContent=S.fraveRows.length+' pubs';
