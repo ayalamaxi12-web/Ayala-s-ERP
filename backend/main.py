@@ -1376,14 +1376,37 @@ def fvg_parse(r):
         raise HTTPException(status_code=r.status_code or 500,
                             detail=f"Fravega {r.status_code}: {r.text[:300]}")
 
+@app.get("/fvg/debug")
+async def fvg_debug(request: Request):
+    """Debug: test different Fravega endpoint URLs"""
+    results = {}
+    hdrs = fvg_headers(request)
+    seller_id = request.headers.get('seller-id', '')
+    for path in [
+        f"/api/v1/item?page=1&size=1",
+        f"/api/item?page=1&size=1",
+        f"/api/v1/items?page=1&size=1",
+    ]:
+        try:
+            r = requests.get(f"{FVG_BASE_CATALOG}{path}", headers=hdrs, timeout=10)
+            results[path] = {"status": r.status_code, "body": r.text[:500]}
+        except Exception as e:
+            results[path] = {"error": str(e)}
+    return results
+
+def fvg_safe_json(r):
+    """Parse response safely — return text if not valid JSON"""
+    try:
+        return {"status": r.status_code, "body": r.json()}
+    except Exception:
+        return {"status": r.status_code, "body": r.text[:2000]}
+
 @app.get("/fvg/items")
 async def fvg_list_items(request: Request, page: int = 1, size: int = 20):
     try:
-        r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item?page={page}&size={size}",
+        r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item?page={page}&size={size}&sellerId={request.headers.get('seller-id','')}",
                          headers=fvg_headers(request), timeout=20)
-        return fvg_parse(r)
-    except HTTPException:
-        raise
+        return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1392,9 +1415,7 @@ async def fvg_get_item(ref_id: str, request: Request):
     try:
         r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}",
                          headers=fvg_headers(request), timeout=20)
-        return fvg_parse(r)
-    except HTTPException:
-        raise
+        return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1404,7 +1425,7 @@ async def fvg_update_price(ref_id: str, request: Request):
     try:
         r = requests.put(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}/price",
                          headers=fvg_headers(request), json=body, timeout=20)
-        return {"status": r.status_code, "body": r.json() if r.content else {}}
+        return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1414,7 +1435,7 @@ async def fvg_update_stock(ref_id: str, request: Request):
     try:
         r = requests.put(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}/stock",
                          headers=fvg_headers(request), json=body, timeout=20)
-        return {"status": r.status_code, "body": r.json() if r.content else {}}
+        return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1423,7 +1444,7 @@ async def fvg_get_order(order_id: str, request: Request):
     try:
         r = requests.get(f"{FVG_BASE_ORDERS}/api/v1/orders/{order_id}",
                          headers=fvg_headers(request), timeout=20)
-        return r.json()
+        return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1433,6 +1454,29 @@ async def fvg_invoice(request: Request):
     try:
         r = requests.post(f"{FVG_BASE_ORDERS}/api/v1/invoice",
                           headers=fvg_headers(request), json=body, timeout=20)
-        return {"status": r.status_code, "body": r.json() if r.content else {}}
+        return fvg_safe_json(r)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# ML AUTH — exchange code for token
+# ══════════════════════════════════════════════════════
+
+@app.post("/ml/exchange")
+async def ml_exchange(request: Request):
+    body = await request.json()
+    code = body.get("code", "")
+    if not code:
+        raise HTTPException(status_code=400, detail="code requerido")
+    try:
+        r = requests.post("https://api.mercadolibre.com/oauth/token", data={
+            "grant_type": "authorization_code",
+            "client_id": APP_ID,
+            "client_secret": CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": "https://ayalamaxi12-web.github.io/Ayala-s-ERP/",
+        }, timeout=15)
+        return r.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
