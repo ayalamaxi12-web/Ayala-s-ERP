@@ -201,6 +201,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="fravega-api" onclick="goPage('fravega-api',this)"><span class="icon">🔌</span> Fravega API</div>
     <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
+    <div class="sidebar-item" data-page="intel-competitiva" onclick="goPage('intel-competitiva',this)"><span class="icon">🎯</span> Intel. Competitiva</div>
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
@@ -679,6 +680,130 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+
+<!-- INTELIGENCIA COMPETITIVA -->
+<div id="page-intel-competitiva" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-hdr" style="margin-bottom:4px">🎯 Inteligencia Competitiva</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Detecta movimientos de competidores y oportunidades de mercado</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn primary" onclick="intelRunAnalysis()">⚡ Analizar cambios</button>
+      <button class="btn" onclick="intelLoadFromSheets()">🔄 Actualizar datos</button>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button class="btn" id="intel-tab-cambios" onclick="intelTab('cambios')">📉 Cambios de Precio</button>
+    <button class="btn btn-secondary" id="intel-tab-ads" onclick="intelTab('ads')">📢 Detector de Ads</button>
+    <button class="btn btn-secondary" id="intel-tab-alertas" onclick="intelTab('alertas')">🔔 Alertas</button>
+  </div>
+
+  <!-- CAMBIOS DE PRECIO -->
+  <div id="intel-section-cambios">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+      <div class="stat-card"><div class="stat-value price-bad" id="ic-bajaron">0</div><div class="stat-label">Bajaron precio 🔴</div></div>
+      <div class="stat-card"><div class="stat-value price-ok" id="ic-subieron">0</div><div class="stat-label">Subieron precio 🟢</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-fuertes" style="color:var(--yellow)">0</div><div class="stat-label">Cambios fuertes (&gt;10%)</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-vendedores" style="color:var(--accent)">0</div><div class="stat-label">Vendedores monitoreados</div></div>
+    </div>
+
+    <div class="erp-filters">
+      <input type="text" id="ic-search" placeholder="Buscar producto o vendedor..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+      <select id="ic-filter-tipo" class="fi">
+        <option value="">Todos los cambios</option>
+        <option value="baja-fuerte">Baja fuerte (&gt;10%)</option>
+        <option value="baja">Bajó precio</option>
+        <option value="sube">Subió precio</option>
+        <option value="nuevo">Producto nuevo</option>
+        <option value="desapareció">Desapareció</option>
+      </select>
+      <select id="ic-filter-vendedor" class="fi">
+        <option value="">Todos los vendedores</option>
+      </select>
+      <button class="btn" onclick="intelExport()">⬇ CSV</button>
+    </div>
+
+    <div id="ic-last-scan" style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;padding:4px 0"></div>
+
+    <div class="table-wrap">
+      <table id="ic-table">
+        <thead><tr>
+          <th>Vendedor</th>
+          <th>Producto</th>
+          <th>Precio Anterior</th>
+          <th>Precio Actual</th>
+          <th>Variación</th>
+          <th>Señal</th>
+          <th>Link</th>
+        </tr></thead>
+        <tbody id="ic-tbody">
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">
+            Cargá los datos de competidores en <b>Competidores ML</b> y ejecutá el tracker, luego volvé acá para ver los cambios detectados.
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ADS DETECTOR -->
+  <div id="intel-section-ads" style="display:none">
+    <div class="card">
+      <div class="card-title">📢 Detector de Publicidad Paga en ML</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Buscá una keyword en ML y detectamos qué publicaciones tienen publicidad paga (etiqueta "ad"). 
+        Usalo para saber cuándo un competidor está invirtiendo en publicidad y posicionarte al lado por precio.
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input id="ic-keyword" class="fi" placeholder="Ej: tn1060, toner hp, cartucho..." style="flex:1;min-width:200px;padding:7px 10px;font-size:12px">
+        <button class="btn primary" onclick="intelDetectAds()">🔍 Buscar ads</button>
+      </div>
+      <div id="ic-ads-result" style="margin-top:16px"></div>
+    </div>
+    <div class="card" style="margin-top:0">
+      <div class="card-title">💡 Cómo usar esta información</div>
+      <div style="font-size:11px;color:var(--text2);line-height:2">
+        <div>🔴 <b>Competidor con ad</b> → Aparece primero pero paga por eso. Vos aparecés justo debajo gratis.</div>
+        <div>📈 <b>Muchos ads en una keyword</b> → Categoría competitiva, hay demanda activa.</div>
+        <div>⚡ <b>Ad nuevo de un competidor</b> → Está saliendo fuerte, posicionarte al lado en precio.</div>
+        <div>💰 <b>Ningún ad</b> → Oportunidad de dominar orgánicamente sin pagar.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTAS -->
+  <div id="intel-section-alertas" style="display:none">
+    <div class="card">
+      <div class="card-title">🔔 Centro de Alertas</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Configurá alertas para que el sistema te avise automáticamente cuando detecte movimientos importantes.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:var(--red)">🔴 Alertas activas</div>
+          <div id="ic-alertas-activas" style="font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;line-height:2">
+            <div>• Baja de precio &gt;15% de cualquier competidor</div>
+            <div>• Producto nuevo de competidor monitoreado</div>
+            <div>• Competidor activa publicidad en keyword clave</div>
+          </div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:var(--accent)">📋 Próximas features</div>
+          <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;line-height:2">
+            <div>• Notificaciones de eventos ML (Hot Sale, etc.)</div>
+            <div>• Monitor de cambios en Fravega y OnCity</div>
+            <div>• Detector de cuotas sin interés masivas</div>
+            <div>• Integración con notificaciones de plataformas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="ic-alertas-log" style="margin-top:0"></div>
+  </div>
+</div>
+
 </div><!-- app-body -->
 <div id="toast" class="toast"></div>
 <script>
@@ -775,6 +900,7 @@ function goPage(page,el){
   if(page==='verificar-web')renderWeb();
   if(page==='verificar-fravega')renderFrave();
   if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
+  if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
 }
 
 // ── MULTI-SELECT ──
@@ -1748,11 +1874,9 @@ function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].m
     pm:ciMulti('PM','Pm'),
     vendedor:ciMulti('Responsable De Ventas','Vendedor','Responsable')
   };
-  if(IDX.precioFinal<0){console.warn('No se encontró columna Precio Final en',sheetName,'Headers:',H);return[];}const parsed=[];const seenOrders=new Set();for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;
-    // Deduplicate by order number if column exists
-    if(IDX.numOrden>=0&&r[IDX.numOrden]){const ord=String(r[IDX.numOrden]).trim();if(ord&&seenOrders.has(ord))continue;if(ord)seenOrders.add(ord);}
+  if(IDX.precioFinal<0){console.warn('No se encontró columna Precio Final en',sheetName,'Headers:',H);return[];}const parsed=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;
     const fecha=parseDate(r[IDX.fecha]);const skuRaw=(r[IDX.skus]||'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);
-    parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,precioFinal:pf,precioSinIva:IDX.precioSinIva>=0?pn(r[IDX.precioSinIva]):0,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}if(parsed.length<5){console.warn('Pestaña '+sheetName+' tiene menos de 5 filas válidas, ignorada');return [];}return parsed;}
+    parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,numOrden:IDX.numOrden>=0?String(r[IDX.numOrden]||'').trim():'',precioFinal:pf,precioSinIva:IDX.precioSinIva>=0?pn(r[IDX.precioSinIva]):0,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}if(parsed.length<5){console.warn('Pestaña '+sheetName+' tiene menos de 5 filas válidas, ignorada');return [];}return parsed;}
 async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';allSalesData=[];
   // Auto-detect all "Base X - Y" sheets dynamically
   let sheetsToLoad=DASH_SHEETS;
@@ -1772,7 +1896,7 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
   const filteredSheets=sheetsToLoad.filter(s=>!s.toLowerCase().includes('brasil'));
   const results=await Promise.all(filteredSheets.map(async sheet=>{
     try{
-      const rows=await fetchSheet(DASH_SHEET_ID,sheet);
+      const rows=await fetchSheet(DASH_SHEET_ID,sheet+'!A1:AM60000');
       const parsed=parseVentas(rows,sheet);
       if(parsed.length>0)console.log(`✓ ${sheet}: ${parsed.length} ventas`);
       else console.warn(`✗ ${sheet}: sin datos válidos (ignorada)`);
@@ -1782,6 +1906,15 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
   }));
   // Only include sheets that returned valid data
   results.forEach(r=>allSalesData=allSalesData.concat(r));
+  // Deduplicate across sheets by order number + canal (same order can appear in multiple Base periods)
+  const globalSeen=new Map();
+  allSalesData=allSalesData.filter(d=>{
+    const key=d.numOrden?`${d.numOrden}|||${d.canal}`:null;
+    if(!key)return true; // no order number = keep
+    if(globalSeen.has(key))return false;
+    globalSeen.set(key,true);
+    return true;
+  });
   if(!allSalesData.length&&loadErrors.length){
     qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">No se pudo cargar ninguna pestaña.<br><small>${loadErrors.join('<br>')}</small></span></div>`;
     return;
@@ -2220,7 +2353,7 @@ async function loadBrasil(){
     for(const sheet of [...new Set(sheets_to_try)]){
       if(brData.length>0)break; // stop after first successful sheet
       try{
-        const rows=await fetchSheet(DASH_SHEET_ID,sheet);
+        const rows=await fetchSheet(DASH_SHEET_ID,sheet+'!A1:AM60000');
         if(!rows||rows.length<2)continue;
         const H=rows[0].map(h=>(h||'').trim());
         const ci2=(...ns)=>{for(const n of ns){const i=H.findIndex(h=>h.toLowerCase()===n.toLowerCase());if(i>=0)return i;}return H.findIndex(h=>ns.some(n=>h.toLowerCase().includes(n.toLowerCase())));};
@@ -2509,6 +2642,265 @@ async function fvgInvoiceOrder(){
     else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${JSON.stringify(data)}</span>`;}
   }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
+
+// ============================================================
+// INTELIGENCIA COMPETITIVA
+// ============================================================
+
+// Storage para historial de precios de competidores
+let intelHistory = {}; // { vendedor_titulo: { precio, fecha, link } }
+let intelChanges = [];
+
+function intelTab(tab){
+  ['cambios','ads','alertas'].forEach(t=>{
+    qs(`intel-section-${t}`).style.display = t===tab ? '' : 'none';
+    const btn = qs(`intel-tab-${t}`);
+    if(btn) btn.className = t===tab ? 'btn' : 'btn btn-secondary';
+  });
+}
+
+function intelLoadHistory(){
+  try {
+    const saved = localStorage.getItem('intel_price_history');
+    if(saved) intelHistory = JSON.parse(saved);
+  } catch(e) {}
+}
+
+function intelSaveHistory(){
+  try {
+    localStorage.setItem('intel_price_history', JSON.stringify(intelHistory));
+  } catch(e) {}
+}
+
+function intelRunAnalysis(){
+  intelLoadHistory();
+  
+  if(!COMP.data || !COMP.data.length){
+    toast('Primero cargá los datos en Competidores ML', 'error');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const changes = [];
+  const newHistory = {};
+
+  COMP.data.forEach(item => {
+    const key = `${item.vendedor}|||${item.titulo}`;
+    const prev = intelHistory[key];
+    const curr = { precio: item.precio, fecha: now, link: item.link, orig: item.orig_price };
+
+    newHistory[key] = curr;
+
+    if(prev && prev.precio > 0 && item.precio > 0){
+      const diff = (item.precio - prev.precio) / prev.precio * 100;
+      if(Math.abs(diff) >= 2){ // Solo cambios de más del 2%
+        changes.push({
+          vendedor: item.vendedor,
+          titulo: item.titulo,
+          precioAnterior: prev.precio,
+          precioActual: item.precio,
+          diff,
+          link: item.link,
+          tipo: diff < -10 ? 'baja-fuerte' : diff < 0 ? 'baja' : 'sube',
+          fecha: now,
+        });
+      }
+    } else if(!prev && item.precio > 0){
+      changes.push({
+        vendedor: item.vendedor,
+        titulo: item.titulo,
+        precioAnterior: null,
+        precioActual: item.precio,
+        diff: null,
+        link: item.link,
+        tipo: 'nuevo',
+        fecha: now,
+      });
+    }
+  });
+
+  // Detectar desaparecidos
+  Object.keys(intelHistory).forEach(key => {
+    if(!newHistory[key]){
+      const [vendedor, titulo] = key.split('|||');
+      changes.push({
+        vendedor, titulo,
+        precioAnterior: intelHistory[key].precio,
+        precioActual: null,
+        diff: null,
+        link: intelHistory[key].link,
+        tipo: 'desapareció',
+        fecha: now,
+      });
+    }
+  });
+
+  intelHistory = { ...intelHistory, ...newHistory };
+  intelSaveHistory();
+  intelChanges = changes;
+
+  localStorage.setItem('intel_last_scan', now);
+  toast(`Análisis completo: ${changes.length} cambios detectados`);
+  intelRenderCambios();
+}
+
+function intelLoadFromSheets(){
+  // Trigger competidores load
+  loadCompetidores().then(()=>{
+    setTimeout(intelRunAnalysis, 1000);
+  }).catch(()=>{
+    toast('Actualizá los datos desde Competidores ML primero', 'error');
+  });
+}
+
+function intelRenderCambios(){
+  const srch = (qs('ic-search')?.value || '').toLowerCase();
+  const fTipo = qs('ic-filter-tipo')?.value || '';
+  const fVend = qs('ic-filter-vendedor')?.value || '';
+
+  // Populate vendedor filter
+  const vendedores = [...new Set(intelChanges.map(c => c.vendedor))].sort();
+  const selV = qs('ic-filter-vendedor');
+  if(selV && selV.options.length <= 1){
+    vendedores.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      selV.appendChild(o);
+    });
+  }
+
+  let data = intelChanges.filter(c => {
+    if(srch && !c.titulo.toLowerCase().includes(srch) && !c.vendedor.toLowerCase().includes(srch)) return false;
+    if(fTipo && c.tipo !== fTipo) return false;
+    if(fVend && c.vendedor !== fVend) return false;
+    return true;
+  });
+
+  // Sort: cambios fuertes primero
+  data.sort((a,b) => Math.abs(b.diff||0) - Math.abs(a.diff||0));
+
+  // Stats
+  qs('ic-bajaron').textContent = intelChanges.filter(c=>c.diff<0).length;
+  qs('ic-subieron').textContent = intelChanges.filter(c=>c.diff>0).length;
+  qs('ic-fuertes').textContent = intelChanges.filter(c=>Math.abs(c.diff||0)>10).length;
+  qs('ic-vendedores').textContent = [...new Set(COMP.data?.map(d=>d.vendedor)||[])].length;
+
+  const lastScan = localStorage.getItem('intel_last_scan');
+  if(lastScan && qs('ic-last-scan')){
+    const d = new Date(lastScan);
+    qs('ic-last-scan').textContent = `Último análisis: ${d.toLocaleDateString('es-AR')} ${d.toLocaleTimeString('es-AR')} · ${intelChanges.length} cambios totales`;
+  }
+
+  const tbody = qs('ic-tbody');
+  if(!data.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">
+      ${intelChanges.length ? 'Sin cambios para los filtros aplicados' : 'Ejecutá "Analizar cambios" para detectar movimientos'}
+    </td></tr>`;
+    return;
+  }
+
+  const senal = (tipo, diff) => {
+    if(tipo === 'nuevo') return '<span class="badge badge-blue">🆕 Nuevo</span>';
+    if(tipo === 'desapareció') return '<span class="badge badge-gray">💨 Desapareció</span>';
+    if(tipo === 'baja-fuerte') return '<span class="badge badge-red">🔴 Baja fuerte — ¡Alerta!</span>';
+    if(tipo === 'baja') return '<span class="badge badge-yellow">🟡 Bajó precio</span>';
+    if(tipo === 'sube') return '<span class="badge badge-green">🟢 Subió — Oportunidad</span>';
+    return '';
+  };
+
+  tbody.innerHTML = data.map(c => {
+    const diffStr = c.diff !== null
+      ? `<span style="font-weight:700;font-family:'DM Mono',monospace;color:${c.diff<-10?'var(--red)':c.diff<0?'var(--yellow)':'var(--green)'}">${c.diff>0?'+':''}${c.diff.toFixed(1)}%</span>`
+      : '—';
+    return `<tr style="${c.tipo==='baja-fuerte'?'background:rgba(255,107,107,0.04)':''}">
+      <td><span class="badge badge-blue" style="font-size:9px">${c.vendedor}</span></td>
+      <td style="font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.titulo}">${c.titulo}</td>
+      <td class="mono" style="font-size:10px;color:var(--text2)">${c.precioAnterior?'$'+fmtN(c.precioAnterior):'—'}</td>
+      <td class="mono" style="font-size:10px;font-weight:700">${c.precioActual?'$'+fmtN(c.precioActual):'—'}</td>
+      <td>${diffStr}</td>
+      <td>${senal(c.tipo, c.diff)}</td>
+      <td>${c.link?`<a href="${c.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function intelDetectAds(){
+  const keyword = qs('ic-keyword')?.value.trim();
+  const el = qs('ic-ads-result');
+  if(!keyword){ toast('Ingresá una keyword', 'error'); return; }
+  
+  el.innerHTML = `<div style="color:var(--text2);font-family:'DM Mono',monospace;font-size:11px">
+    ⏳ Buscando ads para "<b>${keyword}</b>" en ML...<br>
+    <span style="font-size:9px;color:var(--text3)">Nota: ML no expone directamente si una pub tiene ad vía API pública. 
+    Esta feature requiere scraping — próximamente via backend.</span>
+  </div>`;
+
+  // Use ML search API to get results
+  try {
+    const bu = getBackendUrl();
+    const r = await fetch(`${bu}/ml-proxy?path=${encodeURIComponent('sites/MLA/search?q='+encodeURIComponent(keyword)+'&limit=20')}`, {
+      headers: {'x-vk-token': S.mlToken}
+    });
+    const data = await r.json();
+    const results = data.results || [];
+    
+    if(!results.length){ el.innerHTML = '<span style="color:var(--text3)">Sin resultados</span>'; return; }
+
+    el.innerHTML = `
+      <div style="margin-bottom:10px;font-size:11px;color:var(--text2)">
+        <b>${results.length}</b> resultados para "<span style="color:var(--accent)">${keyword}</span>" 
+        · Total en ML: ${(data.paging?.total||0).toLocaleString()}
+      </div>
+      <div style="font-size:10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:10px;margin-bottom:10px;font-family:'DM Mono',monospace;color:var(--accent3)">
+        ⚠ La detección automática de "ad" requiere scraping del frontend de ML (no disponible vía API). 
+        Por ahora mostramos los resultados orgánicos — los primeros 3-5 suelen ser ads pagos.
+      </div>
+      <table class="tabla-ecom" style="width:100%">
+        <thead><tr><th>#</th><th>Título</th><th>Vendedor</th><th>Precio</th><th>Cuotas</th><th>Link</th></tr></thead>
+        <tbody>${results.map((r,i) => `
+          <tr style="${i<3?'background:rgba(245,158,11,0.04)':''}">
+            <td style="font-family:'DM Mono',monospace;font-size:10px;color:${i<3?'var(--accent3)':'var(--text3)'}">
+              ${i<3?'📢':'#'}${i+1}
+            </td>
+            <td style="font-size:10px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.title}</td>
+            <td style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace">${r.seller?.nickname||'—'}</td>
+            <td class="mono price-ok" style="font-size:10px">$${fmtN(r.price)}</td>
+            <td style="font-size:9px;color:var(--text2)">${r.installments?.quantity>1?r.installments.quantity+'x $'+fmtN(r.installments.amount):'—'}</td>
+            <td><a href="${r.permalink}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a></td>
+          </tr>
+        `).join('')}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
+        📌 Los primeros resultados marcados con 📢 probablemente son publicidad paga. Verificá manualmente en ML.
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--red)">❌ ${e.message}</span>`;
+  }
+}
+
+function intelExport(){
+  if(!intelChanges.length){ toast('Sin cambios para exportar', 'error'); return; }
+  const h = 'Vendedor,Producto,Precio Anterior,Precio Actual,Variacion %,Tipo,Link';
+  const lines = intelChanges.map(c => [
+    c.vendedor, `"${c.titulo}"`, c.precioAnterior||'', c.precioActual||'',
+    c.diff!==null?c.diff.toFixed(2):'', c.tipo, c.link||''
+  ].join(','));
+  const blob = new Blob([[h].concat(lines).join('\n'), {type:'text/csv;charset=utf-8;'}]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `intel-competitiva-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('Exportado');
+}
+
+// Wire up filters
+['ic-search','ic-filter-tipo','ic-filter-vendedor'].forEach(id => {
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = qs(id);
+    if(el){ el.addEventListener('input', intelRenderCambios); el.addEventListener('change', intelRenderCambios); }
+  });
+});
 </script>
 </body>
 </html>
