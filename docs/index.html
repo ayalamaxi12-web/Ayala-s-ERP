@@ -1906,13 +1906,14 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
   }));
   // Only include sheets that returned valid data
   results.forEach(r=>allSalesData=allSalesData.concat(r));
-  // Deduplicate across sheets by order number + canal (same order can appear in multiple Base periods)
-  const globalSeen=new Map();
+  // Deduplicate across sheets: same order+SKU in different Base periods = keep only one
+  // Key: order number + SKU raw + canal (NOT just order, as one order can have multiple SKUs)
+  const globalSeen=new Set();
   allSalesData=allSalesData.filter(d=>{
-    const key=d.numOrden?`${d.numOrden}|||${d.canal}`:null;
-    if(!key)return true; // no order number = keep
+    if(!d.numOrden)return true; // no order number = always keep
+    const key=`${d.numOrden}|||${d.skuRaw}|||${d.canal}`;
     if(globalSeen.has(key))return false;
-    globalSeen.set(key,true);
+    globalSeen.add(key);
     return true;
   });
   if(!allSalesData.length&&loadErrors.length){
