@@ -852,10 +852,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="table-wrap" id="ofertas-table-wrap" style="display:none">
     <table id="ofertas-table">
       <thead><tr>
-        <th>SKU</th>
         <th>Título</th>
         <th>MLA</th>
-        <th>Precio Oferta ML</th>
+        <th>Tipo Oferta</th>
+        <th>Precio ML (vivo)</th>
         <th>Precio Tachado ML</th>
         <th>PM Precio</th>
         <th>Tachado Sugerido<br><span style="font-weight:400;font-size:8px">(PM × 1.25)</span></th>
@@ -3046,32 +3046,92 @@ async function ofertasLoad(){
       
       const hdrs = rows[0].map(h=>String(h||'').trim());
       const hm = hdrMap(hdrs);
-      const iSku = findCol(hm,['Sku','SKU','sku']);
-      const iTitulo = findCol(hm,['Titulo','Título','titulo','Publicacion','Publicación']);
-      const iMLA = findCol(hm,['MLA','Id ML','Item ID','mla']);
-      const iPrecio = findCol(hm,['Precio Final','Precio','precio']);
-      const iTachado = findCol(hm,['Precio Tachado','Precio tachado','Tachado']);
-      const iDesc = findCol(hm,['Descuento','descuento']);
-      const iCuotas = findCol(hm,['Cuotas','cuotas']);
+      // Headers reales del Sheets de ofertas:
+      // Categoria(0) | Sku=Titulo(1) | Publicación=MLA(2) | Check(3) | Precio Tachado(4) | 
+      // Precio Final(5) | Estado(6) | Tipo de Oferta(7) | Precio Promocion(8) | 
+      // Precio Ml Ecuacion(9) | Diferencia(10) | Stock(11) | Regla De Precio(12) | Cuotas(13)
+      const iCategoria = findCol(hm,['Categoria','Categoría','categoria']);
+      const iTituloSku = findCol(hm,['Sku','SKU','sku']); // En este Sheets, SKU es el título del producto
+      const iPub = findCol(hm,['Publicación','Publicacion','publicacion','publicación']);
+      const iPrecioTachado = findCol(hm,['Precio Tachado','Precio tachado']);
+      const iPrecioFinal = findCol(hm,['Precio Final','Precio final']);
       const iEstado = findCol(hm,['Estado','estado']);
+      const iTipoOferta = findCol(hm,['Tipo de Oferta','Tipo De Oferta','tipo de oferta']);
+      const iPrecioPromo = findCol(hm,['Precio Promocion','Precio Promoción']);
+      const iPrecioMI = findCol(hm,['Precio Ml Ecuacion','Precio MI Ecuacion','Precio MI']);
+      const iRegla = findCol(hm,['Regla De Precio','Regla de Precio','regla de precio']);
+      const iCuotas = findCol(hm,['Cuotas','cuotas']);
+      const iStock = findCol(hm,['Stock','stock']);
 
       ofertasData[cuenta] = rows.slice(1).map(row=>{
-        const sku = String(row[iSku>=0?iSku:0]||'').trim();
-        const mla = String(row[iMLA>=0?iMLA:1]||'').trim().replace(/MLA/i,'');
+        if(!row || row.every(c=>!c)) return null;
+        // Publicación column has the MLA
+        const pubRaw = String(row[iPub>=0?iPub:2]||'').trim();
+        if(!pubRaw) return null;
+        const mlaMatch = pubRaw.match(/MLA(\d+)/i);
+        const mlaNum = mlaMatch ? mlaMatch[1] : pubRaw.replace(/\D/g,'');
+        if(!mlaNum) return null;
+        // SKU column in this sheet is actually the product title
+        const titulo = String(row[iTituloSku>=0?iTituloSku:1]||'').trim();
+        // Try to extract a real SKU from the title (first word before space)
+        const skuGuess = titulo.split(' ')[0].trim();
         return {
-          sku, skuL: normSku(sku),
-          titulo: String(row[iTitulo>=0?iTitulo:2]||'').trim(),
-          mla: mla,
-          mlaFull: mla ? `MLA${mla}` : '',
-          precioOferta: parseNum(String(row[iPrecio>=0?iPrecio:3]||'')),
-          precioTachado: parseNum(String(row[iTachado>=0?iTachado:4]||'')),
-          descuento: String(row[iDesc>=0?iDesc:5]||'').trim(),
-          cuotas: String(row[iCuotas>=0?iCuotas:6]||'').trim(),
-          estado: String(row[iEstado>=0?iEstado:7]||'').trim(),
+          sku: skuGuess,
+          skuL: normSku(skuGuess),
+          titulo,
+          categoria: String(row[iCategoria>=0?iCategoria:0]||'').trim(),
+          publicacion: pubRaw,
+          mla: mlaNum,
+          mlaFull: 'MLA'+mlaNum,
+          precioTachado: parseNum(String(row[iPrecioTachado>=0?iPrecioTachado:4]||'')),
+          precioOferta: parseNum(String(row[iPrecioFinal>=0?iPrecioFinal:5]||'')),
+          estado: String(row[iEstado>=0?iEstado:6]||'').trim(),
+          tipoOferta: String(row[iTipoOferta>=0?iTipoOferta:7]||'').trim(),
+          precioPromo: parseNum(String(row[iPrecioPromo>=0?iPrecioPromo:8]||'')),
+          precioMI: parseNum(String(row[iPrecioMI>=0?iPrecioMI:9]||'')),
+          regla: String(row[iRegla>=0?iRegla:12]||'').trim(),
+          cuotas: String(row[iCuotas>=0?iCuotas:13]||'').trim(),
+          stock: parseInt(String(row[iStock>=0?iStock:11]||''))||0,
           cuenta,
         };
-      }).filter(r=>r.sku||r.mla);
-      toast(`${ofertasData[cuenta].length} ofertas cargadas (${cuenta})`);
+      }).filter(r=>r&&r.mlaFull);
+
+      // Fetch live ML prices in batches of 20
+      const mlas = ofertasData[cuenta].filter(r=>r.mlaFull).map(r=>r.mlaFull);
+      toast(`Consultando ${mlas.length} precios en vivo desde ML...`);
+      const mlPricesMap = {};
+      const bu = getBackendUrl();
+      for(let i=0;i<mlas.length;i+=20){
+        const batch = mlas.slice(i,i+20);
+        try{
+          const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
+          const d = await mlFetch(`items?ids=${batch.join(',')}&attributes=id,price,original_price,installments`, tkn);
+          if(Array.isArray(d)){
+            d.forEach(item=>{
+              if(item.code===200&&item.body){
+                const b=item.body;
+                const orig=b.original_price||b.price||0;
+                const price=b.price||0;
+                const inst=b.installments||{};
+                let cuotas='Sin cuotas';
+                if(inst.quantity>1){
+                  const m=`$${Math.round(inst.amount).toLocaleString('es-AR')}`;
+                  const s=inst.rate===0?' sin interés':'';
+                  cuotas=`${inst.quantity}x ${m}${s}`;
+                }
+                mlPricesMap[b.id]={precioML:price,tachadoML:orig>price?orig:0,cuotasML:cuotas};
+              }
+            });
+          }
+        }catch(e){console.warn('ML batch error',e);}
+        await new Promise(res=>setTimeout(res,150));
+      }
+      // Merge ML prices into data
+      ofertasData[cuenta]=ofertasData[cuenta].map(r=>{
+        const p=mlPricesMap[r.mlaFull]||{};
+        return{...r,precioML:p.precioML||0,tachadoML:p.tachadoML||0,cuotasML:p.cuotasML||''};
+      });
+      toast(`${ofertasData[cuenta].length} ofertas cargadas con precios ML en vivo (${cuenta})`);
     }
     qs('ofertas-stats-wrap').style.display='grid';
     qs('ofertas-filters').style.display='flex';
@@ -3092,7 +3152,8 @@ function ofertasGetData(){
     const pm = S.pmData[item.skuL]||null;
     const pmPrecio = pm ? pm.ml : 0;
     const tachadoSugerido = pmPrecio ? Math.round(pmPrecio * 1.25) : 0;
-    const diff = item.precioOferta && pmPrecio ? (item.precioOferta - pmPrecio)/pmPrecio*100 : null;
+    const precioActual = item.precioML || item.precioOferta || 0;
+    const diff = precioActual && pmPrecio ? (precioActual - pmPrecio)/pmPrecio*100 : null;
     const estado = !pm||!pmPrecio ? 'nopm' : diff!==null&&Math.abs(diff)>0.5 ? 'diff' : 'ok';
     return {...item, pm, pmPrecio, tachadoSugerido, diff, estado};
   }).filter(r=>{
@@ -3154,11 +3215,11 @@ function ofertasRender(){
       : ofertaLink;
 
     return `<tr style="${r.estado==='diff'?'background:rgba(255,107,107,0.03)':''}">
-      <td class="sku-cell">${r.sku||'—'}</td>
       <td style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.titulo}">${r.titulo||'—'}</td>
-      <td class="sku-cell" style="color:var(--accent)">${r.mlaFull||'—'}</td>
-      <td class="mono price-ok" style="font-size:10px">${r.precioOferta?'$'+fmtN(r.precioOferta):'—'}</td>
-      <td class="mono" style="font-size:10px;text-decoration:line-through;color:var(--text2)">${r.precioTachado?'$'+fmtN(r.precioTachado):'—'}</td>
+      <td class="sku-cell" style="color:var(--accent);font-size:10px">${r.mlaFull||'—'}</td>
+      <td style="font-size:9px;color:var(--text2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.tipoOferta}">${r.tipoOferta||'—'}</td>
+      <td class="mono price-ok" style="font-size:10px">${r.precioML?'$'+fmtN(r.precioML):(r.precioOferta?'$'+fmtN(r.precioOferta):'—')}</td>
+      <td class="mono" style="font-size:10px;text-decoration:line-through;color:var(--text2)">${r.tachadoML?'$'+fmtN(r.tachadoML):(r.precioTachado?'$'+fmtN(r.precioTachado):'—')}</td>
       <td class="mono" style="font-size:10px;color:var(--accent)">${r.pmPrecio?'$'+fmtN(r.pmPrecio):'—'}</td>
       <td class="mono" style="font-size:10px;font-weight:700;color:var(--yellow)">${r.tachadoSugerido?'$'+fmtN(r.tachadoSugerido):'—'}</td>
       <td>${diffStr}</td>
