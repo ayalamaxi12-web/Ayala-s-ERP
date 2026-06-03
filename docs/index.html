@@ -3105,13 +3105,16 @@ async function ofertasLoad(){
         const batch = mlas.slice(i,i+20);
         try{
           const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
-          const d = await mlFetch(`items?ids=${batch.join(',')}&attributes=id,price,original_price,installments`, tkn);
+          const d = await mlFetch(`items?ids=${batch.join(',')}&attributes=id,price,original_price,sale_price,base_price,installments`, tkn);
           if(Array.isArray(d)){
             d.forEach(item=>{
               if(item.code===200&&item.body){
                 const b=item.body;
-                const orig=b.original_price||b.price||0;
-                const price=b.price||0;
+                // price = precio de venta real (con oferta si aplica)
+                // original_price = precio tachado (precio base sin oferta)
+                // sale_price = precio especial si existe
+                const price=b.sale_price?.amount||b.price||0;
+                const orig=b.original_price||(b.base_price&&b.base_price>price?b.base_price:0)||0;
                 const inst=b.installments||{};
                 let cuotas='Sin cuotas';
                 if(inst.quantity>1){
