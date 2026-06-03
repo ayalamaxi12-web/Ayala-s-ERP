@@ -845,7 +845,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <option value="ok">OK</option>
       <option value="nopm">Sin PM</option>
     </select>
-    <button class="btn" onclick="ofertasExport()">⬇ CSV</button>
+    <button class="btn" onclick="ofertasExport()">⬇ CSV verificación</button>
+      <button class="btn primary" onclick="ofertasExportMasivo()" style="border-color:var(--green);color:var(--green)">⬇ CSV Masivo ML</button>
   </div>
 
   <!-- Table -->
@@ -3233,6 +3234,62 @@ function ofertasRender(){
     html+=`<button class="page-btn${i===ofertasPage?' active':''}" onclick="ofertasPage=${i};ofertasRender()">${i}</button>`;
   if(ofertasPage<pages)html+=`<button class="page-btn" onclick="ofertasPage=${ofertasPage+1};ofertasRender()">›</button>`;
   pag.innerHTML=html;
+}
+
+function ofertasExportMasivo(){
+  // Generate CSV ready to upload to ML masivo
+  // Format: ml_item_id, precio (sale = PM con envio), precio_tachado (sale * 1.25)
+  const tab = ofertasTab_active;
+  const all = ofertasData[tab];
+  if(!all.length){toast('Cargá las ofertas primero','error');return;}
+
+  const rows = [];
+  let sinPM = 0;
+
+  all.forEach(item=>{
+    const pm = S.pmData[item.skuL]||null;
+    let pmPrecio = 0;
+
+    // Multi-SKU support
+    const skuParts = item.titulo.split(',').map(s=>s.trim()).filter(Boolean);
+    if(skuParts.length > 1){
+      skuParts.forEach(part=>{
+        const partPm = S.pmData[normSku(part.split(' ')[0])]||null;
+        if(partPm && partPm.ml) pmPrecio += partPm.ml;
+      });
+      if(!pmPrecio && pm) pmPrecio = pm.ml||0;
+    } else {
+      pmPrecio = pm ? pm.ml||0 : 0;
+    }
+
+    if(!pmPrecio){sinPM++;return;} // Skip if no PM
+
+    // Add shipping if >= threshold
+    const precioConEnvio = pmPrecio >= S.shippingThreshold
+      ? pmPrecio + S.shippingCost
+      : pmPrecio;
+
+    // Tachado = precio con envio * 1.25 (so offer is 25% OFF)
+    const precioTachado = Math.round(precioConEnvio * 1.25);
+    const precioSale = Math.round(precioConEnvio);
+
+    rows.push([item.mlaFull, precioSale, precioTachado]);
+  });
+
+  if(!rows.length){
+    toast(`Sin filas para exportar. ${sinPM} sin PM conectado.`,'error');
+    return;
+  }
+
+  // CSV format for ML masivo upload
+  const h = 'ml_item_id,precio,precio_tachado';
+  const lines = rows.map(r=>r.join(','));
+  const blob = new Blob(['﻿'+[h].concat(lines).join('\n'),{type:'text/csv;charset=utf-8;'}]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ofertas-masivo-${tab}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast(`✅ CSV masivo: ${rows.length} MLAs exportados${sinPM?' · '+sinPM+' sin PM':''}`);
 }
 
 function ofertasExport(){
