@@ -2561,6 +2561,7 @@ function init(){
   setupSortHeaders('webpub-table',S.wpSort,renderWeb);
   setupSortHeaders('frave-table',S.fSort,renderFrave);
   setupSortHeaders('comp-table',S.cSort,renderCompetidores);
+  ['of-search','of-filter-estado'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{ofertasPage=1;ofertasRender();});el.addEventListener('change',()=>{ofertasPage=1;ofertasRender();});}});
   if(S.mlToken)qs('ml-token').value=S.mlToken;
   if(S.mlToken2)qs('ml-token2').value=S.mlToken2;
   if(S.mlSellerId){qs('ml-seller').value=S.mlSellerId;qs('ml-status').className='conn-status ok';qs('ml-status').textContent='Conectado';}
@@ -3096,45 +3097,40 @@ async function ofertasLoad(){
         };
       }).filter(r=>r&&r.mlaFull);
 
-      // Fetch live ML prices in batches of 20
+      // Fetch live ML prices — API + scraping for real offer price
       const mlas = ofertasData[cuenta].filter(r=>r.mlaFull).map(r=>r.mlaFull);
-      toast(`Consultando ${mlas.length} precios en vivo desde ML...`);
+      toast(`Consultando ${mlas.length} precios en vivo...`);
       const mlPricesMap = {};
       const bu = getBackendUrl();
+      const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
+
+      // Step 1: API for cuotas info
       for(let i=0;i<mlas.length;i+=20){
-        const batch = mlas.slice(i,i+20);
+        const batch=mlas.slice(i,i+20);
         try{
-          const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
-          const d = await mlFetch(`items?ids=${batch.join(',')}&attributes=id,price,original_price,sale_price,base_price,installments`, tkn);
-          if(Array.isArray(d)){
-            d.forEach(item=>{
-              if(item.code===200&&item.body){
-                const b=item.body;
-                // price = precio de venta real (con oferta si aplica)
-                // original_price = precio tachado (precio base sin oferta)
-                // sale_price = precio especial si existe
-                const price=b.sale_price?.amount||b.price||0;
-                const orig=b.original_price||(b.base_price&&b.base_price>price?b.base_price:0)||0;
-                const inst=b.installments||{};
-                let cuotas='Sin cuotas';
-                if(inst.quantity>1){
-                  const m=`$${Math.round(inst.amount).toLocaleString('es-AR')}`;
-                  const s=inst.rate===0?' sin interés':'';
-                  cuotas=`${inst.quantity}x ${m}${s}`;
-                }
-                mlPricesMap[b.id]={precioML:price,tachadoML:orig>price?orig:0,cuotasML:cuotas};
-              }
-            });
-          }
-        }catch(e){console.warn('ML batch error',e);}
+          const d=await mlFetch(`items?ids=${batch.join(',')}&attributes=id,price,original_price,installments`,tkn);
+          if(Array.isArray(d)){d.forEach(item=>{if(item.code===200&&item.body){const b=item.body;const inst=b.installments||{};let cuotas='Sin cuotas';if(inst.quantity>1){const m=`$${Math.round(inst.amount).toLocaleString('es-AR')}`;const s=inst.rate===0?' sin interés':'';cuotas=`${inst.quantity}x ${m}${s}`;}mlPricesMap[b.id]={precioML:b.price||0,tachadoML:b.original_price||0,cuotasML:cuotas};}});}
+        }catch(e){console.warn('ML API error',e);}
         await new Promise(res=>setTimeout(res,150));
       }
-      // Merge ML prices into data
-      ofertasData[cuenta]=ofertasData[cuenta].map(r=>{
-        const p=mlPricesMap[r.mlaFull]||{};
-        return{...r,precioML:p.precioML||0,tachadoML:p.tachadoML||0,cuotasML:p.cuotasML||''};
-      });
-      toast(`${ofertasData[cuenta].length} ofertas cargadas con precios ML en vivo (${cuenta})`);
+
+      // Step 2: Scrape real offer prices
+      toast(`Scrapeando precios reales de oferta...`);
+      for(let i=0;i<mlas.length;i+=20){
+        const batch=mlas.slice(i,i+20);
+        try{
+          const r=await fetch(`${bu}/ml/scrape-prices`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mlas:batch})});
+          const scraped=await r.json();
+          Object.entries(scraped).forEach(([mla,data])=>{
+            if(data.precio>0){if(!mlPricesMap[mla])mlPricesMap[mla]={cuotasML:''};mlPricesMap[mla].precioML=data.precio;if(data.tachado>0)mlPricesMap[mla].tachadoML=data.tachado;}
+          });
+        }catch(e){console.warn('Scrape error',e);}
+        await new Promise(res=>setTimeout(res,300));
+      }
+
+      // Merge
+      ofertasData[cuenta]=ofertasData[cuenta].map(r=>{const p=mlPricesMap[r.mlaFull]||{};return{...r,precioML:p.precioML||r.precioOferta||0,tachadoML:p.tachadoML||r.precioTachado||0,cuotasML:p.cuotasML||''};});
+      toast(`${ofertasData[cuenta].length} ofertas listas con precios reales (${cuenta})`);
     }
     qs('ofertas-stats-wrap').style.display='grid';
     qs('ofertas-filters').style.display='flex';
@@ -3152,8 +3148,20 @@ function ofertasGetData(){
   const tab = ofertasTab_active;
   
   return ofertasData[tab].map(item=>{
-    const pm = S.pmData[item.skuL]||null;
-    const pmPrecio = pm ? pm.ml : 0;
+    // Handle multiple SKUs separated by comma
+    let pmPrecio = 0;
+    const skuParts = item.titulo.split(',').map(s=>s.trim()).filter(Boolean);
+    if(skuParts.length > 1){
+      // Sum PM prices for each SKU
+      skuParts.forEach(part=>{
+        const partSku = normSku(part.split(' ')[0]);
+        const partPm = S.pmData[partSku]||null;
+        if(partPm && partPm.ml) pmPrecio += partPm.ml;
+      });
+    } else {
+      const pm = S.pmData[item.skuL]||null;
+      pmPrecio = pm ? pm.ml : 0;
+    }
     const tachadoSugerido = pmPrecio ? Math.round(pmPrecio * 1.25) : 0;
     const precioActual = item.precioML || item.precioOferta || 0;
     const diff = precioActual && pmPrecio ? (precioActual - pmPrecio)/pmPrecio*100 : null;
