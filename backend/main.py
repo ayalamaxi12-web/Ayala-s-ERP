@@ -12,13 +12,16 @@ app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
-ML_TOKEN       = os.getenv('ML_TOKEN', 'APP_USR-5759955230156669-050612-d748863eef974646587daa470e41ded3-115764017')
-REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', 'TG-69fb6d882d06f40001c2331d-115764017')
+ML_TOKEN       = os.getenv('ML_TOKEN', 'APP_USR-5759955230156669-060313-905aabe9e53353df2f411208dc1e0616-115764017')
+REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', 'TG-6a2061e24263530001c3f0a2-115764017')
 APP_ID         = os.getenv('ML_APP_ID', '5759955230156669')
 CLIENT_SECRET  = os.getenv('ML_CLIENT_SECRET', '49Z7KYX21nFbxHfHrRVE43bX4vGhwOiX')
+ML_TOKEN_2     = os.getenv('ML_TOKEN_2', 'APP_USR-5759955230156669-060313-6e25f8ce07c3f2cbfba627342ca24bad-34801784')
+REFRESH_TOKEN_2= os.getenv('ML_REFRESH_TOKEN_2', 'TG-6a2061e2f552580001e3fe07-34801784')
 
 job_status = {}
 _token_cache = {'token': ML_TOKEN, 'expiry': 0}
+_token_cache_2 = {'token': ML_TOKEN_2, 'expiry': 0}
 
 def get_ml_token():
     if time.time() < _token_cache['expiry']:
@@ -36,6 +39,23 @@ def get_ml_token():
     except Exception as e:
         print(f"Token error: {e}")
     return _token_cache['token']
+
+def get_ml_token_2():
+    if time.time() < _token_cache_2['expiry']:
+        return _token_cache_2['token']
+    try:
+        res = requests.post('https://api.mercadolibre.com/oauth/token', data={
+            'grant_type': 'refresh_token', 'client_id': APP_ID,
+            'client_secret': CLIENT_SECRET, 'refresh_token': REFRESH_TOKEN_2,
+        }, timeout=10)
+        if res.status_code == 200:
+            d = res.json()
+            _token_cache_2['token'] = d['access_token']
+            _token_cache_2['expiry'] = time.time() + d.get('expires_in', 21600) - 300
+            return _token_cache_2['token']
+    except Exception as e:
+        print(f"Token2 error: {e}")
+    return _token_cache_2['token']
 
 def ml_headers():
     return {'Authorization': f'Bearer {get_ml_token()}', 'User-Agent': 'Mozilla/5.0'}
@@ -409,17 +429,24 @@ def vendedor_job(job_id):
                 seen_t = set()
                 unique = [item for item in all_items if item['title'] not in seen_t and not seen_t.add(item['title'])]
                 sn = f'V - {v["nombre"]}'[:50]
+                # Skip if sheet already exists - don't re-scrape
+                existing_sheets = [s.title for s in ss.worksheets()]
+                if sn in existing_sheets:
+                    log.append(f"⏭ {v['nombre']}: pestaña ya existe, saltando scraping")
+                    cfg.update(values=[[datetime.now().strftime('%d/%m/%Y %H:%M')]], range_name=f'C{v["row"]}')
+                    time.sleep(0.3)
+                    continue
                 try:
                     ws = ss.worksheet(sn); ws.clear()
                 except:
-                    ws = ss.add_worksheet(title=sn, rows=5000, cols=8)
-                ws.update(values=[['Titulo','Precio ($)','Precio Tachado ($)','Descuento','Cuotas','Link']], range_name='A1:F1')
-                rows_d = [[i['title'],i['price'],i['orig_price'],i['discount'],i['cuotas'],i['link']] for i in unique]
+                    ws = ss.add_worksheet(title=sn, rows=5000, cols=10)
+                ws.update(values=[['Titulo','Precio ($)','Precio Tachado ($)','Descuento','Cuotas','Ventas','Link','SKU','Cantidad']], range_name='A1:I1')
+                rows_d = [[i['title'],i['price'],i['orig_price'],i['discount'],i['cuotas'],'',i['link'],'',''] for i in unique]
                 for ci in range(0, len(rows_d), 500):
                     chunk = rows_d[ci:ci+500]; s = ci+2
-                    ws.update(values=chunk, range_name=f'A{s}:F{s+len(chunk)-1}'); time.sleep(0.3)
+                    ws.update(values=chunk, range_name=f'A{s}:I{s+len(chunk)-1}'); time.sleep(0.3)
                 cfg.update(values=[[datetime.now().strftime('%d/%m/%Y %H:%M')]], range_name=f'C{v["row"]}')
-                log.append(f"✅ {v['nombre']}: {len(unique)} productos")
+                log.append(f"✅ {v['nombre']}: {len(unique)} productos (nueva pestaña)")
                 time.sleep(1)
         finally:
             driver.quit()
@@ -681,8 +708,8 @@ app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
-ML_TOKEN       = os.getenv('ML_TOKEN', 'APP_USR-5759955230156669-050612-d748863eef974646587daa470e41ded3-115764017')
-REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', 'TG-69fb6d882d06f40001c2331d-115764017')
+ML_TOKEN       = os.getenv('ML_TOKEN', 'APP_USR-5759955230156669-060111-f8f99934ec4aa7ba31b847ca704fc68c-115764017')
+REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', 'TG-6a1da1e8f5a27000011508a2-115764017')
 APP_ID         = os.getenv('ML_APP_ID', '5759955230156669')
 CLIENT_SECRET  = os.getenv('ML_CLIENT_SECRET', '49Z7KYX21nFbxHfHrRVE43bX4vGhwOiX')
 
@@ -1480,3 +1507,197 @@ async def ml_exchange(request: Request):
         return r.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# COMPETIDORES — Refresh histórico de precios via ML API
+# ══════════════════════════════════════════════════════
+
+HIST_SHEET_NAME = "Historial Competidores"
+MAX_HISTORY_DATES = 10
+
+@app.post("/competidores/refresh")
+async def refresh_competidores(request: Request):
+    """
+    Lee todas las pestañas V - Vendedor, extrae MLAs de los links,
+    consulta precios via API ML, y agrega filas al historial.
+    """
+    body = await request.json()
+    ml_token = body.get("token", ML_TOKEN)
+    job_id = f"refresh_{int(time.time())}"
+    job_status[job_id] = {"status": "running", "log": [], "started": datetime.now().isoformat()}
+    
+    import threading
+    threading.Thread(target=refresh_job, args=(job_id, ml_token), daemon=True).start()
+    return {"job_id": job_id, "status": "started"}
+
+def extract_mla(link):
+    """Extract MLA from ML link"""
+    import re
+    m = re.search(r'(MLA\d+)', str(link), re.I)
+    return m.group(1).upper() if m else None
+
+def refresh_job(job_id, ml_token):
+    log = job_status[job_id]["log"]
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        today = datetime.now().strftime('%d/%m/%Y')
+        
+        # Get all V - Vendedor sheets
+        all_sheets = ss.worksheets()
+        vendor_sheets = [ws for ws in all_sheets if ws.title.startswith('V - ')]
+        log.append(f"📋 {len(vendor_sheets)} pestañas de competidores encontradas")
+        
+        if not vendor_sheets:
+            job_status[job_id] = {"status": "error", "message": "No hay pestañas V - Vendedor", "log": log}
+            return
+        
+        # Collect all items with MLAs
+        all_items = []
+        for ws in vendor_sheets:
+            vendedor = ws.title[3:]  # Remove "V - "
+            try:
+                rows = ws.get_all_values()
+                if len(rows) < 2:
+                    continue
+                hdrs = rows[0]
+                # Find columns
+                link_idx = next((i for i,h in enumerate(hdrs) if 'link' in h.lower()), 6)
+                title_idx = next((i for i,h in enumerate(hdrs) if 'titulo' in h.lower() or 'title' in h.lower()), 0)
+                sku_idx = next((i for i,h in enumerate(hdrs) if h.lower() == 'sku'), 7)
+                qty_idx = next((i for i,h in enumerate(hdrs) if 'cantidad' in h.lower()), 8)
+                
+                for row in rows[1:]:
+                    if len(row) <= link_idx or not row[link_idx]:
+                        continue
+                    mla = extract_mla(row[link_idx])
+                    if not mla:
+                        continue
+                    all_items.append({
+                        'vendedor': vendedor,
+                        'titulo': row[title_idx] if len(row) > title_idx else '',
+                        'link': row[link_idx],
+                        'sku': row[sku_idx] if len(row) > sku_idx else '',
+                        'cantidad': row[qty_idx] if len(row) > qty_idx else '',
+                        'mla': mla,
+                    })
+            except Exception as e:
+                log.append(f"⚠ Error leyendo {ws.title}: {e}")
+        
+        log.append(f"🔗 {len(all_items)} links encontrados con MLA")
+        
+        # Fetch prices from ML API in batches of 20
+        headers = {'Authorization': f'Bearer {ml_token}', 'User-Agent': 'Mozilla/5.0'}
+        mla_prices = {}
+        mlas = list(set(item['mla'] for item in all_items))
+        
+        for i in range(0, len(mlas), 20):
+            batch = mlas[i:i+20]
+            try:
+                r = requests.get(
+                    f"https://api.mercadolibre.com/items?ids={','.join(batch)}&attributes=id,price,original_price,title,installments",
+                    headers=headers, timeout=15
+                )
+                if r.status_code == 200:
+                    for item in r.json():
+                        if item.get('code') == 200 and item.get('body'):
+                            b = item['body']
+                            orig = b.get('original_price') or b.get('price', 0)
+                            price = b.get('price', 0)
+                            disc = f"{round((1-price/orig)*100)}% OFF" if orig and orig > price else ''
+                            inst = b.get('installments') or {}
+                            cuotas = 'Sin cuotas'
+                            if inst.get('quantity', 1) > 1:
+                                m_str = f"${round(inst['amount']):,}".replace(',', '.')
+                                s_str = ' sin interés' if inst.get('rate', 1) == 0 else ''
+                                cuotas = f"{inst['quantity']}x {m_str}{s_str}"
+                            mla_prices[b['id']] = {
+                                'precio': price,
+                                'tachado': orig if orig and orig > price else '',
+                                'descuento': disc,
+                                'cuotas': cuotas,
+                            }
+                log.append(f"✅ Lote {i//20+1}: {len(batch)} MLAs consultados")
+                time.sleep(0.3)
+            except Exception as e:
+                log.append(f"❌ Error lote {i//20+1}: {e}")
+        
+        log.append(f"💰 Precios obtenidos: {len(mla_prices)}/{len(mlas)} MLAs")
+        
+        # Get or create Historial sheet
+        try:
+            hist_ws = ss.worksheet(HIST_SHEET_NAME)
+        except:
+            hist_ws = ss.add_worksheet(title=HIST_SHEET_NAME, rows=50000, cols=12)
+            hist_ws.update(values=[['Vendedor','Titulo','Precio ($)','Precio Tachado ($)','Descuento','Cuotas','Link','SKU','Cantidad','Fecha Refresh']], range_name='A1:J1')
+            log.append("📋 Pestaña Historial Competidores creada")
+        
+        # Check existing dates and enforce max 10
+        existing = hist_ws.get_all_values()
+        if len(existing) > 1:
+            fecha_idx = 9  # column J
+            existing_dates = list(dict.fromkeys(
+                row[fecha_idx] for row in existing[1:] 
+                if len(row) > fecha_idx and row[fecha_idx]
+            ))
+            
+            # If today already has data, remove it first (re-refresh)
+            if today in existing_dates:
+                existing_dates.remove(today)
+                keep_rows = [existing[0]] + [r for r in existing[1:] if len(r) > fecha_idx and r[fecha_idx] != today]
+                hist_ws.clear()
+                if keep_rows:
+                    hist_ws.update(values=keep_rows, range_name=f'A1:J{len(keep_rows)}')
+                existing_dates_clean = existing_dates
+            else:
+                existing_dates_clean = existing_dates
+            
+            # Remove oldest dates if over limit
+            while len(existing_dates_clean) >= MAX_HISTORY_DATES:
+                oldest = existing_dates_clean[0]
+                existing_dates_clean.pop(0)
+                all_vals = hist_ws.get_all_values()
+                keep = [all_vals[0]] + [r for r in all_vals[1:] if len(r) > fecha_idx and r[fecha_idx] != oldest]
+                hist_ws.clear()
+                hist_ws.update(values=keep, range_name=f'A1:J{len(keep)}')
+                log.append(f"🗑 Fecha más vieja eliminada: {oldest}")
+                time.sleep(0.5)
+        
+        # Build new rows
+        new_rows = []
+        for item in all_items:
+            p = mla_prices.get(item['mla'], {})
+            new_rows.append([
+                item['vendedor'],
+                item['titulo'],
+                p.get('precio', ''),
+                p.get('tachado', ''),
+                p.get('descuento', ''),
+                p.get('cuotas', ''),
+                item['link'],
+                item['sku'],
+                item['cantidad'],
+                today,
+            ])
+        
+        # Append new rows in batches
+        for i in range(0, len(new_rows), 500):
+            chunk = new_rows[i:i+500]
+            hist_ws.append_rows(chunk, value_input_option='RAW')
+            time.sleep(0.3)
+        
+        log.append(f"✅ {len(new_rows)} filas agregadas al historial con fecha {today}")
+        job_status[job_id] = {
+            "status": "done", "log": log,
+            "rows_added": len(new_rows),
+            "prices_fetched": len(mla_prices),
+            "finished": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        import traceback
+        job_status[job_id] = {"status": "error", "message": str(e), "log": log + [traceback.format_exc()]}
+
+@app.get("/competidores/refresh/status/{job_id}")
+def refresh_status(job_id: str):
+    return job_status.get(job_id, {"status": "not_found"})
