@@ -1701,3 +1701,94 @@ def refresh_job(job_id, ml_token):
 @app.get("/competidores/refresh/status/{job_id}")
 def refresh_status(job_id: str):
     return job_status.get(job_id, {"status": "not_found"})
+
+
+# ══════════════════════════════════════════════════════
+# ML SCRAPER — precio real de oferta desde HTML
+# ══════════════════════════════════════════════════════
+
+@app.post("/ml/scrape-prices")
+async def ml_scrape_prices(request: Request):
+    """
+    Scrappea el precio real de venta (con oferta) desde el HTML de ML.
+    Recibe lista de MLAs y devuelve precio de venta y tachado.
+    """
+    body = await request.json()
+    mlas = body.get("mlas", [])
+    if not mlas:
+        raise HTTPException(status_code=400, detail="mlas requerido")
+    
+    results = {}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-AR,es;q=0.9",
+    }
+    
+    for mla in mlas[:50]:  # Max 50 por request
+        try:
+            url = f"https://www.mercadolibre.com.ar/p/{mla.lower()}"
+            # Try direct item URL
+            r = requests.get(
+                f"https://www.mercadolibre.com.ar/_/p/{mla.upper()}",
+                headers=headers, timeout=10, allow_redirects=True
+            )
+            if r.status_code != 200:
+                r = requests.get(
+                    f"https://articulo.mercadolibre.com.ar/-_{mla.upper()}",
+                    headers=headers, timeout=10, allow_redirects=True
+                )
+            
+            html = r.text
+            price = 0
+            tachado = 0
+            
+            # Extract sale price (precio de oferta)
+            import re
+            # Pattern for current price
+            price_patterns = [
+                r'"price":\s*(\d+(?:\.\d+)?)',
+                r'"amount":\s*(\d+(?:\.\d+)?)',
+                r'class="andes-money-amount__fraction"[^>]*>([0-9.,]+)<',
+            ]
+            
+            # Look for structured data first
+            ld_match = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
+            if ld_match:
+                try:
+                    import json as json_mod
+                    ld = json_mod.loads(ld_match.group(1))
+                    if isinstance(ld, dict):
+                        offers = ld.get('offers', {})
+                        if offers:
+                            price = float(str(offers.get('price', 0)).replace(',', ''))
+                except:
+                    pass
+            
+            # Try meta tags
+            if not price:
+                meta_match = re.search(r'<meta property="product:price:amount" content="([0-9.,]+)"', html)
+                if meta_match:
+                    price = float(meta_match.group(1).replace(',', '').replace('.', ''))
+            
+            # Try __PRELOADED_STATE__
+            if not price:
+                state_match = re.search(r'"price":\{"value":(\d+)', html)
+                if state_match:
+                    price = float(state_match.group(1))
+            
+            # Try original price
+            orig_match = re.search(r'"original_price":\{"value":(\d+)', html)
+            if orig_match:
+                tachado = float(orig_match.group(1))
+            
+            results[mla.upper()] = {
+                "precio": price,
+                "tachado": tachado if tachado > price else 0,
+            }
+            time.sleep(0.3)
+            
+        except Exception as e:
+            results[mla.upper()] = {"precio": 0, "tachado": 0, "error": str(e)}
+    
+    return results
