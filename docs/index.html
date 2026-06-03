@@ -200,6 +200,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="verificar-fravega" onclick="goPage('verificar-fravega',this)"><span class="icon">🏪</span> Verificar Fravega</div>
     <div class="sidebar-item" data-page="fravega-api" onclick="goPage('fravega-api',this)"><span class="icon">🔌</span> Fravega API</div>
     <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
+    <div class="sidebar-item" data-page="ofertas-ml" onclick="goPage('ofertas-ml',this)"><span class="icon">🏷️</span> Ofertas ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
     <div class="sidebar-item" data-page="intel-competitiva" onclick="goPage('intel-competitiva',this)"><span class="icon">🎯</span> Intel. Competitiva</div>
   </div>
@@ -594,6 +595,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="section-hdr">Competidores ML</div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
     <button class="btn primary" id="btn-load-competidores">🔄 Cargar desde Sheets</button>
+    <button class="btn" onclick="compRefreshHistorial()" id="btn-refresh-hist" style="border-color:rgba(0,229,160,0.4);color:var(--green)">⚡ Refrescar historial de precios</button>
+    <div id="comp-refresh-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
     <div id="competidores-vendor-btns" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
     <span id="competidores-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-left:4px"></span>
   </div>
@@ -804,6 +807,69 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+
+<!-- OFERTAS ML -->
+<div id="page-ofertas-ml" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-hdr" style="margin-bottom:4px">🏷️ Ofertas ML</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Verificá precios de oferta contra PM · Ajustá precio tachado = PM × 1.25</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" onclick="ofertasLoad()" id="btn-load-ofertas">🔄 Cargar ofertas</button>
+      <a href="https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-mla1234411&page=1" target="_blank" class="btn" style="text-decoration:none">🔗 Central de Ofertas ML</a>
+    </div>
+  </div>
+
+  <!-- Tabs por cuenta -->
+  <div style="display:flex;gap:6px;margin-bottom:4px">
+    <button class="btn" id="oferta-tab-IT" onclick="ofertasTab('IT')">📦 Catálogo IT</button>
+    <button class="btn btn-secondary" id="oferta-tab-MT" onclick="ofertasTab('MT')">📦 Catálogo MT</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="ofertas-stats-wrap" style="display:none;grid-template-columns:repeat(5,1fr)">
+    <div class="stat-card"><div class="stat-value" id="of-total">0</div><div class="stat-label">Total ofertas</div></div>
+    <div class="stat-card"><div class="stat-value price-ok" id="of-ok">0</div><div class="stat-label">Precio OK</div></div>
+    <div class="stat-card"><div class="stat-value price-bad" id="of-diff">0</div><div class="stat-label">Diferencia</div></div>
+    <div class="stat-card"><div class="stat-value" id="of-nopm" style="color:var(--text2)">0</div><div class="stat-label">Sin PM</div></div>
+    <div class="stat-card"><div class="stat-value" id="of-ajuste" style="color:var(--yellow)">0</div><div class="stat-label">Para ajustar</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="erp-filters" id="ofertas-filters" style="display:none">
+    <input type="text" id="of-search" placeholder="Buscar SKU o título..." style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+    <select id="of-filter-estado" class="fi">
+      <option value="">Todos</option>
+      <option value="diff">Con diferencia</option>
+      <option value="ok">OK</option>
+      <option value="nopm">Sin PM</option>
+    </select>
+    <button class="btn" onclick="ofertasExport()">⬇ CSV</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap" id="ofertas-table-wrap" style="display:none">
+    <table id="ofertas-table">
+      <thead><tr>
+        <th>SKU</th>
+        <th>Título</th>
+        <th>MLA</th>
+        <th>Precio Oferta ML</th>
+        <th>Precio Tachado ML</th>
+        <th>PM Precio</th>
+        <th>Tachado Sugerido<br><span style="font-weight:400;font-size:8px">(PM × 1.25)</span></th>
+        <th>Diff</th>
+        <th>Estado</th>
+        <th>Acción</th>
+      </tr></thead>
+      <tbody id="ofertas-tbody">
+        <tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text3)">Cargá las ofertas para comenzar</td></tr>
+      </tbody>
+    </table>
+    <div class="pagination" id="ofertas-pag"></div>
+  </div>
+</div>
 </div><!-- app-body -->
 <div id="toast" class="toast"></div>
 <script>
@@ -848,6 +914,9 @@ const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
 const HIST_ID='1Wzs3SmmIGcGd_NJGfe5qJRBYkJBbyKjrl4rF7reojIE';
 const DASH_SHEETS=['Base Diciembre - Enero','Base Enero - Febrero','Base Febrero - Marzo','Base Marzo - Abril','Base Abril - Mayo'];
 const COMP_SHEET_ID='15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
+const OFERTAS_ID='1VnXE8Ukv91yI0Vu7DOkhHH5na6QTvy9uweFu12DcZ7c';
+const OFERTAS_TABS=['Ofertas Catalogo IT','Ofertas Catalogo MT'];
+const OFERTAS_BASE_URL='https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-mla1234411&page=1&search=';
 const SHEETS_BR=['Base Brasil'];
 const COMP={data:[],vendedores:[],selected:[],page:1,pageSize:50};
 let allSalesData=[],canalColors={},activeFilters={},dashCharts={};
@@ -901,6 +970,7 @@ function goPage(page,el){
   if(page==='verificar-fravega')renderFrave();
   if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
+  if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
 }
 
 // ── MULTI-SELECT ──
@@ -2404,6 +2474,48 @@ function applyBrFilters(){brFilters={desde:qs('br-desde').value,hasta:qs('br-has
 function resetBrFilters(){['br-desde','br-hasta','br-sku'].forEach(id=>qs(id).value='');clearMS('ms-br-canal');brFilters={};renderBrasil();}
 function renderBrasil(){const el=qs('page-brasil');if(!brData.length){el.innerHTML='<div class="loading-block"><span>Sin datos de Brasil</span></div>';return;}const f=brFilters||{};let data=brData;if(f.desde)data=data.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data=data.filter(d=>d.fechaStr<=f.hasta);if(f.canal)data=data.filter(d=>f.canal.includes(d.canal));if(f.sku)data=data.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(!data.length){el.innerHTML='<div class="loading-block"><span>Sin datos para los filtros</span></div>';return;}if(dashCharts.brD){try{dashCharts.brD.destroy();}catch(e){}}if(dashCharts.brC){try{dashCharts.brC.destroy();}catch(e){}}const totalFact=data.reduce((s,d)=>s+d.precioFinal,0);const totalRent=data.reduce((s,d)=>s+d.rentabilidad,0);const totalCosto=data.reduce((s,d)=>s+d.costo,0);const byCanal=groupSum(data,'canal','precioFinal');const topCanal=Object.entries(byCanal).sort((a,b)=>b[1]-a[1]);const byDay={};data.forEach(d=>{if(d.fechaStr)byDay[d.fechaStr]=(byDay[d.fechaStr]||0)+d.precioFinal;});const days=Object.keys(byDay).sort();const fmtDay=str=>{const[y,m,d]=str.split('-');return`${+d}/${+m}`;};const bySku={};data.forEach(d=>d.skus.forEach(s=>{bySku[s]=(bySku[s]||0)+d.precioFinal;}));const topSkus=Object.entries(bySku).sort((a,b)=>b[1]-a[1]).slice(0,12);el.innerHTML=`<div class="kpi-row"><div class="kpi-card c1"><div class="kpi-label">Facturación 🇧🇷</div><div class="kpi-value">${fmt$(totalFact)}</div><div class="kpi-sub">${data.length} órdenes</div></div><div class="kpi-card c2"><div class="kpi-label">Rentabilidad $</div><div class="kpi-value">${fmt$(totalRent)}</div><div class="kpi-sub">${totalFact?(totalRent/totalFact*100).toFixed(1):0}%</div></div><div class="kpi-card c3"><div class="kpi-label">Rent. %</div><div class="kpi-value">${totalFact?(totalRent/totalFact*100).toFixed(1):0}%</div></div><div class="kpi-card c4"><div class="kpi-label">Costo</div><div class="kpi-value">${fmt$(totalCosto)}</div><div class="kpi-sub">${totalFact?((totalCosto/totalFact)*100).toFixed(1):0}%</div></div><div class="kpi-card c5"><div class="kpi-label">Canal Principal</div><div class="kpi-value" style="font-size:13px">${topCanal[0]?.[0]||'—'}</div><div class="kpi-sub">${fmt$(topCanal[0]?.[1]||0)}</div></div></div><div class="chart-card"><h3>Facturación por Día — Brasil</h3><p>${days.length} días con ventas</p><div style="position:relative;height:220px"><canvas id="chartBrD"></canvas></div></div><div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final</p><div style="position:relative;height:200px"><canvas id="chartBrC"></canvas></div></div><div class="table-wrap"><div style="padding:10px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">Top SKUs</div></div><table><thead><tr><th>SKU</th><th>Facturación</th><th>%</th></tr></thead><tbody>${topSkus.map(([sku,fact])=>`<tr><td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">${sku}</td><td class="mono" style="font-size:10px">${fmt$(fact)}</td><td style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${totalFact?(fact/totalFact*100).toFixed(1):0}%</td></tr>`).join('')}</tbody></table></div></div>`;requestAnimationFrame(()=>{window._brDChart=new Chart(qs('chartBrD'),{type:'line',data:{labels:days.map(fmtDay),datasets:[{label:'Facturación',data:days.map(d=>byDay[d]),borderColor:'#3b82f6',backgroundColor:'#3b82f615',borderWidth:2,pointRadius:3,tension:0.1,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:ctx=>{const i=ctx[0].dataIndex;const[y,m,d]=days[i].split('-');return`${+d}/${+m}/${y}`;},label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:20}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}}}});window._brCChart=new Chart(qs('chartBrC'),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||'#666')+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||'#666'),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});});}
 
+// ── COMPETIDORES REFRESH ──
+async function compRefreshHistorial(){
+  const btn=qs('btn-refresh-hist');
+  const status=qs('comp-refresh-status');
+  const bu=getBackendUrl();
+  if(!bu){toast('Configurá la URL del backend primero','error');return;}
+  if(!S.mlToken){toast('Conectá ML primero en Verificar ML','error');return;}
+  btn.disabled=true;btn.textContent='⏳ Refrescando...';
+  status.textContent='Iniciando...';
+  try{
+    const r=await fetch(`${bu}/competidores/refresh`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token:S.mlToken})
+    });
+    const{job_id}=await r.json();
+    status.textContent='Job: '+job_id;
+    // Poll status
+    const interval=setInterval(async()=>{
+      try{
+        const res=await fetch(`${bu}/competidores/refresh/status/${job_id}`);
+        const data=await res.json();
+        if(data.log&&data.log.length)status.textContent=data.log[data.log.length-1];
+        if(data.status==='done'){
+          clearInterval(interval);
+          btn.disabled=false;btn.textContent='⚡ Refrescar historial de precios';
+          status.innerHTML=`<span style="color:var(--green)">✅ ${data.rows_added} filas agregadas · ${data.prices_fetched} precios obtenidos</span>`;
+          toast(`Historial actualizado: ${data.rows_added} publicaciones`);
+        }else if(data.status==='error'){
+          clearInterval(interval);
+          btn.disabled=false;btn.textContent='⚡ Refrescar historial de precios';
+          status.innerHTML=`<span style="color:var(--red)">❌ ${data.message}</span>`;
+          toast('Error al refrescar: '+data.message,'error');
+        }
+      }catch(e){console.warn(e);}
+    },3000);
+  }catch(e){
+    btn.disabled=false;btn.textContent='⚡ Refrescar historial de precios';
+    toast('Error: '+e.message,'error');
+  }
+}
+
 // ── INIT ──
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
@@ -2902,6 +3014,186 @@ function intelExport(){
     if(el){ el.addEventListener('input', intelRenderCambios); el.addEventListener('change', intelRenderCambios); }
   });
 });
+
+// ============================================================
+// OFERTAS ML
+// ============================================================
+let ofertasData = {IT:[], MT:[]};
+let ofertasTab_active = 'IT';
+let ofertasPage = 1;
+const OFERTAS_PAGE_SIZE = 50;
+
+function ofertasTab(tab){
+  ofertasTab_active = tab;
+  ['IT','MT'].forEach(t=>{
+    const btn = qs(`oferta-tab-${t}`);
+    if(btn) btn.className = t===tab?'btn':'btn btn-secondary';
+  });
+  ofertasPage = 1;
+  ofertasRender();
+}
+
+async function ofertasLoad(){
+  const btn = qs('btn-load-ofertas');
+  btn.disabled = true; btn.textContent = '⏳ Cargando...';
+  try{
+    // Load both tabs
+    for(const tab of OFERTAS_TABS){
+      const cuenta = tab.includes('IT') ? 'IT' : 'MT';
+      toast(`Cargando ${tab}...`);
+      const rows = await fetchSheet(OFERTAS_ID, `${tab}!A1:Z3000`);
+      if(!rows || rows.length < 2){ toast(`Sin datos en ${tab}`, 'warning'); continue; }
+      
+      const hdrs = rows[0].map(h=>String(h||'').trim());
+      const hm = hdrMap(hdrs);
+      const iSku = findCol(hm,['Sku','SKU','sku']);
+      const iTitulo = findCol(hm,['Titulo','Título','titulo','Publicacion','Publicación']);
+      const iMLA = findCol(hm,['MLA','Id ML','Item ID','mla']);
+      const iPrecio = findCol(hm,['Precio Final','Precio','precio']);
+      const iTachado = findCol(hm,['Precio Tachado','Precio tachado','Tachado']);
+      const iDesc = findCol(hm,['Descuento','descuento']);
+      const iCuotas = findCol(hm,['Cuotas','cuotas']);
+      const iEstado = findCol(hm,['Estado','estado']);
+
+      ofertasData[cuenta] = rows.slice(1).map(row=>{
+        const sku = String(row[iSku>=0?iSku:0]||'').trim();
+        const mla = String(row[iMLA>=0?iMLA:1]||'').trim().replace(/MLA/i,'');
+        return {
+          sku, skuL: normSku(sku),
+          titulo: String(row[iTitulo>=0?iTitulo:2]||'').trim(),
+          mla: mla,
+          mlaFull: mla ? `MLA${mla}` : '',
+          precioOferta: parseNum(String(row[iPrecio>=0?iPrecio:3]||'')),
+          precioTachado: parseNum(String(row[iTachado>=0?iTachado:4]||'')),
+          descuento: String(row[iDesc>=0?iDesc:5]||'').trim(),
+          cuotas: String(row[iCuotas>=0?iCuotas:6]||'').trim(),
+          estado: String(row[iEstado>=0?iEstado:7]||'').trim(),
+          cuenta,
+        };
+      }).filter(r=>r.sku||r.mla);
+      toast(`${ofertasData[cuenta].length} ofertas cargadas (${cuenta})`);
+    }
+    qs('ofertas-stats-wrap').style.display='grid';
+    qs('ofertas-filters').style.display='flex';
+    qs('ofertas-table-wrap').style.display='block';
+    ofertasRender();
+  }catch(e){
+    toast('Error cargando ofertas: '+e.message,'error');
+  }
+  btn.disabled=false; btn.textContent='🔄 Cargar ofertas';
+}
+
+function ofertasGetData(){
+  const srch = (qs('of-search')?.value||'').toLowerCase();
+  const fE = qs('of-filter-estado')?.value||'';
+  const tab = ofertasTab_active;
+  
+  return ofertasData[tab].map(item=>{
+    const pm = S.pmData[item.skuL]||null;
+    const pmPrecio = pm ? pm.ml : 0;
+    const tachadoSugerido = pmPrecio ? Math.round(pmPrecio * 1.25) : 0;
+    const diff = item.precioOferta && pmPrecio ? (item.precioOferta - pmPrecio)/pmPrecio*100 : null;
+    const estado = !pm||!pmPrecio ? 'nopm' : diff!==null&&Math.abs(diff)>0.5 ? 'diff' : 'ok';
+    return {...item, pm, pmPrecio, tachadoSugerido, diff, estado};
+  }).filter(r=>{
+    if(srch && !r.skuL.includes(srch) && !r.titulo.toLowerCase().includes(srch)) return false;
+    if(fE && r.estado!==fE) return false;
+    return true;
+  });
+}
+
+function ofertasRender(){
+  const tab = ofertasTab_active;
+  const all = ofertasData[tab].map(item=>{
+    const pm = S.pmData[item.skuL]||null;
+    const pmP = pm?pm.ml:0;
+    const diff = item.precioOferta&&pmP?(item.precioOferta-pmP)/pmP*100:null;
+    return !pm||!pmP?'nopm':diff!==null&&Math.abs(diff)>0.5?'diff':'ok';
+  });
+  qs('of-total').textContent = ofertasData[tab].length;
+  qs('of-ok').textContent = all.filter(s=>s==='ok').length;
+  qs('of-diff').textContent = all.filter(s=>s==='diff').length;
+  qs('of-nopm').textContent = all.filter(s=>s==='nopm').length;
+  qs('of-ajuste').textContent = all.filter(s=>s==='diff').length;
+
+  let data = ofertasGetData();
+  const pages = Math.ceil(data.length/OFERTAS_PAGE_SIZE)||1;
+  ofertasPage = Math.min(ofertasPage, pages);
+  const page = data.slice((ofertasPage-1)*OFERTAS_PAGE_SIZE, ofertasPage*OFERTAS_PAGE_SIZE);
+
+  const tbody = qs('ofertas-tbody');
+  if(!page.length){
+    tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';
+    return;
+  }
+
+  const badges = {
+    ok:'<span class="badge badge-green">OK</span>',
+    diff:'<span class="badge badge-red">Difiere</span>',
+    nopm:'<span class="badge badge-gray">Sin PM</span>'
+  };
+
+  tbody.innerHTML = page.map(r=>{
+    const diffStr = r.diff!==null
+      ? `<span class="${Math.abs(r.diff)<0.5?'price-ok':'price-bad'}">${r.diff>0?'+':''}${r.diff.toFixed(1)}%</span>`
+      : '—';
+    
+    // MLA number only for the search URL
+    const mlaNum = r.mla.replace(/\D/g,'');
+    const ofertaLink = mlaNum 
+      ? `<a href="${OFERTAS_BASE_URL}${mlaNum}" target="_blank" class="btn-xs" style="text-decoration:none;background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:var(--accent3)">Ir a Oferta →</a>`
+      : '—';
+
+    const accion = r.tachadoSugerido
+      ? `<div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
+            Tachado sugerido: <b style="color:var(--yellow)">$${fmtN(r.tachadoSugerido)}</b>
+          </div>
+          ${ofertaLink}
+        </div>`
+      : ofertaLink;
+
+    return `<tr style="${r.estado==='diff'?'background:rgba(255,107,107,0.03)':''}">
+      <td class="sku-cell">${r.sku||'—'}</td>
+      <td style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.titulo}">${r.titulo||'—'}</td>
+      <td class="sku-cell" style="color:var(--accent)">${r.mlaFull||'—'}</td>
+      <td class="mono price-ok" style="font-size:10px">${r.precioOferta?'$'+fmtN(r.precioOferta):'—'}</td>
+      <td class="mono" style="font-size:10px;text-decoration:line-through;color:var(--text2)">${r.precioTachado?'$'+fmtN(r.precioTachado):'—'}</td>
+      <td class="mono" style="font-size:10px;color:var(--accent)">${r.pmPrecio?'$'+fmtN(r.pmPrecio):'—'}</td>
+      <td class="mono" style="font-size:10px;font-weight:700;color:var(--yellow)">${r.tachadoSugerido?'$'+fmtN(r.tachadoSugerido):'—'}</td>
+      <td>${diffStr}</td>
+      <td>${badges[r.estado]||''}</td>
+      <td>${accion}</td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  const pag = qs('ofertas-pag');
+  if(pages<=1){pag.innerHTML='';return;}
+  let html=`<span class="page-info-txt">${data.length} ofertas</span>`;
+  if(ofertasPage>1)html+=`<button class="page-btn" onclick="ofertasPage=${ofertasPage-1};ofertasRender()">‹</button>`;
+  for(let i=Math.max(1,ofertasPage-2);i<=Math.min(pages,ofertasPage+2);i++)
+    html+=`<button class="page-btn${i===ofertasPage?' active':''}" onclick="ofertasPage=${i};ofertasRender()">${i}</button>`;
+  if(ofertasPage<pages)html+=`<button class="page-btn" onclick="ofertasPage=${ofertasPage+1};ofertasRender()">›</button>`;
+  pag.innerHTML=html;
+}
+
+function ofertasExport(){
+  const data = ofertasGetData();
+  if(!data.length){toast('Sin datos','error');return;}
+  const h='Cuenta,SKU,Titulo,MLA,Precio Oferta,Precio Tachado,PM Precio,Tachado Sugerido,Diff %,Estado';
+  const lines=data.map(r=>[
+    r.cuenta,r.sku,`"${r.titulo}"`,r.mlaFull,
+    r.precioOferta,r.precioTachado,r.pmPrecio,r.tachadoSugerido,
+    r.diff!==null?r.diff.toFixed(2):'',r.estado
+  ].join(','));
+  const blob=new Blob([[h].concat(lines).join('\n'),{type:'text/csv'}]);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`ofertas-ml-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('Exportado');
+}
 </script>
 </body>
 </html>
