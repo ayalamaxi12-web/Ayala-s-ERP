@@ -1794,3 +1794,43 @@ async def ml_scrape_prices(request: Request):
             results[mla.upper()] = {"precio": 0, "tachado": 0, "error": str(e)}
     
     return results
+
+
+@app.post("/ml-proxy")
+async def ml_proxy_post(request: Request):
+    """Generic ML proxy for PUT/POST/DELETE operations"""
+    body = await request.json()
+    token = request.headers.get("x-vk-token", "")
+    if not token:
+        token = get_ml_token()
+    
+    method = body.get("method", "PUT").upper()
+    path = body.get("path", "")
+    payload = body.get("body", {})
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    
+    url = f"https://api.mercadolibre.com/{path}"
+    
+    try:
+        if method == "PUT":
+            r = requests.put(url, headers=headers, json=payload, timeout=15)
+        elif method == "POST":
+            r = requests.post(url, headers=headers, json=payload, timeout=15)
+        elif method == "DELETE":
+            r = requests.delete(url, headers=headers, timeout=15)
+        else:
+            raise HTTPException(status_code=400, detail=f"Method {method} not supported")
+        
+        try:
+            return r.json()
+        except:
+            return {"status": r.status_code, "body": r.text[:500]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
