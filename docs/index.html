@@ -2518,6 +2518,19 @@ async function compRefreshHistorial(){
 }
 
 // ── INIT ──
+async function autoConnectML(){
+  const bu = getBackendUrl();
+  if(!bu) return;
+  try{
+    const [r1,r2] = await Promise.all([
+      fetch(`${bu}/ml/token?account=IT`),
+      fetch(`${bu}/ml/token?account=MT`)
+    ]);
+    if(r1.ok){const d=await r1.json();if(d.token){S.mlToken=d.token;const st=qs('ml-status');if(st){st.className='conn-status connected';st.textContent='● IT';}console.log('ML IT auto-conectado');}}
+    if(r2.ok){const d=await r2.json();if(d.token){S.mlToken2=d.token;const st=qs('ml-status-2');if(st){st.className='conn-status connected';st.textContent='● MT';}console.log('ML MT auto-conectado');}}
+  }catch(e){console.warn('ML auto-connect:',e);}
+}
+
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
   setupDZ('dz-ecom','fi-ecom',f=>readFile(f,processEcomCSV));
@@ -2575,6 +2588,7 @@ function init(){
   renderSkuTags();
   // Trigger initial page load
   goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
+  setTimeout(autoConnectML, 800);
 }
 init();
 
