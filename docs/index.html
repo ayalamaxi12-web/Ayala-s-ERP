@@ -3216,12 +3216,21 @@ function ofertasRender(){
       ? `<a href="${OFERTAS_BASE_URL}${mlaNum}" target="_blank" class="btn-xs" style="text-decoration:none;background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:var(--accent3)">Ir a Oferta →</a>`
       : '—';
 
+    // Price with shipping
+    const precioConEnvio = r.pmPrecio >= (S.shippingThreshold||33000)
+      ? r.pmPrecio + (S.shippingCost||8500)
+      : r.pmPrecio;
+
     const accion = r.tachadoSugerido
       ? `<div style="display:flex;flex-direction:column;gap:4px">
           <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
             Tachado sugerido: <b style="color:var(--yellow)">$${fmtN(r.tachadoSugerido)}</b>
           </div>
-          ${ofertaLink}
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            ${ofertaLink}
+            ${precioConEnvio ? `<button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofertasUpdatePrice('${r.mlaFull}',${precioConEnvio},${r.tachadoSugerido},'${r.cuenta}',this)">⚡ Actualizar precio</button>` : ''}
+            <button class="btn-xs" style="background:rgba(255,107,107,0.15);border-color:rgba(255,107,107,0.4);color:var(--red)" onclick="ofertasDeletePromo('${r.mlaFull}','${r.cuenta}',this)">🗑 Quitar oferta</button>
+          </div>
         </div>`
       : ofertaLink;
 
@@ -3248,6 +3257,83 @@ function ofertasRender(){
     html+=`<button class="page-btn${i===ofertasPage?' active':''}" onclick="ofertasPage=${i};ofertasRender()">${i}</button>`;
   if(ofertasPage<pages)html+=`<button class="page-btn" onclick="ofertasPage=${ofertasPage+1};ofertasRender()">›</button>`;
   pag.innerHTML=html;
+}
+
+async function ofertasDeletePromo(mla, cuenta, btn){
+  if(!confirm(`¿Quitar oferta de ${mla}? Esto la sacará de TODAS las promociones activas.`)) return;
+  const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
+  if(!tkn){toast('Conectá ML primero','error');return;}
+  const orig = btn.textContent;
+  btn.disabled=true; btn.textContent='⏳...';
+  try{
+    const bu = getBackendUrl();
+    const r = await fetch(`${bu}/ml-proxy`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-vk-token':tkn},
+      body: JSON.stringify({
+        method:'DELETE',
+        path:`seller-promotions/items/${mla}?app_version=v2`
+      })
+    });
+    const data = await r.json();
+    console.log('Delete promo response:', data);
+    if(data.successful_ids && data.successful_ids.length > 0){
+      btn.textContent='✅ Quitada';
+      btn.style.color='var(--green)';
+      btn.disabled=true;
+      toast(`✅ ${mla}: oferta quitada (${data.successful_ids.length} promociones)`);
+    } else if(data.errors && data.errors.length > 0){
+      btn.disabled=false; btn.textContent=orig;
+      toast(`❌ ${mla}: ${data.errors[0].error}`,'error');
+    } else {
+      // Unknown response - show it
+      btn.disabled=false; btn.textContent=orig;
+      console.log('Unexpected:', data);
+      toast(`Respuesta: ${JSON.stringify(data).slice(0,100)}`,'error');
+    }
+  }catch(e){
+    btn.disabled=false; btn.textContent=orig;
+    toast('Error: '+e.message,'error');
+  }
+}
+
+async function ofertasUpdatePrice(mla, precio, tachado, cuenta, btn){
+  const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
+  if(!tkn){toast('Conectá ML primero','error');return;}
+  
+  const orig = btn.textContent;
+  btn.disabled=true; btn.textContent='⏳...';
+  
+  try{
+    const bu = getBackendUrl();
+    // Try updating price + original_price
+    const r = await fetch(`${bu}/ml-proxy`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-vk-token':tkn},
+      body: JSON.stringify({
+        method:'PUT',
+        path:`items/${mla}`,
+        body:{price: precio, original_price: tachado}
+      })
+    });
+    const data = await r.json();
+    console.log('Update price response:', data);
+    
+    if(data.id || data.price){
+      btn.textContent='✅ OK';
+      btn.style.color='var(--green)';
+      toast(`✅ ${mla}: precio actualizado a $${fmtN(precio)}`);
+    } else if(data.error){
+      btn.disabled=false; btn.textContent=orig;
+      toast(`❌ ${mla}: ${data.message||data.error}`, 'error');
+    } else {
+      btn.disabled=false; btn.textContent=orig;
+      toast(`Respuesta inesperada: ${JSON.stringify(data).slice(0,100)}`, 'error');
+    }
+  }catch(e){
+    btn.disabled=false; btn.textContent=orig;
+    toast('Error: '+e.message,'error');
+  }
 }
 
 function ofertasExportMasivo(){
