@@ -847,6 +847,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </select>
     <button class="btn" onclick="ofertasExport()">⬇ CSV verificación</button>
       <button class="btn primary" onclick="ofertasExportMasivo()" style="border-color:var(--green);color:var(--green)">⬇ CSV Masivo ML</button>
+      <button class="btn" onclick="ofertasDeleteMasivo()" style="border-color:var(--red);color:var(--red)">🗑 Quitar ofertas con diferencia</button>
+      <div id="ofertas-delete-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
   </div>
 
   <!-- Table -->
@@ -3259,6 +3261,53 @@ function ofertasRender(){
   pag.innerHTML=html;
 }
 
+async function ofertasDeleteMasivo(){
+  const tab = ofertasTab_active;
+  const tkn = tab==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
+  if(!tkn){toast('Conectá ML primero','error');return;}
+
+  // Get all items with difference
+  const conDiff = ofertasData[tab].filter(item=>{
+    const pm = S.pmData[item.skuL]||null;
+    let pmPrecio = 0;
+    const skuParts = item.titulo.split(',').map(s=>s.trim()).filter(Boolean);
+    if(skuParts.length>1){
+      skuParts.forEach(p=>{const pp=S.pmData[normSku(p.split(' ')[0])];if(pp&&pp.ml)pmPrecio+=pp.ml;});
+      if(!pmPrecio&&pm)pmPrecio=pm.ml||0;
+    } else { pmPrecio=pm?pm.ml||0:0; }
+    if(!pmPrecio||!item.precioML)return false;
+    const diff=Math.abs((item.precioML-pmPrecio)/pmPrecio*100);
+    return diff>0.5;
+  });
+
+  if(!conDiff.length){toast('Sin MLAs con diferencia','error');return;}
+  if(!confirm(`¿Quitar oferta de ${conDiff.length} publicaciones con diferencia?`))return;
+
+  const status = qs('ofertas-delete-status');
+  const bu = getBackendUrl();
+  let ok=0, err=0;
+
+  for(let i=0;i<conDiff.length;i++){
+    const item = conDiff[i];
+    if(status) status.textContent=`Procesando ${i+1}/${conDiff.length}: ${item.mlaFull}...`;
+    try{
+      const r = await fetch(`${bu}/ml-proxy`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-vk-token':tkn},
+        body:JSON.stringify({method:'DELETE',path:`seller-promotions/items/${item.mlaFull}?app_version=v2`})
+      });
+      const d = await r.json();
+      if(d.successful_ids&&d.successful_ids.length>0) ok++;
+      else err++;
+    }catch(e){err++;}
+    await new Promise(res=>setTimeout(res,300));
+  }
+
+  if(status) status.innerHTML=`<span style="color:var(--green)">✅ ${ok} quitadas · ❌ ${err} errores</span>`;
+  toast(`✅ ${ok} ofertas quitadas · ${err} errores`);
+  ofertasRender();
+}
+
 async function ofertasDeletePromo(mla, cuenta, btn){
   if(!confirm(`¿Quitar oferta de ${mla}? Esto la sacará de TODAS las promociones activas.`)) return;
   const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
@@ -3297,7 +3346,11 @@ async function ofertasDeletePromo(mla, cuenta, btn){
   }
 }
 
-async function ofertasUpdatePrice(mla, precio, tachado, cuenta, btn){
+async function ofertasUpdatePrice(mla, precioConEnvio, tachado, cuenta, btn){
+  // precioConEnvio = PM con envio = precio final de venta
+  // tachado = PM * 1.25
+  // Si tiene bids: sube precio al tachado (PM*1.25) para que al aplicar oferta 25% quede en PM
+  // Si no tiene bids: sube precio a PM con envio + tachado a PM*1.25
   const tkn = cuenta==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
   if(!tkn){toast('Conectá ML primero','error');return;}
   
@@ -3306,30 +3359,57 @@ async function ofertasUpdatePrice(mla, precio, tachado, cuenta, btn){
   
   try{
     const bu = getBackendUrl();
-    // Try updating price + original_price
-    const r = await fetch(`${bu}/ml-proxy`, {
+
+    // First try with price + original_price
+    const r1 = await fetch(`${bu}/ml-proxy`, {
       method:'POST',
       headers:{'Content-Type':'application/json','x-vk-token':tkn},
       body: JSON.stringify({
         method:'PUT',
         path:`items/${mla}`,
-        body:{price: precio, original_price: tachado}
+        body:{price: precioConEnvio, original_price: tachado}
       })
     });
-    const data = await r.json();
-    console.log('Update price response:', data);
-    
-    if(data.id || data.price){
-      btn.textContent='✅ OK';
+    const d1 = await r1.json();
+
+    if(d1.id){
+      // Success with tachado
+      btn.textContent='✅ Precio + tachado';
       btn.style.color='var(--green)';
-      toast(`✅ ${mla}: precio actualizado a $${fmtN(precio)}`);
-    } else if(data.error){
-      btn.disabled=false; btn.textContent=orig;
-      toast(`❌ ${mla}: ${data.message||data.error}`, 'error');
-    } else {
-      btn.disabled=false; btn.textContent=orig;
-      toast(`Respuesta inesperada: ${JSON.stringify(data).slice(0,100)}`, 'error');
+      btn.disabled=true;
+      toast(`✅ ${mla}: $${fmtN(precioConEnvio)} tachado $${fmtN(tachado)}`);
+      return;
     }
+
+    // If has_bids error — update price only to tachado value (PM*1.25)
+    // So when offer 25% is applied → final price = PM con envio
+    if(d1.error==='validation_error' && d1.message && d1.message.includes('has_bids')){
+      const r2 = await fetch(`${bu}/ml-proxy`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-vk-token':tkn},
+        body: JSON.stringify({
+          method:'PUT',
+          path:`items/${mla}`,
+          body:{price: tachado}
+        })
+      });
+      const d2 = await r2.json();
+      if(d2.id){
+        btn.textContent='✅ Precio base (sin tachado)';
+        btn.style.color='var(--yellow)';
+        btn.disabled=true;
+        toast(`✅ ${mla}: precio base $${fmtN(tachado)} — aplicá oferta 25% para precio final $${fmtN(precioConEnvio)}`);
+      } else {
+        btn.disabled=false; btn.textContent=orig;
+        toast(`❌ ${mla}: ${d2.message||JSON.stringify(d2).slice(0,80)}`,'error');
+      }
+      return;
+    }
+
+    // Other error
+    btn.disabled=false; btn.textContent=orig;
+    toast(`❌ ${mla}: ${d1.message||JSON.stringify(d1).slice(0,80)}`,'error');
+
   }catch(e){
     btn.disabled=false; btn.textContent=orig;
     toast('Error: '+e.message,'error');
