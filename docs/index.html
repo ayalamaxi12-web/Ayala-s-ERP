@@ -817,7 +817,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn primary" onclick="ofertasLoad()" id="btn-load-ofertas">🔄 Cargar ofertas</button>
-      <a href="https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-mla1234411&page=1" target="_blank" class="btn" style="text-decoration:none">🔗 Central de Ofertas ML</a>
+      <a id="btn-central-ofertas" href="https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-mla1234411&page=1" target="_blank" class="btn" style="text-decoration:none">🔗 Central de Ofertas ML</a>
     </div>
   </div>
 
@@ -848,6 +848,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <button class="btn" onclick="ofertasExport()">⬇ CSV verificación</button>
       <button class="btn primary" onclick="ofertasExportMasivo()" style="border-color:var(--green);color:var(--green)">⬇ CSV Masivo ML</button>
       <button class="btn" onclick="ofertasDeleteMasivo()" style="border-color:var(--red);color:var(--red)">🗑 Quitar ofertas con diferencia</button>
+      <button class="btn" onclick="ofertasUpdateMasivo()" style="border-color:var(--green);color:var(--green)">⚡ Actualizar precios masivo</button>
       <div id="ofertas-delete-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
   </div>
 
@@ -860,8 +861,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <th>Tipo Oferta</th>
         <th>Precio ML (vivo)</th>
         <th>Precio Tachado ML</th>
-        <th>PM Precio</th>
-        <th>Tachado Sugerido<br><span style="font-weight:400;font-size:8px">(PM × 1.25)</span></th>
+        <th>PM c/Envío</th>
+        <th>Tachado Sugerido<br><span style="font-weight:400;font-size:8px">(PM c/Envío × 1.25)</span></th>
         <th>Diff</th>
         <th>Estado</th>
         <th>Acción</th>
@@ -2528,8 +2529,18 @@ async function autoConnectML(){
       fetch(`${bu}/ml/token?account=IT`),
       fetch(`${bu}/ml/token?account=MT`)
     ]);
-    if(r1.ok){const d=await r1.json();if(d.token){S.mlToken=d.token;const st=qs('ml-status');if(st){st.className='conn-status connected';st.textContent='● IT';}console.log('ML IT auto-conectado');}}
-    if(r2.ok){const d=await r2.json();if(d.token){S.mlToken2=d.token;const st=qs('ml-status-2');if(st){st.className='conn-status connected';st.textContent='● MT';}console.log('ML MT auto-conectado');}}
+    if(r1.ok){const d=await r1.json();if(d.token){S.mlToken=d.token;
+      // Fill input field
+      const inp=qs('ml-token-input')||document.querySelector('input[placeholder*="Access Token"][placeholder*="Principal"],input[placeholder*="APP_USR"]');
+      if(inp)inp.value=d.token;
+      const st=qs('ml-status');if(st){st.className='conn-status connected';st.textContent='● IT conectado';}
+      console.log('ML IT auto-conectado');}}
+    if(r2.ok){const d=await r2.json();if(d.token){S.mlToken2=d.token;
+      // Fill input field 2
+      const inp2=document.querySelectorAll('input[placeholder*="APP_USR"]')[1]||document.querySelectorAll('input[placeholder*="Access Token"]')[1];
+      if(inp2)inp2.value=d.token;
+      const st=qs('ml-status-2');if(st){st.className='conn-status connected';st.textContent='● MT conectado';}
+      console.log('ML MT auto-conectado');}}
   }catch(e){console.warn('ML auto-connect:',e);}
 }
 
@@ -3047,6 +3058,10 @@ function ofertasTab(tab){
     const btn = qs(`oferta-tab-${t}`);
     if(btn) btn.className = t===tab?'btn':'btn btn-secondary';
   });
+  // Update central ofertas link based on account
+  const campID = tab==='IT' ? 'mla1234411' : 'mla1234884';
+  const btnCentral = qs('btn-central-ofertas');
+  if(btnCentral) btnCentral.href = `https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-${campID}&page=1`;
   ofertasPage = 1;
   ofertasRender();
 }
@@ -3164,11 +3179,15 @@ function ofertasGetData(){
     } else {
       pmPrecio = pm ? pm.ml : 0;
     }
-    const tachadoSugerido = pmPrecio ? Math.round(pmPrecio * 1.25) : 0;
+    // Add shipping cost if applicable
+    const precioConEnvio = pmPrecio >= (S.shippingThreshold||33000)
+      ? pmPrecio + (S.shippingCost||8500)
+      : pmPrecio;
+    const tachadoSugerido = precioConEnvio ? Math.round(precioConEnvio * 1.25) : 0;
     const precioActual = item.precioML || item.precioOferta || 0;
-    const diff = precioActual && pmPrecio ? (precioActual - pmPrecio)/pmPrecio*100 : null;
+    const diff = precioActual && precioConEnvio ? (precioActual - precioConEnvio)/precioConEnvio*100 : null;
     const estado = !pm||!pmPrecio ? 'nopm' : diff!==null&&Math.abs(diff)>0.5 ? 'diff' : 'ok';
-    return {...item, pm, pmPrecio, tachadoSugerido, diff, estado};
+    return {...item, pm, pmPrecio, precioConEnvio, tachadoSugerido, diff, estado};
   }).filter(r=>{
     if(srch && !r.skuL.includes(srch) && !r.titulo.toLowerCase().includes(srch)) return false;
     if(fE && r.estado!==fE) return false;
@@ -3214,8 +3233,10 @@ function ofertasRender(){
     
     // MLA number only for the search URL
     const mlaNum = r.mla.replace(/\D/g,'');
+    const campID = r.cuenta==='IT' ? 'mla1234411' : 'mla1234884';
+    const ofertaBaseUrl = `https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-${campID}&page=1&search=`;
     const ofertaLink = mlaNum 
-      ? `<a href="${OFERTAS_BASE_URL}${mlaNum}" target="_blank" class="btn-xs" style="text-decoration:none;background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:var(--accent3)">Ir a Oferta →</a>`
+      ? `<a href="${ofertaBaseUrl}${mlaNum}" target="_blank" class="btn-xs" style="text-decoration:none;background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:var(--accent3)">Ir a Oferta →</a>`
       : '—';
 
     // Price with shipping
@@ -3242,7 +3263,7 @@ function ofertasRender(){
       <td style="font-size:9px;color:var(--text2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.tipoOferta}">${r.tipoOferta||'—'}</td>
       <td class="mono price-ok" style="font-size:10px">${r.precioML?'$'+fmtN(r.precioML):(r.precioOferta?'$'+fmtN(r.precioOferta):'—')}</td>
       <td class="mono" style="font-size:10px;text-decoration:line-through;color:var(--text2)">${r.tachadoML?'$'+fmtN(r.tachadoML):(r.precioTachado?'$'+fmtN(r.precioTachado):'—')}</td>
-      <td class="mono" style="font-size:10px;color:var(--accent)">${r.pmPrecio?'$'+fmtN(r.pmPrecio):'—'}</td>
+      <td class="mono" style="font-size:10px;color:var(--accent)" title="PM: $${r.pmPrecio?fmtN(r.pmPrecio):'—'}">${r.precioConEnvio?'$'+fmtN(r.precioConEnvio):'—'}</td>
       <td class="mono" style="font-size:10px;font-weight:700;color:var(--yellow)">${r.tachadoSugerido?'$'+fmtN(r.tachadoSugerido):'—'}</td>
       <td>${diffStr}</td>
       <td>${badges[r.estado]||''}</td>
@@ -3259,6 +3280,75 @@ function ofertasRender(){
     html+=`<button class="page-btn${i===ofertasPage?' active':''}" onclick="ofertasPage=${i};ofertasRender()">${i}</button>`;
   if(ofertasPage<pages)html+=`<button class="page-btn" onclick="ofertasPage=${ofertasPage+1};ofertasRender()">›</button>`;
   pag.innerHTML=html;
+}
+
+async function ofertasUpdateMasivo(){
+  const tab = ofertasTab_active;
+  const tkn = tab==='IT' ? S.mlToken : (S.mlToken2||S.mlToken);
+  if(!tkn){toast('Conectá ML primero','error');return;}
+
+  // Get all items with difference and PM price
+  const conDiff = ofertasData[tab].filter(item=>{
+    const pm = S.pmData[item.skuL]||null;
+    let pmPrecio = 0;
+    const skuParts = item.titulo.split(',').map(s=>s.trim()).filter(Boolean);
+    if(skuParts.length>1){
+      skuParts.forEach(p=>{const pp=S.pmData[normSku(p.split(' ')[0])];if(pp&&pp.ml)pmPrecio+=pp.ml;});
+      if(!pmPrecio&&pm)pmPrecio=pm.ml||0;
+    } else { pmPrecio=pm?pm.ml||0:0; }
+    return pmPrecio > 0;
+  });
+
+  if(!conDiff.length){toast('Sin MLAs con PM para actualizar','error');return;}
+  if(!confirm(`¿Actualizar precios de ${conDiff.length} publicaciones?`))return;
+
+  const status = qs('ofertas-delete-status');
+  const bu = getBackendUrl();
+  let ok=0, okSinTachado=0, err=0;
+
+  for(let i=0;i<conDiff.length;i++){
+    const item = conDiff[i];
+    if(status) status.textContent=`Actualizando ${i+1}/${conDiff.length}: ${item.mlaFull}...`;
+
+    // Calculate prices
+    const pm = S.pmData[item.skuL]||null;
+    let pmPrecio = 0;
+    const skuParts = item.titulo.split(',').map(s=>s.trim()).filter(Boolean);
+    if(skuParts.length>1){
+      skuParts.forEach(p=>{const pp=S.pmData[normSku(p.split(' ')[0])];if(pp&&pp.ml)pmPrecio+=pp.ml;});
+      if(!pmPrecio&&pm)pmPrecio=pm.ml||0;
+    } else { pmPrecio=pm?pm.ml||0:0; }
+
+    const precioConEnvio = pmPrecio>=(S.shippingThreshold||33000) ? pmPrecio+(S.shippingCost||8500) : pmPrecio;
+    const tachado = Math.round(precioConEnvio * 1.25);
+
+    try{
+      // Try price + tachado first
+      const r1 = await fetch(`${bu}/ml-proxy`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-vk-token':tkn},
+        body:JSON.stringify({method:'PUT',path:`items/${item.mlaFull}`,body:{price:precioConEnvio,original_price:tachado}})
+      });
+      const d1 = await r1.json();
+
+      if(d1.id){ ok++; }
+      else if(d1.error==='validation_error'&&d1.message&&d1.message.includes('has_bids')){
+        // Fallback: set price to tachado value so 25% offer = PM price
+        const r2 = await fetch(`${bu}/ml-proxy`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-vk-token':tkn},
+          body:JSON.stringify({method:'PUT',path:`items/${item.mlaFull}`,body:{price:tachado}})
+        });
+        const d2 = await r2.json();
+        if(d2.id) okSinTachado++;
+        else err++;
+      } else { err++; }
+    }catch(e){err++;}
+    await new Promise(res=>setTimeout(res,300));
+  }
+
+  if(status) status.innerHTML=`<span style="color:var(--green)">✅ ${ok} completos · 🟡 ${okSinTachado} sin tachado (con bids) · ❌ ${err} errores</span>`;
+  toast(`✅ ${ok} actualizados · 🟡 ${okSinTachado} sin tachado · ${err} errores`);
 }
 
 async function ofertasDeleteMasivo(){
