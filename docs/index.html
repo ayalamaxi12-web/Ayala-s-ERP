@@ -611,7 +611,13 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <th data-col="vendedor">Vendedor</th><th data-col="titulo">Producto</th>
         <th data-col="precio">Precio</th><th data-col="orig">Precio Tachado</th>
         <th data-col="discount">Descuento</th><th data-col="cuotas">Cuotas</th>
-        <th data-col="ventas">Ventas</th><th>Link</th>
+        <th data-col="ventas">Ventas</th>
+        <th>SKU</th><th>Cantidad</th>
+        <th data-col="miPrecio">Mi Precio<br><span style="font-size:8px;font-weight:400">(PM×Cant+Envío)</span></th>
+        <th data-col="diffComp">Diff %</th>
+        <th data-col="margenComp">Margen ML</th>
+        <th>Modificar</th>
+        <th>Link</th>
       </tr></thead>
       <tbody id="competidores-tbody"></tbody>
     </table>
@@ -1901,7 +1907,30 @@ function exportFrave(){
 }
 
 // ── COMPETIDORES ──
-async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${API_KEY}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:H2000?key=${API_KEY}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;rows.slice(1).forEach(row=>{const precio=parseFloat(String(row[1]||'0').replace(/[^\d.]/g,''))||0;if(!precio)return;COMP.data.push({vendedor,titulo:row[0]||'',precio,orig_price:parseFloat(String(row[2]||'0').replace(/[^\d.]/g,''))||0,discount:row[3]||'',cuotas:row[4]||'',ventas:parseInt(row[5])||0,link:row[6]||''});});status.textContent=`${vi+1}/${vendorSheets.length} — ${vendedor}`;}COMP.vendedores=[...new Set(COMP.data.map(r=>r.vendedor))].sort();COMP.selected=[...COMP.vendedores];const btnsDiv=qs('competidores-vendor-btns');btnsDiv.innerHTML=COMP.vendedores.map(v=>`<button class="btn-xs comp-v-btn" data-v="${v}" onclick="toggleVendor(this)">${v}</button>`).join('');qs('competidores-search-bar').style.display='flex';qs('competidores-table-wrap').style.display='block';status.textContent=`${COMP.data.length} productos · ${COMP.vendedores.length} vendedores`;btn.textContent='🔄 Cargar desde Sheets';renderCompetidores();}catch(e){status.textContent='❌ Error: '+e.message;}btn.disabled=false;}
+async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${API_KEY}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:H2000?key=${API_KEY}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;rows.slice(1).forEach(row=>{const precio=parseFloat(String(row[1]||'0').replace(/[^\d.]/g,''))||0;if(!precio)return;COMP.data.push({vendedor,titulo:row[0]||'',precio,orig_price:parseFloat(String(row[2]||'0').replace(/[^\d.]/g,''))||0,discount:row[3]||'',cuotas:row[4]||'',ventas:parseInt(row[5])||0,link:row[6]||''});});status.textContent=`${vi+1}/${vendorSheets.length} — ${vendedor}`;}// Also load General sheet for SKU/Cantidad cross-reference
+  try{
+    const genRows = await fetchSheet(COMP_SHEET_ID,'General!A1:D6000');
+    if(genRows && genRows.length > 1){
+      // Build lookup: link -> {sku, cantidad, vendedor}
+      const genMap = {};
+      genRows.slice(1).forEach(row=>{
+        const link=(row[0]||'').trim();
+        if(link) genMap[link]={sku:(row[1]||'').trim(),cantidad:(row[2]||'1').trim(),vendedor:(row[3]||'').trim()};
+      });
+      // Merge into COMP.data by link
+      COMP.data = COMP.data.map(item=>{
+        const gen = genMap[item.link] || genMap[(item.link||'').split('?')[0]];
+        if(gen){
+          if(!item.sku && gen.sku) item.sku = gen.sku;
+          if(gen.cantidad) item.cantidad = gen.cantidad;
+        }
+        return item;
+      });
+      console.log('General sheet merged:', Object.keys(genMap).length, 'links');
+    }
+  }catch(e){ console.warn('General sheet error:', e); }
+
+  COMP.vendedores=[...new Set(COMP.data.map(r=>r.vendedor))].sort();COMP.selected=[...COMP.vendedores];const btnsDiv=qs('competidores-vendor-btns');btnsDiv.innerHTML=COMP.vendedores.map(v=>`<button class="btn-xs comp-v-btn" data-v="${v}" onclick="toggleVendor(this)">${v}</button>`).join('');qs('competidores-search-bar').style.display='flex';qs('competidores-table-wrap').style.display='block';status.textContent=`${COMP.data.length} productos · ${COMP.vendedores.length} vendedores`;btn.textContent='🔄 Cargar desde Sheets';renderCompetidores();}catch(e){status.textContent='❌ Error: '+e.message;}btn.disabled=false;}
 function toggleVendor(btn){const v=btn.dataset.v;const idx=COMP.selected.indexOf(v);if(idx>=0){COMP.selected.splice(idx,1);btn.style.opacity='0.4';}else{COMP.selected.push(v);btn.style.opacity='1';}COMP.page=1;renderCompetidores();}
 function renderCompetidores(){
   const search=(qs('competidores-search').value||'').toLowerCase();const sort=qs('competidores-sort').value;
@@ -1913,8 +1942,60 @@ function renderCompetidores(){
   const pages=Math.ceil(data.length/COMP.pageSize)||1;COMP.page=Math.min(COMP.page,pages);
   const page=data.slice((COMP.page-1)*COMP.pageSize,COMP.page*COMP.pageSize);
   const tbody=qs('competidores-tbody');
-  if(!page.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';return;}
-  tbody.innerHTML=page.map(r=>`<tr><td><span class="badge badge-blue" style="font-size:9px">${r.vendedor}</span></td><td style="font-size:10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.titulo}">${r.titulo}</td><td class="mono price-ok" style="font-size:10px">$${fmtN(r.precio)}</td><td class="mono" style="font-size:10px;color:var(--text3);text-decoration:line-through">${r.orig_price?'$'+fmtN(r.orig_price):'-'}</td><td>${r.discount?`<span class="off-badge">${r.discount}</span>`:'-'}</td><td style="font-size:10px;color:var(--text2)">${r.cuotas||'-'}</td><td class="mono" style="font-size:10px">${r.ventas||'-'}</td><td>${r.link?`<a href="${r.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'-'}</td></tr>`).join('');
+  if(!page.length){tbody.innerHTML='<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';return;}
+  tbody.innerHTML=page.map(r=>{
+    // Mi precio: PM del SKU × cantidad + envío si aplica
+    const pm = S.pmData[normSku(r.sku||'')] || null;
+    const pmBase = pm ? (pm.ml||0) : 0;
+    const cant = parseFloat(r.cantidad||1)||1;
+    const pmTotal = pmBase * cant;
+    const miPrecio = pmTotal > 0 ? (pmTotal >= (S.shippingThreshold||33000) ? pmTotal + (S.shippingCost||8500) : pmTotal) : 0;
+    
+    // Diff %: (precio_competidor - mi_precio) / mi_precio
+    const diff = miPrecio && r.precio ? (r.precio - miPrecio)/miPrecio*100 : null;
+    const diffStr = diff !== null 
+      ? `<span style="font-weight:700;font-family:'DM Mono',monospace;color:${diff<-5?'var(--green)':diff>5?'var(--red)':'var(--text2)'}">${diff>0?'+':''}${diff.toFixed(1)}%</span>`
+      : '—';
+    
+    // Margen ML usando fórmula real de la planilla Veronica:
+    // BP = 1 - (Q / ((BM+BG+BH+BI+BJ) / TC))
+    // BG=IVA, BH=ComisionML, BI=IIBB, BJ=ImpCheque, BM=PrecioEcom, Q=Costo USD
+    const costoUSD = pm ? (pm.costo||0) : 0;
+    const tc = S.tcBNA || 1455;
+    const costoARS = costoUSD * tc;
+    const ivaFactor = pm ? (pm.iva||1.21) : 1.21; // IVA del PM (1.21 o 1.105)
+    const ivaMonto = miPrecio - (miPrecio / ivaFactor); // BG
+    // BH: Comision ML escalonada + 16% base
+    const comML = (miPrecio <= 15000 ? 1255 : miPrecio <= 25000 ? 2500 : miPrecio < 33000 ? 3030 : 0) + miPrecio * 0.16;
+    const iibb = (miPrecio + ivaMonto) * 0.05; // BI
+    const impCh = miPrecio * 0.012; // BJ
+    const precioEcom = miPrecio < 33000 ? miPrecio : miPrecio - 8500; // BM
+    const neto = precioEcom + ivaMonto - comML - iibb - impCh;
+    const margen = costoARS > 0 && neto > 0 ? 1 - (costoARS / (neto/tc)) : (pm && pm.margenML ? pm.margenML : null);
+    const margenStr = margen !== null 
+      ? `<span style="color:${margen>0.25?'var(--green)':margen>0.15?'var(--yellow)':'var(--red)'}">${(margen*100).toFixed(1)}%</span>`
+      : '—';
+
+    // Modificar Ecom button
+    const modBtn = r.sku ? `<button class="btn-xs" onclick="compModEcom('${r.sku}',${miPrecio||0})" style="background:rgba(0,229,160,0.1);border-color:rgba(0,229,160,0.3);color:var(--green)">✏ Ecom</button>` : '—';
+
+    return `<tr>
+      <td><span class="badge badge-blue" style="font-size:9px">${r.vendedor}</span></td>
+      <td style="font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.titulo}">${r.titulo}</td>
+      <td class="mono price-ok" style="font-size:10px">$${fmtN(r.precio)}</td>
+      <td class="mono" style="font-size:10px;color:var(--text3);text-decoration:line-through">${r.orig_price?'$'+fmtN(r.orig_price):'-'}</td>
+      <td>${r.discount?`<span class="off-badge">${r.discount}</span>`:'-'}</td>
+      <td style="font-size:10px;color:var(--text2)">${r.cuotas||'-'}</td>
+      <td class="mono" style="font-size:10px">${r.ventas||'-'}</td>
+      <td class="sku-cell" style="font-size:9px">${r.sku||'—'}</td>
+      <td class="mono" style="font-size:10px;text-align:center">${cant>1?cant:'1'}</td>
+      <td class="mono" style="font-size:10px;color:var(--accent)">${miPrecio?'$'+fmtN(miPrecio):'Sin PM'}</td>
+      <td>${diffStr}</td>
+      <td>${margenStr}</td>
+      <td>${modBtn}</td>
+      <td>${r.link?`<a href="${r.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'-'}</td>
+    </tr>`;
+  }).join('');
   const pag=qs('competidores-pag');if(pages<=1){pag.innerHTML='';return;}let html=`<span class="page-info-txt">${data.length} resultados</span>`;if(COMP.page>1)html+=`<button class="page-btn" onclick="COMP.page=${COMP.page-1};renderCompetidores()">‹</button>`;for(let i=Math.max(1,COMP.page-2);i<=Math.min(pages,COMP.page+2);i++)html+=`<button class="page-btn${i===COMP.page?' active':''}" onclick="COMP.page=${i};renderCompetidores()">${i}</button>`;if(COMP.page<pages)html+=`<button class="page-btn" onclick="COMP.page=${COMP.page+1};renderCompetidores()">›</button>`;pag.innerHTML=html;
 }
 
@@ -2520,6 +2601,26 @@ async function compRefreshHistorial(){
   }
 }
 
+// ── COMP MOD ECOM ──
+async function compModEcom(sku, precio){
+  if(!precio || precio <= 0){ toast('Sin precio para este SKU','error'); return; }
+  if(!confirm(`Modificar precio de ${sku} a $${fmtN(precio)} en Ecom?`)) return;
+  // Use existing ecom update flow
+  const cookie = S.ecomCookie;
+  if(!cookie){ toast('Conectá Ecom primero en Verificar Ecom','error'); return; }
+  const bu = getBackendUrl();
+  try{
+    const r = await fetch(`${bu}/ecom/update-price`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cookie, sku, skuMadre: sku, price: precio, priceName: 'Mercado Libre'})
+    });
+    const d = await r.json();
+    if(d.success){ toast(`✅ ${sku}: precio actualizado a $${fmtN(precio)} en Ecom`); }
+    else{ toast(`❌ ${sku}: ${d.error||'Error al actualizar'}`, 'error'); }
+  }catch(e){ toast('Error: '+e.message,'error'); }
+}
+
 // ── INIT ──
 async function autoConnectML(){
   const bu = getBackendUrl();
@@ -2542,6 +2643,15 @@ async function autoConnectML(){
       const st=qs('ml-status-2');if(st){st.className='conn-status connected';st.textContent='● MT conectado';}
       console.log('ML MT auto-conectado');}}
   }catch(e){console.warn('ML auto-connect:',e);}
+  // Fetch TC BNA
+  try{
+    const bu2 = getBackendUrl();
+    if(bu2){
+      const rtc = await fetch(`${bu2}/tc/bna`);
+      const dtc = await rtc.json();
+      if(dtc.tc > 0){ S.tcBNA = dtc.tc; console.log('TC BNA:', dtc.tc); }
+    }
+  }catch(e){console.warn('TC BNA error:',e);}
 }
 
 function init(){
