@@ -888,3 +888,42 @@ def refresh_job(job_id, ml_token):
 @app.get("/competidores/refresh/status/{job_id}")
 def refresh_status(job_id: str):
     return job_status.get(job_id, {"status": "not_found"})
+
+
+# ══════════════════════════════════════════════════════
+# TIPO DE CAMBIO — BNA scraper
+# ══════════════════════════════════════════════════════
+
+_tc_cache = {'value': 0, 'expiry': 0}
+
+@app.get("/tc/bna")
+async def get_tc_bna():
+    """Scrappea el tipo de cambio venta del Dólar del BNA"""
+    if time.time() < _tc_cache['expiry'] and _tc_cache['value'] > 0:
+        return {"tc": _tc_cache['value'], "source": "cache"}
+    try:
+        r = requests.get("https://bna.com.ar/Personas",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=10)
+        html = r.text
+        # Find the billetes table - Dolar U.S.A venta (last td of first tr in tbody)
+        import re
+        # Pattern: Dolar U.S.A ... compra ... venta
+        m = re.search(r'Dolar U\.S\.A</td>\s*<td>([\d,\.]+)</td>\s*<td>([\d,\.]+)</td>', html)
+        if m:
+            venta_str = m.group(2).replace('.', '').replace(',', '.')
+            tc = float(venta_str)
+            _tc_cache['value'] = tc
+            _tc_cache['expiry'] = time.time() + 3600  # cache 1 hora
+            return {"tc": tc, "source": "bna", "fecha": datetime.now().strftime('%d/%m/%Y %H:%M')}
+        # Fallback pattern
+        m2 = re.search(r'<td class="tit">Dolar U\.S\.A</td>\s*<td>([\d,\.]+)</td>\s*<td>([\d,\.]+)</td>', html)
+        if m2:
+            venta_str = m2.group(2).replace('.', '').replace(',', '.')
+            tc = float(venta_str)
+            _tc_cache['value'] = tc
+            _tc_cache['expiry'] = time.time() + 3600
+            return {"tc": tc, "source": "bna", "fecha": datetime.now().strftime('%d/%m/%Y %H:%M')}
+        return {"tc": 0, "error": "No se pudo parsear el TC", "source": "error"}
+    except Exception as e:
+        return {"tc": 0, "error": str(e), "source": "error"}
