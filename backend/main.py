@@ -12,12 +12,12 @@ app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
-ML_TOKEN       = os.getenv('ML_TOKEN', 'APP_USR-5759955230156669-060313-905aabe9e53353df2f411208dc1e0616-115764017')
-REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', 'TG-6a2061e24263530001c3f0a2-115764017')
+ML_TOKEN       = os.getenv('ML_TOKEN', 'APP_USR-5759955230156669-060409-fc9ceeec44fb8853a38f7115a8214256-115764017')
+REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', 'TG-6a2182ebfcf7f400016c2262-115764017')
 APP_ID         = os.getenv('ML_APP_ID', '5759955230156669')
 CLIENT_SECRET  = os.getenv('ML_CLIENT_SECRET', '49Z7KYX21nFbxHfHrRVE43bX4vGhwOiX')
-ML_TOKEN_2     = os.getenv('ML_TOKEN_2', 'APP_USR-5759955230156669-060313-6e25f8ce07c3f2cbfba627342ca24bad-34801784')
-REFRESH_TOKEN_2= os.getenv('ML_REFRESH_TOKEN_2', 'TG-6a2061e2f552580001e3fe07-34801784')
+ML_TOKEN_2     = os.getenv('ML_TOKEN_2', 'APP_USR-5759955230156669-060409-370ec9e0d4562e036624232b9833dd1b-34801784')
+REFRESH_TOKEN_2= os.getenv('ML_REFRESH_TOKEN_2', 'TG-6a2182eb876de300012b811a-34801784')
 
 job_status = {}
 _token_cache = {'token': ML_TOKEN, 'expiry': 0}
@@ -35,6 +35,7 @@ def get_ml_token():
             d = res.json()
             _token_cache['token'] = d['access_token']
             _token_cache['expiry'] = time.time() + d.get('expires_in', 21600) - 300
+            if 'refresh_token' in d: os.environ['ML_REFRESH_TOKEN'] = d['refresh_token']
             return _token_cache['token']
     except Exception as e:
         print(f"Token error: {e}")
@@ -52,6 +53,7 @@ def get_ml_token_2():
             d = res.json()
             _token_cache_2['token'] = d['access_token']
             _token_cache_2['expiry'] = time.time() + d.get('expires_in', 21600) - 300
+            if 'refresh_token' in d: os.environ['ML_REFRESH_TOKEN_2'] = d['refresh_token']
             return _token_cache_2['token']
     except Exception as e:
         print(f"Token2 error: {e}")
