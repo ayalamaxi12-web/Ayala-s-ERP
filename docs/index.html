@@ -4132,7 +4132,7 @@ function ofertasExport(){
     try{
       const wb = XLSX.read(buf, {type:'array', cellDates:true});
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+      const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
       // Fila 6 (índice 5) = headers, datos desde fila 7 (índice 6)
       // Headers: Fecha de Emisión(0) Empresa(1) Código(2) Descripción(3) Fabricante(4)
       //          Tipo de Producto(5) Familia(6) Vendedor(7) Tipo de Factura(8) Nº Factura(9)
