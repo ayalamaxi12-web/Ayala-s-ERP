@@ -4165,7 +4165,7 @@ for(let i=0;i<Math.min(10,raw.length);i++){
       const iNro    = fi('Nº Factura','N° Factura','Nro Factura','Numero Factura');
       const iCosto  = fi('Costo de Lista');
       const iCant   = fi('Cantidad');
-      const iPV     = fi('Precio de Venta');
+      const iPV = hdrs.findIndex(h=>h.trim()==='Precio de Venta');
 
       let rows = [];
       for(let i=HDR_ROW+1; i<raw.length; i++){
@@ -4224,7 +4224,7 @@ for(let i=0;i<Math.min(10,raw.length);i++){
   // ── RECALC ──
   window.tacRentRecalc = function(){
     tacCalcRows = window.tacRawRows.map(_calc);
-    const activas = tacCalcRows.filter(r=>!r._tipo.startsWith('EXCL'));
+    const activas = tacCalcRows;
     const excl    = tacCalcRows.filter(r=>r._tipo.startsWith('EXCL'));
     const conM    = activas.filter(r=>r._margen!==null);
     const totalM  = conM.reduce((s,r)=>s+r._margen,0);
@@ -4273,7 +4273,6 @@ for(let i=0;i<Math.min(10,raw.length);i++){
     const fMarg = document.getElementById('tacrent-filter-margen')?.value||'';
 
     tacFiltered = tacCalcRows.filter(r=>{
-      if(r._tipo.startsWith('EXCL')) return false;
       if(fTipo && r._tipo!==fTipo) return false;
       if(fVend && r._vendedor!==fVend) return false;
       if(fResp && r._responsable!==fResp) return false;
