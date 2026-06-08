@@ -4138,7 +4138,14 @@ function ofertasExport(){
       //          Tipo de Producto(5) Familia(6) Vendedor(7) Tipo de Factura(8) Nº Factura(9)
       //          Precio de Compra de Lista(10) Costo de Lista(11) Precio de Venta de Lista(12)
       //          Cantidad(13) Precio de Venta(14) Margen(15)
-      const HDR_ROW = 5; // índice 0-based
+      // Auto-detectar fila de headers
+let HDR_ROW = 0;
+for(let i=0;i<Math.min(10,raw.length);i++){
+  const r=raw[i].map(h=>String(h||'').toLowerCase());
+  if(r.some(h=>h.includes('empresa'))&&r.some(h=>h.includes('código')||h.includes('codigo'))){
+    HDR_ROW=i;break;
+  }
+}
       const hdrs = raw[HDR_ROW] ? raw[HDR_ROW].map(h=>String(h||'').trim()) : [];
 
       // Mapear columnas por nombre
