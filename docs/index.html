@@ -195,7 +195,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="sidebar-section">
     <div class="sidebar-section-label">🛠 Gestión de Precios</div>
     <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
-    <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">📋</span> Verificar Táctica</div>
+    <div class="sidebar-item" data-page="rentabilidad-tactica" onclick="goPage('rentabilidad-tactica',this)"><span class="icon">📊</span> Rentabilidad Táctica</div>
     <div class="sidebar-item" data-page="verificar-web" onclick="goPage('verificar-web',this)"><span class="icon">🌐</span> Verificar Web</div>
     <div class="sidebar-item" data-page="verificar-fravega" onclick="goPage('verificar-fravega',this)"><span class="icon">🏪</span> Verificar Fravega</div>
     <div class="sidebar-item" data-page="fravega-api" onclick="goPage('fravega-api',this)"><span class="icon">🔌</span> Fravega API</div>
@@ -880,8 +880,210 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="pagination" id="ofertas-pag"></div>
   </div>
 </div>
-</div><!-- app-body -->
-<div id="toast" class="toast"></div>
+<!-- FRAVEGA API PAGE -->
+<div id="page-fravega-api" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-hdr" style="margin-bottom:4px">🔌 Fravega API — Seller Center</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Gestión directa de productos, precios, stock y órdenes</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">🔑 Credenciales</div>
+    <p style="font-size:11px;color:var(--text2);margin:8px 0">Credenciales de <b>Catálogo e Inventario</b> (Seller Center)</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px">
+      <div class="field" style="margin:0"><label>Seller ID</label><input id="fvg-seller-id" placeholder="fravegasellerprod1266"></div>
+      <div class="field" style="margin:0"><label>API Key</label><input id="fvg-api-key" placeholder="API Key"></div>
+      <div class="field" style="margin:0"><label>API Token</label><input id="fvg-api-token" placeholder="API Token"></div>
+    </div>
+    <p style="font-size:11px;color:var(--text2);margin:12px 0 8px">Credenciales de <b>VTEX</b> (Pedidos y Facturación)</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field" style="margin:0"><label>VTEX Key</label><input id="fvg-vtex-key" placeholder="vtexappkey-..."></div>
+      <div class="field" style="margin:0"><label>VTEX Token</label><input id="fvg-vtex-token" placeholder="VTEX Token"></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px">
+      <button class="btn primary" onclick="fvgSaveCreds()">💾 Guardar credenciales</button>
+      <button class="btn" onclick="fvgTestCreds()">🧪 Probar conexión</button>
+    </div>
+    <div id="fvg-creds-status" style="margin-top:8px;font-size:13px"></div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn" onclick="fvgTab('productos')" id="fvg-tab-productos">📦 Productos</button>
+    <button class="btn" onclick="fvgTab('precios')" id="fvg-tab-precios">💲 Precios</button>
+    <button class="btn" onclick="fvgTab('stock')" id="fvg-tab-stock">📊 Stock</button>
+    <button class="btn" onclick="fvgTab('ordenes')" id="fvg-tab-ordenes">🛒 Órdenes</button>
+    <button class="btn" onclick="fvgTab('facturacion')" id="fvg-tab-facturacion">🧾 Facturación</button>
+  </div>
+  <div id="fvg-section-productos">
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">📦 Listar Productos</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+        <input id="fvg-prod-page" class="fi" placeholder="Página" style="width:120px" value="1">
+        <input id="fvg-prod-size" class="fi" placeholder="Tamaño (máx 100)" style="width:140px" value="20">
+        <button class="btn" onclick="fvgListProducts()">🔄 Cargar productos</button>
+      </div>
+      <div id="fvg-prod-result" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔍 Buscar por RefID (SKU)</div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <input id="fvg-refid-input" class="fi" placeholder="RefID / SKU" style="width:200px">
+        <button class="btn" onclick="fvgGetByRefId()">Buscar</button>
+      </div>
+      <div id="fvg-refid-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <div id="fvg-section-precios" style="display:none">
+    <div class="card">
+      <div class="card-title">💲 Actualizar Precio por RefID</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
+        <div class="field" style="margin:0"><label>RefID / SKU</label><input id="fvg-price-refid" placeholder="Ej: TN1060COMP"></div>
+        <div class="field" style="margin:0"><label>Precio Tachado (list)</label><input id="fvg-price-list" placeholder="Ej: 15000"></div>
+        <div class="field" style="margin:0"><label>Precio Venta (sale)</label><input id="fvg-price-sale" placeholder="Ej: 12000"></div>
+        <button class="btn" onclick="fvgUpdatePrice()">✅ Actualizar</button>
+      </div>
+      <div id="fvg-price-result" style="margin-top:12px;font-size:13px"></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">💲 Actualizar Precios Masivo</div>
+      <p style="font-size:11px;color:var(--text2);margin:8px 0">Columnas: RefID, Precio Tachado, Precio Venta (separadas por tab)</p>
+      <textarea id="fvg-bulk-price" rows="6" placeholder="RefID&#9;PrecioTachado&#9;PrecioVenta&#10;TN1060COMP&#9;15000&#9;12000" style="width:100%;font-family:monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);margin-top:4px"></textarea>
+      <button class="btn" style="margin-top:10px" onclick="fvgBulkPrice()">⚡ Actualizar todos</button>
+      <div id="fvg-bulk-result" style="margin-top:12px;font-size:13px;max-height:200px;overflow-y:auto"></div>
+    </div>
+  </div>
+  <div id="fvg-section-stock" style="display:none">
+    <div class="card">
+      <div class="card-title">📊 Actualizar Stock por RefID</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
+        <div class="field" style="margin:0"><label>RefID / SKU</label><input id="fvg-stock-refid" placeholder="Ej: TN1060COMP"></div>
+        <div class="field" style="margin:0"><label>Cantidad</label><input id="fvg-stock-qty" placeholder="Ej: 10"></div>
+        <button class="btn" onclick="fvgUpdateStock()">✅ Actualizar</button>
+      </div>
+      <div id="fvg-stock-result" style="margin-top:12px;font-size:13px"></div>
+    </div>
+  </div>
+  <div id="fvg-section-ordenes" style="display:none">
+    <div class="card">
+      <div class="card-title">🛒 Consultar Órdenes</div>
+      <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap">
+        <input id="fvg-order-id" class="fi" placeholder="ID de orden" style="width:200px">
+        <button class="btn" onclick="fvgGetOrder()">🔍 Buscar orden</button>
+      </div>
+      <div id="fvg-order-result" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+  </div>
+  <div id="fvg-section-facturacion" style="display:none">
+    <div class="card">
+      <div class="card-title">🧾 Facturar Orden</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+        <div class="field" style="margin:0"><label>ID de Orden</label><input id="fvg-inv-order-id" placeholder="Ej: IIII-prueba"></div>
+        <div class="field" style="margin:0"><label>Número de Factura</label><input id="fvg-inv-number" placeholder="0005-00136332"></div>
+        <div class="field" style="margin:0"><label>Fecha (DD-MM-AAAA)</label><input id="fvg-inv-date" placeholder="16-05-2024"></div>
+        <div class="field" style="margin:0"><label>URL Factura</label><input id="fvg-inv-url" placeholder="https://..."></div>
+        <div class="field" style="margin:0"><label>Tracking (opcional)</label><input id="fvg-inv-tracking" placeholder="Nro. seguimiento"></div>
+        <div class="field" style="margin:0"><label>Courier (opcional)</label><input id="fvg-inv-courier" placeholder="Ej: OCA"></div>
+      </div>
+      <button class="btn" style="margin-top:12px" onclick="fvgInvoiceOrder()">🧾 Facturar</button>
+      <div id="fvg-inv-result" style="margin-top:12px;font-size:13px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="page-rentabilidad-tactica" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-hdr" style="margin-bottom:4px">📊 Rentabilidad Táctica</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Cargá el reporte de facturación · El ERP calcula el margen limpio con los impuestos configurados</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="file" id="tacrent-file-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="tacRentHandleFile(event)">
+      <button class="btn primary" onclick="document.getElementById('tacrent-file-input').click()">📥 Subir Rentabilidad Táctica</button>
+      <button class="btn" id="tacrent-btn-export" style="display:none" onclick="tacRentExport()">⬇ CSV</button>
+    </div>
+  </div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px">
+    <div style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px" onclick="tacRentToggleConfig()">
+      <span style="font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.12em">⚙ Configuración de Impuestos</span>
+      <span id="tacrent-cfg-arrow" style="color:var(--text3);font-size:10px">▼</span>
+      <span style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-left:8px">(editables — recalcula automáticamente)</span>
+    </div>
+    <div id="tacrent-cfg-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">IIBB — Cuenta 1</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="tacrent-cfg-iibb" value="5" min="0" max="100" step="0.1" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
+          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV sin IVA</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Imp. Cheque — C1</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="tacrent-cfg-impchq" value="1.2" min="0" max="100" step="0.01" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
+          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV + IVA</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Costo Financiero 1 — C1</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="tacrent-cfg-cf1" value="3" min="0" max="100" step="0.1" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
+          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV + IVA</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Costo Financiero 2 — DOS</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="tacrent-cfg-cf2" value="3" min="0" max="100" step="0.1" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
+          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV sin IVA</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:14px;font-size:9px;font-family:'DM Mono',monospace;color:var(--text3)">
+      <span><span style="color:var(--accent)">C1</span> (no DOS): IIBB + Imp.Cheque + CF1</span>
+      <span><span style="color:#a855f7">C2</span> (DOS/FAE): solo CF2</span>
+      <span><span style="color:var(--red)">NC-C1</span>: solo IIBB · sin costo</span>
+      <span><span style="color:var(--green)">PROMOS</span>: sin costo · positivo</span>
+      <span><span style="color:var(--text3)">ND / FEA+00003</span>: excluidas</span>
+    </div>
+  </div>
+  <div id="tacrent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px" class="stats-row">
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-rows" style="font-size:22px">—</div><div class="stat-label">Filas procesadas</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-excl" style="font-size:22px;color:var(--text3)">—</div><div class="stat-label">Excluidas</div></div>
+    <div class="stat-card c2"><div class="stat-value" id="tacrent-kpi-venta" style="font-size:18px">—</div><div class="stat-label">Venta Total (PV)</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-margen" style="font-size:22px">—</div><div class="stat-label">Margen Total $</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-pct" style="font-size:22px">—</div><div class="stat-label">Margen % prom.</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-neg" style="font-size:22px;color:var(--red)">—</div><div class="stat-label">Filas negativas</div></div>
+  </div>
+  <div id="tacrent-filters" style="display:none" class="erp-filters">
+    <input type="text" id="tacrent-search" placeholder="Empresa, SKU, Nº Factura..." oninput="tacRentRender()" style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none">
+    <select id="tacrent-filter-tipo" class="fi" onchange="tacRentRender()"><option value="">Todos los tipos</option><option value="C1">Cuenta 1</option><option value="C2">Cuenta 2 (DOS)</option><option value="NC-C1">NC Cuenta 1</option><option value="NC-C2">NC Cuenta 2</option><option value="PROMO">Promos</option></select>
+    <select id="tacrent-filter-vendedor" class="fi" onchange="tacRentRender()"><option value="">Todos los vendedores</option></select>
+    <select id="tacrent-filter-margen" class="fi" onchange="tacRentRender()"><option value="">Todos los márgenes</option><option value="pos">Positivo</option><option value="neg">Negativo</option></select>
+    <span id="tacrent-filter-count" style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;align-self:center"></span>
+  </div>
+  <div id="tacrent-table-wrap" style="display:none" class="table-wrap">
+    <table id="tacrent-table">
+      <thead><tr>
+        <th>Fecha</th><th>Empresa</th><th>SKU</th><th>Tipo Factura</th><th>Vendedor</th>
+        <th style="text-align:right">PV $</th><th style="text-align:right">Costo $</th>
+        <th style="text-align:right">IIBB</th><th style="text-align:right">Imp.CHQ</th><th style="text-align:right">CF</th>
+        <th style="text-align:right">Margen $</th><th style="text-align:right">Margen %</th><th style="text-align:center">Tipo</th>
+      </tr></thead>
+      <tbody id="tacrent-tbody"></tbody>
+    </table>
+    <div class="pagination" id="tacrent-pag"></div>
+  </div>
+  <div id="tacrent-empty" style="text-align:center;padding:70px 20px;color:var(--text3)">
+    <div style="font-size:44px;margin-bottom:14px">📊</div>
+    <div style="font-size:14px;margin-bottom:6px">Subí el archivo de Rentabilidad Táctica para comenzar</div>
+    <div style="font-size:11px;font-family:'DM Mono',monospace">Acepta CSV o XLSX</div>
+  </div>
+</div>
+</div><!-- app-body --><div id="toast" class="toast"></div>
 <script>
 const S={
   mlToken:'',mlToken2:'',mlSellerId:'',mlSellerId2:'',sheetsKey:'',ecomCookie:'',ecomEmail:'',
@@ -976,6 +1178,7 @@ function goPage(page,el){
   if(page==='verificar-ecom')renderEcom();
   if(page==='verificar-ml')renderML();
   if(page==='verificar-tactica')renderTactica();
+  if(page==='rentabilidad-tactica'){tacRentInit();}
   if(page==='verificar-web')renderWeb();
   if(page==='verificar-fravega')renderFrave();
   if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
@@ -3687,177 +3890,142 @@ function ofertasExport(){
   a.download=`ofertas-ml-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   toast('Exportado');
-}
+}// ── RENTABILIDAD TÁCTICA ────────────────────────────────────────────────────
+(function(){
+  const PROMOS_SKUS=new Set(['PROMOS-PM21','PROMOS-PM10.5']);
+  const PAGE_SIZE=50;
+  let tacRawRows=[],tacCalcRows=[],tacFiltered=[],tacPage=1;
+  const _num=v=>{if(v===null||v===undefined||v==='')return 0;const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;};
+  const _pct=id=>{const el=document.getElementById(id);return el?parseFloat(el.value||0)/100:0;};
+  const _fmt$=v=>{if(v===null||v===undefined)return'—';const abs=Math.abs(v);const str=abs>=1e6?(abs/1e6).toFixed(2)+'M':Math.round(abs).toLocaleString('es-AR');return(v<0?'-':'')+'$'+str;};
+  const _fmtPct=v=>v===null||v===undefined?'—':(v*100).toFixed(2)+'%';
+  const _fmtDate=v=>{if(!v)return'—';const n=parseFloat(String(v));if(!isNaN(n)&&n>40000){const d=new Date((n-25569)*86400*1000);return d.toLocaleDateString('es-AR');}return String(v).slice(0,10);};
+  function _classify(row){
+    const empresa=String(row['Empresa']||'').trim();
+    const tipo=String(row['Tipo de Factura']||'').trim();
+    const nro=String(row['Nº Factura']||row['N\u00ba Factura']||'').trim();
+    const sku=String(row['Codigo']||'').trim().toUpperCase();
+    const esDOS=/^DOS\s/i.test(empresa)||/^DOS$/i.test(empresa);
+    const esNC=/nota de cr[eé]dito/i.test(tipo);
+    const esND=/nota de d[eé]bito/i.test(tipo);
+    const esFAE=/\bFAE\b/i.test(tipo);
+    const esFEA003=/\bFEA\b/i.test(tipo)&&nro.startsWith('00003-');
+    const esPromo=PROMOS_SKUS.has(sku);
+    if(esND)return'EXCL_ND';
+    if(esFEA003)return'EXCL_FEA003';
+    if(esPromo)return'PROMO';
+    if(esNC&&!esDOS)return'NC-C1';
+    if(esNC&&esDOS)return'NC-C2';
+    if(esDOS||esFAE)return'C2';
+    return'C1';
+  }
+  function _calc(row){
+    const tipo=_classify(row);
+    const pv=_num(row['Precio de Venta']);
+    const iva=_num(row['IVA']);
+    const costoUSD=_num(row['Costo de Lista']);
+    const cant=_num(row['Cantidad']);
+    const tc=_num(row['TC']);
+    const cfg={iibb:_pct('tacrent-cfg-iibb'),impchq:_pct('tacrent-cfg-impchq'),cf1:_pct('tacrent-cfg-cf1'),cf2:_pct('tacrent-cfg-cf2')};
+    let costo=0,iibb=0,impchq=0,cf=0,margen=null,margenPct=null;
+    if(tipo==='EXCL_ND'||tipo==='EXCL_FEA003')return{...row,_tipo:tipo,_pv:pv,_costo:0,_iibb:0,_impchq:0,_cf:0,_margen:null,_margenPct:null};
+    if(tipo==='NC-C1'){iibb=pv*cfg.iibb*-1;margen=pv+iibb;margenPct=pv!==0?margen/Math.abs(pv):null;return{...row,_tipo:tipo,_pv:pv,_costo:0,_iibb:iibb,_impchq:0,_cf:0,_margen:margen,_margenPct:margenPct};}
+    if(tipo==='NC-C2')return{...row,_tipo:tipo,_pv:pv,_costo:0,_iibb:0,_impchq:0,_cf:0,_margen:pv,_margenPct:null};
+    if(tipo==='PROMO'){const pvPos=Math.abs(pv);iibb=pvPos*cfg.iibb*-1;impchq=(pvPos+Math.abs(iva))*cfg.impchq*-1;margen=pvPos+iibb+impchq;margenPct=pvPos!==0?margen/pvPos:null;return{...row,_tipo:tipo,_pv:pvPos,_costo:0,_iibb:iibb,_impchq:impchq,_cf:0,_margen:margen,_margenPct:margenPct};}
+    costo=costoUSD*cant*tc*-1;
+    if(tipo==='C1'){iibb=pv*cfg.iibb*-1;impchq=(pv+iva)*cfg.impchq*-1;cf=(pv+iva)*cfg.cf1*-1;margen=pv+costo+iibb+impchq+cf;margenPct=pv!==0?margen/pv:null;}
+    else{cf=pv*cfg.cf2*-1;margen=pv+costo+cf;margenPct=pv!==0?margen/pv:null;}
+    return{...row,_tipo:tipo,_pv:pv,_costo:costo,_iibb:iibb,_impchq:impchq,_cf:cf,_margen:margen,_margenPct:margenPct};
+  }
+  function _parseText(text){
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2)return[];
+    const sep=lines[0].split('\t').length>lines[0].split(',').length?'\t':',';
+    function splitLine(line){const r=[];let cur='',q=false;for(const c of line){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur.trim());cur='';}else cur+=c;}r.push(cur.trim());return r.map(v=>v.replace(/^"|"$/g,'').trim());}
+    const hdrs=splitLine(lines[0]);
+    return lines.slice(1).map(line=>{const vals=splitLine(line);const obj={};hdrs.forEach((h,i)=>{obj[h.trim()]=(vals[i]||'').trim();});return obj;}).filter(r=>Object.values(r).some(v=>v));
+  }
+  window.tacRentRecalc=function(){
+    tacCalcRows=tacRawRows.map(_calc);
+    const activas=tacCalcRows.filter(r=>!r._tipo.startsWith('EXCL'));
+    const excl=tacCalcRows.filter(r=>r._tipo.startsWith('EXCL'));
+    const conM=activas.filter(r=>r._margen!==null);
+    const totalM=conM.reduce((s,r)=>s+r._margen,0);
+    const totalV=activas.filter(r=>r._margen!==null&&r._pv>0).reduce((s,r)=>s+r._pv,0);
+    const promPct=totalV!==0?totalM/totalV:0;
+    const negC=conM.filter(r=>r._margen<0).length;
+    document.getElementById('tacrent-kpi-rows').textContent=activas.length.toLocaleString('es-AR');
+    document.getElementById('tacrent-kpi-excl').textContent=excl.length.toLocaleString('es-AR');
+    document.getElementById('tacrent-kpi-venta').textContent=_fmt$(totalV);
+    const mEl=document.getElementById('tacrent-kpi-margen');mEl.textContent=_fmt$(totalM);mEl.style.color=totalM>=0?'var(--green)':'var(--red)';
+    const pEl=document.getElementById('tacrent-kpi-pct');pEl.textContent=_fmtPct(promPct);pEl.style.color=promPct>=0.15?'var(--green)':promPct>=0.05?'var(--yellow)':'var(--red)';
+    document.getElementById('tacrent-kpi-neg').textContent=negC.toLocaleString('es-AR');
+    document.getElementById('tacrent-kpis').style.display='grid';
+    const sel=document.getElementById('tacrent-filter-vendedor');
+    if(sel){const prev=sel.value;sel.innerHTML='<option value="">Todos los vendedores</option>';[...new Set(tacCalcRows.map(r=>r['Vendedor']).filter(Boolean))].sort().forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});sel.value=prev;}
+    tacRentRender();
+  };
+  window.tacRentRender=function(){
+    const srch=(document.getElementById('tacrent-search')?.value||'').toLowerCase();
+    const fTipo=document.getElementById('tacrent-filter-tipo')?.value||'';
+    const fVend=document.getElementById('tacrent-filter-vendedor')?.value||'';
+    const fMarg=document.getElementById('tacrent-filter-margen')?.value||'';
+    tacFiltered=tacCalcRows.filter(r=>{
+      if(r._tipo.startsWith('EXCL'))return false;
+      if(fTipo&&r._tipo!==fTipo)return false;
+      if(fVend&&r['Vendedor']!==fVend)return false;
+      if(fMarg==='pos'&&(r._margen===null||r._margen<0))return false;
+      if(fMarg==='neg'&&(r._margen===null||r._margen>=0))return false;
+      const nroFact=r['Nº Factura']||r['N\u00ba Factura']||'';
+      if(srch&&!`${r['Empresa']} ${r['Codigo']} ${nroFact}`.toLowerCase().includes(srch))return false;
+      return true;
+    });
+    const cEl=document.getElementById('tacrent-filter-count');
+    if(cEl)cEl.textContent=tacFiltered.length.toLocaleString('es-AR')+' filas';
+    const totalPages=Math.max(1,Math.ceil(tacFiltered.length/PAGE_SIZE));
+    if(tacPage>totalPages)tacPage=1;
+    const slice=tacFiltered.slice((tacPage-1)*PAGE_SIZE,tacPage*PAGE_SIZE);
+    const tbody=document.getElementById('tacrent-tbody');
+    tbody.innerHTML='';
+    const BS={'C1':'background:rgba(0,157,188,.15);color:var(--accent)','C2':'background:rgba(168,85,247,.15);color:#a855f7','NC-C1':'background:rgba(255,107,107,.15);color:var(--red)','NC-C2':'background:rgba(255,150,50,.15);color:var(--orange)','PROMO':'background:rgba(0,229,160,.15);color:var(--green)'};
+    slice.forEach(r=>{
+      const mc=r._margen===null?'var(--text3)':r._margen>=0?'var(--green)':'var(--red)';
+      const pc=r._margenPct===null?'var(--text3)':r._margenPct>=0.15?'var(--green)':r._margenPct>=0.05?'var(--yellow)':'var(--red)';
+      const bs=BS[r._tipo]||'background:var(--border);color:var(--text3)';
+      const nroFact=r['Nº Factura']||r['N\u00ba Factura']||'—';
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${_fmtDate(r['Fecha'])}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${(r['Empresa']||'').replace(/"/g,'')}">${r['Empresa']||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">${r['Codigo']||'—'}</td><td style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['Tipo de Factura']||'—'}</td><td style="font-size:10px">${r['Vendedor']||'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px">${r._pv?_fmt$(r._pv):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._costo?_fmt$(r._costo):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._iibb?_fmt$(r._iibb):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._impchq?_fmt$(r._impchq):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._cf?_fmt$(r._cf):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${mc}">${r._margen!==null?_fmt$(r._margen):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${pc}">${r._margenPct!==null?_fmtPct(r._margenPct):'—'}</td><td style="text-align:center"><span class="badge" style="${bs};font-size:9px">${r._tipo}</span></td>`;
+      tbody.appendChild(tr);
+    });
+    const pag=document.getElementById('tacrent-pag');
+    if(pag){if(totalPages<=1){pag.innerHTML='';}else{let h=`<span class="page-info-txt">${tacFiltered.length} resultados</span>`;if(tacPage>1)h+=`<button class="page-btn" onclick="tacRentChangePage(-1)">‹</button>`;for(let i=Math.max(1,tacPage-2);i<=Math.min(totalPages,tacPage+2);i++)h+=`<button class="page-btn${i===tacPage?' active':''}" onclick="tacRentSetPage(${i})">${i}</button>`;if(tacPage<totalPages)h+=`<button class="page-btn" onclick="tacRentChangePage(1)">›</button>`;pag.innerHTML=h;}}
+    document.getElementById('tacrent-table-wrap').style.display='block';
+    document.getElementById('tacrent-filters').style.display='flex';
+    document.getElementById('tacrent-empty').style.display='none';
+    document.getElementById('tacrent-btn-export').style.display='';
+  };
+  window.tacRentChangePage=d=>{const p=Math.ceil(tacFiltered.length/PAGE_SIZE);tacPage=Math.max(1,Math.min(p,tacPage+d));tacRentRender();};
+  window.tacRentSetPage=p=>{tacPage=p;tacRentRender();};
+  window.tacRentHandleFile=function(event){
+    const file=event.target.files[0];if(!file)return;
+    const ext=file.name.split('.').pop().toLowerCase();
+    if(ext==='csv'){const r=new FileReader();r.onload=e=>{try{tacRawRows=_parseText(e.target.result);if(!tacRawRows.length){toast('CSV vacío','error');return;}tacRentRecalc();toast('✅ '+tacRawRows.length+' filas cargadas');}catch(err){toast('Error CSV: '+err.message,'error');}};r.readAsText(file,'UTF-8');}
+    else if(ext==='xlsx'||ext==='xls'){const r=new FileReader();r.onload=e=>{try{if(typeof XLSX==='undefined'){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=()=>_procXlsx(e.target.result);document.head.appendChild(s);}else _procXlsx(e.target.result);}catch(err){toast('Error XLSX: '+err.message,'error');}};r.readAsArrayBuffer(file);}
+    event.target.value='';
+  };
+  function _procXlsx(buf){try{const wb=XLSX.read(buf,{type:'array',cellDates:false});const ws=wb.Sheets[wb.SheetNames[0]];tacRawRows=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});if(!tacRawRows.length){toast('XLSX vacío','error');return;}tacRentRecalc();toast('✅ '+tacRawRows.length+' filas cargadas');}catch(err){toast('Error XLSX: '+err.message,'error');}}
+  window.tacRentExport=function(){
+    if(!tacFiltered.length){toast('Sin datos','error');return;}
+    const h='Fecha,Empresa,SKU,Tipo Factura,Vendedor,PV,Costo_ARS,IIBB,Imp_CHQ,CF,Margen_$,Margen_%,Tipo';
+    const lines=tacFiltered.map(r=>[_fmtDate(r['Fecha']),`"${(r['Empresa']||'').replace(/"/g,'')}"`,r['Codigo']||'',`"${(r['Tipo de Factura']||'').replace(/"/g,'')}"`,r['Vendedor']||'',r._pv||'',r._costo||'',r._iibb||'',r._impchq||'',r._cf||'',r._margen!==null?Math.round(r._margen):'',r._margenPct!==null?(r._margenPct*100).toFixed(4):'',r._tipo].join(','));
+    const blob=new Blob(['\uFEFF'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='rentabilidad-tactica-'+new Date().toISOString().slice(0,10)+'.csv';a.click();toast('Exportado');
+  };
+  window.tacRentToggleConfig=function(){const b=document.getElementById('tacrent-cfg-body');const a=document.getElementById('tacrent-cfg-arrow');if(!b)return;if(b.style.display==='none'){b.style.display='grid';if(a)a.textContent='▼';}else{b.style.display='none';if(a)a.textContent='▶';}};
+  window.tacRentInit=function(){if(tacCalcRows.length)tacRentRender();};
+})();
+// ── FIN RENTABILIDAD TÁCTICA ────────────────────────────────────────────────
+
 </script>
 </body>
 </html>
-    <!-- FRAVEGA API PAGE -->
-    <div id="page-fravega-api" class="page">
-      <h2 style="margin-bottom:16px">🔌 Fravega API — Seller Center</h2>
-
-      <!-- Credenciales -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title">🔑 Credenciales</div>
-        <p style="font-size:12px;color:var(--text-muted);margin:8px 0">Credenciales de <b>Catálogo e Inventario</b> (Seller Center)</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px">
-          <div>
-            <label style="font-size:12px;color:var(--text-muted)">Seller ID</label>
-            <input id="fvg-seller-id" class="input-field" placeholder="fravegasellerprod1266" style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:12px;color:var(--text-muted)">API Key</label>
-            <input id="fvg-api-key" class="input-field" placeholder="API Key" style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:12px;color:var(--text-muted)">API Token</label>
-            <input id="fvg-api-token" class="input-field" placeholder="API Token" style="width:100%">
-          </div>
-        </div>
-        <p style="font-size:12px;color:var(--text-muted);margin:12px 0 8px">Credenciales de <b>VTEX</b> (Pedidos y Facturación)</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
-            <label style="font-size:12px;color:var(--text-muted)">VTEX Key</label>
-            <input id="fvg-vtex-key" class="input-field" placeholder="vtexappkey-..." style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:12px;color:var(--text-muted)">VTEX Token</label>
-            <input id="fvg-vtex-token" class="input-field" placeholder="VTEX Token" style="width:100%">
-          </div>
-        </div>
-        <div style="margin-top:10px;display:flex;gap:10px">
-          <button class="btn" onclick="fvgSaveCreds()">💾 Guardar credenciales</button>
-          <button class="btn btn-secondary" onclick="fvgTestCreds()">🧪 Probar conexión</button>
-        </div>
-        <div id="fvg-creds-status" style="margin-top:8px;font-size:13px"></div>
-      </div>
-
-      <!-- Tabs -->
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-        <button class="btn" onclick="fvgTab('productos')" id="fvg-tab-productos">📦 Productos</button>
-        <button class="btn btn-secondary" onclick="fvgTab('precios')" id="fvg-tab-precios">💲 Precios</button>
-        <button class="btn btn-secondary" onclick="fvgTab('stock')" id="fvg-tab-stock">📊 Stock</button>
-        <button class="btn btn-secondary" onclick="fvgTab('ordenes')" id="fvg-tab-ordenes">🛒 Órdenes</button>
-        <button class="btn btn-secondary" onclick="fvgTab('facturacion')" id="fvg-tab-facturacion">🧾 Facturación</button>
-      </div>
-
-      <!-- PRODUCTOS -->
-      <div id="fvg-section-productos">
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">📦 Listar Productos</div>
-          <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
-            <input id="fvg-prod-page" class="input-field" placeholder="Página (ej: 1)" style="width:120px" value="1">
-            <input id="fvg-prod-size" class="input-field" placeholder="Tamaño (máx 100)" style="width:140px" value="20">
-            <button class="btn" onclick="fvgListProducts()">🔄 Cargar productos</button>
-          </div>
-          <div id="fvg-prod-result" style="margin-top:12px;overflow-x:auto"></div>
-        </div>
-        <div class="card">
-          <div class="card-title">🔍 Buscar producto por RefID (SKU)</div>
-          <div style="display:flex;gap:10px;margin-top:10px">
-            <input id="fvg-refid-input" class="input-field" placeholder="RefID / SKU" style="width:200px">
-            <button class="btn" onclick="fvgGetByRefId()">Buscar</button>
-          </div>
-          <div id="fvg-refid-result" style="margin-top:12px"></div>
-        </div>
-      </div>
-
-      <!-- PRECIOS -->
-      <div id="fvg-section-precios" style="display:none">
-        <div class="card">
-          <div class="card-title">💲 Actualizar Precio por RefID (SKU)</div>
-          <p style="font-size:13px;color:var(--text-muted);margin:8px 0">
-            <b>list</b> = precio tachado (precio de lista) | <b>sale</b> = precio de venta actual
-          </p>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">RefID / SKU</label>
-              <input id="fvg-price-refid" class="input-field" placeholder="Ej: TN1060COMP" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Precio Tachado (list)</label>
-              <input id="fvg-price-list" class="input-field" placeholder="Ej: 15000" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Precio Venta (sale)</label>
-              <input id="fvg-price-sale" class="input-field" placeholder="Ej: 12000" style="width:100%">
-            </div>
-            <button class="btn" onclick="fvgUpdatePrice()">✅ Actualizar</button>
-          </div>
-          <div id="fvg-price-result" style="margin-top:12px;font-size:13px"></div>
-        </div>
-        <div class="card" style="margin-top:12px">
-          <div class="card-title">💲 Actualizar Precios Masivo (desde tabla)</div>
-          <p style="font-size:13px;color:var(--text-muted);margin:8px 0">Pegá una tabla con columnas: RefID, Precio Tachado, Precio Venta (separadas por tab)</p>
-          <textarea id="fvg-bulk-price" class="input-field" rows="6" placeholder="RefID&#9;PrecioTachado&#9;PrecioVenta&#10;TN1060COMP&#9;15000&#9;12000" style="width:100%;font-family:monospace;font-size:12px"></textarea>
-          <button class="btn" style="margin-top:10px" onclick="fvgBulkPrice()">⚡ Actualizar todos</button>
-          <div id="fvg-bulk-result" style="margin-top:12px;font-size:13px;max-height:200px;overflow-y:auto"></div>
-        </div>
-      </div>
-
-      <!-- STOCK -->
-      <div id="fvg-section-stock" style="display:none">
-        <div class="card">
-          <div class="card-title">📊 Actualizar Stock por RefID</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">RefID / SKU</label>
-              <input id="fvg-stock-refid" class="input-field" placeholder="Ej: TN1060COMP" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Cantidad</label>
-              <input id="fvg-stock-qty" class="input-field" placeholder="Ej: 10" style="width:100%">
-            </div>
-            <button class="btn" onclick="fvgUpdateStock()">✅ Actualizar</button>
-          </div>
-          <div id="fvg-stock-result" style="margin-top:12px;font-size:13px"></div>
-        </div>
-      </div>
-
-      <!-- ORDENES -->
-      <div id="fvg-section-ordenes" style="display:none">
-        <div class="card">
-          <div class="card-title">🛒 Consultar Órdenes</div>
-          <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap">
-            <input id="fvg-order-id" class="input-field" placeholder="ID de orden (opcional)" style="width:200px">
-            <button class="btn" onclick="fvgGetOrder()">🔍 Buscar orden</button>
-          </div>
-          <div id="fvg-order-result" style="margin-top:12px;overflow-x:auto"></div>
-        </div>
-      </div>
-
-      <!-- FACTURACION -->
-      <div id="fvg-section-facturacion" style="display:none">
-        <div class="card">
-          <div class="card-title">🧾 Facturar Orden</div>
-          <p style="font-size:13px;color:var(--text-muted);margin:8px 0">Completá los datos para facturar una orden en Fravega</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">ID de Orden</label>
-              <input id="fvg-inv-order-id" class="input-field" placeholder="Ej: IIII-prueba" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Número de Factura</label>
-              <input id="fvg-inv-number" class="input-field" placeholder="Ej: 0005-00136332" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Fecha de Emisión (DD-MM-AAAA)</label>
-              <input id="fvg-inv-date" class="input-field" placeholder="Ej: 16-05-2024" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">URL de la Factura</label>
-              <input id="fvg-inv-url" class="input-field" placeholder="https://mi-empresa.com/factura.pdf" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Número de Tracking (opcional)</label>
-              <input id="fvg-inv-tracking" class="input-field" placeholder="Número de seguimiento" style="width:100%">
-            </div>
-            <div>
-              <label style="font-size:12px;color:var(--text-muted)">Courier (opcional)</label>
-              <input id="fvg-inv-courier" class="input-field" placeholder="Ej: OCA" style="width:100%">
-            </div>
-          </div>
-          <button class="btn" style="margin-top:12px" onclick="fvgInvoiceOrder()">🧾 Facturar</button>
-          <div id="fvg-inv-result" style="margin-top:12px;font-size:13px"></div>
-        </div>
-      </div>
-    </div>
