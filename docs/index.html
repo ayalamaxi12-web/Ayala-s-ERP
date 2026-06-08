@@ -4092,7 +4092,7 @@ function ofertasExport(){
     let iibb=0, impchq=0, cf=0, margen=null, margenPct=null;
 
     if(tipo==='EXCL_ND'||tipo==='EXCL_FEA003'){
-      return {...row, _tipo:tipo, _pv:pv, _costo:costoARS, _iva:ivaMonto, _iibb:0, _impchq:0, _cf:0, _margen:null, _margenPct:null, _tc:tc};
+      return {...row, _tipo:tipo, _pv:pv, _costo:costoARS, _iva:ivaMonto, _iibb:0, _impchq:0, _cf:0, _margen:pv, _margenPct:0, _tc:tc};
     }
     if(tipo==='NC-C1'){
       iibb = pv * cfg.iibb * -1;
@@ -4228,7 +4228,7 @@ for(let i=0;i<Math.min(10,raw.length);i++){
     const excl    = tacCalcRows.filter(r=>r._tipo.startsWith('EXCL'));
     const conM    = activas.filter(r=>r._margen!==null);
     const totalM  = conM.reduce((s,r)=>s+r._margen,0);
-    const totalV  = activas.filter(r=>r._margen!==null&&r._pv>0).reduce((s,r)=>s+r._pv,0);
+    const totalV  = activas.filter(r=>r._pv>0).reduce((s,r)=>s+r._pv,0);
     const promPct = totalV!==0 ? totalM/totalV : 0;
     const negC    = conM.filter(r=>r._margen<0).length;
 
