@@ -439,7 +439,115 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </div>
   </div>
 </div>
+<!-- RENTABILIDAD TÁCTICA -->
+<div id="page-rentabilidad-tactica" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-hdr" style="margin-bottom:4px">📊 Rentabilidad Táctica</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Calculadora de rentabilidad real por factura · C1 / C2 / NC / PROMOS</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <label for="tacrent-file-input" class="btn primary" style="cursor:pointer">📂 Cargar XLSX</label>
+      <input type="file" id="tacrent-file-input" accept=".xlsx,.xls" style="display:none" onchange="tacRentHandleFile(event)">
+      <button class="btn" id="tacrent-btn-export" onclick="tacRentExport()" style="display:none">⬇ Exportar CSV</button>
+    </div>
+  </div>
 
+  <!-- CONFIG PANEL -->
+  <div class="card" style="margin-bottom:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="tacRentToggleConfig()">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Configuración de impuestos</div>
+      <span id="tacrent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
+    </div>
+    <div id="tacrent-cfg-body" style="display:none;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px">
+      <div class="rule-item">
+        <div class="rule-name">IIBB (%)</div>
+        <div class="rule-pct"><input type="number" id="tacrent-cfg-iibb" value="5" step="0.1" onchange="if(window.tacRentRecalc&&window.tacRawRows&&window.tacRawRows.length)tacRentRecalc()"></div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name">Imp. Cheque (%)</div>
+        <div class="rule-pct"><input type="number" id="tacrent-cfg-impchq" value="1.2" step="0.1" onchange="if(window.tacRentRecalc&&window.tacRawRows&&window.tacRawRows.length)tacRentRecalc()"></div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name">CF1 — C1 (%)</div>
+        <div class="rule-pct"><input type="number" id="tacrent-cfg-cf1" value="3" step="0.1" onchange="if(window.tacRentRecalc&&window.tacRawRows&&window.tacRawRows.length)tacRentRecalc()"></div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name">CF2 — C2 (%)</div>
+        <div class="rule-pct"><input type="number" id="tacrent-cfg-cf2" value="3" step="0.1" onchange="if(window.tacRentRecalc&&window.tacRawRows&&window.tacRawRows.length)tacRentRecalc()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div id="tacrent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px">
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-rows">0</div><div class="stat-label">Filas activas</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--text3)" id="tacrent-kpi-excl">0</div><div class="stat-label">Excluidas</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-venta">—</div><div class="stat-label">Venta Total</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-margen">—</div><div class="stat-label">Margen $</div></div>
+    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-pct">—</div><div class="stat-label">Margen %</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="tacrent-kpi-neg">0</div><div class="stat-label">Negativos</div></div>
+  </div>
+
+  <!-- FILTERS -->
+  <div id="tacrent-filters" class="erp-filters" style="display:none">
+    <input type="text" id="tacrent-search" placeholder="Buscar empresa, SKU, factura..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;" oninput="tacRentRender()">
+    <select id="tacrent-filter-tipo" class="fi" onchange="tacRentRender()">
+      <option value="">Todos los tipos</option>
+      <option value="C1">C1</option>
+      <option value="C2">C2</option>
+      <option value="NC-C1">NC-C1</option>
+      <option value="NC-C2">NC-C2</option>
+      <option value="PROMO">PROMO</option>
+    </select>
+    <select id="tacrent-filter-vendedor" class="fi" onchange="tacRentRender()">
+      <option value="">Todos los vendedores</option>
+    </select>
+    <select id="tacrent-filter-resp" class="fi" onchange="tacRentRender()">
+      <option value="">Todos los responsables</option>
+    </select>
+    <select id="tacrent-filter-margen" class="fi" onchange="tacRentRender()">
+      <option value="">Todos los márgenes</option>
+      <option value="pos">Positivos</option>
+      <option value="neg">Negativos</option>
+    </select>
+    <span id="tacrent-filter-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div id="tacrent-empty" style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;flex-direction:column;gap:12px">
+    <div style="font-size:32px">📂</div>
+    <div>Cargá el XLSX de facturación de Táctica para comenzar</div>
+    <div style="font-size:10px;color:var(--text3)">Formato: exportación estándar de Táctica · Fila 6 = headers</div>
+  </div>
+
+  <!-- TABLE -->
+  <div id="tacrent-table-wrap" class="table-wrap" style="display:none;overflow-x:auto">
+    <table id="tacrent-table" style="min-width:1400px">
+      <thead><tr>
+        <th>Fecha</th>
+        <th>Empresa</th>
+        <th>SKU</th>
+        <th>Tipo F.</th>
+        <th>Nº Factura</th>
+        <th>Vendedor</th>
+        <th>Responsable</th>
+        <th>TC</th>
+        <th style="text-align:right">PV</th>
+        <th style="text-align:right">Costo ARS</th>
+        <th style="text-align:right">IVA</th>
+        <th style="text-align:right">IIBB</th>
+        <th style="text-align:right">Imp.CHQ</th>
+        <th style="text-align:right">CF</th>
+        <th style="text-align:right">Margen $</th>
+        <th style="text-align:right">Margen %</th>
+        <th style="text-align:center">Tipo</th>
+      </tr></thead>
+      <tbody id="tacrent-tbody"></tbody>
+    </table>
+    <div class="pagination" id="tacrent-pag"></div>
+  </div>
+</div>
 <!-- VERIFICAR WEB -->
 <div id="page-verificar-web" class="page">
   <div class="section-hdr">Verificar Web</div>
@@ -989,101 +1097,6 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </div>
   </div>
 </div>
-
-<div id="page-rentabilidad-tactica" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-    <div>
-      <div class="section-hdr" style="margin-bottom:4px">📊 Rentabilidad Táctica</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Cargá el reporte de facturación · El ERP calcula el margen limpio con los impuestos configurados</div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <input type="file" id="tacrent-file-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="tacRentHandleFile(event)">
-      <button class="btn primary" onclick="document.getElementById('tacrent-file-input').click()">📥 Subir Rentabilidad Táctica</button>
-      <button class="btn" id="tacrent-btn-export" style="display:none" onclick="tacRentExport()">⬇ CSV</button>
-    </div>
-  </div>
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px">
-    <div style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px" onclick="tacRentToggleConfig()">
-      <span style="font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.12em">⚙ Configuración de Impuestos</span>
-      <span id="tacrent-cfg-arrow" style="color:var(--text3);font-size:10px">▼</span>
-      <span style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-left:8px">(editables — recalcula automáticamente)</span>
-    </div>
-    <div id="tacrent-cfg-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
-        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">IIBB — Cuenta 1</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="number" id="tacrent-cfg-iibb" value="5" min="0" max="100" step="0.1" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
-          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
-        </div>
-        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV sin IVA</div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
-        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Imp. Cheque — C1</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="number" id="tacrent-cfg-impchq" value="1.2" min="0" max="100" step="0.01" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
-          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
-        </div>
-        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV + IVA</div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
-        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Costo Financiero 1 — C1</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="number" id="tacrent-cfg-cf1" value="3" min="0" max="100" step="0.1" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
-          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
-        </div>
-        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV + IVA</div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
-        <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px">Costo Financiero 2 — DOS</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="number" id="tacrent-cfg-cf2" value="3" min="0" max="100" step="0.1" onchange="tacRentRecalc()" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;width:70px;outline:none">
-          <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2)">%</span>
-        </div>
-        <div style="font-size:9px;color:var(--text3);margin-top:3px">Base: PV sin IVA</div>
-      </div>
-    </div>
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:14px;font-size:9px;font-family:'DM Mono',monospace;color:var(--text3)">
-      <span><span style="color:var(--accent)">C1</span> (no DOS): IIBB + Imp.Cheque + CF1</span>
-      <span><span style="color:#a855f7">C2</span> (DOS/FAE): solo CF2</span>
-      <span><span style="color:var(--red)">NC-C1</span>: solo IIBB · sin costo</span>
-      <span><span style="color:var(--green)">PROMOS</span>: sin costo · positivo</span>
-      <span><span style="color:var(--text3)">ND / FEA+00003</span>: excluidas</span>
-    </div>
-  </div>
-  <div id="tacrent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px" class="stats-row">
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-rows" style="font-size:22px">—</div><div class="stat-label">Filas procesadas</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-excl" style="font-size:22px;color:var(--text3)">—</div><div class="stat-label">Excluidas</div></div>
-    <div class="stat-card c2"><div class="stat-value" id="tacrent-kpi-venta" style="font-size:18px">—</div><div class="stat-label">Venta Total (PV)</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-margen" style="font-size:22px">—</div><div class="stat-label">Margen Total $</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-pct" style="font-size:22px">—</div><div class="stat-label">Margen % prom.</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-neg" style="font-size:22px;color:var(--red)">—</div><div class="stat-label">Filas negativas</div></div>
-  </div>
-  <div id="tacrent-filters" style="display:none" class="erp-filters">
-    <input type="text" id="tacrent-search" placeholder="Empresa, SKU, Nº Factura..." oninput="tacRentRender()" style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none">
-    <select id="tacrent-filter-tipo" class="fi" onchange="tacRentRender()"><option value="">Todos los tipos</option><option value="C1">Cuenta 1</option><option value="C2">Cuenta 2 (DOS)</option><option value="NC-C1">NC Cuenta 1</option><option value="NC-C2">NC Cuenta 2</option><option value="PROMO">Promos</option></select>
-    <select id="tacrent-filter-vendedor" class="fi" onchange="tacRentRender()"><option value="">Todos los vendedores</option></select>
-    <select id="tacrent-filter-margen" class="fi" onchange="tacRentRender()"><option value="">Todos los márgenes</option><option value="pos">Positivo</option><option value="neg">Negativo</option></select>
-    <span id="tacrent-filter-count" style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;align-self:center"></span>
-  </div>
-  <div id="tacrent-table-wrap" style="display:none" class="table-wrap">
-    <table id="tacrent-table">
-      <thead><tr>
-        <th>Fecha</th><th>Empresa</th><th>SKU</th><th>Tipo Factura</th><th>Vendedor</th>
-        <th style="text-align:right">PV $</th><th style="text-align:right">Costo $</th>
-        <th style="text-align:right">IIBB</th><th style="text-align:right">Imp.CHQ</th><th style="text-align:right">CF</th>
-        <th style="text-align:right">Margen $</th><th style="text-align:right">Margen %</th><th style="text-align:center">Tipo</th>
-      </tr></thead>
-      <tbody id="tacrent-tbody"></tbody>
-    </table>
-    <div class="pagination" id="tacrent-pag"></div>
-  </div>
-  <div id="tacrent-empty" style="text-align:center;padding:70px 20px;color:var(--text3)">
-    <div style="font-size:44px;margin-bottom:14px">📊</div>
-    <div style="font-size:14px;margin-bottom:6px">Subí el archivo de Rentabilidad Táctica para comenzar</div>
-    <div style="font-size:11px;font-family:'DM Mono',monospace">Acepta CSV o XLSX</div>
-  </div>
-</div>
-</div><!-- app-body --><div id="toast" class="toast"></div>
 <script>
 const S={
   mlToken:'',mlToken2:'',mlSellerId:'',mlSellerId2:'',sheetsKey:'',ecomCookie:'',ecomEmail:'',
@@ -3890,142 +3903,522 @@ function ofertasExport(){
   a.download=`ofertas-ml-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   toast('Exportado');
-}// ── RENTABILIDAD TÁCTICA ────────────────────────────────────────────────────
+}// ── RENTABILIDAD TÁCTICA v2 ─────────────────────────────────────────────────
 (function(){
-  const PROMOS_SKUS=new Set(['PROMOS-PM21','PROMOS-PM10.5']);
-  const PAGE_SIZE=50;
-  let tacRawRows=[],tacCalcRows=[],tacFiltered=[],tacPage=1;
-  const _num=v=>{if(v===null||v===undefined||v==='')return 0;const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;};
-  const _pct=id=>{const el=document.getElementById(id);return el?parseFloat(el.value||0)/100:0;};
-  const _fmt$=v=>{if(v===null||v===undefined)return'—';const abs=Math.abs(v);const str=abs>=1e6?(abs/1e6).toFixed(2)+'M':Math.round(abs).toLocaleString('es-AR');return(v<0?'-':'')+'$'+str;};
-  const _fmtPct=v=>v===null||v===undefined?'—':(v*100).toFixed(2)+'%';
-  const _fmtDate=v=>{if(!v)return'—';const n=parseFloat(String(v));if(!isNaN(n)&&n>40000){const d=new Date((n-25569)*86400*1000);return d.toLocaleDateString('es-AR');}return String(v).slice(0,10);};
+  const PROMOS_SKUS = new Set(['PROMOS-PM21','PROMOS-PM10.5']);
+  const PAGE_SIZE = 50;
+  let tacRawRows=[], tacCalcRows=[], tacFiltered=[], tacPage=1;
+  let tacTCMap = {};       // { 'DD/MM/YYYY': tc }
+  let tacRespMap = {};     // { 'empresa normalizada': 'Responsable ACTUAL' }
+  let tacRespLoaded = false;
+
+  // ── UTILS ──
+  const _num = v => { if(v===null||v===undefined||v==='') return 0; const n=parseFloat(String(v).replace(/,/g,'')); return isNaN(n)?0:n; };
+  const _pct = id => { const el=document.getElementById(id); return el?parseFloat(el.value||0)/100:0; };
+  const _fmt$ = v => { if(v===null||v===undefined) return '—'; const abs=Math.abs(v); const str=abs>=1e6?(abs/1e6).toFixed(2)+'M':Math.round(abs).toLocaleString('es-AR'); return (v<0?'-':'')+'$'+str; };
+  const _fmtPct = v => v===null||v===undefined ? '—' : (v*100).toFixed(2)+'%';
+  const _fmtDate = v => { if(!v) return '—'; if(v instanceof Date) return v.toLocaleDateString('es-AR'); const n=parseFloat(String(v)); if(!isNaN(n)&&n>40000){ const d=new Date((n-25569)*86400*1000); return d.toLocaleDateString('es-AR'); } return String(v).slice(0,10); };
+  const _normEmp = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
+  const _trimSku = s => String(s||'').trim().replace(/\s+$/,'');
+
+  // ── CARGAR TC DESDE BASE MAYO-JUNIO ──
+  async function _loadTC(){
+    const bu = getBackendUrl ? getBackendUrl() : '';
+    const key = (window.S&&S.sheetsKey) || 'AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
+    const DASH_ID = '1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
+    tacTCMap = {};
+    // Intentar cargar de todas las pestañas Base disponibles
+    const tabs = ['Base Mayo - Junio','Base Abril - Mayo','Base Marzo - Abril','Base Febrero - Marzo','Base Enero - Febrero','Base Diciembre - Enero'];
+    for(const tab of tabs){
+      try{
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${DASH_ID}/values/${encodeURIComponent(tab)}!A1:AM60000?key=${key}`;
+        const d = await(await fetch(url)).json();
+        if(!d.values||d.values.length<2) continue;
+        const hdrs = d.values[0].map(h=>String(h||'').trim());
+        const iFecha = hdrs.findIndex(h=>h.includes('Fecha'));
+        const iTC = hdrs.findIndex(h=>h.toUpperCase()==='TC'||h.toUpperCase().includes('TIPO DE CAMBIO'));
+        // TC está en columna AM = índice 38
+        const iTCfinal = iTC>=0 ? iTC : 38;
+        if(iFecha<0) continue;
+        d.values.slice(1).forEach(row=>{
+          const fechaRaw = row[iFecha];
+          const tcVal = parseFloat(String(row[iTCfinal]||'0').replace(/[^\d.]/g,''));
+          if(!fechaRaw||!tcVal||tcVal<100) return;
+          // Normalizar fecha a DD/MM/YYYY
+          let fechaStr = '';
+          if(typeof fechaRaw === 'string'){
+            // puede ser DD/MM/YYYY o YYYY-MM-DD
+            if(fechaRaw.includes('/')){
+              const parts = fechaRaw.split('/');
+              if(parts[0].length===4) fechaStr=`${parts[2]}/${parts[1]}/${parts[0]}`; // YYYY/MM/DD
+              else fechaStr = fechaRaw; // DD/MM/YYYY
+            } else if(fechaRaw.includes('-')){
+              const parts = fechaRaw.split('-');
+              fechaStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+          }
+          if(fechaStr && !tacTCMap[fechaStr]) tacTCMap[fechaStr] = tcVal;
+        });
+      }catch(e){ /* silencioso */ }
+    }
+    // Fallback: TC actual del BNA
+    if(!Object.keys(tacTCMap).length){
+      try{
+        const bu2 = getBackendUrl ? getBackendUrl() : '';
+        if(bu2){ const r=await fetch(`${bu2}/tc/bna`); const d=await r.json(); if(d.tc>100) tacTCMap['__current__']=d.tc; }
+      }catch(e){}
+    }
+    console.log('TacRent TC cargados:', Object.keys(tacTCMap).length, 'fechas');
+  }
+
+  function _getTCForDate(fechaEmision){
+    if(!fechaEmision) return tacTCMap['__current__'] || S.tcBNA || 1455;
+    let fechaStr = '';
+    if(fechaEmision instanceof Date){
+      const d=fechaEmision.getDate().toString().padStart(2,'0');
+      const m=(fechaEmision.getMonth()+1).toString().padStart(2,'0');
+      const y=fechaEmision.getFullYear();
+      fechaStr=`${d}/${m}/${y}`;
+    } else {
+      const s=String(fechaEmision);
+      if(s.includes('/')){
+        const parts=s.split('/');
+        if(parts[0].length===4) fechaStr=`${parts[2]}/${parts[1]}/${parts[0]}`;
+        else fechaStr=s.split(' ')[0];
+      } else if(s.includes('-')){
+        const parts=s.split('-');
+        fechaStr=`${parts[2].slice(0,2)}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    return tacTCMap[fechaStr] || tacTCMap['__current__'] || S.tcBNA || 1455;
+  }
+
+  // ── CARGAR RESPONSABLES ──
+  async function _loadResponsables(){
+    if(tacRespLoaded) return;
+    const key = (window.S&&S.sheetsKey) || 'AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
+    const RESP_ID = '1tncawBuMTmW-0jVuU5SeqOcreJ4516s6wY7QOfC1sWQ';
+    const TAB = 'BASE GENERAL';
+    try{
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${RESP_ID}/values/${encodeURIComponent(TAB)}!A1:D5000?key=${key}`;
+      const d = await(await fetch(url)).json();
+      if(!d.values||d.values.length<2){ console.warn('TacRent: no se pudo cargar responsables'); return; }
+      // Col A = Empresa, Col B o C puede tener "DOS ...", Col D = Responsable ACTUAL
+      const hdrs = d.values[0].map(h=>String(h||'').trim().toLowerCase());
+      const iEmp = 0; // Col A
+      const iResp = 3; // Col D
+      const iDos = 1;  // Col B (razón social DOS)
+      tacRespMap = {};
+      d.values.slice(1).forEach(row=>{
+        const emp = _normEmp(row[iEmp]||'');
+        const resp = String(row[iResp]||'').trim();
+        const dos = _normEmp(row[iDos]||'');
+        if(emp && resp){ tacRespMap[emp] = resp; }
+        if(dos && resp){ tacRespMap[dos] = resp; }
+      });
+      tacRespLoaded = true;
+      console.log('TacRent Responsables:', Object.keys(tacRespMap).length, 'empresas');
+    }catch(e){ console.warn('TacRent responsables error:', e); }
+  }
+
+  function _getResp(empresa){
+    if(!empresa) return '—';
+    const norm = _normEmp(empresa);
+    if(tacRespMap[norm]) return tacRespMap[norm];
+    // Buscar parcial (empresa DOS: "DOS X" → buscar "X")
+    const sinDos = norm.replace(/^dos\s+/,'');
+    if(tacRespMap[sinDos]) return tacRespMap[sinDos];
+    // Buscar si alguna key contiene la empresa
+    for(const [k,v] of Object.entries(tacRespMap)){
+      if(k.includes(sinDos.slice(0,20)) || sinDos.includes(k.slice(0,20))) return v;
+    }
+    return '—';
+  }
+
+  // ── CLASIFICACIÓN ──
   function _classify(row){
-    const empresa=String(row['Empresa']||'').trim();
-    const tipo=String(row['Tipo de Factura']||'').trim();
-    const nro=String(row['Nº Factura']||row['N\u00ba Factura']||'').trim();
-    const sku=String(row['Codigo']||'').trim().toUpperCase();
-    const esDOS=/^DOS\s/i.test(empresa)||/^DOS$/i.test(empresa);
-    const esNC=/nota de cr[eé]dito/i.test(tipo);
-    const esND=/nota de d[eé]bito/i.test(tipo);
-    const esFAE=/\bFAE\b/i.test(tipo);
-    const esFEA003=/\bFEA\b/i.test(tipo)&&nro.startsWith('00003-');
-    const esPromo=PROMOS_SKUS.has(sku);
-    if(esND)return'EXCL_ND';
-    if(esFEA003)return'EXCL_FEA003';
-    if(esPromo)return'PROMO';
-    if(esNC&&!esDOS)return'NC-C1';
-    if(esNC&&esDOS)return'NC-C2';
-    if(esDOS||esFAE)return'C2';
-    return'C1';
+    const empresa = String(row._empresa||'').trim();
+    const tipo = String(row._tipo_fact||'').trim();
+    const nro = String(row._nro_fact||'').trim();
+    const sku = String(row._sku||'').trim().toUpperCase();
+    const prefijo = tipo.slice(0,3).toUpperCase();
+
+    const esDOS = /^DOS\s/i.test(empresa) || /^DOS$/i.test(empresa);
+    const esND = prefijo==='DEA' || prefijo==='DVE';
+    const esNC = prefijo==='CEA' || prefijo==='CEB' || prefijo==='CEE' || prefijo==='CVE';
+    const esFAE = prefijo==='FAE';
+    const esFEA003 = (prefijo==='FEA'||prefijo==='FEB'||prefijo==='FEE') && nro.startsWith('00003-');
+    const esPromo = PROMOS_SKUS.has(sku);
+
+    if(esND) return 'EXCL_ND';
+    if(esFEA003) return 'EXCL_FEA003';
+    if(esPromo) return 'PROMO';
+    if(esNC && !esDOS) return 'NC-C1';
+    if(esNC && esDOS) return 'NC-C2';
+    if(esDOS || esFAE) return 'C2';
+    return 'C1';
   }
+
+  // ── CÁLCULO ──
   function _calc(row){
-    const tipo=_classify(row);
-    const pv=_num(row['Precio de Venta']);
-    const iva=_num(row['IVA']);
-    const costoUSD=_num(row['Costo de Lista']);
-    const cant=_num(row['Cantidad']);
-    const tc=_num(row['TC']);
-    const cfg={iibb:_pct('tacrent-cfg-iibb'),impchq:_pct('tacrent-cfg-impchq'),cf1:_pct('tacrent-cfg-cf1'),cf2:_pct('tacrent-cfg-cf2')};
-    let costo=0,iibb=0,impchq=0,cf=0,margen=null,margenPct=null;
-    if(tipo==='EXCL_ND'||tipo==='EXCL_FEA003')return{...row,_tipo:tipo,_pv:pv,_costo:0,_iibb:0,_impchq:0,_cf:0,_margen:null,_margenPct:null};
-    if(tipo==='NC-C1'){iibb=pv*cfg.iibb*-1;margen=pv+iibb;margenPct=pv!==0?margen/Math.abs(pv):null;return{...row,_tipo:tipo,_pv:pv,_costo:0,_iibb:iibb,_impchq:0,_cf:0,_margen:margen,_margenPct:margenPct};}
-    if(tipo==='NC-C2')return{...row,_tipo:tipo,_pv:pv,_costo:0,_iibb:0,_impchq:0,_cf:0,_margen:pv,_margenPct:null};
-    if(tipo==='PROMO'){const pvPos=Math.abs(pv);iibb=pvPos*cfg.iibb*-1;impchq=(pvPos+Math.abs(iva))*cfg.impchq*-1;margen=pvPos+iibb+impchq;margenPct=pvPos!==0?margen/pvPos:null;return{...row,_tipo:tipo,_pv:pvPos,_costo:0,_iibb:iibb,_impchq:impchq,_cf:0,_margen:margen,_margenPct:margenPct};}
-    costo=costoUSD*cant*tc*-1;
-    if(tipo==='C1'){iibb=pv*cfg.iibb*-1;impchq=(pv+iva)*cfg.impchq*-1;cf=(pv+iva)*cfg.cf1*-1;margen=pv+costo+iibb+impchq+cf;margenPct=pv!==0?margen/pv:null;}
-    else{cf=pv*cfg.cf2*-1;margen=pv+costo+cf;margenPct=pv!==0?margen/pv:null;}
-    return{...row,_tipo:tipo,_pv:pv,_costo:costo,_iibb:iibb,_impchq:impchq,_cf:cf,_margen:margen,_margenPct:margenPct};
+    const tipo = _classify(row);
+    const pv = _num(row._pv);
+    const costoLista = _num(row._costo_lista); // ARS ya
+    const cant = _num(row._cant);
+    const tc = row._tc || 1455;
+
+    // IVA: buscar en PM, si no asumir 1.21
+    const sku = _trimSku(row._sku||'').toLowerCase();
+    const pm = window.S ? (S.pmData[sku] || S.pmData[normSku ? normSku(row._sku||'') : sku]) : null;
+    const ivaFactor = pm ? (pm.iva||1.21) : 1.21;
+    const ivaMonto = pv - (pv / ivaFactor);
+
+    // Costo: usar del PM si disponible (costo USD × TC × cant), si no usar costo del archivo × cant
+    let costoARS = 0;
+    if(pm && pm.costo && pm.costo > 0){
+      costoARS = pm.costo * tc * cant * -1;
+    } else if(costoLista > 0){
+      costoARS = costoLista * cant * -1;
+    }
+
+    const cfg = {
+      iibb:   _pct('tacrent-cfg-iibb'),
+      impchq: _pct('tacrent-cfg-impchq'),
+      cf1:    _pct('tacrent-cfg-cf1'),
+      cf2:    _pct('tacrent-cfg-cf2'),
+    };
+
+    let iibb=0, impchq=0, cf=0, margen=null, margenPct=null;
+
+    if(tipo==='EXCL_ND'||tipo==='EXCL_FEA003'){
+      return {...row, _tipo:tipo, _pv:pv, _costo:costoARS, _iva:ivaMonto, _iibb:0, _impchq:0, _cf:0, _margen:null, _margenPct:null, _tc:tc};
+    }
+    if(tipo==='NC-C1'){
+      iibb = pv * cfg.iibb * -1;
+      margen = pv + iibb;
+      margenPct = pv!==0 ? margen/Math.abs(pv) : null;
+      return {...row, _tipo:tipo, _pv:pv, _costo:0, _iva:ivaMonto, _iibb:iibb, _impchq:0, _cf:0, _margen:margen, _margenPct:margenPct, _tc:tc};
+    }
+    if(tipo==='NC-C2'){
+      return {...row, _tipo:tipo, _pv:pv, _costo:0, _iva:ivaMonto, _iibb:0, _impchq:0, _cf:0, _margen:pv, _margenPct:null, _tc:tc};
+    }
+    if(tipo==='PROMO'){
+      const pvPos = Math.abs(pv);
+      const ivaPOS = pvPos - (pvPos / ivaFactor);
+      iibb   = pvPos * cfg.iibb * -1;
+      impchq = (pvPos + ivaPOS) * cfg.impchq * -1;
+      margen = pvPos + iibb + impchq;
+      margenPct = pvPos!==0 ? margen/pvPos : null;
+      return {...row, _tipo:tipo, _pv:pvPos, _costo:0, _iva:ivaPOS, _iibb:iibb, _impchq:impchq, _cf:0, _margen:margen, _margenPct:margenPct, _tc:tc};
+    }
+    // C1 o C2
+    if(tipo==='C1'){
+      iibb   = pv * cfg.iibb * -1;
+      impchq = (pv + ivaMonto) * cfg.impchq * -1;
+      cf     = (pv + ivaMonto) * cfg.cf1 * -1;
+      margen = pv + costoARS + iibb + impchq + cf;
+      margenPct = pv!==0 ? margen/pv : null;
+    } else { // C2
+      cf     = pv * cfg.cf2 * -1;
+      margen = pv + costoARS + cf;
+      margenPct = pv!==0 ? margen/pv : null;
+    }
+    return {...row, _tipo:tipo, _pv:pv, _costo:costoARS, _iva:ivaMonto, _iibb:iibb, _impchq:impchq, _cf:cf, _margen:margen, _margenPct:margenPct, _tc:tc};
   }
-  function _parseText(text){
-    const lines=text.split(/\r?\n/).filter(l=>l.trim());
-    if(lines.length<2)return[];
-    const sep=lines[0].split('\t').length>lines[0].split(',').length?'\t':',';
-    function splitLine(line){const r=[];let cur='',q=false;for(const c of line){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur.trim());cur='';}else cur+=c;}r.push(cur.trim());return r.map(v=>v.replace(/^"|"$/g,'').trim());}
-    const hdrs=splitLine(lines[0]);
-    return lines.slice(1).map(line=>{const vals=splitLine(line);const obj={};hdrs.forEach((h,i)=>{obj[h.trim()]=(vals[i]||'').trim();});return obj;}).filter(r=>Object.values(r).some(v=>v));
+
+  // ── PROCESAR XLSX (SheetJS) ──
+  function _procXlsx(buf){
+    try{
+      const wb = XLSX.read(buf, {type:'array', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+      // Fila 6 (índice 5) = headers, datos desde fila 7 (índice 6)
+      // Headers: Fecha de Emisión(0) Empresa(1) Código(2) Descripción(3) Fabricante(4)
+      //          Tipo de Producto(5) Familia(6) Vendedor(7) Tipo de Factura(8) Nº Factura(9)
+      //          Precio de Compra de Lista(10) Costo de Lista(11) Precio de Venta de Lista(12)
+      //          Cantidad(13) Precio de Venta(14) Margen(15)
+      const HDR_ROW = 5; // índice 0-based
+      const hdrs = raw[HDR_ROW] ? raw[HDR_ROW].map(h=>String(h||'').trim()) : [];
+
+      // Mapear columnas por nombre
+      const fi = (...names) => {
+        for(const n of names){
+          const i = hdrs.findIndex(h=>h.toLowerCase().includes(n.toLowerCase()));
+          if(i>=0) return i;
+        }
+        return -1;
+      };
+      const iFecha  = fi('Fecha de Emisión','Fecha de Emision','Fecha');
+      const iEmp    = fi('Empresa');
+      const iCod    = fi('Código','Codigo');
+      const iDesc   = fi('Descripción','Descripcion');
+      const iVend   = fi('Vendedor');
+      const iTipo   = fi('Tipo de Factura');
+      const iNro    = fi('Nº Factura','N° Factura','Nro Factura','Numero Factura');
+      const iCosto  = fi('Costo de Lista');
+      const iCant   = fi('Cantidad');
+      const iPV     = fi('Precio de Venta');
+
+      let rows = [];
+      for(let i=HDR_ROW+1; i<raw.length; i++){
+        const row = raw[i];
+        if(!row || !row.some(c=>c)) continue;
+        // Ignorar subtotales y filas de metadata
+        const nro = String(row[iNro>=0?iNro:9]||'').trim();
+        if(nro==='Subtotal') continue;
+        const empresa = String(row[iEmp>=0?iEmp:1]||'').trim();
+        const cod = _trimSku(String(row[iCod>=0?iCod:2]||''));
+        if(!cod && !empresa) continue;
+        // Ignorar filas donde empresa es solo espacios (subtotales sin label)
+        if(!cod) continue;
+
+        // Fecha
+        let fechaRaw = row[iFecha>=0?iFecha:0];
+        let fechaObj = null;
+        if(fechaRaw){
+          if(typeof fechaRaw === 'string' && fechaRaw.includes('/')){
+            const parts = fechaRaw.split('/');
+            if(parts[0].length===4) fechaObj=new Date(+parts[0],+parts[1]-1,+parts[2]);
+            else fechaObj=new Date(+parts[2],+parts[1]-1,+parts[0]);
+          } else if(typeof fechaRaw === 'string' && fechaRaw.includes('-')){
+            const parts = fechaRaw.split('-');
+            fechaObj=new Date(+parts[0],+parts[1]-1,+parts[2]);
+          } else if(fechaRaw instanceof Date){
+            fechaObj = fechaRaw;
+          }
+        }
+
+        const tc = _getTCForDate(fechaObj);
+        const resp = _getResp(empresa);
+
+        rows.push({
+          _fecha:     fechaObj,
+          _empresa:   empresa,
+          _sku:       cod,
+          _desc:      String(row[iDesc>=0?iDesc:3]||'').trim(),
+          _vendedor:  String(row[iVend>=0?iVend:7]||'').trim(),
+          _tipo_fact: String(row[iTipo>=0?iTipo:8]||'').trim(),
+          _nro_fact:  nro,
+          _costo_lista: parseFloat(String(row[iCosto>=0?iCosto:11]||'0').replace(/,/g,''))||0,
+          _cant:      parseFloat(String(row[iCant>=0?iCant:13]||'1').replace(/,/g,''))||1,
+          _pv:        parseFloat(String(row[iPV>=0?iPV:14]||'0').replace(/,/g,''))||0,
+          _tc:        tc,
+          _responsable: resp,
+        });
+      }
+      return rows;
+    }catch(e){
+      toast('Error procesando XLSX: '+e.message,'error');
+      return [];
+    }
   }
-  window.tacRentRecalc=function(){
-    tacCalcRows=tacRawRows.map(_calc);
-    const activas=tacCalcRows.filter(r=>!r._tipo.startsWith('EXCL'));
-    const excl=tacCalcRows.filter(r=>r._tipo.startsWith('EXCL'));
-    const conM=activas.filter(r=>r._margen!==null);
-    const totalM=conM.reduce((s,r)=>s+r._margen,0);
-    const totalV=activas.filter(r=>r._margen!==null&&r._pv>0).reduce((s,r)=>s+r._pv,0);
-    const promPct=totalV!==0?totalM/totalV:0;
-    const negC=conM.filter(r=>r._margen<0).length;
-    document.getElementById('tacrent-kpi-rows').textContent=activas.length.toLocaleString('es-AR');
-    document.getElementById('tacrent-kpi-excl').textContent=excl.length.toLocaleString('es-AR');
-    document.getElementById('tacrent-kpi-venta').textContent=_fmt$(totalV);
-    const mEl=document.getElementById('tacrent-kpi-margen');mEl.textContent=_fmt$(totalM);mEl.style.color=totalM>=0?'var(--green)':'var(--red)';
-    const pEl=document.getElementById('tacrent-kpi-pct');pEl.textContent=_fmtPct(promPct);pEl.style.color=promPct>=0.15?'var(--green)':promPct>=0.05?'var(--yellow)':'var(--red)';
-    document.getElementById('tacrent-kpi-neg').textContent=negC.toLocaleString('es-AR');
-    document.getElementById('tacrent-kpis').style.display='grid';
-    const sel=document.getElementById('tacrent-filter-vendedor');
-    if(sel){const prev=sel.value;sel.innerHTML='<option value="">Todos los vendedores</option>';[...new Set(tacCalcRows.map(r=>r['Vendedor']).filter(Boolean))].sort().forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});sel.value=prev;}
+
+  // ── RECALC ──
+  window.tacRentRecalc = function(){
+    tacCalcRows = window.tacRawRows.map(_calc);
+    const activas = tacCalcRows.filter(r=>!r._tipo.startsWith('EXCL'));
+    const excl    = tacCalcRows.filter(r=>r._tipo.startsWith('EXCL'));
+    const conM    = activas.filter(r=>r._margen!==null);
+    const totalM  = conM.reduce((s,r)=>s+r._margen,0);
+    const totalV  = activas.filter(r=>r._margen!==null&&r._pv>0).reduce((s,r)=>s+r._pv,0);
+    const promPct = totalV!==0 ? totalM/totalV : 0;
+    const negC    = conM.filter(r=>r._margen<0).length;
+
+    document.getElementById('tacrent-kpi-rows').textContent  = activas.length.toLocaleString('es-AR');
+    document.getElementById('tacrent-kpi-excl').textContent  = excl.length.toLocaleString('es-AR');
+    document.getElementById('tacrent-kpi-venta').textContent = _fmt$(totalV);
+    const mEl=document.getElementById('tacrent-kpi-margen');
+    mEl.textContent=_fmt$(totalM); mEl.style.color=totalM>=0?'var(--green)':'var(--red)';
+    const pEl=document.getElementById('tacrent-kpi-pct');
+    pEl.textContent=_fmtPct(promPct); pEl.style.color=promPct>=0.15?'var(--green)':promPct>=0.05?'var(--yellow)':'var(--red)';
+    document.getElementById('tacrent-kpi-neg').textContent = negC.toLocaleString('es-AR');
+    document.getElementById('tacrent-kpis').style.display = 'grid';
+
+    // Poblar filtro vendedor y responsable
+    const selV=document.getElementById('tacrent-filter-vendedor');
+    if(selV){
+      const prev=selV.value;
+      selV.innerHTML='<option value="">Todos los vendedores</option>';
+      [...new Set(tacCalcRows.map(r=>r._vendedor).filter(Boolean))].sort().forEach(v=>{
+        const o=document.createElement('option');o.value=v;o.textContent=v;selV.appendChild(o);
+      });
+      selV.value=prev;
+    }
+    const selR=document.getElementById('tacrent-filter-resp');
+    if(selR){
+      const prev=selR.value;
+      selR.innerHTML='<option value="">Todos los responsables</option>';
+      [...new Set(tacCalcRows.map(r=>r._responsable).filter(r=>r&&r!=='—'))].sort().forEach(v=>{
+        const o=document.createElement('option');o.value=v;o.textContent=v;selR.appendChild(o);
+      });
+      selR.value=prev;
+    }
     tacRentRender();
   };
-  window.tacRentRender=function(){
-    const srch=(document.getElementById('tacrent-search')?.value||'').toLowerCase();
-    const fTipo=document.getElementById('tacrent-filter-tipo')?.value||'';
-    const fVend=document.getElementById('tacrent-filter-vendedor')?.value||'';
-    const fMarg=document.getElementById('tacrent-filter-margen')?.value||'';
-    tacFiltered=tacCalcRows.filter(r=>{
-      if(r._tipo.startsWith('EXCL'))return false;
-      if(fTipo&&r._tipo!==fTipo)return false;
-      if(fVend&&r['Vendedor']!==fVend)return false;
-      if(fMarg==='pos'&&(r._margen===null||r._margen<0))return false;
-      if(fMarg==='neg'&&(r._margen===null||r._margen>=0))return false;
-      const nroFact=r['Nº Factura']||r['N\u00ba Factura']||'';
-      if(srch&&!`${r['Empresa']} ${r['Codigo']} ${nroFact}`.toLowerCase().includes(srch))return false;
+
+  // ── RENDER ──
+  window.tacRentRender = function(){
+    const srch  = (document.getElementById('tacrent-search')?.value||'').toLowerCase();
+    const fTipo = document.getElementById('tacrent-filter-tipo')?.value||'';
+    const fVend = document.getElementById('tacrent-filter-vendedor')?.value||'';
+    const fResp = document.getElementById('tacrent-filter-resp')?.value||'';
+    const fMarg = document.getElementById('tacrent-filter-margen')?.value||'';
+
+    tacFiltered = tacCalcRows.filter(r=>{
+      if(r._tipo.startsWith('EXCL')) return false;
+      if(fTipo && r._tipo!==fTipo) return false;
+      if(fVend && r._vendedor!==fVend) return false;
+      if(fResp && r._responsable!==fResp) return false;
+      if(fMarg==='pos' && (r._margen===null||r._margen<0)) return false;
+      if(fMarg==='neg' && (r._margen===null||r._margen>=0)) return false;
+      if(srch && !`${r._empresa} ${r._sku} ${r._nro_fact} ${r._responsable}`.toLowerCase().includes(srch)) return false;
       return true;
     });
+
     const cEl=document.getElementById('tacrent-filter-count');
-    if(cEl)cEl.textContent=tacFiltered.length.toLocaleString('es-AR')+' filas';
+    if(cEl) cEl.textContent=tacFiltered.length.toLocaleString('es-AR')+' filas';
+
     const totalPages=Math.max(1,Math.ceil(tacFiltered.length/PAGE_SIZE));
-    if(tacPage>totalPages)tacPage=1;
-    const slice=tacFiltered.slice((tacPage-1)*PAGE_SIZE,tacPage*PAGE_SIZE);
+    if(tacPage>totalPages) tacPage=1;
+    const slice=tacFiltered.slice((tacPage-1)*PAGE_SIZE, tacPage*PAGE_SIZE);
     const tbody=document.getElementById('tacrent-tbody');
     tbody.innerHTML='';
-    const BS={'C1':'background:rgba(0,157,188,.15);color:var(--accent)','C2':'background:rgba(168,85,247,.15);color:#a855f7','NC-C1':'background:rgba(255,107,107,.15);color:var(--red)','NC-C2':'background:rgba(255,150,50,.15);color:var(--orange)','PROMO':'background:rgba(0,229,160,.15);color:var(--green)'};
+
+    const BS={
+      'C1':    'background:rgba(0,157,188,.15);color:var(--accent)',
+      'C2':    'background:rgba(168,85,247,.15);color:#a855f7',
+      'NC-C1': 'background:rgba(255,107,107,.15);color:var(--red)',
+      'NC-C2': 'background:rgba(255,150,50,.15);color:var(--orange)',
+      'PROMO': 'background:rgba(0,229,160,.15);color:var(--green)',
+    };
+
     slice.forEach(r=>{
-      const mc=r._margen===null?'var(--text3)':r._margen>=0?'var(--green)':'var(--red)';
-      const pc=r._margenPct===null?'var(--text3)':r._margenPct>=0.15?'var(--green)':r._margenPct>=0.05?'var(--yellow)':'var(--red)';
-      const bs=BS[r._tipo]||'background:var(--border);color:var(--text3)';
-      const nroFact=r['Nº Factura']||r['N\u00ba Factura']||'—';
+      const mc = r._margen===null?'var(--text3)':r._margen>=0?'var(--green)':'var(--red)';
+      const pc = r._margenPct===null?'var(--text3)':r._margenPct>=0.15?'var(--green)':r._margenPct>=0.05?'var(--yellow)':'var(--red)';
+      const bs = BS[r._tipo]||'background:var(--border);color:var(--text3)';
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${_fmtDate(r['Fecha'])}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${(r['Empresa']||'').replace(/"/g,'')}">${r['Empresa']||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">${r['Codigo']||'—'}</td><td style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['Tipo de Factura']||'—'}</td><td style="font-size:10px">${r['Vendedor']||'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px">${r._pv?_fmt$(r._pv):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._costo?_fmt$(r._costo):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._iibb?_fmt$(r._iibb):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._impchq?_fmt$(r._impchq):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._cf?_fmt$(r._cf):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${mc}">${r._margen!==null?_fmt$(r._margen):'—'}</td><td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${pc}">${r._margenPct!==null?_fmtPct(r._margenPct):'—'}</td><td style="text-align:center"><span class="badge" style="${bs};font-size:9px">${r._tipo}</span></td>`;
+      tr.innerHTML=`
+        <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${_fmtDate(r._fecha)}</td>
+        <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px" title="${(r._empresa||'').replace(/"/g,'')}">${r._empresa||'—'}</td>
+        <td style="font-size:10px;color:var(--accent);font-family:'DM Mono',monospace">${r._sku||'—'}</td>
+        <td style="font-size:9px;color:var(--text2);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r._tipo_fact||'—'}</td>
+        <td style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace">${r._nro_fact||'—'}</td>
+        <td style="font-size:10px;color:var(--text3)">${r._vendedor||'—'}</td>
+        <td style="font-size:10px;color:var(--accent3)">${r._responsable||'—'}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${r._tc?Math.round(r._tc):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px">${r._pv?_fmt$(r._pv):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._costo?_fmt$(r._costo):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">${r._iva?_fmt$(r._iva):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._iibb?_fmt$(r._iibb):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._impchq?_fmt$(r._impchq):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${r._cf?_fmt$(r._cf):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${mc}">${r._margen!==null?_fmt$(r._margen):'—'}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${pc}">${r._margenPct!==null?_fmtPct(r._margenPct):'—'}</td>
+        <td style="text-align:center"><span class="badge" style="${bs};font-size:9px">${r._tipo}</span></td>`;
       tbody.appendChild(tr);
     });
+
     const pag=document.getElementById('tacrent-pag');
-    if(pag){if(totalPages<=1){pag.innerHTML='';}else{let h=`<span class="page-info-txt">${tacFiltered.length} resultados</span>`;if(tacPage>1)h+=`<button class="page-btn" onclick="tacRentChangePage(-1)">‹</button>`;for(let i=Math.max(1,tacPage-2);i<=Math.min(totalPages,tacPage+2);i++)h+=`<button class="page-btn${i===tacPage?' active':''}" onclick="tacRentSetPage(${i})">${i}</button>`;if(tacPage<totalPages)h+=`<button class="page-btn" onclick="tacRentChangePage(1)">›</button>`;pag.innerHTML=h;}}
+    if(pag){
+      if(totalPages<=1){ pag.innerHTML=''; }
+      else{
+        let h=`<span class="page-info-txt">${tacFiltered.length} resultados</span>`;
+        if(tacPage>1) h+=`<button class="page-btn" onclick="tacRentChangePage(-1)">‹</button>`;
+        for(let i=Math.max(1,tacPage-2);i<=Math.min(totalPages,tacPage+2);i++)
+          h+=`<button class="page-btn${i===tacPage?' active':''}" onclick="tacRentSetPage(${i})">${i}</button>`;
+        if(tacPage<totalPages) h+=`<button class="page-btn" onclick="tacRentChangePage(1)">›</button>`;
+        pag.innerHTML=h;
+      }
+    }
     document.getElementById('tacrent-table-wrap').style.display='block';
     document.getElementById('tacrent-filters').style.display='flex';
     document.getElementById('tacrent-empty').style.display='none';
     document.getElementById('tacrent-btn-export').style.display='';
   };
-  window.tacRentChangePage=d=>{const p=Math.ceil(tacFiltered.length/PAGE_SIZE);tacPage=Math.max(1,Math.min(p,tacPage+d));tacRentRender();};
-  window.tacRentSetPage=p=>{tacPage=p;tacRentRender();};
-  window.tacRentHandleFile=function(event){
-    const file=event.target.files[0];if(!file)return;
+
+  window.tacRentChangePage = d => { const p=Math.ceil(tacFiltered.length/PAGE_SIZE); tacPage=Math.max(1,Math.min(p,tacPage+d)); tacRentRender(); };
+  window.tacRentSetPage = p => { tacPage=p; tacRentRender(); };
+
+  // ── HANDLE FILE ──
+  window.tacRentHandleFile = async function(event){
+    const file=event.target.files[0]; if(!file) return;
     const ext=file.name.split('.').pop().toLowerCase();
-    if(ext==='csv'){const r=new FileReader();r.onload=e=>{try{tacRawRows=_parseText(e.target.result);if(!tacRawRows.length){toast('CSV vacío','error');return;}tacRentRecalc();toast('✅ '+tacRawRows.length+' filas cargadas');}catch(err){toast('Error CSV: '+err.message,'error');}};r.readAsText(file,'UTF-8');}
-    else if(ext==='xlsx'||ext==='xls'){const r=new FileReader();r.onload=e=>{try{if(typeof XLSX==='undefined'){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=()=>_procXlsx(e.target.result);document.head.appendChild(s);}else _procXlsx(e.target.result);}catch(err){toast('Error XLSX: '+err.message,'error');}};r.readAsArrayBuffer(file);}
+    if(ext!=='xlsx'&&ext!=='xls'){ toast('Solo se acepta XLSX','error'); return; }
+
+    // Mostrar loading
+    document.getElementById('tacrent-empty').innerHTML=`<div style="display:flex;align-items:center;gap:12px;justify-content:center"><div class="spinner"></div><span style="font-family:'DM Mono',monospace;font-size:12px">Cargando TC y responsables...</span></div>`;
+
+    // Cargar TC y responsables en paralelo
+    await Promise.all([_loadTC(), _loadResponsables()]);
+
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        if(typeof XLSX==='undefined'){
+          const s=document.createElement('script');
+          s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+          s.onload=()=>{ window.tacRawRows=_procXlsx(e.target.result); if(!window.tacRawRows.length){toast('Sin filas válidas','error');return;} tacRentRecalc(); toast('✅ '+window.tacRawRows.length+' filas cargadas'); };
+          document.head.appendChild(s);
+        } else {
+          window.tacRawRows=_procXlsx(e.target.result);
+          if(!window.tacRawRows.length){toast('Sin filas válidas','error');return;}
+          tacRentRecalc();
+          toast('✅ '+window.tacRawRows.length+' filas cargadas');
+        }
+      }catch(err){ toast('Error: '+err.message,'error'); }
+    };
+    reader.readAsArrayBuffer(file);
     event.target.value='';
   };
-  function _procXlsx(buf){try{const wb=XLSX.read(buf,{type:'array',cellDates:false});const ws=wb.Sheets[wb.SheetNames[0]];tacRawRows=XLSX.utils.sheet_to_json(ws,{raw:true,defval:''});if(!tacRawRows.length){toast('XLSX vacío','error');return;}tacRentRecalc();toast('✅ '+tacRawRows.length+' filas cargadas');}catch(err){toast('Error XLSX: '+err.message,'error');}}
-  window.tacRentExport=function(){
-    if(!tacFiltered.length){toast('Sin datos','error');return;}
-    const h='Fecha,Empresa,SKU,Tipo Factura,Vendedor,PV,Costo_ARS,IIBB,Imp_CHQ,CF,Margen_$,Margen_%,Tipo';
-    const lines=tacFiltered.map(r=>[_fmtDate(r['Fecha']),`"${(r['Empresa']||'').replace(/"/g,'')}"`,r['Codigo']||'',`"${(r['Tipo de Factura']||'').replace(/"/g,'')}"`,r['Vendedor']||'',r._pv||'',r._costo||'',r._iibb||'',r._impchq||'',r._cf||'',r._margen!==null?Math.round(r._margen):'',r._margenPct!==null?(r._margenPct*100).toFixed(4):'',r._tipo].join(','));
-    const blob=new Blob(['\uFEFF'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='rentabilidad-tactica-'+new Date().toISOString().slice(0,10)+'.csv';a.click();toast('Exportado');
-  };
-  window.tacRentToggleConfig=function(){const b=document.getElementById('tacrent-cfg-body');const a=document.getElementById('tacrent-cfg-arrow');if(!b)return;if(b.style.display==='none'){b.style.display='grid';if(a)a.textContent='▼';}else{b.style.display='none';if(a)a.textContent='▶';}};
-  window.tacRentInit=function(){if(tacCalcRows.length)tacRentRender();};
-})();
-// ── FIN RENTABILIDAD TÁCTICA ────────────────────────────────────────────────
 
+  // ── EXPORT CSV ──
+  window.tacRentExport = function(){
+    if(!tacFiltered.length){ toast('Sin datos','error'); return; }
+    const h='Fecha,Empresa,Responsable,SKU,Descripcion,Tipo Factura,Nro Factura,Vendedor,TC,PV,Costo_ARS,IVA_Monto,IIBB,Imp_CHQ,CF,Margen_$,Margen_%,Tipo';
+    const lines=tacFiltered.map(r=>[
+      _fmtDate(r._fecha),
+      `"${(r._empresa||'').replace(/"/g,'')}"`,
+      `"${(r._responsable||'').replace(/"/g,'')}"`,
+      r._sku||'',
+      `"${(r._desc||'').replace(/"/g,'')}"`,
+      `"${(r._tipo_fact||'').replace(/"/g,'')}"`,
+      r._nro_fact||'',
+      `"${(r._vendedor||'').replace(/"/g,'')}"`,
+      r._tc?Math.round(r._tc):'',
+      r._pv||'',
+      r._costo?Math.round(Math.abs(r._costo)):'',
+      r._iva?Math.round(r._iva):'',
+      r._iibb?Math.round(Math.abs(r._iibb)):'',
+      r._impchq?Math.round(Math.abs(r._impchq)):'',
+      r._cf?Math.round(Math.abs(r._cf)):'',
+      r._margen!==null?Math.round(r._margen):'',
+      r._margenPct!==null?(r._margenPct*100).toFixed(4):'',
+      r._tipo
+    ].join(','));
+    const blob=new Blob(['\uFEFF'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='rentabilidad-tactica-'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();
+    toast('Exportado ✅');
+  };
+
+  // ── CONFIG TOGGLE ──
+  window.tacRentToggleConfig = function(){
+    const b=document.getElementById('tacrent-cfg-body');
+    const a=document.getElementById('tacrent-cfg-arrow');
+    if(!b) return;
+    if(b.style.display==='none'){ b.style.display='grid'; if(a) a.textContent='▼'; }
+    else { b.style.display='none'; if(a) a.textContent='▶'; }
+  };
+
+  window.tacRentInit = function(){
+    if(tacCalcRows.length) tacRentRender();
+  };
+
+})();
+// ── FIN RENTABILIDAD TÁCTICA v2 ─────────────────────────────────────────────
 </script>
+<div class="toast" id="toast"></div>
 </body>
 </html>
