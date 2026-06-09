@@ -477,6 +477,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <div class="rule-name">CF2 — C2 (%)</div>
         <div class="rule-pct"><input type="number" id="tacrent-cfg-cf2" value="3" step="0.1" onchange="if(window.tacRentRecalc&&window.tacRawRows&&window.tacRawRows.length)tacRentRecalc()"></div>
       </div>
+      <div class="rule-item">
+        <div class="rule-name">TC del día</div>
+        <div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto" onchange="if(window.tacRentRecalc&&window.tacRawRows&&window.tacRawRows.length)tacRentRecalc()"></div>
+      </div>
     </div>
   </div>
 
@@ -3991,14 +3995,14 @@ function ofertasExport(){
         fechaStr=`${parts[2].slice(0,2)}/${parts[1]}/${parts[0]}`;
       }
     }
-    return tacTCMap[fechaStr] || tacTCMap['__current__'] || S.tcBNA || 1455;
+    const tcManual = parseFloat(document.getElementById('tacrent-cfg-tc')?.value||'0');     if(tcManual > 100) return tcManual;     return tacTCMap[fechaStr] || tacTCMap['__current__'] || S.tcBNA || 1455;
   }
 
   // ── CARGAR RESPONSABLES ──
   async function _loadResponsables(){
     if(tacRespLoaded) return;
     const key = (window.S&&S.sheetsKey) || 'AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
-    const RESP_ID = '1tncawBuMTmW-0jVuU5SeqOcreJ4516s6wY7QOfC1sWQ';
+    const RESP_ID = '1WgrC1RVWxtvmxX2ip8qLI1M_2AomMyUyyE3Wiqag8do';
     const TAB = 'BASE GENERAL';
     try{
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${RESP_ID}/values/${encodeURIComponent(TAB)}!A1:D5000?key=${key}`;
