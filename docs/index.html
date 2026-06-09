@@ -4064,68 +4064,59 @@ function ofertasExport(){
   function _calc(row){
     const tipo = _classify(row);
     const pv = _num(row._pv);
-    const costoLista = _num(row._costo_lista); // ARS ya
-    const cant = _num(row._cant);
+    const costoUSD = _num(row._costo_lista);
+    const cant = _num(row._cant) || 1;
     const tc = row._tc || 1455;
+    const ivaFactor = row._iva_factor || 1.21;
 
-    // IVA: buscar en PM, si no asumir 1.21
-    const sku = _trimSku(row._sku||'').toLowerCase();
-    const pm = window.S ? (S.pmData[sku] || S.pmData[normSku ? normSku(row._sku||'') : sku]) : null;
-    const ivaFactor = pm ? (pm.iva||1.21) : 1.21;
+    // Costo ARS = CostoLista(USD) × TC × Cant
+    const costoARS = costoUSD > 0 ? costoUSD * tc * cant * -1 : 0;
+
+    // IVA monto
     const ivaMonto = pv - (pv / ivaFactor);
-
-    // Costo: usar del PM si disponible (costo USD × TC × cant), si no usar costo del archivo × cant
-    let costoARS = 0;
-    if(pm && pm.costo && pm.costo > 0){
-      costoARS = pm.costo * tc * cant * -1;
-    } else if(costoLista > 0){
-      costoARS = costoLista * cant * -1;
-    }
-
-    const cfg = {
-      iibb:   _pct('tacrent-cfg-iibb'),
-      impchq: _pct('tacrent-cfg-impchq'),
-      cf1:    _pct('tacrent-cfg-cf1'),
-      cf2:    _pct('tacrent-cfg-cf2'),
-    };
 
     let iibb=0, impchq=0, cf=0, margen=null, margenPct=null;
 
-    if(tipo==='EXCL_ND'||tipo==='EXCL_FEA003'){
+    if(tipo==='EXCL_ND'){
       return {...row, _tipo:tipo, _pv:pv, _costo:costoARS, _iva:ivaMonto, _iibb:0, _impchq:0, _cf:0, _margen:null, _margenPct:null, _tc:tc};
     }
-    if(tipo==='NC-C1'){
-      iibb = pv * cfg.iibb * -1;
-      margen = pv + iibb;
-      margenPct = pv!==0 ? margen/Math.abs(pv) : null;
-      return {...row, _tipo:tipo, _pv:pv, _costo:0, _iva:ivaMonto, _iibb:iibb, _impchq:0, _cf:0, _margen:margen, _margenPct:margenPct, _tc:tc};
+
+    if(tipo==='NC-C1'||tipo==='NC-C2'){
+      const ivaNc = ((pv * ivaFactor) - pv) * -1;
+      iibb = pv * _pct('tacrent-cfg-iibb') * -1;
+      margen = pv + ivaNc + iibb;
+      margenPct = pv !== 0 ? margen / Math.abs(pv) : null;
+      return {...row, _tipo:tipo, _pv:pv, _costo:0, _iva:ivaNc, _iibb:iibb, _impchq:0, _cf:0, _margen:margen, _margenPct:margenPct, _tc:tc};
     }
-    if(tipo==='NC-C2'){
-      return {...row, _tipo:tipo, _pv:pv, _costo:0, _iva:ivaMonto, _iibb:0, _impchq:0, _cf:0, _margen:pv, _margenPct:null, _tc:tc};
-    }
+
     if(tipo==='PROMO'){
       const pvPos = Math.abs(pv);
-      const ivaPOS = pvPos - (pvPos / ivaFactor);
-      iibb   = pvPos * cfg.iibb * -1;
-      impchq = (pvPos + ivaPOS) * cfg.impchq * -1;
+      const ivaP = pvPos - (pvPos / ivaFactor);
+      iibb   = pvPos * _pct('tacrent-cfg-iibb') * -1;
+      impchq = (pvPos + ivaP) * _pct('tacrent-cfg-impchq') * -1;
       margen = pvPos + iibb + impchq;
-      margenPct = pvPos!==0 ? margen/pvPos : null;
-      return {...row, _tipo:tipo, _pv:pvPos, _costo:0, _iva:ivaPOS, _iibb:iibb, _impchq:impchq, _cf:0, _margen:margen, _margenPct:margenPct, _tc:tc};
+      margenPct = pvPos !== 0 ? margen / pvPos : null;
+      return {...row, _tipo:tipo, _pv:pvPos, _costo:0, _iva:ivaP, _iibb:iibb, _impchq:impchq, _cf:0, _margen:margen, _margenPct:margenPct, _tc:tc};
     }
-    // C1 o C2
+
     if(tipo==='C1'){
-      iibb   = pv * cfg.iibb * -1;
-      impchq = (pv + ivaMonto) * cfg.impchq * -1;
-      cf     = (pv + ivaMonto) * cfg.cf1 * -1;
-      margen = pv + costoARS + iibb + impchq + cf;
-      margenPct = pv!==0 ? margen/pv : null;
-    } else { // C2
-      cf     = pv * cfg.cf2 * -1;
-      margen = pv + costoARS + cf;
-      margenPct = pv!==0 ? margen/pv : null;
+      iibb   = pv * _pct('tacrent-cfg-iibb') * -1;
+      impchq = (pv + ivaMonto) * _pct('tacrent-cfg-impchq') * -1;
+      cf     = (pv + ivaMonto) * _pct('tacrent-cfg-cf1') * -1;
+      margen = pv + ivaMonto + iibb + impchq + cf + costoARS;
+      margenPct = pv !== 0 ? margen / pv : null;
+    } else {
+      // C2: sin IVA, sin IIBB, sin ImpCheque, solo CF + Costo
+      cf     = pv * _pct('tacrent-cfg-cf2') * -1;
+      margen = pv + cf + costoARS;
+      margenPct = pv !== 0 ? margen / pv : null;
     }
+
     return {...row, _tipo:tipo, _pv:pv, _costo:costoARS, _iva:ivaMonto, _iibb:iibb, _impchq:impchq, _cf:cf, _margen:margen, _margenPct:margenPct, _tc:tc};
   }
+
+  // ── PROCESAR XLSX (SheetJS) ──
+  function _procXlsx(buf){
 
   // ── PROCESAR XLSX (SheetJS) ──
   function _procXlsx(buf){
@@ -4165,7 +4156,7 @@ for(let i=0;i<Math.min(10,raw.length);i++){
       const iNro    = fi('Nº Factura','N° Factura','Nro Factura','Numero Factura');
       const iCosto  = fi('Costo de Lista');
       const iCant   = fi('Cantidad');
-      const iPV = hdrs.findIndex(h=>h.trim()==='Precio de Venta');
+      const iPV = hdrs.findIndex(h=>h.trim()==='Precio de Venta'); const iIVAf = hdrs.findIndex(h=>h.trim()==='Precio de Venta IVA'||h.trim()==='IVA'); const iCostoLista = fi('Costo de Lista');
 
       let rows = [];
       for(let i=HDR_ROW+1; i<raw.length; i++){
@@ -4207,7 +4198,7 @@ for(let i=0;i<Math.min(10,raw.length);i++){
           _vendedor:  String(row[iVend>=0?iVend:7]||'').trim(),
           _tipo_fact: String(row[iTipo>=0?iTipo:8]||'').trim(),
           _nro_fact:  nro,
-          _costo_lista: parseFloat(String(row[iCosto>=0?iCosto:11]||'0').replace(/,/g,''))||0,
+          _costo_lista: parseFloat(String(row[iCostoLista>=0?iCostoLista:11]||'0').replace(/,/g,''))||0, _iva_factor: iIVAf>=0 ? (parseFloat(String(row[iIVAf]||'1.21').replace(/,/g,''))||1.21) : 1.21,
           _cant:      parseFloat(String(row[iCant>=0?iCant:13]||'1').replace(/,/g,''))||1,
           _pv:        parseFloat(String(row[iPV>=0?iPV:14]||'0').replace(/,/g,''))||0,
           _tc:        tc,
