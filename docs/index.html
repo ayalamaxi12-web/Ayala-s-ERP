@@ -4154,7 +4154,7 @@ for(let i=0;i<Math.min(10,raw.length);i++){
       const iNro    = fi('Nº Factura','N° Factura','Nro Factura','Numero Factura');
       const iCosto  = fi('Costo de Lista');
       const iCant   = fi('Cantidad');
-      const iPV = hdrs.findIndex(h=>h.trim()==='Precio de Venta'); const iIVAf = hdrs.findIndex(h=>h.trim()==='Precio de Venta IVA'||h.trim()==='IVA'); const iCostoLista = fi('Costo de Lista');
+      const iPV = hdrs.findIndex(h=>h.trim()==='Precio de Venta'); const iIVAf = hdrs.findIndex(h=>h.trim()==='Precio de Venta IVA'||h.trim()==='IVA'); const iCostoLista = hdrs.findIndex(h=>h.trim()==='Costo de Lista');
 
       let rows = [];
       for(let i=HDR_ROW+1; i<raw.length; i++){
