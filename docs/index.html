@@ -4017,7 +4017,7 @@ function ofertasExport(){
       fIMPCHQ = -(pvConIVA * cfg.impchq);        // (PV+IVA) × 1.2% × -1
       fIIBB   = -(pv * cfg.iibb);
       fCosto  = -costoARS;
-      fCF     = -(pv * cfg.cf1);
+      fCF     = -(pvConIVA * cfg.cf1);           // (PV+IVA) × 3% × -1
     }
     else if(tipo==='C2'){
       fCosto = -costoARS;
@@ -4037,7 +4037,7 @@ function ofertasExport(){
       if(refact){
         fIMPCHQ = cfg.impchqNC1Refact ? -(pvConIVA * cfg.impchq) : 0;
         fCosto  = -costoARS;
-        fCF     = -(pv * cfg.cf1);
+        fCF     = -(pvConIVA * cfg.cf1);         // (PV+IVA) × 3% × -1
       }
     }
     else if(tipo==='NC_C2'){
@@ -4055,13 +4055,13 @@ function ofertasExport(){
     // En NC_C1: pv negativo + IVA(negativo) + resto → todo suma
     let margen;
     if(tipo==='C1'){
-      margen = pv - fIVA + fIMPCHQ + fIIBB + fCosto + fCF;  // fIVA positivo → se resta
+      margen = pv + fIMPCHQ + fIIBB + fCosto + fCF;  // IVA no entra, solo base para IMPCHQ y CF1
     } else if(tipo==='C2'){
       margen = pv + fCosto + fCF;
     } else if(tipo==='PROMO'){
-      margen = pv - fIVA + fIMPCHQ + fIIBB;                  // fIVA positivo → se resta del negativo
+      margen = pv + fIMPCHQ + fIIBB;                  // IVA no entra
     } else {
-      // NC_C1, NC_C2: pv negativo, fIVA negativo (pv<0 × iva) → suma al margen
+      // NC_C1, NC_C2: pv negativo, fIVA negativo → suma al margen
       margen = pv + fIVA + fIMPCHQ + fIIBB + fCosto + fCF;
     }
     const margenPct = pv!==0 ? margen/Math.abs(pv) : 0;
