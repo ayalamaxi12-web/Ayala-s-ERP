@@ -714,7 +714,7 @@ async def fvg_debug(request: Request):
 @app.get("/fvg/items")
 async def fvg_list_items(request: Request, page: int = 1, size: int = 20):
     try:
-        r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item?page={page}&size={size}&sellerId={request.headers.get('seller-id','')}",
+        r = requests.get(f"{FVG_BASE_CATALOG}/api/item?page={page}&size={size}&sellerId={request.headers.get('seller-id','')}",
                          headers=fvg_headers(request), timeout=20)
         return fvg_safe_json(r)
     except Exception as e:
@@ -723,7 +723,7 @@ async def fvg_list_items(request: Request, page: int = 1, size: int = 20):
 @app.get("/fvg/items/{ref_id}")
 async def fvg_get_item(ref_id: str, request: Request):
     try:
-        r = requests.get(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}", headers=fvg_headers(request), timeout=20)
+        r = requests.get(f"{FVG_BASE_CATALOG}/api/item/refId/{ref_id}", headers=fvg_headers(request), timeout=20)
         return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -732,7 +732,7 @@ async def fvg_get_item(ref_id: str, request: Request):
 async def fvg_update_price(ref_id: str, request: Request):
     body = await request.json()
     try:
-        r = requests.put(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}/price", headers=fvg_headers(request), json=body, timeout=20)
+        r = requests.put(f"{FVG_BASE_CATALOG}/api/item/refId/{ref_id}/price", headers=fvg_headers(request), json=body, timeout=20)
         return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -741,7 +741,7 @@ async def fvg_update_price(ref_id: str, request: Request):
 async def fvg_update_stock(ref_id: str, request: Request):
     body = await request.json()
     try:
-        r = requests.put(f"{FVG_BASE_CATALOG}/api/v1/item/{ref_id}/stock", headers=fvg_headers(request), json=body, timeout=20)
+        r = requests.put(f"{FVG_BASE_CATALOG}/api/item/refId/{ref_id}/stock", headers=fvg_headers(request), json=body, timeout=20)
         return fvg_safe_json(r)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
