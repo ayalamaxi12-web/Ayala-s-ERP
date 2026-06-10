@@ -4310,6 +4310,7 @@ function ofertasExport(){
     toast('Exportado');
   };
 
+  window.tacRentRender     = tacRentRender;
   window.tacRentChangePage = d=>{ const p=Math.ceil(tacFiltered.length/PAGE_SIZE); tacPage=Math.max(1,Math.min(p,tacPage+d)); tacRentRender(); };
   window.tacRentSetPage    = p=>{ tacPage=p; tacRentRender(); };
   window.tacRentToggleConfig = function(){
