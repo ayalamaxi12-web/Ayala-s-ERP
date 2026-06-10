@@ -4032,22 +4032,15 @@ function ofertasExport(){
     }
     else if(tipo==='NC_C1'){
       const refact = _esRefact(row);
-      fIVA  = pv * iva;                          // positivo (pv negativo → fIVA negativo → en NC suma)
-      fIIBB = -(pv * cfg.iibb);
-      if(refact){
-        fIMPCHQ = cfg.impchqNC1Refact ? -(pvConIVA * cfg.impchq) : 0;
-        fCosto  = -costoARS;
-        fCF     = -(pvConIVA * cfg.cf1);         // (PV+IVA) × 3% × -1
-      }
+      fIVA    = Math.abs(pv) * iva;             // positivo, solo display
+      fIIBB   = -(pv * cfg.iibb);               // pv negativo → positivo (recupera)
+      fIMPCHQ = cfg.impchqNC1Refact ? -(pvConIVA * cfg.impchq) : 0;
+      fCosto  = -(costo * tc * cant);           // (CostoLista × TC × Cant) × -1 — cant negativa → resultado positivo
+      fCF     = -(pvConIVA * cfg.cf1);          // pv negativo → positivo (recupera)
     }
     else if(tipo==='NC_C2'){
-      const refact = _esRefact(row);
-      if(refact){
-        fCosto = -costoARS;
-        fCF    = cfg.cf2NC2Refact ? -(pv * cfg.cf2) : 0;
-      } else {
-        fCF    = cfg.cf2NC2Fallado ? -(pv * cfg.cf2) : 0;
-      }
+      fCosto = -(costo * tc * cant);            // cant negativa → resultado positivo (recupera)
+      fCF    = -(pv * cfg.cf2);                 // pv negativo → positivo (recupera)
     }
 
     // Margen: IVA entra como descuento (fIVA positivo → se resta sumando negativo)
@@ -4061,8 +4054,8 @@ function ofertasExport(){
     } else if(tipo==='PROMO'){
       margen = pv + fIMPCHQ + fIIBB;                  // IVA no entra
     } else {
-      // NC_C1, NC_C2: pv negativo, fIVA negativo → suma al margen
-      margen = pv + fIVA + fIMPCHQ + fIIBB + fCosto + fCF;
+      // NC_C1, NC_C2: IVA no entra en margen (igual que C1/C2)
+      margen = pv + fIMPCHQ + fIIBB + fCosto + fCF;
     }
     const margenPct = pv!==0 ? margen/Math.abs(pv) : 0;
     return { pv, iva:fIVA, impchq:fIMPCHQ, iibb:fIIBB, costo:fCosto, cf:fCF, margen, margenPct, tipo, refact:_esRefact(row) };
