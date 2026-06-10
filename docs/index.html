@@ -4009,10 +4009,12 @@ function ofertasExport(){
     const pvConIVA = pv * (1 + iva);
 
     let fIVA=0, fIMPCHQ=0, fIIBB=0, fCF=0, fCosto=0;
+    // IVA: siempre POSITIVO (solo se muestra en columna, no entra en margen)
+    // IMPCHQ = (PV + IVA) × tasa × -1
 
     if(tipo==='C1'){
-      fIVA    = -(pv * iva);
-      fIMPCHQ = -(pvConIVA * cfg.impchq);
+      fIVA    = pv * iva;                        // positivo, solo display
+      fIMPCHQ = -(pvConIVA * cfg.impchq);        // (PV+IVA) × 1.2% × -1
       fIIBB   = -(pv * cfg.iibb);
       fCosto  = -costoARS;
       fCF     = -(pv * cfg.cf1);
@@ -4022,14 +4024,15 @@ function ofertasExport(){
       fCF    = -(pv * cfg.cf2);
     }
     else if(tipo==='PROMO'){
-      // pv negativo; IVA solo base para IMPCHQ, no entra en margen
+      // pv negativo; IVA positivo solo base para IMPCHQ, no entra en margen
       const pvAbs = Math.abs(pv);
+      fIVA    = pvAbs * iva;                     // positivo, solo display
       fIMPCHQ = -(pvAbs*(1+iva)*cfg.impchq);
       fIIBB   = -(pvAbs*cfg.iibb);
     }
     else if(tipo==='NC_C1'){
       const refact = _esRefact(row);
-      fIVA  = -(pv * iva);
+      fIVA  = pv * iva;                          // positivo (pv negativo → fIVA negativo → en NC suma)
       fIIBB = -(pv * cfg.iibb);
       if(refact){
         fIMPCHQ = cfg.impchqNC1Refact ? -(pvConIVA * cfg.impchq) : 0;
@@ -4047,7 +4050,20 @@ function ofertasExport(){
       }
     }
 
-    const margen = pv + fIVA + fIMPCHQ + fIIBB + fCosto + fCF;
+    // Margen: IVA entra como descuento (fIVA positivo → se resta sumando negativo)
+    // En C1: pv - IVA - IMPCHQ - IIBB - Costo - CF
+    // En NC_C1: pv negativo + IVA(negativo) + resto → todo suma
+    let margen;
+    if(tipo==='C1'){
+      margen = pv - fIVA + fIMPCHQ + fIIBB + fCosto + fCF;  // fIVA positivo → se resta
+    } else if(tipo==='C2'){
+      margen = pv + fCosto + fCF;
+    } else if(tipo==='PROMO'){
+      margen = pv - fIVA + fIMPCHQ + fIIBB;                  // fIVA positivo → se resta del negativo
+    } else {
+      // NC_C1, NC_C2: pv negativo, fIVA negativo (pv<0 × iva) → suma al margen
+      margen = pv + fIVA + fIMPCHQ + fIIBB + fCosto + fCF;
+    }
     const margenPct = pv!==0 ? margen/Math.abs(pv) : 0;
     return { pv, iva:fIVA, impchq:fIMPCHQ, iibb:fIIBB, costo:fCosto, cf:fCF, margen, margenPct, tipo, refact:_esRefact(row) };
   }
