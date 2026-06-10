@@ -548,20 +548,21 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 
   <!-- POR PM -->
-  <div id="tacrent-por-pm" style="display:none;margin-top:24px">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">📋 Resumen por PM</div>
-    <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border)">
-      <table style="min-width:800px">
+  <div id="tacrent-por-pm" style="display:none;margin-top:8px">
+    <div class="section-hdr" style="margin-bottom:10px">Resumen por PM</div>
+    <div class="table-wrap">
+      <table id="tacrent-pm-table">
         <thead><tr>
+          <th style="width:22px"></th>
           <th>PM</th>
-          <th style="text-align:right">Venta</th>
+          <th style="text-align:right">Venta Total</th>
+          <th style="text-align:right">Margen $</th>
+          <th style="text-align:right">Margen %</th>
           <th style="text-align:right">IVA</th>
           <th style="text-align:right">IIBB</th>
           <th style="text-align:right">Imp.CHQ</th>
           <th style="text-align:right">Costo ARS</th>
           <th style="text-align:right">CF</th>
-          <th style="text-align:right">Margen $</th>
-          <th style="text-align:right">Margen %</th>
         </tr></thead>
         <tbody id="tacrent-pm-tbody"></tbody>
       </table>
@@ -4240,28 +4241,85 @@ function ofertasExport(){
     const mapa={};
     datos.forEach(d=>{
       const pm=d.pm||'(Sin PM)';
-      if(!mapa[pm]) mapa[pm]={pv:0,iva:0,iibb:0,impchq:0,costo:0,cf:0,margen:0};
+      if(!mapa[pm]) mapa[pm]={pv:0,iva:0,iibb:0,impchq:0,costo:0,cf:0,margen:0,skus:{}};
       const m=mapa[pm];
       m.pv+=d.pv;m.iva+=d.iva;m.iibb+=d.iibb;m.impchq+=d.impchq;m.costo+=d.costo;m.cf+=d.cf;m.margen+=d.margen;
+      // Agrupar por SKU dentro del PM
+      if(!m.skus[d.sku]) m.skus[d.sku]={pv:0,iva:0,iibb:0,impchq:0,costo:0,cf:0,margen:0,tipo:d.tipo};
+      const s=m.skus[d.sku];
+      s.pv+=d.pv;s.iva+=d.iva;s.iibb+=d.iibb;s.impchq+=d.impchq;s.costo+=d.costo;s.cf+=d.cf;s.margen+=d.margen;
     });
     const rows=Object.entries(mapa).sort((a,b)=>b[1].margen-a[1].margen);
     document.getElementById('tacrent-por-pm').style.display=rows.length?'block':'none';
-    document.getElementById('tacrent-pm-tbody').innerHTML=rows.map(([pm,t])=>{
+
+    let html='';
+    rows.forEach(([pm,t])=>{
       const pct=t.pv?t.margen/Math.abs(t.pv):0;
       const mc=t.margen>=0?'color:#4ade80':'color:#f87171';
-      return `<tr>
-        <td><b>${pm}</b></td>
-        <td style="text-align:right">${_fmt(t.pv)}</td>
-        <td style="text-align:right">${_fmt(t.iva)}</td>
-        <td style="text-align:right">${_fmt(t.iibb)}</td>
-        <td style="text-align:right">${_fmt(t.impchq)}</td>
-        <td style="text-align:right">${_fmt(t.costo)}</td>
-        <td style="text-align:right">${_fmt(t.cf)}</td>
-        <td style="text-align:right;${mc}"><b>${_fmt(t.margen)}</b></td>
-        <td style="text-align:right;${mc}">${_fmtPct(pct)}</td>
+      const pctColor=pct>=0.25?'var(--green)':pct>=0.15?'var(--yellow)':'var(--red)';
+      const pmId='pm-'+pm.replace(/[^a-z0-9]/gi,'');
+      const topSkus=Object.entries(t.skus).sort((a,b)=>b[1].margen-a[1].margen);
+
+      // Fila PM (colapsable)
+      html+=`<tr class="cat-row" onclick="tacTogglePM('${pmId}')" style="cursor:pointer;background:var(--surface2)">
+        <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${pmId}">▶</td>
+        <td style="font-weight:700;font-size:12px">${pm}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:11px">${_fmt(t.pv)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;${mc}">${_fmt(t.margen)}</td>
+        <td style="text-align:right"><span class="badge" style="background:rgba(0,229,160,0.15);color:${pctColor};font-size:10px">${_fmtPct(pct)}</span></td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">${_fmt(t.iva)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">${_fmt(t.iibb)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">${_fmt(t.impchq)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">${_fmt(t.costo)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">${_fmt(t.cf)}</td>
       </tr>`;
-    }).join('');
+
+      // Filas SKU colapsadas
+      html+=`<tr id="${pmId}" style="display:none"><td colspan="10" style="padding:0">
+        <table style="width:100%;background:var(--surface)">
+          <thead><tr style="background:rgba(0,157,188,0.06)">
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);width:22px"></th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3)">SKU</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">Venta</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">Margen $</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">Margen %</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">IVA</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">IIBB</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">Imp.CHQ</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">Costo ARS</th>
+            <th style="padding:5px 10px;font-size:9px;color:var(--text3);text-align:right">CF</th>
+          </tr></thead>
+          <tbody>${topSkus.map(([sku,s])=>{
+            const sp=s.pv?s.margen/Math.abs(s.pv):0;
+            const sc=s.margen>=0?'color:#4ade80':'color:#f87171';
+            const spc=sp>=0.25?'var(--green)':sp>=0.15?'var(--yellow)':'var(--red)';
+            return `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:4px 10px"></td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">${sku}</td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;text-align:right">${_fmt(s.pv)}</td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;text-align:right;${sc}">${_fmt(s.margen)}</td>
+              <td style="padding:4px 10px;text-align:right"><span style="font-size:9px;font-family:'DM Mono',monospace;font-weight:700;color:${spc}">${_fmtPct(sp)}</span></td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;text-align:right;color:var(--text2)">${s.iva?_fmt(s.iva):'—'}</td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;text-align:right;color:var(--text2)">${s.iibb?_fmt(s.iibb):'—'}</td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;text-align:right;color:var(--text2)">${s.impchq?_fmt(s.impchq):'—'}</td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;text-align:right;color:var(--red)">${s.costo?_fmt(s.costo):'—'}</td>
+              <td style="padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;text-align:right;color:var(--text2)">${s.cf?_fmt(s.cf):'—'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </td></tr>`;
+    });
+    document.getElementById('tacrent-pm-tbody').innerHTML=html;
   }
+
+  window.tacTogglePM = function(id){
+    const row=document.getElementById(id);
+    const arr=document.getElementById('arr-'+id);
+    if(!row) return;
+    const open=row.style.display!=='none';
+    row.style.display=open?'none':'table-row';
+    if(arr) arr.textContent=open?'▶':'▼';
+  };
 
   // ── CARGAR ARCHIVO ──
   window.tacRentHandleFile = async function(event){
