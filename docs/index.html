@@ -4004,7 +4004,7 @@ function ofertasExport(){
     const costo = _parseNum(row['Costo de Lista']);
     const cant  = _parseNum(row['Cantidad']);
     const tc    = _getTC();
-    const iva   = _getIVA(row['Código']);
+    const ivaCSV = _parseNum(row['IVA']); const iva = ivaCSV > 1 ? ivaCSV - 1 : (ivaCSV > 0 ? ivaCSV : _getIVA(row['Código']));
     const costoARS = Math.abs(costo) * Math.abs(cant) * tc;
     const pvConIVA = pv * (1 + iva);
 
