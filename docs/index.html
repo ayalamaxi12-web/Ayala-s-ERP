@@ -4329,11 +4329,21 @@ function ofertasExport(){
     document.getElementById('tacrent-empty').innerHTML=`<div style="display:flex;align-items:center;gap:12px"><div class="spinner"></div><span style="font-family:'DM Mono',monospace;font-size:12px">Cargando TC e IVA...</span></div>`;
     document.getElementById('tacrent-table-wrap').style.display='none';
     document.getElementById('tacrent-por-pm').style.display='none';
+                          
 
     await Promise.all([_loadTC(), _loadIVA()]);
 
     const text=await file.text();
-    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    let lines=text.split(/\r?\n/).filter(l=>l.trim());
+    const merged=[];
+    let buffer='';
+    for(const l of lines){
+      buffer = buffer ? buffer+' '+l : l;
+      const quotes=(buffer.match(/"/g)||[]).length;
+      if(quotes%2===0){ merged.push(buffer); buffer=''; }
+    }
+    if(buffer) merged.push(buffer);
+    lines=merged;
     const headers=_parseLine(lines[0]).map(h=>h.replace(/"/g,'').trim());
     tacRawRows=[];
     for(let i=1;i<lines.length;i++){
