@@ -729,6 +729,27 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div id="competidores-vendor-btns" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
     <span id="competidores-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-left:4px"></span>
   </div>
+  <div id="comp-desc-panel" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:700;color:var(--accent)">Margen al P. Sugerido:</span>
+      <span style="display:flex;gap:4px;align-items:center">Baja s/comp.<input type="text" id="cfg-baja" value="1" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.com=this.checked;renderCompetidores()">Comisión ML<input type="text" id="cfg-com" value="16" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.extra=this.checked;renderCompetidores()">Extra fijo<input type="text" id="cfg-e1" value="1255" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">&lt;16k</span><input type="text" id="cfg-e2" value="2500" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">16-24k</span><input type="text" id="cfg-e3" value="3030" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">24-33k</span><input type="text" id="cfg-e4" value="0" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">≥33k</span></label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iva=this.checked;renderCompetidores()">IVA</label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iibb=this.checked;renderCompetidores()">IIBB<input type="text" id="cfg-iibb" value="5" onchange="compCfgSave();renderCompetidores()" style="width:30px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.impch=this.checked;renderCompetidores()">Imp.CH<input type="text" id="cfg-impch" value="1.2" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.envio=this.checked;renderCompetidores()">Envío<input type="text" id="cfg-envio" value="8500" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">≥33k</span></label>
+      <span style="display:flex;gap:4px;align-items:center">TC:<input type="text" id="comp-tc" placeholder="BNA auto" oninput="renderCompetidores()" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;outline:none"></span>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:700;color:var(--accent)">Cuotas (recargo × / comisión %):</span>
+      <span style="display:flex;gap:3px;align-items:center">3c<input type="text" id="cfg-r3" value="1.15" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q3" value="4.08" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+      <span style="display:flex;gap:3px;align-items:center">6c<input type="text" id="cfg-r6" value="1.20" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q6" value="9.48" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+      <span style="display:flex;gap:3px;align-items:center">9c<input type="text" id="cfg-r9" value="1.25" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q9" value="15.12" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+      <span style="display:flex;gap:3px;align-items:center">12c<input type="text" id="cfg-r12" value="1.35" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q12" value="18.24" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+      <span style="display:flex;gap:3px;align-items:center">18c<input type="text" id="cfg-r18" value="1.45" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q18" value="26.52" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+    </div>
+  </div>
   <div class="erp-filters" id="competidores-search-bar" style="display:none">
     <input type="text" id="competidores-search" placeholder="Buscar producto..." style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
     <select id="competidores-sort" class="fi"><option value="precio-asc">Precio ↑</option><option value="precio-desc">Precio ↓</option><option value="nombre">Nombre A-Z</option><option value="ventas-desc">Ventas ↓</option></select>
@@ -744,6 +765,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <th>SKU</th><th>Cantidad</th>
         <th data-col="miPrecio">Mi Precio<br><span style="font-size:8px;font-weight:400">(PM×Cant+Envío)</span></th>
         <th data-col="diffComp">Diff %</th>
+        <th>P. Sugerido</th>
         <th data-col="margenComp">Margen ML</th>
         <th>Modificar</th>
         <th>Link</th>
@@ -2194,21 +2216,17 @@ function renderCompetidores(){
       ? `<span style="font-weight:700;font-family:'DM Mono',monospace;color:${diff<-5?'var(--green)':diff>5?'var(--red)':'var(--text2)'}">${diff>0?'+':''}${diff.toFixed(1)}%</span>`
       : '—';
     
-    // Margen ML usando fórmula real de la planilla Veronica:
-    // BP = 1 - (Q / ((BM+BG+BH+BI+BJ) / TC))
-    // BG=IVA, BH=ComisionML, BI=IIBB, BJ=ImpCheque, BM=PrecioEcom, Q=Costo USD
+// Margen ML al PRECIO SUGERIDO (competencia − % baja) — valores editables en el panel
+    window.COMPDESC = window.COMPDESC || {com:true,extra:true,iva:true,iibb:true,impch:true,envio:true};
     const costoUSD = pm ? (pm.costo||0) : 0;
-    const tc = S.tcBNA || 1455;
-    const costoARS = costoUSD * tc;
-    const ivaFactor = pm ? (pm.iva||1.21) : 1.21; // IVA del PM (1.21 o 1.105)
-    const ivaMonto = miPrecio - (miPrecio / ivaFactor); // BG
-    // BH: Comision ML escalonada + 16% base
-    const comML = (miPrecio <= 15000 ? 1255 : miPrecio <= 25000 ? 2500 : miPrecio < 33000 ? 3030 : 0) + miPrecio * 0.16;
-    const iibb = (miPrecio + ivaMonto) * 0.05; // BI
-    const impCh = miPrecio * 0.012; // BJ
-    const precioEcom = miPrecio < 33000 ? miPrecio : miPrecio - 8500; // BM
-    const neto = precioEcom + ivaMonto - comML - iibb - impCh;
-    const margen = costoARS > 0 && neto > 0 ? 1 - (costoARS / neto) : (pm && pm.margenML ? pm.margenML : null);
+    const tcManual = parseFloat(((qs('comp-tc')||{}).value||'').replace(',','.'))||0;
+    const tc = tcManual || S.tcBNA || 1465;
+    const costoARS = costoUSD * cant * tc;
+    const ivaFactor = pm ? (pm.iva||1.21) : 1.21;
+    const pComp = r.precio || 0;
+    const pSug = pComp ? pComp*(1-cfgN('cfg-baja',1)/100) : 0;
+    const _mg = compMargenAt(pSug, ivaFactor, costoARS, 0);
+    const margen = _mg.m;
     const margenStr = margen !== null 
       ? `<span style="color:${margen>0.25?'var(--green)':margen>0.15?'var(--yellow)':'var(--red)'}">${(margen*100).toFixed(1)}%</span>`
       : '—';
@@ -2228,13 +2246,22 @@ function renderCompetidores(){
       <td class="mono" style="font-size:10px;text-align:center">${cant>1?cant:'1'}</td>
       <td class="mono" style="font-size:10px;color:var(--accent)">${miPrecio?'$'+fmtN(miPrecio):'Sin PM'}</td>
       <td>${diffStr}</td>
-      <td>${margenStr}</td>
+      <td class="mono" style="font-size:10px;color:#ffd166">${pSug?'$'+fmtN(Math.round(pSug)):'—'}</td>
+      <td>${margenStr}${(pSug&&costoARS>0)?` <button class="btn-xs" title="Margen por cuotas" onclick="compToggleCuotas(this)" data-psug="${pSug}" data-costo="${costoARS}" data-iva="${ivaFactor}">▾</button>`:''}</td>
       <td>${modBtn}</td>
       <td>${r.link?`<a href="${r.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'-'}</td>
     </tr>`;
   }).join('');
   const pag=qs('competidores-pag');if(pages<=1){pag.innerHTML='';return;}let html=`<span class="page-info-txt">${data.length} resultados</span>`;if(COMP.page>1)html+=`<button class="page-btn" onclick="COMP.page=${COMP.page-1};renderCompetidores()">‹</button>`;for(let i=Math.max(1,COMP.page-2);i<=Math.min(pages,COMP.page+2);i++)html+=`<button class="page-btn${i===COMP.page?' active':''}" onclick="COMP.page=${i};renderCompetidores()">${i}</button>`;if(COMP.page<pages)html+=`<button class="page-btn" onclick="COMP.page=${COMP.page+1};renderCompetidores()">›</button>`;pag.innerHTML=html;
 }
+// ── CONFIG MARGEN COMPETIDORES ──
+function cfgN(id,def){const el=qs(id);if(!el)return def;const v=parseFloat(String(el.value).replace(',','.'));return isNaN(v)?def:v;}
+function compCfgSave(){try{const ids=['cfg-baja','cfg-com','cfg-e1','cfg-e2','cfg-e3','cfg-e4','cfg-iibb','cfg-impch','cfg-envio','cfg-r3','cfg-q3','cfg-r6','cfg-q6','cfg-r9','cfg-q9','cfg-r12','cfg-q12','cfg-r18','cfg-q18'];const o={};ids.forEach(i=>{const el=qs(i);if(el)o[i]=el.value;});localStorage.setItem('comp_cfg',JSON.stringify(o));}catch(e){}}
+function compCfgLoad(){try{const o=JSON.parse(localStorage.getItem('comp_cfg')||'{}');Object.keys(o).forEach(i=>{const el=qs(i);if(el&&o[i]!=='')el.value=o[i];});}catch(e){}}
+function compExtraFijo(p){return p<16000?cfgN('cfg-e1',1255):p<24000?cfgN('cfg-e2',2500):p<33000?cfgN('cfg-e3',3030):cfgN('cfg-e4',0);}
+function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',16)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&neto>0)?mars/neto:null,mars:mars};}
+function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=[['3 Cuotas','cfg-r3',1.15,'cfg-q3',4.08],['6 Cuotas','cfg-r6',1.20,'cfg-q6',9.48],['9 Cuotas','cfg-r9',1.25,'cfg-q9',15.12],['12 Cuotas','cfg-r12',1.35,'cfg-q12',18.24],['18 Cuotas','cfg-r18',1.45,'cfg-q18',26.52]];const cells=planes.map(pl=>{const p=pSug*cfgN(pl[1],pl[2]);const q=cfgN(pl[3],pl[4]);const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
+compCfgLoad();
 
 // ── RULES ──
 function renderRules(){qs('rules-grid').innerHTML=RULES.map(r=>`<div class="rule-item"><div class="rule-name">${r.key}</div><div class="rule-pct"><input type="number" step="0.01" value="${r.pct.toFixed(2)}" data-rk="${r.key}"></div></div>`).join('');qs('rules-grid').querySelectorAll('input').forEach(inp=>inp.addEventListener('change',()=>{const r=RULES.find(x=>x.key===inp.dataset.rk);if(r)r.pct=parseFloat(inp.value)||r.pct;}));}
