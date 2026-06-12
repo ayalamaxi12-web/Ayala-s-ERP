@@ -762,10 +762,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <th data-col="precio">Precio</th><th data-col="orig">Precio Tachado</th>
         <th data-col="discount">Descuento</th><th data-col="cuotas">Cuotas</th>
         <th data-col="ventas">Ventas</th>
-        <th>SKU</th><th>Cantidad</th>
+        <th data-col="sku">SKU</th><th data-col="cant">Cantidad</th>
         <th data-col="miPrecio">Mi Precio<br><span style="font-size:8px;font-weight:400">(PM×Cant+Envío)</span></th>
         <th data-col="diffComp">Diff %</th>
-        <th>P. Sugerido</th>
+        <th data-col="psug">P. Sugerido</th>
         <th data-col="margenComp">Margen ML</th>
         <th>Modificar</th>
         <th>Link</th>
@@ -2194,8 +2194,9 @@ function toggleVendor(btn){const v=btn.dataset.v;const idx=COMP.selected.indexOf
 function renderCompetidores(){
   const search=(qs('competidores-search').value||'').toLowerCase();const sort=qs('competidores-sort').value;
   let data=COMP.data.filter(r=>{if(COMP.selected.indexOf(r.vendedor)<0)return false;if(search&&!r.titulo.toLowerCase().includes(search))return false;return true;});
-  if(S.cSort.col){const col=S.cSort.col,dir=S.cSort.dir;data.sort((a,b)=>{const va=col==='vendedor'?a.vendedor:col==='titulo'?a.titulo:col==='precio'?a.precio:col==='orig'?a.orig_price:col==='ventas'?a.ventas:col==='cuotas'?a.cuotas:a.vendedor;const vb=col==='vendedor'?b.vendedor:col==='titulo'?b.titulo:col==='precio'?b.precio:col==='orig'?b.orig_price:col==='ventas'?b.ventas:col==='cuotas'?b.cuotas:b.vendedor;return va<vb?-dir:va>vb?dir:0;});}
-  else{if(sort==='precio-asc')data.sort((a,b)=>a.precio-b.precio);else if(sort==='precio-desc')data.sort((a,b)=>b.precio-a.precio);else if(sort==='ventas-desc')data.sort((a,b)=>b.ventas-a.ventas);else data.sort((a,b)=>a.titulo.localeCompare(b.titulo));}
+const _tcS=(parseFloat(((qs('comp-tc')||{}).value||'').replace(',','.'))||0)||S.tcBNA||1465;
+  data=data.map(r=>{const pmx=S.pmData[normSku(r.sku||'')]||null;const cx=parseFloat(r.cantidad||1)||1;const pmT=(pmx?(pmx.ml||0):0)*cx;const mi=pmT>0?(pmT>=(S.shippingThreshold||33000)?pmT+(S.shippingCost||8500):pmT):0;const cARS=(pmx?(pmx.costo||0):0)*cx*_tcS;const ivaF=pmx?(pmx.iva||1.21):1.21;const ps=r.precio?r.precio*(1-cfgN('cfg-baja',1)/100):0;r._mi=mi;r._diff=(mi&&r.precio)?(r.precio-mi)/mi*100:null;r._psug=ps;r._mg=(cARS>0&&ps>0)?compMargenAt(ps,ivaF,cARS,0).m:null;return r;});
+  if(S.cSort.col){const col=S.cSort.col,dir=S.cSort.dir;const gv=x=>{switch(col){case 'vendedor':return x.vendedor||'';case 'titulo':return x.titulo||'';case 'precio':return x.precio||0;case 'orig':return x.orig_price||0;case 'discount':return parseFloat(x.discount)||0;case 'cuotas':return x.cuotas||'';case 'ventas':return x.ventas||0;case 'sku':return x.sku||'';case 'cant':return parseFloat(x.cantidad||1)||1;case 'miPrecio':return x._mi==null?-Infinity:x._mi;case 'diffComp':return x._diff==null?-Infinity:x._diff;case 'psug':return x._psug==null?-Infinity:x._psug;case 'margenComp':return x._mg==null?-Infinity:x._mg;default:return x.vendedor||'';}};data.sort((a,b)=>{const va=gv(a),vb=gv(b);return va<vb?-dir:va>vb?dir:0;});}  else{if(sort==='precio-asc')data.sort((a,b)=>a.precio-b.precio);else if(sort==='precio-desc')data.sort((a,b)=>b.precio-a.precio);else if(sort==='ventas-desc')data.sort((a,b)=>b.ventas-a.ventas);else data.sort((a,b)=>a.titulo.localeCompare(b.titulo));}
   qs('competidores-count').textContent=data.length+' productos';
   document.querySelectorAll('#comp-table th[data-col]').forEach(th=>{th.classList.remove('sort-asc','sort-desc');if(th.dataset.col===S.cSort.col)th.classList.add(S.cSort.dir===1?'sort-asc':'sort-desc');});
   const pages=Math.ceil(data.length/COMP.pageSize)||1;COMP.page=Math.min(COMP.page,pages);
