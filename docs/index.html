@@ -2208,7 +2208,7 @@ function renderCompetidores(){
     const impCh = miPrecio * 0.012; // BJ
     const precioEcom = miPrecio < 33000 ? miPrecio : miPrecio - 8500; // BM
     const neto = precioEcom + ivaMonto - comML - iibb - impCh;
-    const margen = costoARS > 0 && neto > 0 ? 1 - (costoARS / (neto/tc)) : (pm && pm.margenML ? pm.margenML : null);
+    const margen = costoARS > 0 && neto > 0 ? 1 - (costoARS / neto) : (pm && pm.margenML ? pm.margenML : null);
     const margenStr = margen !== null 
       ? `<span style="color:${margen>0.25?'var(--green)':margen>0.15?'var(--yellow)':'var(--red)'}">${(margen*100).toFixed(1)}%</span>`
       : '—';
