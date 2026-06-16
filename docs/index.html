@@ -4002,8 +4002,10 @@ function ofertasExport(){
       if(/\bCEE\b|\bCVE\b/.test(tf)) return 'NC_C2';
       return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';
     }
-    // FAE, FEE → C2 salvo prefijo 0003
-    if(/\bFAE\b|\bFEE\b/.test(tf)) return pref===RT_PREFIJO_C1?'C1':'C2';
+    // FEE (Factura E Electrónica) → C1 siempre
+    if(/\bFEE\b/.test(tf)) return 'C1';
+    // FAE (Factura E no electrónica) → C2 siempre
+    if(/\bFAE\b/.test(tf)) return 'C2';
     // FEA, FEB, MLA Factura → C1
     if(/\bFEA\b|\bFEB\b/.test(tf)) return 'C1';
     if(/multiprop[oó]sito.*factura\b/i.test(tf)) return 'C1';
