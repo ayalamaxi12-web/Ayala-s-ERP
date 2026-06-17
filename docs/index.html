@@ -2953,16 +2953,16 @@ async function autoConnectML(){
     ]);
     if(r1.ok){const d=await r1.json();if(d.token){S.mlToken=d.token;
       // Fill input field
-      const inp=qs('ml-token-input')||document.querySelector('input[placeholder*="Access Token"][placeholder*="Principal"],input[placeholder*="APP_USR"]');
+      const inp=qs('ml-token');
       if(inp)inp.value=d.token;
       const st=qs('ml-status');if(st){st.className='conn-status connected';st.textContent='● IT conectado';}
       console.log('ML IT auto-conectado');}}
     if(r2.ok){const d=await r2.json();if(d.token){S.mlToken2=d.token;
       // Fill input field 2
-      const inp2=document.querySelectorAll('input[placeholder*="APP_USR"]')[1]||document.querySelectorAll('input[placeholder*="Access Token"]')[1];
+      const inp2=qs('ml-token2');
       if(inp2)inp2.value=d.token;
-      const st=qs('ml-status-2');if(st){st.className='conn-status connected';st.textContent='● MT conectado';}
-      console.log('ML MT auto-conectado');}}
+      const st=qs('ml-status2');if(st){st.className='conn-status ok';st.textContent='● MT conectado';}
+      console.log('ML MT auto-conectado');}}     saveStor();
   }catch(e){console.warn('ML auto-connect:',e);}
   // Fetch TC BNA
   try{
