@@ -3245,85 +3245,101 @@ function intelSaveHistory(){
   } catch(e) {}
 }
 
-function intelRunAnalysis(){
-  intelLoadHistory();
-  
-  if(!COMP.data || !COMP.data.length){
-    toast('Primero cargá los datos en Competidores ML', 'error');
-    return;
+async function intelRunAnalysis(){
+  const bu = getBackendUrl();
+  const API_KEY = S.sheetsKey;
+  const SHEET_ID = (typeof COMP_SHEET_ID!=='undefined') ? COMP_SHEET_ID : '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
+  if(!API_KEY){ toast('Falta API Key de Sheets (Configuración)', 'error'); return; }
+  toast('Leyendo historial del Sheets...');
+
+  // 1) listar todas las pestañas V - *
+  let tabs=[];
+  try{
+    const meta = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title&key=${API_KEY}`)).json();
+    tabs = (meta.sheets||[]).map(s=>s.properties.title).filter(t=>/^V - /.test(t));
+  }catch(e){ toast('Error leyendo pestañas: '+e.message,'error'); return; }
+  if(!tabs.length){ toast('No encontré pestañas "V - ..."','error'); return; }
+
+  const parseDesc = s => { const m=String(s||'').match(/(\d+)\s*%/); return m?parseFloat(m[1])/100:0; };
+  const precioFinal = (precio, tachado, descTxt) => {
+    const p=parseNum(String(precio||'')), t=parseNum(String(tachado||'')), d=parseDesc(descTxt);
+    // si el "precio" es >= tachado y hay descuento, está mal scrapeado -> recalcular del tachado
+    if(t>0 && p>0 && p>=t && d>0) return Math.round(t*(1-d));
+    if(p>0) return p;
+    if(t>0 && d>0) return Math.round(t*(1-d));
+    return t||0;
+  };
+
+  const changes = [];
+  const fechasGlobal = new Set();
+
+  for(const tab of tabs){
+    const vendedor = tab.replace(/^V - /,'');
+    let d;
+    try{ d = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(tab)}!A1:CZ5000?key=${API_KEY}`)).json(); }
+    catch(e){ continue; }
+    const rows = d.values||[];
+    if(rows.length<2) continue;
+    const hdr = rows[0].map(h=>String(h).trim());
+
+    // detectar bloques de fecha: headers tipo "Precio ($) dd/mm/yyyy"
+    const fechaCols = {}; // fecha -> {precio, tachado, desc}
+    hdr.forEach((h,idx)=>{
+      const m = h.match(/Precio\s*\(\$\)\s*(\d{2}\/\d{2}\/\d{4})/i);
+      if(m){ fechaCols[m[1]] = fechaCols[m[1]]||{}; fechaCols[m[1]].precio=idx; }
+      const mt = h.match(/Tachado\s*\(\$\)\s*(\d{2}\/\d{2}\/\d{4})/i);
+      if(mt){ fechaCols[mt[1]] = fechaCols[mt[1]]||{}; fechaCols[mt[1]].tachado=idx; }
+      const md = h.match(/Desc\s*(\d{2}\/\d{2}\/\d{4})/i);
+      if(md){ fechaCols[md[1]] = fechaCols[md[1]]||{}; fechaCols[md[1]].desc=idx; }
+    });
+    // ordenar fechas cronológicamente
+    const toDate = f => { const [dd,mm,yy]=f.split('/'); return new Date(+yy,+mm-1,+dd).getTime(); };
+    const fechas = Object.keys(fechaCols).sort((a,b)=>toDate(a)-toDate(b));
+    fechas.forEach(f=>fechasGlobal.add(f));
+    if(fechas.length<1) continue;
+
+    const fUlt = fechas[fechas.length-1];
+    const fPrev = fechas.length>=2 ? fechas[fechas.length-2] : null;
+
+    for(const row of rows.slice(1)){
+      const titulo = (row[0]||'').trim();
+      const link = (row[6]||'').trim();
+      const sku = (row[7]||'').trim();
+      if(!titulo) continue;
+
+      const cu = fechaCols[fUlt];
+      const cp = fPrev ? fechaCols[fPrev] : null;
+      const pUlt = precioFinal(row[cu.precio], row[cu.tachado], cu.desc!=null?row[cu.desc]:'');
+      const pPrev = cp ? precioFinal(row[cp.precio], row[cp.tachado], cp.desc!=null?row[cp.desc]:'') : 0;
+      const noEnc = String(row[cu.precio]||'').trim()==='' && (cu.desc!=null && String(row[cu.desc]||'').toLowerCase().includes('no encontr'));
+
+      // desaparecida: tenía precio antes y ahora no
+      if(noEnc && pPrev>0){
+        changes.push({vendedor,titulo,precioAnterior:pPrev,precioActual:null,diff:null,link,sku,tipo:'desapareció',fecha:fUlt});
+        continue;
+      }
+      if(pUlt<=0) continue;
+
+      if(fPrev && pPrev>0){
+        const diff = (pUlt-pPrev)/pPrev*100;
+        if(Math.abs(diff)>=2){
+          changes.push({vendedor,titulo,precioAnterior:pPrev,precioActual:pUlt,diff,link,sku,
+            tipo: diff<-10?'baja-fuerte':diff<0?'baja':'sube', fecha:fUlt});
+        }
+      }
+    }
   }
 
-  const now = new Date().toISOString();
-  const changes = [];
-  const newHistory = {};
-
-  COMP.data.forEach(item => {
-    const key = `${item.vendedor}|||${item.titulo}`;
-    const prev = intelHistory[key];
-    const curr = { precio: item.precio, fecha: now, link: item.link, orig: item.orig_price };
-
-    newHistory[key] = curr;
-
-    if(prev && prev.precio > 0 && item.precio > 0){
-      const diff = (item.precio - prev.precio) / prev.precio * 100;
-      if(Math.abs(diff) >= 2){ // Solo cambios de más del 2%
-        changes.push({
-          vendedor: item.vendedor,
-          titulo: item.titulo,
-          precioAnterior: prev.precio,
-          precioActual: item.precio,
-          diff,
-          link: item.link,
-          tipo: diff < -10 ? 'baja-fuerte' : diff < 0 ? 'baja' : 'sube',
-          fecha: now,
-        });
-      }
-    } else if(!prev && item.precio > 0){
-      changes.push({
-        vendedor: item.vendedor,
-        titulo: item.titulo,
-        precioAnterior: null,
-        precioActual: item.precio,
-        diff: null,
-        link: item.link,
-        tipo: 'nuevo',
-        fecha: now,
-      });
-    }
-  });
-
-  // Detectar desaparecidos
-  Object.keys(intelHistory).forEach(key => {
-    if(!newHistory[key]){
-      const [vendedor, titulo] = key.split('|||');
-      changes.push({
-        vendedor, titulo,
-        precioAnterior: intelHistory[key].precio,
-        precioActual: null,
-        diff: null,
-        link: intelHistory[key].link,
-        tipo: 'desapareció',
-        fecha: now,
-      });
-    }
-  });
-
-  intelHistory = { ...intelHistory, ...newHistory };
-  intelSaveHistory();
   intelChanges = changes;
-
+  const now = new Date().toISOString();
   localStorage.setItem('intel_last_scan', now);
-  toast(`Análisis completo: ${changes.length} cambios detectados`);
+  const nf = fechasGlobal.size;
+  toast(`Análisis: ${changes.length} cambios · ${nf} fechas · ${tabs.length} vendedores`);
   intelRenderCambios();
 }
 
 function intelLoadFromSheets(){
-  // Trigger competidores load
-  loadCompetidores().then(()=>{
-    setTimeout(intelRunAnalysis, 1000);
-  }).catch(()=>{
-    toast('Actualizá los datos desde Competidores ML primero', 'error');
-  });
+  intelRunAnalysis();
 }
 
 function intelRenderCambios(){
