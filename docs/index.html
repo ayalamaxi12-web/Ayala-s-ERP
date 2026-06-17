@@ -197,7 +197,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
     <div class="sidebar-item" data-page="rentabilidad-tactica" onclick="goPage('rentabilidad-tactica',this)"><span class="icon">📊</span> Rentabilidad Táctica</div>
     <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">✅</span> Verificar Táctica</div>
-    <div class="sidebar-item" data-page="verificar-web" onclick="goPage('verificar-web',this)"><span class="icon">🌐</span> Verificar Web</div>
+    <div class="sidebar-item" data-page="verificar-web" onclick="goPage('verificar-web',this)"><span class="icon">🌐</span> Verificar Web</div>     <div class="sidebar-item" data-page="verificador-pm" onclick="goPage('verificador-pm',this)"><span class="icon">📋</span> Verificador PM</div>
     <div class="sidebar-item" data-page="verificar-fravega" onclick="goPage('verificar-fravega',this)"><span class="icon">🏪</span> Verificar Fravega</div>
     <div class="sidebar-item" data-page="fravega-api" onclick="goPage('fravega-api',this)"><span class="icon">🔌</span> Fravega API</div>
     <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
@@ -570,7 +570,22 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 <!-- VERIFICAR WEB -->
-<div id="page-verificar-web" class="page">
+<div id="page-verificador-pm" class="page">
+  <div class="section-hdr">Verificador PM</div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+    <input type="text" id="vpm-search" placeholder="Buscar SKU, descripción o categoría..." autocomplete="off" oninput="renderVerifPM()" style="flex:1;min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none">
+    <select id="vpm-pm" class="fi" onchange="renderVerifPM()"><option value="">Todos los PMs</option></select>
+    <select id="vpm-cat" class="fi" onchange="renderVerifPM()"><option value="">Todas las categorías</option></select>
+    <span id="vpm-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div id="vpm-empty" style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Conectá las planillas PM en Configuración para ver los datos.</div>
+  <div style="overflow-x:auto"><table id="vpm-table" style="display:none"><thead><tr>
+    <th>SKU</th><th>Categoría</th><th>Subcategoría</th><th>Descripción</th><th>Forma de Pago</th>
+    <th style="text-align:center">Frávega</th><th style="text-align:center">On City</th><th style="text-align:center">May. ML</th>
+    <th style="text-align:center">Publicidad</th><th style="text-align:center">Promoción</th><th style="text-align:center">P. Tachado</th><th style="text-align:center">FULL</th><th>PM</th>
+  </tr></thead><tbody id="vpm-tbody"></tbody></table></div>
+</div>
+  <div id="page-verificar-web" class="page">
   <div class="section-hdr">Verificar Web</div>
   <div class="card" style="margin-bottom:8px">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1236,7 +1251,7 @@ function goPage(page,el){
   if(page==='verificar-ml')renderML();
   if(page==='verificar-tactica')renderTactica();
   if(page==='rentabilidad-tactica'){tacRentInit();}
-  if(page==='verificar-web')renderWeb();
+  if(page==='verificar-web')renderWeb();   if(page==='verificador-pm')renderVerifPM();
   if(page==='verificar-fravega')renderFrave();
   if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
@@ -1300,7 +1315,8 @@ async function loadCats(){
 
 // ── PM SHEETS ──
 function buildPMBlocks(){const cont=qs('pm-blocks');if(!cont)return;cont.innerHTML='';['pm1','pm2','pm3','pm4'].forEach(k=>{const s=S.sheets[k];const d=document.createElement('div');d.style.marginBottom='8px';d.innerHTML=`<div style="display:flex;gap:5px;align-items:center"><span style="font-size:11px;font-weight:700;color:var(--accent);min-width:62px">${s.name}</span><input type="text" id="s-${k}-id" placeholder="ID planilla" value="${s.id||''}" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-size:10px;font-family:'DM Mono',monospace"><input type="text" id="s-${k}-tab" placeholder="Pestaña" value="${s.tab||''}" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-size:10px;font-family:'DM Mono',monospace"><button class="btn-xs" data-k="${k}">Conectar</button><span class="conn-status idle" id="ss-${k}" style="min-width:48px;font-size:9px">-</span></div>`;d.querySelector('[data-k]').addEventListener('click',()=>connectSheet(k));cont.appendChild(d);});}
-async function connectSheet(k){const key=qs('sheets-key').value.trim(),id=qs(`s-${k}-id`).value.trim(),tab=qs(`s-${k}-tab`).value.trim();if(!key||!id||!tab){toast('Completa API Key, ID y pestaña','error');return;}S.sheetsKey=key;S.sheets[k].id=id;S.sheets[k].tab=tab;const ss=qs(`ss-${k}`);ss.className='conn-status idle';ss.textContent='...';try{const url=`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(tab)}!A1:CZ1200?key=${key}`;const d=await(await fetch(url)).json();if(!d.values)throw new Error((d.error&&d.error.message)||'Sin datos');let hIdx=0;for(let i=0;i<Math.min(5,d.values.length);i++){const row=d.values[i].map(h=>String(h).trim().toUpperCase());if(row.some(h=>h==='SKU')&&row.some(h=>h==='PRECIOS ECOM')){hIdx=i;break;}}const hdrs=d.values[hIdx].map(h=>String(h).trim());const hu=hdrs.map(h=>h.toUpperCase());const si=hu.findIndex(h=>h==='SKU'),mi=hu.findIndex(h=>h==='PRECIOS ECOM'),wi=hu.findIndex(h=>h==='WEB NUEVO'),fi=hu.findIndex(h=>h.includes('PRECIO CON ENVIO')),ivai=hu.findIndex(h=>h==='IVA'),l3i=hu.findIndex(h=>h==='L3 USD SIN IVA'||h==='L3 USD'||h==='L3USD'||h.includes('L3 USD')),l4i=hu.findIndex(h=>h==='L4 USD SIN IVA'||h==='L4 USD'||h==='L4USD'||h.includes('L4 USD')),l5i=hu.findIndex(h=>h==='L5 USD SIN IVA'||h==='L5 USD'||h==='L5USD'||h.includes('L5 USD')),ci=hu.findIndex(h=>['COSTO','COSTO USD','COSTO 1'].includes(h));if(si<0||mi<0)throw new Error('No encontré SKU y PRECIOS ECOM');const l1i=hu.findIndex(h=>h==='L1'||h==='L1 PESOS (WEB SIN IVA)');const l2i=hu.findIndex(h=>h==='L2'||h==='L2 PESOS (WEB2 SIN IVA)');let filas=0;d.values.slice(hIdx+1).forEach(row=>{const sku=normSku(String(row[si]||''));if(!sku)return;const ml=mi>=0?parseNum(String(row[mi]||'')):0;const web=wi>=0?parseNum(String(row[wi]||'')):0;const iva=ivai>=0?parseNum(String(row[ivai]||'')):0;const l3=l3i>=0?parseNum(String(row[l3i]||'')):0;const l4=l4i>=0?parseNum(String(row[l4i]||'')):0;const l5=l5i>=0?parseNum(String(row[l5i]||'')):0;const costo=ci>=0?parseNum(String(row[ci]||'')):0;let l1=l1i>=0?parseNum(String(row[l1i]||'')):0;let l2=l2i>=0?parseNum(String(row[l2i]||'')):0;if(!l1&&iva>0&&web>0)l1=Math.round(web/iva);if(!l2&&iva>0&&web>0)l2=Math.round((web*0.98)/iva);if(sku){S.pmData[sku]={ml,web,frave:fi>=0?parseNum(String(row[fi]||'')):0,iva,l1,l2,l3,l4,l5,costo,pm:k,pmName:S.sheets[k].name};filas++;}});ss.className='conn-status ok';ss.textContent=filas+' SKUs';saveStor();renderEcom();renderTactica();toast(`${S.sheets[k].name} (${filas} SKUs)`);}catch(e){ss.className='conn-status err';ss.textContent='Error';toast(`Error ${S.sheets[k].name}: ${e.message}`,'error');}}
+async function connectSheet(k){const key=qs('sheets-key').value.trim(),id=qs(`s-${k}-id`).value.trim(),tab=qs(`s-${k}-tab`).value.trim();if(!key||!id||!tab){toast('Completa API Key, ID y pestaña','error');return;}S.sheetsKey=key;S.sheets[k].id=id;S.sheets[k].tab=tab;const ss=qs(`ss-${k}`);ss.className='conn-status idle';ss.textContent='...';try{const url=`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(tab)}!A1:CZ1200?key=${key}`;const d=await(await fetch(url)).json();if(!d.values)throw new Error((d.error&&d.error.message)||'Sin datos');let hIdx=0;for(let i=0;i<Math.min(5,d.values.length);i++){const row=d.values[i].map(h=>String(h).trim().toUpperCase());if(row.some(h=>h==='SKU')&&row.some(h=>h==='PRECIOS ECOM')){hIdx=i;break;}}const hdrs=d.values[hIdx].map(h=>String(h).trim());const hu=hdrs.map(h=>h.toUpperCase());const si=hu.findIndex(h=>h==='SKU'),mi=hu.findIndex(h=>h==='PRECIOS ECOM'),wi=hu.findIndex(h=>h==='WEB NUEVO'),fi=hu.findIndex(h=>h.includes('PRECIO CON ENVIO')),ivai=hu.findIndex(h=>h==='IVA'),l3i=hu.findIndex(h=>h==='L3 USD SIN IVA'||h==='L3 USD'||h==='L3USD'||h.includes('L3 USD')),l4i=hu.findIndex(h=>h==='L4 USD SIN IVA'||h==='L4 USD'||h==='L4USD'||h.includes('L4 USD')),l5i=hu.findIndex(h=>h==='L5 USD SIN IVA'||h==='L5 USD'||h==='L5USD'||h.includes('L5 USD')),ci=hu.findIndex(h=>['COSTO','COSTO USD','COSTO 1'].includes(h));if(si<0||mi<0)throw new Error('No encontré SKU y PRECIOS ECOM');const cati=hu.findIndex(h=>h==='CATEGORÍA'||h==='CATEGORIA'),subi=hu.findIndex(h=>h==='SUBCATEGORÍA'||h==='SUBCATEGORIA'),desi=hu.findIndex(h=>h==='DESCRIPCIÓN'||h==='DESCRIPCION'),fpi=hu.findIndex(h=>h==='FORMA DE PAGO'||h.includes('FORMA DE PAGO'));
+const c_fra=hu.findIndex(h=>h==='FRAVEGA'||h==='FRÁVEGA'),c_onc=hu.findIndex(h=>h==='ON CITY'||h==='ONCITY'),c_may=hu.findIndex(h=>h.includes('MAYORISTA ML')||h==='PRECIO MAYORISTA ML'),c_pub=hu.findIndex(h=>h==='PUBLICIDAD'),c_pro=hu.findIndex(h=>h==='PROMOCION'||h==='PROMOCIÓN'),c_tac=hu.findIndex(h=>h==='PRECIO TACHADO'||h.includes('TACHADO')),c_full=hu.findIndex(h=>h==='FULL');const l1i=hu.findIndex(h=>h==='L1'||h==='L1 PESOS (WEB SIN IVA)');const l2i=hu.findIndex(h=>h==='L2'||h==='L2 PESOS (WEB2 SIN IVA)');let filas=0;d.values.slice(hIdx+1).forEach(row=>{const sku=normSku(String(row[si]||''));if(!sku)return;const ml=mi>=0?parseNum(String(row[mi]||'')):0;const web=wi>=0?parseNum(String(row[wi]||'')):0;const iva=ivai>=0?parseNum(String(row[ivai]||'')):0;const l3=l3i>=0?parseNum(String(row[l3i]||'')):0;const l4=l4i>=0?parseNum(String(row[l4i]||'')):0;const l5=l5i>=0?parseNum(String(row[l5i]||'')):0;const costo=ci>=0?parseNum(String(row[ci]||'')):0;let l1=l1i>=0?parseNum(String(row[l1i]||'')):0;let l2=l2i>=0?parseNum(String(row[l2i]||'')):0;if(!l1&&iva>0&&web>0)l1=Math.round(web/iva);if(!l2&&iva>0&&web>0)l2=Math.round((web*0.98)/iva);const TF=x=>String(x||'').trim().toUpperCase()==='TRUE';const gv=ix=>ix>=0?String(row[ix]||'').trim():'';if(sku){S.pmData[sku]={ml,web,frave:fi>=0?parseNum(String(row[fi]||'')):0,iva,l1,l2,l3,l4,l5,costo,pm:k,pmName:S.sheets[k].name,categoria:gv(cati),subcategoria:gv(subi),descripcion:gv(desi),formaPago:gv(fpi),chkFravega:TF(row[c_fra]),chkOnCity:TF(row[c_onc]),chkMayML:TF(row[c_may]),chkPublic:TF(row[c_pub]),chkPromo:TF(row[c_pro]),chkTachado:TF(row[c_tac]),chkFull:TF(row[c_full])};filas++;}});ss.className='conn-status ok';ss.textContent=filas+' SKUs';saveStor();renderEcom();renderTactica();toast(`${S.sheets[k].name} (${filas} SKUs)`);}catch(e){ss.className='conn-status err';ss.textContent='Error';toast(`Error ${S.sheets[k].name}: ${e.message}`,'error');}}
 // ── ML API ──
 async function mlFetch(path,token){const t=token||S.mlToken;const bu=getBackendUrl();return(await fetch(`${bu}/ml-proxy?path=${encodeURIComponent(path.replace(/^\//,''))}`,{headers:{'x-vk-token':t}})).json();}
 async function mlPut(id,body,token){const t=token||S.mlToken;const bu=getBackendUrl();return(await fetch(`${bu}/ml-proxy/${id}`,{method:'PUT',headers:{'x-vk-token':t,'Content-Type':'application/json'},body:JSON.stringify(body)})).json();}
@@ -2273,6 +2289,40 @@ function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').fo
 // ── RULES ──
 function renderRules(){qs('rules-grid').innerHTML=RULES.map(r=>`<div class="rule-item"><div class="rule-name">${r.key}</div><div class="rule-pct"><input type="number" step="0.01" value="${r.pct.toFixed(2)}" data-rk="${r.key}"></div></div>`).join('');qs('rules-grid').querySelectorAll('input').forEach(inp=>inp.addEventListener('change',()=>{const r=RULES.find(x=>x.key===inp.dataset.rk);if(r)r.pct=parseFloat(inp.value)||r.pct;}));}
 function populateRuleFilter(){const sel=qs('ml-filter-regla');if(!sel)return;RULES.forEach(r=>{const o=document.createElement('option');o.value=r.key;o.textContent=r.key;sel.appendChild(o);});}
+function renderVerifPM(){
+  const tbody=qs('vpm-tbody'),tbl=qs('vpm-table'),empty=qs('vpm-empty');if(!tbody)return;
+  const all=Object.entries(S.pmData||{});
+  if(!all.length){if(tbl)tbl.style.display='none';if(empty)empty.style.display='block';return;}
+  // poblar filtros una vez
+  const selPM=qs('vpm-pm'),selCat=qs('vpm-cat');
+  if(selPM&&selPM.options.length<=1){[...new Set(all.map(([s,d])=>d.pmName).filter(Boolean))].sort().forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;selPM.appendChild(o);});}
+  if(selCat&&selCat.options.length<=1){[...new Set(all.map(([s,d])=>d.categoria).filter(Boolean))].sort().forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selCat.appendChild(o);});}
+  const q=(qs('vpm-search').value||'').toLowerCase(),fPM=selPM?selPM.value:'',fCat=selCat?selCat.value:'';
+  const chk=v=>v?'<span style="color:var(--green);font-weight:700">✓</span>':'<span style="color:var(--text3)">—</span>';
+  let rows=all.filter(([sku,d])=>{
+    if(fPM&&d.pmName!==fPM)return false;
+    if(fCat&&d.categoria!==fCat)return false;
+    if(q){const hay=sku.toLowerCase().includes(q)||(d.descripcion||'').toLowerCase().includes(q)||(d.categoria||'').toLowerCase().includes(q);if(!hay)return false;}
+    return true;
+  }).sort((a,b)=>a[0].localeCompare(b[0]));
+  if(empty)empty.style.display='none';if(tbl)tbl.style.display='table';
+  qs('vpm-count').textContent=rows.length+' SKUs';
+  tbody.innerHTML=rows.map(([sku,d])=>`<tr>
+    <td class="mono" style="font-size:10px;font-weight:700;color:var(--accent)">${sku.toUpperCase()}</td>
+    <td style="font-size:10px">${d.categoria||'—'}</td>
+    <td style="font-size:10px">${d.subcategoria||'—'}</td>
+    <td style="font-size:10px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(d.descripcion||'').replace(/"/g,'&quot;')}">${d.descripcion||'—'}</td>
+    <td style="font-size:10px;color:var(--yellow)">${d.formaPago||'—'}</td>
+    <td style="text-align:center">${chk(d.chkFravega)}</td>
+    <td style="text-align:center">${chk(d.chkOnCity)}</td>
+    <td style="text-align:center">${chk(d.chkMayML)}</td>
+    <td style="text-align:center">${chk(d.chkPublic)}</td>
+    <td style="text-align:center">${chk(d.chkPromo)}</td>
+    <td style="text-align:center">${chk(d.chkTachado)}</td>
+    <td style="text-align:center">${chk(d.chkFull)}</td>
+    <td><span class="badge badge-blue" style="font-size:9px">${d.pmName||''}</span></td>
+  </tr>`).join('');
+}  
 
 // ── ML TOOLS ──
 async function runTracker(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-tracker');const status=qs('tracker-status');const logEl=qs('tracker-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/tracker/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'tracker');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
