@@ -3263,11 +3263,11 @@ async function intelRunAnalysis(){
   const parseDesc = s => { const m=String(s||'').match(/(\d+)\s*%/); return m?parseFloat(m[1])/100:0; };
   const precioFinal = (precio, tachado, descTxt) => {
     const p=parseNum(String(precio||'')), t=parseNum(String(tachado||'')), d=parseDesc(descTxt);
-    // si el "precio" es >= tachado y hay descuento, está mal scrapeado -> recalcular del tachado
-    if(t>0 && p>0 && p>=t && d>0) return Math.round(t*(1-d));
-    if(p>0) return p;
-    if(t>0 && d>0) return Math.round(t*(1-d));
-    return t||0;
+    if(t>0 && d>0) return {val:Math.round(t*(1-d)), ok:true};
+    if(p>0 && (t===0 || p<t)) return {val:p, ok:true};
+    if(p>0 && t>0 && p>=t && d===0) return {val:p, ok:false};
+    if(p>0) return {val:p, ok:true};
+    return {val:t||0, ok:false};
   };
 
   const changes = [];
@@ -3309,8 +3309,9 @@ async function intelRunAnalysis(){
 
       const cu = fechaCols[fUlt];
       const cp = fPrev ? fechaCols[fPrev] : null;
-      const pUlt = precioFinal(row[cu.precio], row[cu.tachado], cu.desc!=null?row[cu.desc]:'');
-      const pPrev = cp ? precioFinal(row[cp.precio], row[cp.tachado], cp.desc!=null?row[cp.desc]:'') : 0;
+      const rUlt = precioFinal(row[cu.precio], row[cu.tachado], cu.desc!=null?row[cu.desc]:'');
+      const rPrev = cp ? precioFinal(row[cp.precio], row[cp.tachado], cp.desc!=null?row[cp.desc]:'') : {val:0,ok:false};
+      const pUlt = rUlt.val, pPrev = rPrev.val;
       const noEnc = String(row[cu.precio]||'').trim()==='' && (cu.desc!=null && String(row[cu.desc]||'').toLowerCase().includes('no encontr'));
 
       // desaparecida: tenía precio antes y ahora no
@@ -3320,7 +3321,7 @@ async function intelRunAnalysis(){
       }
       if(pUlt<=0) continue;
 
-      if(fPrev && pPrev>0){
+      if(fPrev && pPrev>0 && rUlt.ok && rPrev.ok){
         const diff = (pUlt-pPrev)/pPrev*100;
         if(Math.abs(diff)>=2){
           changes.push({vendedor,titulo,precioAnterior:pPrev,precioActual:pUlt,diff,link,sku,
