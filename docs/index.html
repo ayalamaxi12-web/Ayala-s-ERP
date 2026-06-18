@@ -894,6 +894,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <option value="sube">Subió precio</option>
         <option value="nuevo">Producto nuevo</option>
         <option value="desapareció">Desapareció</option>
+        <option value="sin-cambio">Sin cambios</option>
       </select>
       <select id="ic-filter-vendedor" class="fi">
         <option value="">Todos los vendedores</option>
@@ -3326,7 +3327,11 @@ async function intelRunAnalysis(){
         if(Math.abs(diff)>=2){
           changes.push({vendedor,titulo,precioAnterior:pPrev,precioActual:pUlt,diff,link,sku,
             tipo: diff<-10?'baja-fuerte':diff<0?'baja':'sube', fecha:fUlt});
+        } else {
+          changes.push({vendedor,titulo,precioAnterior:pPrev,precioActual:pUlt,diff,link,sku,tipo:'sin-cambio',fecha:fUlt});
         }
+      } else if(pUlt>0){
+        changes.push({vendedor,titulo,precioAnterior:pPrev||null,precioActual:pUlt,diff:null,link,sku,tipo:'sin-cambio',fecha:fUlt});
       }
     }
   }
@@ -3395,6 +3400,7 @@ function intelRenderCambios(){
     if(tipo === 'baja-fuerte') return '<span class="badge badge-red">🔴 Baja fuerte — ¡Alerta!</span>';
     if(tipo === 'baja') return '<span class="badge badge-yellow">🟡 Bajó precio</span>';
     if(tipo === 'sube') return '<span class="badge badge-green">🟢 Subió — Oportunidad</span>';
+    if(tipo === 'sin-cambio') return '<span class="badge badge-gray" style="opacity:0.6">➖ Sin cambios</span>';
     return '';
   };
 
