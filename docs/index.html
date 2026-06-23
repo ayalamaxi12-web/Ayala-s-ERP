@@ -2355,7 +2355,7 @@ function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].m
   const esTactica=/tactica/i.test(sheetName)||(ci('Margen real')>=0&&IDX.precioFinal<0);
   if(esTactica){
     const T={fecha:ci('Fecha'),codigo:ci('Codigo'),cant:ci('Cantidad'),
-      pvIva:H.lastIndexOf('Precio de Venta IVA'),pv:ci('Precio de Venta'),
+      pvIva:ci('Precio de Venta IVA'),pv:ci('Precio de Venta'),
       margen:ci('Margen real'),costo:ci('Costo Total Pesos'),pm:ci('PM'),
       sub:ci('Subcategoria'),resp:ci('Responsable'),nro:ci('Nº Factura')};
     const pvCol=T.pvIva>=0?T.pvIva:T.pv;
