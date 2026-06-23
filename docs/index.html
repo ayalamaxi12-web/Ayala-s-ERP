@@ -1196,7 +1196,7 @@ const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b
 const API_KEY='AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
 const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
 const HIST_ID='1Wzs3SmmIGcGd_NJGfe5qJRBYkJBbyKjrl4rF7reojIE';
-const DASH_SHEETS=['Base Diciembre - Enero','Base Enero - Febrero','Base Febrero - Marzo','Base Marzo - Abril','Base Abril - Mayo'];
+const DASH_SHEETS=['Base Diciembre - Enero','Base Enero - Febrero','Base Febrero - Marzo','Base Marzo - Abril','Base Abril - Mayo ECOM','Base Abril - Mayo TACTICA','Base Mayo - Junio ECOM','Base Mayo - Junio TACTICA'];
 const COMP_SHEET_ID='15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
 const OFERTAS_ID='1VnXE8Ukv91yI0Vu7DOkhHH5na6QTvy9uweFu12DcZ7c';
 const OFERTAS_TABS=['Ofertas Catalogo IT','Ofertas Catalogo MT'];
@@ -2351,6 +2351,28 @@ function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].m
     pm:ciMulti('PM','Pm'),
     vendedor:ciMulti('Responsable De Ventas','Vendedor','Responsable')
   };
+  // ── Detección de base TÁCTICA (estructura distinta a ECOM) ──
+  const esTactica=/tactica/i.test(sheetName)||(ci('Margen real')>=0&&IDX.precioFinal<0);
+  if(esTactica){
+    const T={fecha:ci('Fecha'),codigo:ci('Codigo'),cant:ci('Cantidad'),
+      pvIva:H.lastIndexOf('Precio de Venta IVA'),pv:ci('Precio de Venta'),
+      margen:ci('Margen real'),costo:ci('Costo Total Pesos'),pm:ci('PM'),
+      sub:ci('Subcategoria'),resp:ci('Responsable'),nro:ci('Nº Factura')};
+    const pvCol=T.pvIva>=0?T.pvIva:T.pv;
+    const out=[];
+    for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;
+      const pf=pn(r[pvCol]);if(pf===0)continue;
+      const fecha=parseDate(r[T.fecha]);const sku=(r[T.codigo]||'').trim();
+      out.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:'TACTICA',
+        skuRaw:sku,skus:sku?[sku]:[],numOrden:T.nro>=0?String(r[T.nro]||'').trim():'',
+        precioFinal:pf,precioSinIva:T.pv>=0?pn(r[T.pv]):0,
+        rentabilidad:T.margen>=0?pn(r[T.margen]):0,utilidad:0,facturUSD:0,
+        costo:T.costo>=0?Math.abs(pn(r[T.costo])):0,pm:(r[T.pm]||'').trim(),
+        vendedor:T.resp>=0?(r[T.resp]||'').trim():'',categoria:(r[T.sub]||'Sin categoría').trim()});}
+    if(out.length<5){console.warn('TACTICA '+sheetName+' <5 filas, ignorada');return[];}
+    console.log('✓ '+sheetName+' (TACTICA): '+out.length+' ventas');
+    return out;
+  }                                   
   if(IDX.precioFinal<0){console.warn('No se encontró columna Precio Final en',sheetName,'Headers:',H);return[];}const parsed=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;
     const fecha=parseDate(r[IDX.fecha]);const skuRaw=(r[IDX.skus]||'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);
     parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,numOrden:IDX.numOrden>=0?String(r[IDX.numOrden]||'').trim():'',precioFinal:pf,precioSinIva:IDX.precioSinIva>=0?pn(r[IDX.precioSinIva]):0,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}if(parsed.length<5){console.warn('Pestaña '+sheetName+' tiene menos de 5 filas válidas, ignorada');return [];}return parsed;}
