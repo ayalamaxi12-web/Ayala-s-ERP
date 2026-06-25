@@ -4092,7 +4092,8 @@ function ofertasExport(){
     // MLA NC
     if(/multiprop[oó]sito.*nota de cr[eé]dito/i.test(tf)) return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';
     // NC genéricas
-    if(/nota de cr[eé]dito/i.test(tf)){
+if(/nota de cr[eé]dito/i.test(tf)){
+      if(pref==='00007') return 'ND';
       if(/\bCEA\b/.test(tf)) return 'NC_C1';
       if(/\bCEE\b|\bCVE\b/.test(tf)) return 'NC_C2';
       return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';
