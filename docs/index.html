@@ -2356,7 +2356,7 @@ function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].m
   if(esTactica){
     const T={fecha:ci('Fecha'),codigo:ci('Codigo'),cant:ci('Cantidad'),
       pvIva:ci('Precio de Venta IVA'),pv:ci('Precio de Venta'),
-      margen:ci('Margen real'),costo:ci('Costo Total Pesos'),pm:ci('PM'),
+      margenReal:ci('Margen real'),margen:ci('Margen'),costo:ci('Costo Total Pesos'),pm:ci('PM'),
       sub:ci('Subcategoria'),resp:ci('Responsable'),nro:ci('Nº Factura')};
     const pvCol=T.pvIva>=0?T.pvIva:T.pv;
     const out=[];
@@ -2366,7 +2366,7 @@ function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].m
       out.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:'TACTICA',
         skuRaw:sku,skus:sku?[sku]:[],numOrden:T.nro>=0?String(r[T.nro]||'').trim():'',
         precioFinal:pf,precioSinIva:T.pv>=0?pn(r[T.pv]):0,
-        rentabilidad:T.margen>=0?pn(r[T.margen]):0,utilidad:0,facturUSD:0,
+        rentabilidad:T.margenReal>=0?pn(r[T.margenReal]):0,utilidad:0,facturUSD:0,
         costo:T.costo>=0?Math.abs(pn(r[T.costo])):0,pm:(r[T.pm]||'').trim(),
         vendedor:T.resp>=0?(r[T.resp]||'').trim():'',categoria:(r[T.sub]||'Sin categoría').trim()});}
     if(out.length<5){console.warn('TACTICA '+sheetName+' <5 filas, ignorada');return[];}
