@@ -4090,7 +4090,7 @@ function ofertasExport(){
     // Promos
     if(/promop/i.test(tf)) return 'PROMO';
     // MLA NC
-    if(/multiprop[oó]sito.*nota de cr[eé]dito/i.test(tf)) return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';
+    if(/multiprop[oó]sito.*nota de cr[eé]dito/i.test(tf)){       if(pref==='00007') return 'ND';       return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';     }
     // NC genéricas
 if(/nota de cr[eé]dito/i.test(tf)){
       if(pref==='00007') return 'ND';
