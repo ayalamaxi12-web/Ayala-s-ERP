@@ -91,6 +91,65 @@ def extract_ids(url):
             ids[key] = m.group(1)
     return ids
 
+# ══════════════════════════════════════════════════════
+# IDENTIDAD ML — capa F0 (Data Quality)
+# Aislada: todavía no la usa ningún endpoint/job. No reemplaza a
+# extract_mla/extract_ids en producción hasta que se apruebe ese paso.
+# ══════════════════════════════════════════════════════
+
+_ML_PATH_ITEM_RE = re.compile(r'/(ML[A-Z]+-?\d{8,})')
+_ML_PATH_PRODUCT_P_RE = re.compile(r'/p/(ML[A-Z]+-?\d+)', re.I)
+_ML_PATH_PRODUCT_UP_RE = re.compile(r'/up/(ML[A-Z]+-?\d+)', re.I)
+_ML_PARAM_ITEM_ID_RE = re.compile(r'item_id:(ML[A-Z]+-?\d+)', re.I)
+_ML_PARAM_WID_RE = re.compile(r'[?&#]wid=(ML[A-Z]+-?\d+)', re.I)
+_ML_PARAM_SEARCHVAR_RE = re.compile(r'searchVariation=(ML[A-Z]+-?\d+)', re.I)
+
+def _split_url_zones(link):
+    """Separa la URL en (path, resto) donde resto = todo desde el primer '?' o '#' en adelante."""
+    s = str(link) if link is not None else ''
+    for sep in ('?', '#'):
+        idx = s.find(sep)
+        if idx != -1:
+            return s[:idx], s[idx:]
+    return s, ''
+
+def _normalize_ml_id(raw_id):
+    """Colapsa variantes con/sin separador ('MLA-123' y 'MLA123') a una forma canónica."""
+    return re.sub(r'[^A-Z0-9]', '', raw_id.upper())
+
+def resolve_ml_identity(link):
+    """
+    Contrato de identidad ML aprobado para F0 (Data Quality — Competitors).
+    Devuelve dict {estado, tipo, identificador, link_origen}.
+    estado: 'Sin Link' | 'Sin Identificador' | 'Identificador Válido'
+    tipo:   'item_id' | 'product_id' | None
+    No lanza excepciones ante entradas vacías, None o sin formato de URL.
+    """
+    origen = link
+    s = str(link).strip() if link is not None else ''
+    if not s:
+        return {'estado': 'Sin Link', 'tipo': None, 'identificador': None, 'link_origen': origen}
+
+    path, _resto = _split_url_zones(s)
+
+    # item_id tiene prioridad: primero el permalink de path (zona más confiable),
+    # luego los marcadores nombrados (item_id:/wid=, ya auto-anclados por su propio
+    # literal, por eso se buscan sobre el string completo y no solo sobre "resto")
+    for pat, zona in ((_ML_PATH_ITEM_RE, path), (_ML_PARAM_ITEM_ID_RE, s), (_ML_PARAM_WID_RE, s)):
+        m = pat.search(zona)
+        if m:
+            return {'estado': 'Identificador Válido', 'tipo': 'item_id',
+                    'identificador': _normalize_ml_id(m.group(1)), 'link_origen': origen}
+
+    # product_id: solo si no se encontró item_id
+    for pat, zona in ((_ML_PATH_PRODUCT_P_RE, path), (_ML_PATH_PRODUCT_UP_RE, path), (_ML_PARAM_SEARCHVAR_RE, s)):
+        m = pat.search(zona)
+        if m:
+            return {'estado': 'Identificador Válido', 'tipo': 'product_id',
+                    'identificador': _normalize_ml_id(m.group(1)), 'link_origen': origen}
+
+    return {'estado': 'Sin Identificador', 'tipo': None, 'identificador': None, 'link_origen': origen}
+
 def fetch_item(item_id):
     r = requests.get(f'https://api.mercadolibre.com/items/{item_id}', headers=ml_headers(), timeout=10)
     return r.json() if r.status_code == 200 else None
@@ -795,6 +854,8 @@ def refresh_job(job_id, ml_token):
         if not vendor_sheets:
             job_status[job_id] = {"status": "error", "message": "No hay pestañas V - Vendedor", "log": log}; return
         all_items = []
+        id_stats = {'sin_link': 0, 'sin_identificador': 0, 'product_id_excluido': 0, 'item_id_usado': 0}
+        id_examples = {'sin_identificador': [], 'product_id_excluido': []}
         for ws in vendor_sheets:
             vendedor = ws.title[3:]
             try:
@@ -806,18 +867,40 @@ def refresh_job(job_id, ml_token):
                 sku_idx = next((i for i,h in enumerate(hdrs) if h.lower() == 'sku'), 7)
                 qty_idx = next((i for i,h in enumerate(hdrs) if 'cantidad' in h.lower()), 8)
                 for row in rows[1:]:
-                    if len(row) <= link_idx or not row[link_idx]: continue
-                    mla = extract_mla(row[link_idx])
-                    if not mla: continue
+                    if len(row) <= link_idx:
+                        id_stats['sin_link'] += 1
+                        continue
+                    identidad = resolve_ml_identity(row[link_idx])
+                    if identidad['estado'] == 'Sin Link':
+                        id_stats['sin_link'] += 1
+                        continue
+                    if identidad['estado'] == 'Sin Identificador':
+                        id_stats['sin_identificador'] += 1
+                        if len(id_examples['sin_identificador']) < 5:
+                            id_examples['sin_identificador'].append(f"{vendedor}: {row[link_idx]}")
+                        continue
+                    if identidad['tipo'] == 'product_id':
+                        id_stats['product_id_excluido'] += 1
+                        if len(id_examples['product_id_excluido']) < 5:
+                            id_examples['product_id_excluido'].append(f"{vendedor}: {row[link_idx]} -> {identidad['identificador']}")
+                        continue
+                    id_stats['item_id_usado'] += 1
                     all_items.append({'vendedor': vendedor,
                         'titulo': row[title_idx] if len(row) > title_idx else '',
                         'link': row[link_idx],
                         'sku': row[sku_idx] if len(row) > sku_idx else '',
                         'cantidad': row[qty_idx] if len(row) > qty_idx else '',
-                        'mla': mla})
+                        'mla': identidad['identificador']})
             except Exception as e:
                 log.append(f"⚠ Error leyendo {ws.title}: {e}")
         log.append(f"🔗 {len(all_items)} links encontrados con MLA")
+        log.append(f"📊 Identidad ML — item_id usados: {id_stats['item_id_usado']} · "
+                    f"product_id excluidos: {id_stats['product_id_excluido']} · "
+                    f"sin identificador: {id_stats['sin_identificador']} · "
+                    f"sin link: {id_stats['sin_link']}")
+        for _cat, _ejemplos in id_examples.items():
+            if _ejemplos:
+                log.append(f"   ↳ ejemplos {_cat}: " + " | ".join(_ejemplos))
         headers = {'Authorization': f'Bearer {ml_token}', 'User-Agent': 'Mozilla/5.0'}
         mla_prices = {}
         mlas = list(set(item['mla'] for item in all_items))
