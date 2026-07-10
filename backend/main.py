@@ -890,7 +890,8 @@ def refresh_job(job_id, ml_token):
                         'link': row[link_idx],
                         'sku': row[sku_idx] if len(row) > sku_idx else '',
                         'cantidad': row[qty_idx] if len(row) > qty_idx else '',
-                        'mla': identidad['identificador']})
+                        'mla': identidad['identificador'],
+                        'estado': identidad['estado']})
             except Exception as e:
                 log.append(f"⚠ Error leyendo {ws.title}: {e}")
         log.append(f"🔗 {len(all_items)} links encontrados con MLA")
@@ -933,9 +934,16 @@ def refresh_job(job_id, ml_token):
             hist_ws = ss.worksheet(HIST_SHEET_NAME)
         except:
             hist_ws = ss.add_worksheet(title=HIST_SHEET_NAME, rows=50000, cols=12)
-            hist_ws.update(values=[['Vendedor','Titulo','Precio ($)','Precio Tachado ($)','Descuento','Cuotas','Link','SKU','Cantidad','Fecha Refresh']], range_name='A1:J1')
             log.append("📋 Pestaña Historial Competidores creada")
+
+        HIST_HEADERS = ['Vendedor','Titulo','Precio ($)','Precio Tachado ($)','Descuento','Cuotas',
+                        'Link','SKU','Cantidad','Fecha Refresh','Item ID','Estado Identidad']
         existing = hist_ws.get_all_values()
+        if not existing or existing[0] != HIST_HEADERS:
+            hist_ws.update(values=[HIST_HEADERS], range_name='A1:L1')
+            existing = hist_ws.get_all_values()
+            log.append("🔧 Header de Historial Competidores actualizado a 12 columnas (Item ID, Estado Identidad)")
+
         if len(existing) > 1:
             fecha_idx = 9
             existing_dates = list(dict.fromkeys(row[fecha_idx] for row in existing[1:] if len(row) > fecha_idx and row[fecha_idx]))
@@ -943,7 +951,7 @@ def refresh_job(job_id, ml_token):
                 existing_dates.remove(today)
                 keep_rows = [existing[0]] + [r for r in existing[1:] if len(r) > fecha_idx and r[fecha_idx] != today]
                 hist_ws.clear()
-                if keep_rows: hist_ws.update(values=keep_rows, range_name=f'A1:J{len(keep_rows)}')
+                if keep_rows: hist_ws.update(values=keep_rows, range_name=f'A1:L{len(keep_rows)}')
                 existing_dates_clean = existing_dates
             else:
                 existing_dates_clean = existing_dates
@@ -951,14 +959,14 @@ def refresh_job(job_id, ml_token):
                 oldest = existing_dates_clean[0]; existing_dates_clean.pop(0)
                 all_vals = hist_ws.get_all_values()
                 keep = [all_vals[0]] + [r for r in all_vals[1:] if len(r) > fecha_idx and r[fecha_idx] != oldest]
-                hist_ws.clear(); hist_ws.update(values=keep, range_name=f'A1:J{len(keep)}')
+                hist_ws.clear(); hist_ws.update(values=keep, range_name=f'A1:L{len(keep)}')
                 log.append(f"🗑 Fecha más vieja eliminada: {oldest}"); time.sleep(0.5)
         new_rows = []
         for item in all_items:
             p = mla_prices.get(item['mla'], {})
             new_rows.append([item['vendedor'], item['titulo'], p.get('precio',''), p.get('tachado',''),
                              p.get('descuento',''), p.get('cuotas',''), item['link'],
-                             item['sku'], item['cantidad'], today])
+                             item['sku'], item['cantidad'], today, item['mla'], item['estado']])
         for i in range(0, len(new_rows), 500):
             hist_ws.append_rows(new_rows[i:i+500], value_input_option='RAW'); time.sleep(0.3)
         log.append(f"✅ {len(new_rows)} filas agregadas al historial con fecha {today}")
