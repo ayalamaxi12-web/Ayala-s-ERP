@@ -1018,3 +1018,31 @@ async def get_tc_bna():
         return {"tc": 0, "error": "No se pudo parsear el TC", "source": "error"}
     except Exception as e:
         return {"tc": 0, "error": str(e), "source": "error"}
+
+
+# ══════════════════════════════════════════════════════
+# DISTRIBUCION — inicialización de pestañas
+# ══════════════════════════════════════════════════════
+
+DISTRIB_SHEETS = {
+    'Distribuidores': ['Distribuidor','Provincia','Localidad','Estado','Seller_ID','Responsable','Tolerancia_PVP','Fecha_Alta','Fecha_Ultima_Revision','Observaciones','Link_ML'],
+    'Distribuidor_SKU': ['Distribuidor','SKU','Descripcion','Activo','PVP_Override','PVP_Oficial'],
+    'Distribucion_Auditoria': ['Distribuidor','SKU','Fecha','Precio_Detectado','Cumple','Diferencia_%'],
+}
+
+@app.post("/distribucion/init")
+def init_distribucion():
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        existing = {ws.title for ws in ss.worksheets()}
+        result = {}
+        for name, headers in DISTRIB_SHEETS.items():
+            if name in existing:
+                result[name] = 'ya existía'
+                continue
+            sheet = ss.add_worksheet(title=name, rows=1000, cols=len(headers))
+            sheet.append_row(headers)
+            result[name] = 'creada'
+        return {"status": "ok", "sheets": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
