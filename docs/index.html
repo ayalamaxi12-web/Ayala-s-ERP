@@ -120,6 +120,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .btn-xs{padding:3px 8px;font-size:9px;border-radius:4px;cursor:pointer;border:1px solid rgba(0,157,188,.3);background:rgba(0,157,188,.12);color:var(--accent);font-family:'Inter',sans-serif;font-weight:700;}
 .btn-xs:hover{background:rgba(0,157,188,.25);}
 .btn-xs:disabled{opacity:.5;cursor:not-allowed;}
+.distrib-view-tab{font-size:10px;padding:5px 12px;}
+.distrib-view-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 .pagination{display:flex;align-items:center;gap:5px;justify-content:flex-end;padding:10px 12px;border-top:1px solid var(--border);}
 .page-btn{width:26px;height:26px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;}
 .page-btn:hover{border-color:var(--accent);color:var(--accent);}
@@ -204,6 +206,11 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="ofertas-ml" onclick="goPage('ofertas-ml',this)"><span class="icon">🏷️</span> Ofertas ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
     <div class="sidebar-item" data-page="intel-competitiva" onclick="goPage('intel-competitiva',this)"><span class="icon">🎯</span> Intel. Competitiva</div>
+  </div>
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">🚚 Distribución</div>
+    <div class="sidebar-item" data-page="distribucion" onclick="goPage('distribucion',this)"><span class="icon">🚚</span> Distribuidores</div>
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
@@ -791,6 +798,107 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+<!-- DISTRIBUCION -->
+<div id="page-distribucion" class="page">
+  <div class="section-hdr">Distribución — Red de Distribuidores Autorizados ML</div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+    <button class="btn-xs distrib-view-tab active" id="distrib-tab-distribuidores" onclick="distribSwitchView('distribuidores')">Distribuidores</button>
+    <button class="btn-xs distrib-view-tab" id="distrib-tab-monitor" onclick="distribSwitchView('monitor')">Monitor de Publicaciones</button>
+  </div>
+
+  <div id="distribucion-view-distribuidores">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn primary" id="btn-load-distribucion">🔄 Cargar desde Sheets</button>
+      <span id="distribucion-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div id="distribucion-stats-wrap" style="display:none">
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-value" id="ds-total-dist">0</div><div class="stat-label">Distribuidores</div></div>
+        <div class="stat-card"><div class="stat-value" id="ds-total-sku">0</div><div class="stat-label">SKUs autorizados</div></div>
+        <div class="stat-card"><div class="stat-value" id="ds-total-controlados">0</div><div class="stat-label">SKUs controlados</div></div>
+        <div class="stat-card"><div class="stat-value price-ok" id="ds-cumple">0</div><div class="stat-label">Cumplen PVP</div></div>
+        <div class="stat-card"><div class="stat-value price-bad" id="ds-no-cumple">0</div><div class="stat-label">Fuera de PVP</div></div>
+        <div class="stat-card"><div class="stat-value" id="ds-pct" style="color:var(--accent)">0%</div><div class="stat-label">% Cumplimiento global</div></div>
+      </div>
+    </div>
+    <div class="erp-filters" id="distribucion-search-bar" style="display:none">
+      <div style="position:relative;flex:1;min-width:180px">
+        <input type="text" id="distribucion-search" placeholder="Buscar distribuidor, provincia o localidad..." autocomplete="off" oninput="renderDistribucion()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+      </div>
+      <select id="distribucion-filter-estado" class="fi" onchange="renderDistribucion()">
+        <option value="">Todos los estados</option>
+        <option value="Activo">Activo</option>
+        <option value="Suspendido">Suspendido</option>
+        <option value="Baja">Baja</option>
+      </select>
+      <span id="distribucion-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div class="table-wrap" id="distribucion-table-wrap" style="display:none">
+      <table id="distrib-table">
+        <thead><tr>
+          <th></th>
+          <th data-col="distribuidor">Distribuidor</th>
+          <th data-col="provincia">Provincia</th>
+          <th data-col="localidad">Localidad</th>
+          <th data-col="estado">Estado</th>
+          <th data-col="skus">SKUs Autorizados</th>
+          <th data-col="controlados">Controlados</th>
+          <th data-col="cumple">Cumple</th>
+          <th data-col="noCumple">No Cumple</th>
+          <th data-col="pct">% Cumplimiento</th>
+          <th>Tienda ML</th>
+        </tr></thead>
+        <tbody id="distribucion-tbody"></tbody>
+      </table>
+      <div class="pagination" id="distribucion-pag"></div>
+    </div>
+  </div>
+
+  <div id="distribucion-view-monitor" style="display:none">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" id="btn-load-monitor">🔄 Cargar histórico</button>
+      <button class="btn primary" id="btn-run-monitor">▶ Ejecutar monitoreo</button>
+      <span id="monitor-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div id="monitor-stats-wrap" style="display:none">
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-value" id="mon-total-links">0</div><div class="stat-label">SKUs monitoreados</div></div>
+        <div class="stat-card"><div class="stat-value price-ok" id="mon-ok">0</div><div class="stat-label">Publicaciones OK</div></div>
+        <div class="stat-card"><div class="stat-value price-bad" id="mon-error">0</div><div class="stat-label">Publicaciones con error</div></div>
+        <div class="stat-card"><div class="stat-value" id="mon-pct-exito" style="color:var(--accent)">0%</div><div class="stat-label">% Éxito de lectura</div></div>
+        <div class="stat-card"><div class="stat-value" id="mon-ultima-corrida" style="font-size:14px">—</div><div class="stat-label">Última actualización</div></div>
+      </div>
+    </div>
+    <div class="erp-filters" id="monitor-search-bar" style="display:none">
+      <div style="position:relative;flex:1;min-width:180px">
+        <input type="text" id="monitor-search" placeholder="Buscar distribuidor o SKU..." autocomplete="off" oninput="renderMonitor()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+      </div>
+      <select id="monitor-filter-estado" class="fi" onchange="renderMonitor()">
+        <option value="">Todos los estados</option>
+        <option value="OK">OK</option>
+        <option value="Error">Error</option>
+      </select>
+      <span id="monitor-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div class="table-wrap" id="monitor-table-wrap" style="display:none">
+      <table id="monitor-table">
+        <thead><tr>
+          <th></th>
+          <th data-col="distribuidor">Distribuidor</th>
+          <th data-col="sku">SKU</th>
+          <th>Publicación</th>
+          <th data-col="precio">Precio Detectado</th>
+          <th data-col="fecha">Última lectura</th>
+          <th data-col="estado">Estado</th>
+          <th data-col="metodo">Método</th>
+        </tr></thead>
+        <tbody id="monitor-tbody"></tbody>
+      </table>
+      <div class="pagination" id="monitor-pag"></div>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIG -->
 <div id="page-config" class="page">
   <div class="section-hdr">Configuración</div>
@@ -1203,6 +1311,7 @@ const OFERTAS_TABS=['Ofertas Catalogo IT','Ofertas Catalogo MT'];
 const OFERTAS_BASE_URL='https://www.mercadolibre.com.ar/publicaciones/listado/promos?filters=seller_campaign_offer-c-mla1234411&page=1&search=';
 const SHEETS_BR=['Base Brasil'];
 const COMP={data:[],vendedores:[],selected:[],page:1,pageSize:50};
+const DISTRIB={distribuidores:[],skusByDist:{},auditByDist:{}};
 let allSalesData=[],canalColors={},activeFilters={},dashCharts={};
 let histSkus=[],histAllData={},histDataParsed={};
 let cobrData=[],brData=[];
@@ -2287,6 +2396,299 @@ function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{
 function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=[['3 Cuotas','cfg-r3',1.15,'cfg-q3',4.08],['6 Cuotas','cfg-r6',1.20,'cfg-q6',9.48],['9 Cuotas','cfg-r9',1.25,'cfg-q9',15.12],['12 Cuotas','cfg-r12',1.35,'cfg-q12',18.24],['18 Cuotas','cfg-r18',1.45,'cfg-q18',26.52]];const cells=planes.map(pl=>{const p=pSug*cfgN(pl[1],pl[2]);const q=cfgN(pl[3],pl[4]);const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
 function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').forEach(row=>{const btn=row.previousElementSibling&&row.previousElementSibling.querySelector('button[data-psug]');if(btn){compToggleCuotas(btn);compToggleCuotas(btn);}});} document.addEventListener('change',e=>{if(e.target&&/^cfg-(r|q)\d+$/.test(e.target.id))compUpdateCuotasRows();}); const _oRC=renderCompetidores;renderCompetidores=function(){let openLink=null;const op=document.querySelector('.comp-cuotas-row');if(op){const b=op.previousElementSibling&&op.previousElementSibling.querySelector('button[data-link]');if(b)openLink=b.dataset.link;}_oRC();if(openLink){const nb=Array.from(document.querySelectorAll('#competidores-tbody button[data-link]')).find(x=>x.dataset.link===openLink);if(nb)compToggleCuotas(nb);}}; compCfgLoad();
 
+// ── DISTRIBUCION ──
+function _rowsToObjs(rows){
+  if(!rows||rows.length<2)return[];
+  const hdrs=rows[0].map(h=>String(h||'').trim());
+  return rows.slice(1).filter(r=>r.some(c=>String(c||'').trim())).map(r=>{
+    const o={};
+    hdrs.forEach((h,i)=>{o[h]=r[i]!==undefined?String(r[i]).trim():'';});
+    return o;
+  });
+}
+function _parseFechaDDMMYYYY(s){
+  if(!s)return 0;
+  const p=String(s).split('/');
+  if(p.length!==3)return 0;
+  return new Date(+p[2],+p[1]-1,+p[0]).getTime()||0;
+}
+async function loadDistribucion(){
+  const btn=qs('btn-load-distribucion'),status=qs('distribucion-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';
+  try{
+    const [distRows,skuRows,audRows]=await Promise.all([
+      fetchSheet(COMP_SHEET_ID,'Distribuidores!A1:Z500').catch(()=>null),
+      fetchSheet(COMP_SHEET_ID,'Distribuidor_SKU!A1:Z5000').catch(()=>null),
+      fetchSheet(COMP_SHEET_ID,'Distribucion_Auditoria!A1:Z20000').catch(()=>null),
+    ]);
+    if(!distRows){
+      status.textContent='⚠ No existe la pestaña "Distribuidores" todavía — creala en Cuentirijillas con los headers acordados.';
+      btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';return;
+    }
+    DISTRIB.distribuidores=_rowsToObjs(distRows);
+    const skus=_rowsToObjs(skuRows||[]);
+    const audit=_rowsToObjs(audRows||[]);
+    DISTRIB.skusByDist={};
+    skus.forEach(s=>{const d=s.Distribuidor||'';(DISTRIB.skusByDist[d]=DISTRIB.skusByDist[d]||[]).push(s);});
+    const latestByKey={};
+    audit.forEach(a=>{
+      const key=(a.Distribuidor||'')+'|'+(a.SKU||'');
+      const prev=latestByKey[key];
+      if(!prev||_parseFechaDDMMYYYY(a.Fecha)>_parseFechaDDMMYYYY(prev.Fecha))latestByKey[key]=a;
+    });
+    DISTRIB.auditByDist={};
+    Object.keys(latestByKey).forEach(key=>{
+      const a=latestByKey[key],d=a.Distribuidor||'';
+      (DISTRIB.auditByDist[d]=DISTRIB.auditByDist[d]||[]).push(a);
+    });
+    qs('distribucion-search-bar').style.display='flex';
+    qs('distribucion-table-wrap').style.display='block';
+    qs('distribucion-stats-wrap').style.display='block';
+    status.textContent=`${DISTRIB.distribuidores.length} distribuidores · ${skus.length} SKUs autorizados · ${audit.length} controles históricos`;
+    btn.textContent='🔄 Cargar desde Sheets';
+    renderDistribucion();
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+  }
+  btn.disabled=false;
+}
+function renderDistribucion(){
+  const search=(qs('distribucion-search').value||'').toLowerCase();
+  const fEstado=qs('distribucion-filter-estado').value;
+  let rows=DISTRIB.distribuidores.filter(d=>{
+    if(fEstado&&d.Estado!==fEstado)return false;
+    if(search){
+      const hay=(d.Distribuidor||'').toLowerCase().includes(search)||(d.Provincia||'').toLowerCase().includes(search)||(d.Localidad||'').toLowerCase().includes(search);
+      if(!hay)return false;
+    }
+    return true;
+  });
+  rows=rows.map(d=>{
+    const nombre=d.Distribuidor||'';
+    const skus=DISTRIB.skusByDist[nombre]||[];
+    const activos=skus.filter(s=>(s.Activo||'').toLowerCase().startsWith('s'));
+    const audits=DISTRIB.auditByDist[nombre]||[];
+    const cumple=audits.filter(a=>(a.Cumple||'').toLowerCase().startsWith('s')).length;
+    const noCumple=audits.filter(a=>(a.Cumple||'').toLowerCase().startsWith('n')).length;
+    const controlados=audits.length;
+    const pct=controlados?Math.round(cumple/controlados*1000)/10:null;
+    return Object.assign({},d,{_skus:activos,_audits:audits,_cumple:cumple,_noCumple:noCumple,_controlados:controlados,_pct:pct});
+  });
+  const totalSku=rows.reduce((a,r)=>a+r._skus.length,0);
+  const totalControlados=rows.reduce((a,r)=>a+r._controlados,0);
+  const totalCumple=rows.reduce((a,r)=>a+r._cumple,0);
+  const totalNoCumple=rows.reduce((a,r)=>a+r._noCumple,0);
+  qs('ds-total-dist').textContent=rows.length;
+  qs('ds-total-sku').textContent=totalSku;
+  qs('ds-total-controlados').textContent=totalControlados;
+  qs('ds-cumple').textContent=totalCumple;
+  qs('ds-no-cumple').textContent=totalNoCumple;
+  qs('ds-pct').textContent=totalControlados?Math.round(totalCumple/totalControlados*1000)/10+'%':'—';
+  qs('distribucion-count').textContent=rows.length+' distribuidores';
+  const tbody=qs('distribucion-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text3)">Sin distribuidores cargados</td></tr>';return;}
+  tbody.innerHTML=rows.map((d,idx)=>{
+    const rid='dist-'+idx;
+    const pctStr=d._pct===null?'<span style="color:var(--text3)">Sin controles</span>':`<span class="${d._pct>=90?'price-ok':d._pct>=70?'price-warn':'price-bad'}">${d._pct}%</span>`;
+    const estadoColor=d.Estado==='Activo'?'var(--green)':d.Estado==='Suspendido'?'#ffd166':'var(--red)';
+    return `<tr style="cursor:pointer" onclick="distribToggleDetail('${rid}')">
+      <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${rid}">▶</td>
+      <td style="font-weight:600">${d.Distribuidor||''}</td>
+      <td class="mono" style="font-size:11px">${d.Provincia||'—'}</td>
+      <td class="mono" style="font-size:11px">${d.Localidad||'—'}</td>
+      <td><span style="color:${estadoColor};font-size:10px;font-weight:600">${d.Estado||'—'}</span></td>
+      <td class="mono" style="text-align:center">${d._skus.length}</td>
+      <td class="mono" style="text-align:center">${d._controlados}</td>
+      <td class="mono price-ok" style="text-align:center">${d._cumple}</td>
+      <td class="mono price-bad" style="text-align:center">${d._noCumple}</td>
+      <td style="text-align:center">${pctStr}</td>
+      <td>${d.Link_ML?`<a href="${d.Link_ML}" target="_blank" class="btn-xs" style="text-decoration:none" onclick="event.stopPropagation()">Abrir →</a>`:'—'}</td>
+    </tr>
+    <tr id="${rid}" style="display:none"><td colspan="11" style="padding:0">${_distribDetailHTML(d)}</td></tr>`;
+  }).join('');
+}
+function _distribDetailHTML(d){
+  const rowsHtml=(d._skus||[]).map(s=>{
+    const auditRow=(d._audits||[]).find(a=>a.SKU===s.SKU);
+    const pvp=s.PVP_Override||s.PVP_Oficial||'—';
+    const detectado=auditRow?auditRow.Precio_Detectado:'';
+    const cumple=auditRow?(auditRow.Cumple||''):'';
+    const diff=auditRow?auditRow['Diferencia_%']:'';
+    const cumpleColor=cumple.toLowerCase().startsWith('s')?'price-ok':cumple.toLowerCase().startsWith('n')?'price-bad':'';
+    return `<tr>
+      <td class="mono" style="font-size:10px">${s.SKU||''}</td>
+      <td style="font-size:10px">${s.Descripcion||''}</td>
+      <td class="mono" style="font-size:10px">$${pvp}</td>
+      <td class="mono" style="font-size:10px">${detectado?'$'+detectado:'<span style="color:var(--text3)">Sin control</span>'}</td>
+      <td class="mono" style="font-size:10px">${diff||'—'}</td>
+      <td class="${cumpleColor}" style="font-size:10px">${cumple||'—'}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="background:var(--surface2);padding:10px 16px 14px 40px">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:10px;color:var(--text2);margin-bottom:8px;font-family:'DM Mono',monospace">
+      <span>Seller ID: <b>${d.Seller_ID||'—'}</b></span>
+      <span>Responsable: <b>${d.Responsable||'—'}</b></span>
+      <span>Tolerancia PVP: <b>±${d.Tolerancia_PVP||'—'}%</b></span>
+      <span>Alta: <b>${d.Fecha_Alta||'—'}</b></span>
+      <span>Última revisión: <b>${d.Fecha_Ultima_Revision||'—'}</b></span>
+    </div>
+    ${d.Observaciones?`<div style="font-size:10px;color:var(--text3);margin-bottom:8px">${d.Observaciones}</div>`:''}
+    <table style="width:100%">
+      <thead><tr><th style="font-size:9px">SKU</th><th style="font-size:9px">Descripción</th><th style="font-size:9px">PVP objetivo</th><th style="font-size:9px">Precio detectado</th><th style="font-size:9px">Dif. %</th><th style="font-size:9px">Cumple</th></tr></thead>
+      <tbody>${rowsHtml||'<tr><td colspan="6" style="text-align:center;color:var(--text3);font-size:10px;padding:8px">Sin SKUs autorizados cargados</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+function distribToggleDetail(id){
+  const row=qs(id),arr=qs('arr-'+id);
+  if(!row)return;
+  const isOpen=row.style.display!=='none';
+  row.style.display=isOpen?'none':'table-row';
+  if(arr)arr.textContent=isOpen?'▶':'▼';
+}
+
+// ── MONITOR DE PUBLICACIONES ──
+const MONITOR={lecturas:[]};
+
+function distribSwitchView(view){
+  const isDist=view==='distribuidores';
+  qs('distribucion-view-distribuidores').style.display=isDist?'block':'none';
+  qs('distribucion-view-monitor').style.display=isDist?'none':'block';
+  qs('distrib-tab-distribuidores').classList.toggle('active',isDist);
+  qs('distrib-tab-monitor').classList.toggle('active',!isDist);
+}
+
+function _parseFechaHora(s){
+  if(!s)return 0;
+  const [fecha,hora]=String(s).trim().split(' ');
+  const p=(fecha||'').split('/');
+  if(p.length!==3)return 0;
+  const [hh,mm]=(hora||'0:0').split(':');
+  return new Date(+p[2],+p[1]-1,+p[0],+hh||0,+mm||0).getTime()||0;
+}
+
+function _monitorUltimaLecturaPorClave(rows){
+  const latest={};
+  rows.forEach(r=>{
+    const key=(r.Distribuidor||'')+'|'+(r.SKU||'');
+    const prev=latest[key];
+    if(!prev||_parseFechaHora(r.Fecha_Hora)>_parseFechaHora(prev.Fecha_Hora))latest[key]=r;
+  });
+  return Object.values(latest);
+}
+
+async function loadMonitorLecturas(){
+  const btn=qs('btn-load-monitor'),status=qs('monitor-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo histórico...';
+  try{
+    const rows=await fetchSheet(COMP_SHEET_ID,'Monitor_Lecturas!A1:J20000').catch(()=>null);
+    if(!rows){
+      status.textContent='⚠ Todavía no hay lecturas — corré "Ejecutar monitoreo" para generar la primera.';
+      btn.disabled=false;btn.textContent='🔄 Cargar histórico';return;
+    }
+    MONITOR.lecturas=_rowsToObjs(rows);
+    status.textContent=`${MONITOR.lecturas.length} lecturas históricas cargadas`;
+    btn.textContent='🔄 Cargar histórico';
+    renderMonitor();
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+  }
+  btn.disabled=false;
+}
+
+async function runMonitor(){
+  const btn=qs('btn-run-monitor'),status=qs('monitor-status');
+  const bu=getBackendUrl();
+  if(!bu){status.textContent='⚠ Configurá la URL del backend primero (Configuración)';return;}
+  btn.disabled=true;btn.textContent='⏳ Monitoreando...';status.textContent='Consultando publicaciones en vivo...';
+  try{
+    const res=await fetch(bu+'/distribucion/monitor/run',{method:'POST'});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Error desconocido');
+    const fresh=(data.results||[]).map(r=>({
+      Distribuidor:r.distribuidor,SKU:r.sku,Link:r.link,
+      Precio_Detectado:r.precio_detectado!=null?String(r.precio_detectado):'',
+      Fecha_Hora:r.fecha_hora,Estado:r.estado,Metodo:r.metodo,
+      Detalle_Error:r.detalle_error,Seller_ID:r.seller_id!=null?String(r.seller_id):'',
+      Official_Store_ID:r.official_store_id!=null?String(r.official_store_id):'',
+    }));
+    MONITOR.lecturas=[...MONITOR.lecturas,...fresh];
+    status.textContent=`✅ ${fresh.length} publicaciones monitoreadas`;
+    btn.textContent='▶ Ejecutar monitoreo';
+    renderMonitor();
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+    btn.textContent='▶ Ejecutar monitoreo';
+  }
+  btn.disabled=false;
+}
+
+function renderMonitor(){
+  const search=(qs('monitor-search').value||'').toLowerCase();
+  const fEstado=qs('monitor-filter-estado').value;
+  const ultimas=_monitorUltimaLecturaPorClave(MONITOR.lecturas);
+  let rows=ultimas.filter(r=>{
+    if(fEstado&&r.Estado!==fEstado)return false;
+    if(search){
+      const hay=(r.Distribuidor||'').toLowerCase().includes(search)||(r.SKU||'').toLowerCase().includes(search);
+      if(!hay)return false;
+    }
+    return true;
+  }).sort((a,b)=>_parseFechaHora(b.Fecha_Hora)-_parseFechaHora(a.Fecha_Hora));
+
+  const totalOk=ultimas.filter(r=>r.Estado==='OK').length;
+  const totalError=ultimas.filter(r=>r.Estado==='Error').length;
+  const totalLeidas=ultimas.length;
+  const ultimaFecha=ultimas.reduce((max,r)=>{const t=_parseFechaHora(r.Fecha_Hora);return t>max.t?{t,s:r.Fecha_Hora}:max;},{t:0,s:'—'}).s;
+
+  qs('monitor-stats-wrap').style.display=totalLeidas?'block':'none';
+  qs('monitor-search-bar').style.display=totalLeidas?'flex':'none';
+  qs('monitor-table-wrap').style.display=totalLeidas?'block':'none';
+  qs('mon-total-links').textContent=totalLeidas;
+  qs('mon-ok').textContent=totalOk;
+  qs('mon-error').textContent=totalError;
+  qs('mon-pct-exito').textContent=totalLeidas?Math.round(totalOk/totalLeidas*1000)/10+'%':'0%';
+  qs('mon-ultima-corrida').textContent=ultimaFecha;
+  qs('monitor-count').textContent=rows.length+' publicaciones';
+
+  const tbody=qs('monitor-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">Sin publicaciones monitoreadas todavía</td></tr>';return;}
+  tbody.innerHTML=rows.map((r,idx)=>{
+    const rid='mon-'+idx;
+    const estadoColor=r.Estado==='OK'?'var(--green)':'var(--red)';
+    const precioStr=r.Precio_Detectado?`$${Number(r.Precio_Detectado).toLocaleString('es-AR')}`:'—';
+    const metodoBg=r.Metodo==='Selenium'?'rgba(245,158,11,0.15)':'rgba(0,157,188,0.15)';
+    const metodoColor=r.Metodo==='Selenium'?'var(--accent3)':'var(--accent)';
+    return `<tr style="cursor:pointer" onclick="monitorToggleDetail('${rid}')">
+      <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${rid}">▶</td>
+      <td style="font-weight:600">${r.Distribuidor||''}</td>
+      <td class="mono" style="font-size:11px">${r.SKU||''}</td>
+      <td>${r.Link?`<a href="${r.Link}" target="_blank" class="btn-xs" style="text-decoration:none" onclick="event.stopPropagation()">Abrir →</a>`:'—'}</td>
+      <td class="mono">${precioStr}</td>
+      <td class="mono" style="font-size:11px">${r.Fecha_Hora||'—'}</td>
+      <td><span style="color:${estadoColor};font-size:10px;font-weight:600">${r.Estado||'—'}</span></td>
+      <td><span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:${metodoBg};color:${metodoColor}">${r.Metodo||'—'}</span></td>
+    </tr>
+    <tr id="${rid}" style="display:none"><td colspan="8" style="padding:0">${_monitorDetailHTML(r)}</td></tr>`;
+  }).join('');
+}
+
+function _monitorDetailHTML(r){
+  return `<div style="background:var(--surface2);padding:10px 16px 14px 40px;display:flex;gap:24px;flex-wrap:wrap;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace">
+    <span>Seller ID: <b>${r.Seller_ID||'—'}</b></span>
+    <span>Official Store ID: <b>${r.Official_Store_ID||'—'}</b></span>
+    ${r.Detalle_Error?`<span style="color:var(--red);flex-basis:100%">Detalle del error: ${r.Detalle_Error}</span>`:''}
+  </div>`;
+}
+
+function monitorToggleDetail(id){
+  const row=qs(id),arr=qs('arr-'+id);
+  if(!row)return;
+  const isOpen=row.style.display!=='none';
+  row.style.display=isOpen?'none':'table-row';
+  if(arr)arr.textContent=isOpen?'▶':'▼';
+}
+
 // ── RULES ──
 function renderRules(){qs('rules-grid').innerHTML=RULES.map(r=>`<div class="rule-item"><div class="rule-name">${r.key}</div><div class="rule-pct"><input type="number" step="0.01" value="${r.pct.toFixed(2)}" data-rk="${r.key}"></div></div>`).join('');qs('rules-grid').querySelectorAll('input').forEach(inp=>inp.addEventListener('change',()=>{const r=RULES.find(x=>x.key===inp.dataset.rk);if(r)r.pct=parseFloat(inp.value)||r.pct;}));}
 function populateRuleFilter(){const sel=qs('ml-filter-regla');if(!sel)return;RULES.forEach(r=>{const o=document.createElement('option');o.value=r.key;o.textContent=r.key;sel.appendChild(o);});}
@@ -3027,6 +3429,9 @@ function init(){
   qs('btn-save-rules').addEventListener('click',()=>{saveStor();toast('Reglas guardadas');});
   qs('btn-reload-cats').addEventListener('click',loadCats);
   qs('btn-load-competidores').addEventListener('click',loadCompetidores);
+  qs('btn-load-distribucion').addEventListener('click',loadDistribucion);
+  qs('btn-load-monitor').addEventListener('click',loadMonitorLecturas);
+  qs('btn-run-monitor').addEventListener('click',runMonitor);
   ['ecom-search','ecom-filter-estado'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.ePage=1;renderEcom();});el.addEventListener('change',()=>{S.ePage=1;renderEcom();});}});
   ['ml-search','ml-filter-estado','ml-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.mPage=1;renderML();});el.addEventListener('change',()=>{S.mPage=1;renderML();});}});
   ['tactica-search','tactica-filter-estado','tactica-filter-lista'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.tPage=1;renderTactica();});el.addEventListener('change',()=>{S.tPage=1;renderTactica();});}});

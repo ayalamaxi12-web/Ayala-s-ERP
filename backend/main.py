@@ -1046,3 +1046,216 @@ def init_distribucion():
         return {"status": "ok", "sheets": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# DISTRIBUCION — monitor de precio en vivo (MVP, sin comparación PVP)
+# ══════════════════════════════════════════════════════
+
+MONITOR_HEADERS = ['Distribuidor','SKU','Link','Precio_Detectado','Fecha_Hora','Estado','Metodo','Detalle_Error','Seller_ID','Official_Store_ID']
+
+def _monitor_extract_ids(link):
+    """
+    A diferencia de resolve_ml_identity (que devuelve un único tipo con prioridad
+    item_id > product_id), acá necesitamos product_id y wid AL MISMO TIEMPO: un link
+    de catálogo trae ambos, y el wid identifica la oferta puntual dentro del catálogo.
+    Reutiliza los mismos regex/helpers de la capa de identidad ML (F0).
+    """
+    s = str(link) if link is not None else ''
+    path, _resto = _split_url_zones(s)
+    product_id = None
+    for pat in (_ML_PATH_PRODUCT_P_RE, _ML_PATH_PRODUCT_UP_RE):
+        m = pat.search(path)
+        if m:
+            product_id = _normalize_ml_id(m.group(1)); break
+    wid = None
+    m = _ML_PARAM_WID_RE.search(s)
+    if m:
+        wid = _normalize_ml_id(m.group(1))
+    item_id = None
+    if not product_id:
+        m = _ML_PATH_ITEM_RE.search(path) or _ML_PARAM_ITEM_ID_RE.search(s)
+        if m:
+            item_id = _normalize_ml_id(m.group(1))
+        elif wid:
+            item_id = wid  # sin product_id de catálogo, el wid es el item individual a mirar
+    return {'product_id': product_id, 'wid': wid, 'item_id': item_id}
+
+def _monitor_leer_catalogo(product_id, wid):
+    """Publicación de catálogo (/p/, /up/): la oferta puntual del distribuidor se identifica
+    por wid dentro de /products/{id}/items — endpoint público, no gateado por ownership."""
+    if not wid:
+        return {'precio': None, 'estado': 'Error', 'metodo': 'API', 'seller_id': None, 'official_store_id': None,
+                'detalle_error': 'Link de catálogo sin wid= — no se puede identificar la oferta puntual del distribuidor'}
+    try:
+        offers = []; offset = 0
+        while True:
+            r = requests.get(f"https://api.mercadolibre.com/products/{product_id}/items",
+                headers=ml_headers(), params={'limit': 100, 'offset': offset}, timeout=15)
+            if r.status_code != 200:
+                try:
+                    msg = r.json().get('message', r.text[:120])
+                except Exception:
+                    msg = r.text[:120]
+                return {'precio': None, 'estado': 'Error', 'metodo': 'API', 'seller_id': None, 'official_store_id': None,
+                        'detalle_error': f'API {r.status_code} en /products/{product_id}/items: {msg}'}
+            data = r.json()
+            results = data.get('results', [])
+            offers.extend(results)
+            total = data.get('paging', {}).get('total', len(offers))
+            offset += len(results)
+            if not results or offset >= total:
+                break
+        match = next((o for o in offers if o.get('item_id') == wid), None)
+        if not match:
+            return {'precio': None, 'estado': 'Error', 'metodo': 'API', 'seller_id': None, 'official_store_id': None,
+                    'detalle_error': f'wid {wid} no encontrado entre las {len(offers)} ofertas de {product_id} (¿vendedor no coincide o publicación eliminada?)'}
+        return {'precio': match.get('price'), 'estado': 'OK', 'metodo': 'API',
+                'seller_id': match.get('seller_id'), 'official_store_id': match.get('official_store_id'),
+                'detalle_error': ''}
+    except Exception as e:
+        return {'precio': None, 'estado': 'Error', 'metodo': 'API', 'seller_id': None, 'official_store_id': None,
+                'detalle_error': f'API error: {e}'}
+
+def _monitor_try_api_item(item_id):
+    """Intento rápido por API para item individual (no catálogo). Devuelve (precio o None, detalle)."""
+    try:
+        r = requests.get(f"https://api.mercadolibre.com/items/{item_id}", headers=ml_headers(), timeout=10)
+        if r.status_code == 200:
+            price = r.json().get('price')
+            if price:
+                return price, ''
+            return None, 'API 200 pero sin precio en la respuesta'
+        try:
+            msg = r.json().get('message', r.text[:120])
+        except Exception:
+            msg = r.text[:120]
+        return None, f'API {r.status_code}: {msg}'
+    except Exception as e:
+        return None, f'API error: {e}'
+
+def _monitor_try_selenium(driver, link):
+    """Visita la publicación puntual (sin scroll/paginación) y lee el precio del DOM."""
+    from selenium.webdriver.common.by import By
+    try:
+        driver.get(link); time.sleep(2.5)
+        page_text = driver.find_element(By.TAG_NAME, 'body').text.lower()
+        if 'pausada' in page_text or 'pausado' in page_text:
+            return None, "Selenium: la publicación aparece pausada"
+        if 'ya no está disponible' in page_text or 'no encontramos la página' in page_text or 'esta publicación ya no' in page_text:
+            return None, "Selenium: la publicación ya no está disponible"
+        price = 0
+        for sel in ['.ui-pdp-price__second-line .andes-money-amount__fraction',
+                    '.ux-price__second-line .andes-money-amount__fraction',
+                    '.andes-money-amount__fraction']:
+            try:
+                txt = driver.find_element(By.CSS_SELECTOR, sel).text
+                v = int(re.sub(r'[^\d]', '', txt) or 0)
+                if v: price = v; break
+            except Exception:
+                continue
+        if price:
+            return price, ''
+        return None, 'Selenium: no se encontró precio en la página'
+    except Exception as e:
+        return None, f'Selenium error: {e}'
+
+def _monitor_launch_driver():
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    options = Options()
+    options.add_argument('--headless=new'); options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+    options.add_argument('--window-size=1920,1080')
+    try:
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
+        return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    except Exception:
+        return webdriver.Chrome(options=options)
+
+def leer_precio_publicacion(link, driver_holder):
+    ids = _monitor_extract_ids(link)
+
+    if ids['product_id']:
+        return _monitor_leer_catalogo(ids['product_id'], ids['wid'])
+
+    if ids['item_id']:
+        price, api_detail = _monitor_try_api_item(ids['item_id'])
+        if price:
+            return {'precio': price, 'estado': 'OK', 'metodo': 'API',
+                    'seller_id': None, 'official_store_id': None, 'detalle_error': ''}
+        if driver_holder['driver'] is None:
+            driver_holder['driver'] = _monitor_launch_driver()
+        price2, sel_detail = _monitor_try_selenium(driver_holder['driver'], link)
+        if price2:
+            return {'precio': price2, 'estado': 'OK', 'metodo': 'Selenium',
+                    'seller_id': None, 'official_store_id': None, 'detalle_error': ''}
+        return {'precio': None, 'estado': 'Error', 'metodo': 'Selenium',
+                'seller_id': None, 'official_store_id': None, 'detalle_error': f"{api_detail} | {sel_detail}"}
+
+    return {'precio': None, 'estado': 'Error', 'metodo': '', 'seller_id': None, 'official_store_id': None,
+            'detalle_error': 'Link no reconocido (sin product_id ni item_id)'}
+
+@app.post("/distribucion/monitor/run")
+def run_monitor():
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        try:
+            sku_ws = ss.worksheet('Distribuidor_SKU')
+        except Exception:
+            raise HTTPException(status_code=400, detail="No existe la pestaña Distribuidor_SKU")
+
+        headers = sku_ws.row_values(1)
+        if 'Link_Publicacion' not in headers:
+            col = len(headers) + 1
+            if col > sku_ws.col_count:
+                sku_ws.add_cols(col - sku_ws.col_count)
+            sku_ws.update_cell(1, col, 'Link_Publicacion')
+            headers.append('Link_Publicacion')
+
+        idx = {h: i for i, h in enumerate(headers)}
+        rows = sku_ws.get_all_values()[1:]
+        targets = []
+        for r in rows:
+            link = r[idx['Link_Publicacion']].strip() if len(r) > idx['Link_Publicacion'] else ''
+            if not link:
+                continue
+            targets.append({
+                'distribuidor': r[idx['Distribuidor']] if len(r) > idx.get('Distribuidor', -1) else '',
+                'sku': r[idx['SKU']] if len(r) > idx.get('SKU', -1) else '',
+                'link': link,
+            })
+
+        try:
+            mon_ws = ss.worksheet('Monitor_Lecturas')
+        except Exception:
+            mon_ws = ss.add_worksheet(title='Monitor_Lecturas', rows=2000, cols=len(MONITOR_HEADERS))
+            mon_ws.append_row(MONITOR_HEADERS)
+
+        driver_holder = {'driver': None}
+        results = []
+        try:
+            for t in targets:
+                res = leer_precio_publicacion(t['link'], driver_holder)
+                fecha_hora = datetime.now().strftime('%d/%m/%Y %H:%M')
+                results.append({
+                    'distribuidor': t['distribuidor'], 'sku': t['sku'], 'link': t['link'],
+                    'precio_detectado': res['precio'], 'fecha_hora': fecha_hora,
+                    'estado': res['estado'], 'metodo': res['metodo'], 'detalle_error': res['detalle_error'],
+                    'seller_id': res.get('seller_id'), 'official_store_id': res.get('official_store_id'),
+                })
+                mon_ws.append_row([t['distribuidor'], t['sku'], t['link'], res['precio'] or '',
+                                    fecha_hora, res['estado'], res['metodo'], res['detalle_error'],
+                                    res.get('seller_id') or '', res.get('official_store_id') or ''])
+        finally:
+            if driver_holder['driver']:
+                driver_holder['driver'].quit()
+
+        return {"status": "ok", "count": len(results), "results": results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
