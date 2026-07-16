@@ -209,6 +209,11 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
+    <div class="sidebar-section-label">🧠 Inteligencia Comercial</div>
+    <div class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this)"><span class="icon">🧠</span> SKUs &amp; Referencias</div>
+  </div>
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section">
     <div class="sidebar-section-label">🚚 Distribución</div>
     <div class="sidebar-item" data-page="distribucion" onclick="goPage('distribucion',this)"><span class="icon">🚚</span> Distribuidores</div>
   </div>
@@ -799,6 +804,47 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 </div>
 
 <!-- DISTRIBUCION -->
+<div id="page-intel-comercial" class="page">
+  <div class="section-hdr">Inteligencia Comercial — SKUs &amp; Referencias de Mercado (Fase 1: solo lectura)</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn primary" id="btn-load-intel-comercial">🔄 Cargar desde Sheets</button>
+    <span id="intel-comercial-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div id="intel-comercial-stats-wrap" style="display:none">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-value" id="ic-total-skus">0</div><div class="stat-label">SKUs con referencias</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-total-referencias">0</div><div class="stat-label">Referencias totales</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-tipo-distribuidor">0</div><div class="stat-label">Distribuidor</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-tipo-competencia">0</div><div class="stat-label">Competencia</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-tipo-cuenta-propia">0</div><div class="stat-label">Cuenta Propia</div></div>
+      <div class="stat-card"><div class="stat-value" id="ic-tipo-mayorista">0</div><div class="stat-label">Mayorista</div></div>
+    </div>
+  </div>
+  <div class="erp-filters" id="intel-comercial-search-bar" style="display:none">
+    <div style="position:relative;flex:1;min-width:180px">
+      <input type="text" id="intel-comercial-search" placeholder="Buscar SKU..." autocomplete="off" oninput="renderIntelComercial()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+    </div>
+    <select id="intel-comercial-filter-tipo" class="fi" onchange="renderIntelComercial()">
+      <option value="">Todos los tipos</option>
+      <option value="Distribuidor">Distribuidor</option>
+      <option value="Competencia">Competencia</option>
+      <option value="Cuenta Propia">Cuenta Propia</option>
+      <option value="Mayorista">Mayorista</option>
+    </select>
+    <span id="intel-comercial-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div class="table-wrap" id="intel-comercial-table-wrap" style="display:none">
+    <table id="intel-comercial-table">
+      <thead><tr>
+        <th></th>
+        <th data-col="sku">SKU</th>
+        <th data-col="refs"># Referencias</th>
+      </tr></thead>
+      <tbody id="intel-comercial-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="page-distribucion" class="page">
   <div class="section-hdr">Distribución — Red de Distribuidores Autorizados ML</div>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
@@ -1365,6 +1411,7 @@ function goPage(page,el){
   if(page==='verificar-fravega')renderFrave();
   if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
+  if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
 }
 
@@ -2395,6 +2442,108 @@ function compExtraFijo(p){return p<16000?cfgN('cfg-e1',1255):p<24000?cfgN('cfg-e
 function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',16)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&(mars+costoARS)>0)?mars/(mars+costoARS):null,mars:mars};}
 function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=[['3 Cuotas','cfg-r3',1.15,'cfg-q3',4.08],['6 Cuotas','cfg-r6',1.20,'cfg-q6',9.48],['9 Cuotas','cfg-r9',1.25,'cfg-q9',15.12],['12 Cuotas','cfg-r12',1.35,'cfg-q12',18.24],['18 Cuotas','cfg-r18',1.45,'cfg-q18',26.52]];const cells=planes.map(pl=>{const p=pSug*cfgN(pl[1],pl[2]);const q=cfgN(pl[3],pl[4]);const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
 function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').forEach(row=>{const btn=row.previousElementSibling&&row.previousElementSibling.querySelector('button[data-psug]');if(btn){compToggleCuotas(btn);compToggleCuotas(btn);}});} document.addEventListener('change',e=>{if(e.target&&/^cfg-(r|q)\d+$/.test(e.target.id))compUpdateCuotasRows();}); const _oRC=renderCompetidores;renderCompetidores=function(){let openLink=null;const op=document.querySelector('.comp-cuotas-row');if(op){const b=op.previousElementSibling&&op.previousElementSibling.querySelector('button[data-link]');if(b)openLink=b.dataset.link;}_oRC();if(openLink){const nb=Array.from(document.querySelectorAll('#competidores-tbody button[data-link]')).find(x=>x.dataset.link===openLink);if(nb)compToggleCuotas(nb);}}; compCfgLoad();
+
+// ── INTELIGENCIA COMERCIAL (Fase 1 — hub SKU de solo lectura) ──
+const INTEL={referencias:[],entidades:[],bySku:{}};
+let intelComercialLoaded=false;
+
+async function loadIntelComercial(){
+  const btn=qs('btn-load-intel-comercial'),status=qs('intel-comercial-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';
+  try{
+    const [refRows,entRows]=await Promise.all([
+      fetchSheet(COMP_SHEET_ID,'Referencias_Mercado!A1:Z5000').catch(()=>null),
+      fetchSheet(COMP_SHEET_ID,'Entidades!A1:Z1000').catch(()=>null),
+    ]);
+    if(!refRows){
+      status.textContent='⚠ No existe la pestaña "Referencias_Mercado" todavía — correr /intel-comercial/init y los bridges primero.';
+      btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';return;
+    }
+    INTEL.referencias=_rowsToObjs(refRows);
+    INTEL.entidades=_rowsToObjs(entRows||[]);
+    const entById={};
+    INTEL.entidades.forEach(e=>{entById[e.Entidad_ID]=e;});
+    INTEL.bySku={};
+    INTEL.referencias.forEach(r=>{
+      r._entidad=entById[r.Entidad_ID]||null;
+      const sku=r.SKU||'';
+      (INTEL.bySku[sku]=INTEL.bySku[sku]||[]).push(r);
+    });
+    intelComercialLoaded=true;
+    qs('intel-comercial-search-bar').style.display='flex';
+    qs('intel-comercial-table-wrap').style.display='block';
+    qs('intel-comercial-stats-wrap').style.display='block';
+    status.textContent=`${Object.keys(INTEL.bySku).length} SKUs · ${INTEL.referencias.length} referencias · ${INTEL.entidades.length} entidades`;
+    btn.textContent='🔄 Cargar desde Sheets';
+    renderIntelComercial();
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+  }
+  btn.disabled=false;
+}
+
+function renderIntelComercial(){
+  const search=(qs('intel-comercial-search').value||'').toLowerCase();
+  const fTipo=qs('intel-comercial-filter-tipo').value;
+  let skus=Object.keys(INTEL.bySku);
+  if(search)skus=skus.filter(s=>s.toLowerCase().includes(search));
+  let rows=skus.map(sku=>{
+    let refs=INTEL.bySku[sku]||[];
+    if(fTipo)refs=refs.filter(r=>r.Tipo===fTipo);
+    return {sku,refs};
+  }).filter(r=>r.refs.length);
+  rows.sort((a,b)=>a.sku.localeCompare(b.sku));
+
+  qs('ic-total-skus').textContent=Object.keys(INTEL.bySku).length;
+  qs('ic-total-referencias').textContent=INTEL.referencias.length;
+  const countTipo=t=>INTEL.referencias.filter(r=>r.Tipo===t).length;
+  qs('ic-tipo-distribuidor').textContent=countTipo('Distribuidor');
+  qs('ic-tipo-competencia').textContent=countTipo('Competencia');
+  qs('ic-tipo-cuenta-propia').textContent=countTipo('Cuenta Propia');
+  qs('ic-tipo-mayorista').textContent=countTipo('Mayorista');
+  qs('intel-comercial-count').textContent=rows.length+' SKUs';
+
+  const tbody=qs('intel-comercial-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Sin referencias cargadas</td></tr>';return;}
+  tbody.innerHTML=rows.map((r,idx)=>{
+    const rid='ic-'+idx;
+    return `<tr style="cursor:pointer" onclick="intelToggleDetail('${rid}')">
+      <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${rid}">▶</td>
+      <td class="mono" style="font-weight:600">${r.sku}</td>
+      <td class="mono" style="text-align:center">${r.refs.length}</td>
+    </tr>
+    <tr id="${rid}" style="display:none"><td colspan="3" style="padding:0">${_intelSkuDetailHTML(r.refs)}</td></tr>`;
+  }).join('');
+}
+
+function _intelSkuDetailHTML(refs){
+  const rowsHtml=refs.map(r=>{
+    const tipoColor=r.Tipo==='Distribuidor'?'var(--accent)':r.Tipo==='Competencia'?'var(--red)':r.Tipo==='Cuenta Propia'?'var(--green)':'#ffd166';
+    const activo=(r.Activo||'').toLowerCase().startsWith('s');
+    return `<tr>
+      <td style="font-size:10px"><span style="color:${tipoColor};font-weight:600">${r.Tipo||'—'}</span></td>
+      <td style="font-size:10px">${r.Entidad_Nombre||'—'}</td>
+      <td class="mono" style="font-size:10px">${r.PVP_Override||r.PVP_Oficial||'—'}</td>
+      <td style="font-size:10px">${activo?'<span class="price-ok">Sí</span>':'<span class="price-bad">No</span>'}</td>
+      <td style="font-size:10px">${r.Origen||'—'}</td>
+      <td>${r.Link_Publicacion?`<a href="${r.Link_Publicacion}" target="_blank" class="btn-xs" style="text-decoration:none">Abrir →</a>`:'—'}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="background:var(--surface2);padding:10px 16px 14px 40px">
+    <table style="width:100%">
+      <thead><tr><th style="font-size:9px">Tipo</th><th style="font-size:9px">Entidad</th><th style="font-size:9px">PVP</th><th style="font-size:9px">Activo</th><th style="font-size:9px">Origen</th><th style="font-size:9px">Publicación</th></tr></thead>
+      <tbody>${rowsHtml||'<tr><td colspan="6" style="text-align:center;color:var(--text3);font-size:10px;padding:8px">Sin referencias</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+function intelToggleDetail(id){
+  const row=qs(id),arr=qs('arr-'+id);
+  if(!row)return;
+  const isOpen=row.style.display!=='none';
+  row.style.display=isOpen?'none':'table-row';
+  if(arr)arr.textContent=isOpen?'▶':'▼';
+}
 
 // ── DISTRIBUCION ──
 function _rowsToObjs(rows){
@@ -3429,6 +3578,7 @@ function init(){
   qs('btn-save-rules').addEventListener('click',()=>{saveStor();toast('Reglas guardadas');});
   qs('btn-reload-cats').addEventListener('click',loadCats);
   qs('btn-load-competidores').addEventListener('click',loadCompetidores);
+  qs('btn-load-intel-comercial').addEventListener('click',loadIntelComercial);
   qs('btn-load-distribucion').addEventListener('click',loadDistribucion);
   qs('btn-load-monitor').addEventListener('click',loadMonitorLecturas);
   qs('btn-run-monitor').addEventListener('click',runMonitor);

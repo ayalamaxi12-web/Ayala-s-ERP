@@ -1313,3 +1313,164 @@ def init_intel_comercial():
         return {"status": "ok", "sheets": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# INTELIGENCIA COMERCIAL — bridges (Fase 1, solo lectura de origen, no editan
+# Distribuidores/Distribuidor_SKU/Monitor_Lecturas; idempotentes por clave)
+# ══════════════════════════════════════════════════════
+
+def _next_seq_id(existing_ids, prefix):
+    max_n = 0
+    pat = re.compile(rf'^{prefix}-(\d+)$')
+    for v in existing_ids:
+        m = pat.match(str(v).strip())
+        if m:
+            n = int(m.group(1))
+            if n > max_n:
+                max_n = n
+    return max_n
+
+def _bridge_entidades_distribuidores(ss):
+    try:
+        dist_ws = ss.worksheet('Distribuidores')
+    except Exception:
+        raise HTTPException(status_code=400, detail="No existe la pestaña Distribuidores")
+    try:
+        ent_ws = ss.worksheet('Entidades')
+    except Exception:
+        raise HTTPException(status_code=400, detail="No existe la pestaña Entidades — correr /intel-comercial/init primero")
+
+    dist_rows = dist_ws.get_all_records()
+    ent_values = ent_ws.get_all_values()
+    ent_headers = ent_values[0] if ent_values else INTEL_SHEETS['Entidades']
+    eidx = {h: i for i, h in enumerate(ent_headers)}
+
+    existing_keys = set()
+    existing_ids = []
+    for r in ent_values[1:]:
+        nombre = r[eidx['Nombre']].strip() if len(r) > eidx.get('Nombre', -1) else ''
+        tipo = r[eidx['Tipo']].strip() if len(r) > eidx.get('Tipo', -1) else ''
+        existing_keys.add((nombre, tipo))
+        if len(r) > eidx.get('Entidad_ID', -1) and r[eidx['Entidad_ID']]:
+            existing_ids.append(r[eidx['Entidad_ID']])
+
+    seq = _next_seq_id(existing_ids, 'ENT')
+    creadas = 0
+    ya_existian = 0
+    nuevas = []
+    for row in dist_rows:
+        nombre = str(row.get('Distribuidor', '')).strip()
+        if not nombre:
+            continue
+        key = (nombre, 'Distribuidor')
+        if key in existing_keys:
+            ya_existian += 1
+            continue
+        seq += 1
+        nuevas.append([
+            f'ENT-{seq:06d}', nombre, 'Distribuidor',
+            row.get('Provincia', ''), row.get('Localidad', ''), row.get('Estado', ''),
+            row.get('Responsable', ''), row.get('Tolerancia_PVP', ''),
+            row.get('Fecha_Alta', ''), row.get('Fecha_Ultima_Revision', ''),
+            row.get('Observaciones', ''), row.get('Link_ML', ''),
+        ])
+        existing_keys.add(key)
+        creadas += 1
+    if nuevas:
+        ent_ws.append_rows(nuevas)
+    return {"creadas": creadas, "ya_existian": ya_existian}
+
+@app.post("/intel-comercial/entidades/bridge-distribuidores")
+def bridge_entidades_distribuidores():
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        res = _bridge_entidades_distribuidores(ss)
+        return {"status": "ok", **res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+def _bridge_referencias_distribuidor_sku(ss):
+    # Asegura que Entidades esté al día antes de resolver Entidad_ID por nombre.
+    ent_result = _bridge_entidades_distribuidores(ss)
+
+    try:
+        sku_ws = ss.worksheet('Distribuidor_SKU')
+    except Exception:
+        raise HTTPException(status_code=400, detail="No existe la pestaña Distribuidor_SKU")
+    try:
+        ref_ws = ss.worksheet('Referencias_Mercado')
+    except Exception:
+        raise HTTPException(status_code=400, detail="No existe la pestaña Referencias_Mercado — correr /intel-comercial/init primero")
+    ent_ws = ss.worksheet('Entidades')
+
+    ent_values = ent_ws.get_all_values()
+    ent_headers = ent_values[0] if ent_values else INTEL_SHEETS['Entidades']
+    eidx = {h: i for i, h in enumerate(ent_headers)}
+    entidad_id_by_key = {}
+    for r in ent_values[1:]:
+        nombre = r[eidx['Nombre']].strip() if len(r) > eidx.get('Nombre', -1) else ''
+        tipo = r[eidx['Tipo']].strip() if len(r) > eidx.get('Tipo', -1) else ''
+        eid = r[eidx['Entidad_ID']] if len(r) > eidx.get('Entidad_ID', -1) else ''
+        if nombre:
+            entidad_id_by_key[(nombre, tipo)] = eid
+
+    sku_rows = sku_ws.get_all_records()
+
+    ref_values = ref_ws.get_all_values()
+    ref_headers = ref_values[0] if ref_values else INTEL_SHEETS['Referencias_Mercado']
+    ridx = {h: i for i, h in enumerate(ref_headers)}
+    existing_keys = set()
+    existing_ids = []
+    for r in ref_values[1:]:
+        ent_nombre = r[ridx['Entidad_Nombre']].strip() if len(r) > ridx.get('Entidad_Nombre', -1) else ''
+        sku = r[ridx['SKU']].strip() if len(r) > ridx.get('SKU', -1) else ''
+        link = r[ridx['Link_Publicacion']].strip() if len(r) > ridx.get('Link_Publicacion', -1) else ''
+        existing_keys.add((ent_nombre, sku, link))
+        if len(r) > ridx.get('Referencia_ID', -1) and r[ridx['Referencia_ID']]:
+            existing_ids.append(r[ridx['Referencia_ID']])
+
+    seq = _next_seq_id(existing_ids, 'REF')
+    creadas = 0
+    ya_existian = 0
+    sin_entidad = 0
+    hoy = datetime.now().strftime('%d/%m/%Y')
+    nuevas = []
+    for row in sku_rows:
+        distribuidor = str(row.get('Distribuidor', '')).strip()
+        sku = str(row.get('SKU', '')).strip()
+        if not distribuidor or not sku:
+            continue
+        link = str(row.get('Link_Publicacion', '')).strip()
+        key = (distribuidor, sku, link)
+        if key in existing_keys:
+            ya_existian += 1
+            continue
+        entidad_id = entidad_id_by_key.get((distribuidor, 'Distribuidor'), '')
+        if not entidad_id:
+            sin_entidad += 1
+            continue
+        seq += 1
+        nuevas.append([
+            f'REF-{seq:06d}', sku, 'Distribuidor', entidad_id, distribuidor,
+            link, row.get('PVP_Oficial', ''), row.get('PVP_Override', ''),
+            '', row.get('Activo', ''), '', hoy, 'Manual', row.get('Descripcion', ''),
+        ])
+        existing_keys.add(key)
+        creadas += 1
+    if nuevas:
+        ref_ws.append_rows(nuevas)
+    return {"creadas": creadas, "ya_existian": ya_existian, "sin_entidad": sin_entidad, "entidades": ent_result}
+
+@app.post("/intel-comercial/referencias/bridge-distribuidor-sku")
+def bridge_referencias_distribuidor_sku():
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        res = _bridge_referencias_distribuidor_sku(ss)
+        return {"status": "ok", **res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
