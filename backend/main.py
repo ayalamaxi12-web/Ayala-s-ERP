@@ -1259,3 +1259,57 @@ def run_monitor():
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# INTELIGENCIA COMERCIAL — esquema unificado (fusión Distribución + Competencia ML)
+# Entidades/Referencias_Mercado/Discovery_Sugerencias/Intel_Config son tablas nuevas.
+# Monitor_Lecturas se EXTIENDE (no se duplica): se le agregan columnas al final,
+# run_monitor()/init_distribucion() siguen sin tocarse.
+# ══════════════════════════════════════════════════════
+
+INTEL_SHEETS = {
+    'Entidades': ['Entidad_ID','Nombre','Tipo','Provincia','Localidad','Estado','Responsable','Tolerancia_Default_Pct','Fecha_Alta','Fecha_Ultima_Revision','Observaciones','Link_ML'],
+    'Referencias_Mercado': ['Referencia_ID','SKU','Tipo','Entidad_ID','Entidad_Nombre','Link_Publicacion','PVP_Oficial','PVP_Override','Tolerancia_Pct','Activo','Seller_ID_Esperado','Fecha_Alta','Origen','Observaciones'],
+    'Discovery_Sugerencias': ['Sugerencia_ID','Entidad_Origen','Titulo_Detectado','Link_Detectado','Precio_Detectado','SKU_Sugerido','Fecha_Deteccion','Estado_Revision','Referencia_ID_Generada'],
+    'Intel_Config': ['Tipo','Tolerancia_Default_Pct'],
+}
+
+MONITOR_HEADERS_EXT = ['Referencia_ID','Tipo','Entidad','PVP_Comparado','Diferencia_Pct','Cumple']
+
+@app.post("/intel-comercial/init")
+def init_intel_comercial():
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        existing = {ws.title for ws in ss.worksheets()}
+        result = {}
+        for name, headers in INTEL_SHEETS.items():
+            if name in existing:
+                result[name] = 'ya existía'
+                continue
+            sheet = ss.add_worksheet(title=name, rows=1000, cols=len(headers))
+            sheet.append_row(headers)
+            result[name] = 'creada'
+
+        try:
+            mon_ws = ss.worksheet('Monitor_Lecturas')
+            headers = mon_ws.row_values(1)
+            faltantes = [h for h in MONITOR_HEADERS_EXT if h not in headers]
+            if not faltantes:
+                result['Monitor_Lecturas'] = 'ya extendida'
+            else:
+                col = len(headers) + 1
+                if col + len(faltantes) - 1 > mon_ws.col_count:
+                    mon_ws.add_cols(col + len(faltantes) - 1 - mon_ws.col_count)
+                for i, h in enumerate(faltantes):
+                    mon_ws.update_cell(1, col + i, h)
+                result['Monitor_Lecturas'] = f'extendida (+{len(faltantes)} columnas)'
+        except Exception:
+            headers_full = MONITOR_HEADERS + MONITOR_HEADERS_EXT
+            mon_ws = ss.add_worksheet(title='Monitor_Lecturas', rows=2000, cols=len(headers_full))
+            mon_ws.append_row(headers_full)
+            result['Monitor_Lecturas'] = 'creada (esquema completo)'
+
+        return {"status": "ok", "sheets": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
