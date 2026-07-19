@@ -1638,3 +1638,220 @@ def run_monitor_unificado():
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# INTELIGENCIA COMERCIAL — CRUD (Fase 3, backend)
+# Helpers genéricos por-fila-por-ID, reutilizables para cualquier pestaña con
+# columna ID (Entidades, Referencias_Mercado, y futuras tablas similares).
+# No toca run_monitor, leer_precio_publicacion, init_distribucion, los
+# bridges de Fase 1 ni el monitor unificado de Fase 2.
+# ══════════════════════════════════════════════════════
+
+REFERENCIA_TIPOS_VALIDOS = ['Distribuidor', 'Competencia', 'Cuenta Propia', 'Mayorista']
+
+
+def _find_row_by_id(ws, id_col_name, id_value):
+    """Busca una fila por valor exacto de columna id_col_name.
+    Devuelve (row_index 1-based de la hoja, dict {header: valor}) o (None, None) si no existe."""
+    headers = ws.row_values(1)
+    if id_col_name not in headers:
+        return None, None
+    id_idx = headers.index(id_col_name)
+    rows = ws.get_all_values()[1:]
+    for i, row in enumerate(rows, start=2):
+        val = row[id_idx] if len(row) > id_idx else ''
+        if str(val).strip() == str(id_value).strip():
+            record = {headers[j]: (row[j] if j < len(row) else '') for j in range(len(headers))}
+            return i, record
+    return None, None
+
+
+def _update_row_fields(ws, row_index, headers, updates):
+    """Escribe solo las columnas presentes en updates (dict header->valor) en la fila row_index."""
+    for key, value in updates.items():
+        if key not in headers:
+            continue
+        col = headers.index(key) + 1
+        ws.update_cell(row_index, col, value)
+
+
+def _delete_row(ws, row_index):
+    ws.delete_rows(row_index)
+
+
+def _append_row_from_dict(ws, headers, values_dict):
+    """Arma una fila en el orden de headers a partir de un dict parcial y la agrega al final."""
+    row = {h: '' for h in headers}
+    for k, v in values_dict.items():
+        if k in row:
+            row[k] = v
+    ws.append_row([row[h] for h in headers])
+
+
+@app.post("/intel-comercial/entidades")
+async def crear_entidad(request: Request):
+    try:
+        body = await request.json()
+        nombre = str(body.get('Nombre', '')).strip()
+        tipo = str(body.get('Tipo', '')).strip()
+        if not nombre:
+            raise HTTPException(status_code=400, detail="Nombre es obligatorio")
+        if not tipo:
+            raise HTTPException(status_code=400, detail="Tipo es obligatorio")
+
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        ent_ws = ss.worksheet('Entidades')
+        headers = ent_ws.row_values(1)
+        id_idx = headers.index('Entidad_ID')
+        existing_ids = [r[id_idx] for r in ent_ws.get_all_values()[1:] if len(r) > id_idx and r[id_idx]]
+        seq = _next_seq_id(existing_ids, 'ENT') + 1
+        entidad_id = f'ENT-{seq:06d}'
+
+        _append_row_from_dict(ent_ws, headers, {
+            'Entidad_ID': entidad_id, 'Nombre': nombre, 'Tipo': tipo,
+            'Provincia': body.get('Provincia', ''), 'Localidad': body.get('Localidad', ''),
+            'Estado': body.get('Estado', ''), 'Responsable': body.get('Responsable', ''),
+            'Tolerancia_Default_Pct': body.get('Tolerancia_Default_Pct', ''),
+            'Fecha_Alta': datetime.now().strftime('%d/%m/%Y'),
+            'Observaciones': body.get('Observaciones', ''), 'Link_ML': body.get('Link_ML', ''),
+        })
+        return {"status": "ok", "entidad_id": entidad_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/intel-comercial/entidades/{entidad_id}")
+async def editar_entidad(entidad_id: str, request: Request):
+    try:
+        body = await request.json()
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        ent_ws = ss.worksheet('Entidades')
+        headers = ent_ws.row_values(1)
+        row_index, record = _find_row_by_id(ent_ws, 'Entidad_ID', entidad_id)
+        if row_index is None:
+            raise HTTPException(status_code=404, detail=f"No existe Entidad_ID {entidad_id}")
+
+        updates = {}
+        for campo in ('Nombre', 'Tipo', 'Provincia', 'Localidad', 'Estado', 'Responsable',
+                      'Tolerancia_Default_Pct', 'Fecha_Ultima_Revision', 'Observaciones', 'Link_ML'):
+            if campo in body:
+                updates[campo] = body[campo]
+
+        if 'Nombre' in updates and not str(updates['Nombre']).strip():
+            raise HTTPException(status_code=400, detail="Nombre no puede quedar vacío")
+        if 'Tipo' in updates and not str(updates['Tipo']).strip():
+            raise HTTPException(status_code=400, detail="Tipo no puede quedar vacío")
+
+        _update_row_fields(ent_ws, row_index, headers, updates)
+        return {"status": "ok", "entidad_id": entidad_id, "actualizado": list(updates.keys())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/intel-comercial/referencias")
+async def crear_referencia(request: Request):
+    try:
+        body = await request.json()
+        sku = str(body.get('SKU', '')).strip()
+        tipo = str(body.get('Tipo', '')).strip()
+        entidad_id = str(body.get('Entidad_ID', '')).strip()
+        link = str(body.get('Link_Publicacion', '')).strip()
+
+        if not sku:
+            raise HTTPException(status_code=400, detail="SKU es obligatorio")
+        if tipo not in REFERENCIA_TIPOS_VALIDOS:
+            raise HTTPException(status_code=400, detail=f"Tipo inválido: '{tipo}'. Valores permitidos: {', '.join(REFERENCIA_TIPOS_VALIDOS)}")
+        if not link:
+            raise HTTPException(status_code=400, detail="Link_Publicacion es obligatorio")
+        if not entidad_id:
+            raise HTTPException(status_code=400, detail="Entidad_ID es obligatorio")
+
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        ent_ws = ss.worksheet('Entidades')
+        _, entidad = _find_row_by_id(ent_ws, 'Entidad_ID', entidad_id)
+        if entidad is None:
+            raise HTTPException(status_code=400, detail=f"No existe Entidad_ID {entidad_id}")
+
+        ref_ws = ss.worksheet('Referencias_Mercado')
+        headers = ref_ws.row_values(1)
+        id_idx = headers.index('Referencia_ID')
+        existing_ids = [r[id_idx] for r in ref_ws.get_all_values()[1:] if len(r) > id_idx and r[id_idx]]
+        seq = _next_seq_id(existing_ids, 'REF') + 1
+        referencia_id = f'REF-{seq:06d}'
+
+        _append_row_from_dict(ref_ws, headers, {
+            'Referencia_ID': referencia_id, 'SKU': sku, 'Tipo': tipo,
+            'Entidad_ID': entidad_id, 'Entidad_Nombre': entidad.get('Nombre', ''),
+            'Link_Publicacion': link,
+            'PVP_Oficial': body.get('PVP_Oficial', ''), 'PVP_Override': body.get('PVP_Override', ''),
+            'Tolerancia_Pct': body.get('Tolerancia_Pct', ''), 'Activo': body.get('Activo', ''),
+            'Seller_ID_Esperado': body.get('Seller_ID_Esperado', ''),
+            'Fecha_Alta': datetime.now().strftime('%d/%m/%Y'),
+            'Origen': body.get('Origen', 'Manual'), 'Observaciones': body.get('Observaciones', ''),
+        })
+        return {"status": "ok", "referencia_id": referencia_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/intel-comercial/referencias/{referencia_id}")
+async def editar_referencia(referencia_id: str, request: Request):
+    try:
+        body = await request.json()
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        ref_ws = ss.worksheet('Referencias_Mercado')
+        headers = ref_ws.row_values(1)
+        row_index, record = _find_row_by_id(ref_ws, 'Referencia_ID', referencia_id)
+        if row_index is None:
+            raise HTTPException(status_code=404, detail=f"No existe Referencia_ID {referencia_id}")
+
+        updates = {}
+        for campo in ('SKU', 'Tipo', 'Entidad_ID', 'Link_Publicacion', 'PVP_Oficial', 'PVP_Override',
+                      'Tolerancia_Pct', 'Activo', 'Seller_ID_Esperado', 'Observaciones'):
+            if campo in body:
+                updates[campo] = body[campo]
+
+        if 'SKU' in updates and not str(updates['SKU']).strip():
+            raise HTTPException(status_code=400, detail="SKU no puede quedar vacío")
+        if 'Tipo' in updates and str(updates['Tipo']).strip() not in REFERENCIA_TIPOS_VALIDOS:
+            raise HTTPException(status_code=400, detail=f"Tipo inválido: '{updates['Tipo']}'. Valores permitidos: {', '.join(REFERENCIA_TIPOS_VALIDOS)}")
+        if 'Link_Publicacion' in updates and not str(updates['Link_Publicacion']).strip():
+            raise HTTPException(status_code=400, detail="Link_Publicacion no puede quedar vacío")
+
+        if 'Entidad_ID' in updates:
+            nuevo_entidad_id = str(updates['Entidad_ID']).strip()
+            ent_ws = ss.worksheet('Entidades')
+            _, entidad = _find_row_by_id(ent_ws, 'Entidad_ID', nuevo_entidad_id)
+            if entidad is None:
+                raise HTTPException(status_code=400, detail=f"No existe Entidad_ID {nuevo_entidad_id}")
+            updates['Entidad_Nombre'] = entidad.get('Nombre', '')
+
+        _update_row_fields(ref_ws, row_index, headers, updates)
+        return {"status": "ok", "referencia_id": referencia_id, "actualizado": list(updates.keys())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/intel-comercial/referencias/{referencia_id}")
+def eliminar_referencia(referencia_id: str):
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        ref_ws = ss.worksheet('Referencias_Mercado')
+        row_index, record = _find_row_by_id(ref_ws, 'Referencia_ID', referencia_id)
+        if row_index is None:
+            raise HTTPException(status_code=404, detail=f"No existe Referencia_ID {referencia_id}")
+        _delete_row(ref_ws, row_index)
+        return {"status": "ok", "referencia_id": referencia_id, "eliminado": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
