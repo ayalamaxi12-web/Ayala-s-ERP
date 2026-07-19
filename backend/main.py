@@ -1474,3 +1474,167 @@ def bridge_referencias_distribuidor_sku():
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# INTELIGENCIA COMERCIAL — monitor unificado (Fase 2, validación inicial)
+# Reusa leer_precio_publicacion/_monitor_launch_driver sin modificarlos. Itera
+# Referencias_Mercado (no Distribuidor_SKU) y agrega filas a Monitor_Lecturas
+# (histórico append-only, igual que run_monitor). No toca run_monitor,
+# init_distribucion, Distribuidor_SKU, Distribuidores.
+#
+# Validación inicial deliberadamente excluye Tipo=Distribuidor (ver
+# MONITOR_UNIFICADO_TIPOS) para no mezclar escrituras con run_monitor todavía.
+# ══════════════════════════════════════════════════════
+
+MONITOR_UNIFICADO_TIPOS = ['Competencia', 'Cuenta Propia', 'Mayorista']
+
+_ACTIVO_TRUTHY = {'si', 'sí', 'true', '1', 'activo'}
+
+
+def _es_activo(valor):
+    """vacío = activo (compat. con comportamiento actual); si/sí/true/1/activo = activo; cualquier otro valor = inactivo."""
+    v = str(valor or '').strip().lower()
+    if not v:
+        return True
+    return v in _ACTIVO_TRUTHY
+
+
+def _monitor_calc_comparacion(precio, pvp_comparado, tolerancia_pct):
+    """Diferencia_Pct = (precio - pvp_comparado) / pvp_comparado; Cumple = dentro de tolerancia (simétrico).
+    Backend no decide qué significa "cumplir" para cada Tipo — eso lo interpreta el frontend."""
+    try:
+        precio_f = float(precio) if precio not in (None, '') else None
+        pvp_f = float(pvp_comparado) if pvp_comparado not in (None, '') else None
+    except (TypeError, ValueError):
+        return None, None
+    if precio_f is None or pvp_f is None or pvp_f == 0:
+        return None, None
+    diferencia_pct = (precio_f - pvp_f) / pvp_f
+    try:
+        tol_f = float(tolerancia_pct) if tolerancia_pct not in (None, '') else None
+    except (TypeError, ValueError):
+        tol_f = None
+    if tol_f is None:
+        tol_f = 0.05
+    cumple = abs(diferencia_pct) <= tol_f
+    return diferencia_pct, cumple
+
+
+def _resolver_tolerancia(referencia_tolerancia_pct, entidad_tolerancia_pct, tipo, intel_config_by_tipo):
+    for v in (referencia_tolerancia_pct, entidad_tolerancia_pct):
+        try:
+            if v not in (None, ''):
+                return float(v)
+        except (TypeError, ValueError):
+            pass
+    cfg = intel_config_by_tipo.get(tipo)
+    if cfg not in (None, ''):
+        try:
+            return float(cfg)
+        except (TypeError, ValueError):
+            pass
+    return 0.05
+
+
+def _referencias_targets(ss):
+    ref_ws = ss.worksheet('Referencias_Mercado')
+    ent_ws = ss.worksheet('Entidades')
+    try:
+        cfg_ws = ss.worksheet('Intel_Config')
+        cfg_rows = cfg_ws.get_all_records()
+    except Exception:
+        cfg_rows = []
+    intel_config_by_tipo = {}
+    for r in cfg_rows:
+        tipo = str(r.get('Tipo', '')).strip()
+        if tipo:
+            intel_config_by_tipo[tipo] = r.get('Tolerancia_Default_Pct', '')
+
+    ent_by_id = {}
+    for r in ent_ws.get_all_records():
+        eid = str(r.get('Entidad_ID', '')).strip()
+        if eid:
+            ent_by_id[eid] = r
+
+    targets = []
+    for r in ref_ws.get_all_records():
+        tipo = str(r.get('Tipo', '')).strip()
+        if tipo not in MONITOR_UNIFICADO_TIPOS:
+            continue
+        if not _es_activo(r.get('Activo', '')):
+            continue
+        link = str(r.get('Link_Publicacion', '')).strip()
+        if not link:
+            continue
+        referencia_id = str(r.get('Referencia_ID', '')).strip()
+        sku = str(r.get('SKU', '')).strip()
+        entidad_id = str(r.get('Entidad_ID', '')).strip()
+        entidad_nombre = str(r.get('Entidad_Nombre', '')).strip()
+        pvp_override = r.get('PVP_Override', '')
+        pvp_oficial = r.get('PVP_Oficial', '')
+        pvp_comparado = pvp_override if pvp_override not in (None, '') else pvp_oficial
+        entidad = ent_by_id.get(entidad_id, {})
+        tolerancia_pct = _resolver_tolerancia(
+            r.get('Tolerancia_Pct', ''),
+            entidad.get('Tolerancia_Default_Pct', ''),
+            tipo,
+            intel_config_by_tipo,
+        )
+        targets.append({
+            'referencia_id': referencia_id, 'sku': sku, 'tipo': tipo,
+            'entidad_nombre': entidad_nombre, 'link': link,
+            'pvp_comparado': pvp_comparado, 'tolerancia_pct': tolerancia_pct,
+        })
+    return targets
+
+
+@app.post("/intel-comercial/monitor/run")
+def run_monitor_unificado():
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        try:
+            targets = _referencias_targets(ss)
+        except Exception:
+            raise HTTPException(status_code=400, detail="No existen las pestañas Referencias_Mercado/Entidades — correr /intel-comercial/init y los bridges primero")
+
+        try:
+            mon_ws = ss.worksheet('Monitor_Lecturas')
+        except Exception:
+            headers_full = MONITOR_HEADERS + MONITOR_HEADERS_EXT
+            mon_ws = ss.add_worksheet(title='Monitor_Lecturas', rows=2000, cols=len(headers_full))
+            mon_ws.append_row(headers_full)
+
+        driver_holder = {'driver': None}
+        results = []
+        try:
+            for t in targets:
+                res = leer_precio_publicacion(t['link'], driver_holder)
+                fecha_hora = datetime.now().strftime('%d/%m/%Y %H:%M')
+                diferencia_pct, cumple = _monitor_calc_comparacion(res['precio'], t['pvp_comparado'], t['tolerancia_pct'])
+                results.append({
+                    'referencia_id': t['referencia_id'], 'sku': t['sku'], 'tipo': t['tipo'],
+                    'entidad_nombre': t['entidad_nombre'], 'link': t['link'],
+                    'precio_detectado': res['precio'], 'fecha_hora': fecha_hora,
+                    'estado': res['estado'], 'metodo': res['metodo'], 'detalle_error': res['detalle_error'],
+                    'seller_id': res.get('seller_id'), 'official_store_id': res.get('official_store_id'),
+                    'pvp_comparado': t['pvp_comparado'], 'diferencia_pct': diferencia_pct, 'cumple': cumple,
+                })
+                mon_ws.append_row([
+                    t['entidad_nombre'], t['sku'], t['link'], res['precio'] or '',
+                    fecha_hora, res['estado'], res['metodo'], res['detalle_error'],
+                    res.get('seller_id') or '', res.get('official_store_id') or '',
+                    t['referencia_id'], t['tipo'], t['entidad_nombre'],
+                    t['pvp_comparado'] if t['pvp_comparado'] not in (None, '') else '',
+                    diferencia_pct if diferencia_pct is not None else '',
+                    cumple if cumple is not None else '',
+                ])
+        finally:
+            if driver_holder['driver']:
+                driver_holder['driver'].quit()
+
+        return {"status": "ok", "count": len(results), "results": results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
