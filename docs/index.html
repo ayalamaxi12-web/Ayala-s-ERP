@@ -211,6 +211,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="sidebar-section">
     <div class="sidebar-section-label">🧠 Inteligencia Comercial</div>
     <div class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this)"><span class="icon">🧠</span> SKUs &amp; Referencias</div>
+    <div class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this)"><span class="icon">🏢</span> Entidades</div>
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
@@ -845,6 +846,57 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+<div id="page-intel-entidades" class="page">
+  <div class="section-hdr">Inteligencia Comercial — Entidades</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn primary" id="btn-load-entidades" onclick="loadEntidadesPage()">🔄 Cargar desde Sheets</button>
+    <button class="btn primary" id="btn-new-entidad" onclick="entidadToggleCreateForm()">+ Nueva Entidad</button>
+    <span id="entidades-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div id="entidad-create-form" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:14px">
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div class="field" style="margin:0;min-width:200px"><label>Nombre</label><input type="text" id="ent-new-nombre" placeholder="Nombre de la entidad"></div>
+      <div class="field" style="margin:0;min-width:160px"><label>Tipo</label><select id="ent-new-tipo" class="fi">
+        <option value="">Seleccionar...</option>
+        <option value="Distribuidor">Distribuidor</option>
+        <option value="Competencia">Competencia</option>
+        <option value="Cuenta Propia">Cuenta Propia</option>
+        <option value="Mayorista">Mayorista</option>
+      </select></div>
+      <div class="field" style="margin:0;min-width:140px"><label>Estado</label><select id="ent-new-estado" class="fi">
+        <option value="Activo">Activo</option>
+        <option value="Inactivo">Inactivo</option>
+      </select></div>
+      <div class="field" style="margin:0;flex:1;min-width:200px"><label>Observaciones</label><input type="text" id="ent-new-obs" placeholder="Opcional"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn primary" onclick="crearEntidad()">Crear entidad</button>
+      <button class="btn-xs" onclick="entidadToggleCreateForm()">Cancelar</button>
+    </div>
+  </div>
+  <div class="erp-filters" id="entidades-search-bar" style="display:none">
+    <div style="position:relative;flex:1;min-width:180px">
+      <input type="text" id="entidades-search" placeholder="Buscar nombre..." autocomplete="off" oninput="renderEntidadesPage()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+    </div>
+    <select id="entidades-filter-tipo" class="fi" onchange="renderEntidadesPage()">
+      <option value="">Todos los tipos</option>
+      <option value="Distribuidor">Distribuidor</option>
+      <option value="Competencia">Competencia</option>
+      <option value="Cuenta Propia">Cuenta Propia</option>
+      <option value="Mayorista">Mayorista</option>
+    </select>
+    <span id="entidades-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div class="table-wrap" id="entidades-table-wrap" style="display:none">
+    <table id="entidades-table">
+      <thead><tr>
+        <th>ID</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Observaciones</th><th></th>
+      </tr></thead>
+      <tbody id="entidades-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="page-distribucion" class="page">
   <div class="section-hdr">Distribución — Red de Distribuidores Autorizados ML</div>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
@@ -1412,6 +1464,7 @@ function goPage(page,el){
   if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
   if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
+  if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
 }
 
@@ -2543,6 +2596,142 @@ function intelToggleDetail(id){
   const isOpen=row.style.display!=='none';
   row.style.display=isOpen?'none':'table-row';
   if(arr)arr.textContent=isOpen?'▶':'▼';
+}
+
+// ── INTELIGENCIA COMERCIAL — ENTIDADES (Fase 3, CRUD) ──
+let entidadesPageLoaded=false;
+
+async function loadEntidadesPage(){
+  const btn=qs('btn-load-entidades'),status=qs('entidades-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo Entidades...';
+  try{
+    const rows=await fetchSheet(COMP_SHEET_ID,'Entidades!A1:Z1000').catch(()=>null);
+    if(!rows){
+      status.textContent='⚠ No existe la pestaña "Entidades" todavía — correr /intel-comercial/init primero.';
+      btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';return;
+    }
+    INTEL.entidades=_rowsToObjs(rows);
+    entidadesPageLoaded=true;
+    qs('entidades-search-bar').style.display='flex';
+    qs('entidades-table-wrap').style.display='block';
+    status.textContent=`${INTEL.entidades.length} entidades cargadas`;
+    btn.textContent='🔄 Cargar desde Sheets';
+    renderEntidadesPage();
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+  }
+  btn.disabled=false;
+}
+
+function renderEntidadesPage(){
+  const search=(qs('entidades-search').value||'').toLowerCase();
+  const fTipo=qs('entidades-filter-tipo').value;
+  let rows=INTEL.entidades.filter(e=>{
+    if(fTipo&&e.Tipo!==fTipo)return false;
+    if(search&&!(e.Nombre||'').toLowerCase().includes(search))return false;
+    return true;
+  });
+  qs('entidades-count').textContent=rows.length+' entidades';
+
+  const tbody=qs('entidades-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Sin entidades cargadas</td></tr>';return;}
+  tbody.innerHTML=rows.map(e=>{
+    const rid='ent-'+e.Entidad_ID;
+    const activo=(e.Estado||'').toLowerCase().startsWith('activ');
+    return `<tr>
+      <td class="mono" style="font-size:10px">${e.Entidad_ID||''}</td>
+      <td style="font-weight:600">${e.Nombre||''}</td>
+      <td style="font-size:11px">${e.Tipo||'—'}</td>
+      <td><span style="${activo?'color:var(--green)':'color:var(--red)'};font-size:10px;font-weight:600">${e.Estado||'—'}</span></td>
+      <td style="font-size:11px">${e.Observaciones||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-xs" onclick="entidadToggleEdit('${rid}')">✏ Editar</button>
+        <button class="btn-xs" onclick="toggleEstadoEntidad('${e.Entidad_ID}','${activo?'Inactivo':'Activo'}')">${activo?'Desactivar':'Activar'}</button>
+      </td>
+    </tr>
+    <tr id="${rid}" style="display:none"><td colspan="6" style="padding:0">${_entidadEditHTML(e)}</td></tr>`;
+  }).join('');
+}
+
+function _entidadEditHTML(e){
+  return `<div style="background:var(--surface2);padding:10px 16px 14px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+    <div class="field" style="margin:0;min-width:200px"><label>Nombre</label><input type="text" id="ent-edit-nombre-${e.Entidad_ID}" value="${(e.Nombre||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin:0;min-width:160px"><label>Tipo</label><select id="ent-edit-tipo-${e.Entidad_ID}" class="fi">
+      ${['Distribuidor','Competencia','Cuenta Propia','Mayorista'].map(t=>`<option value="${t}" ${e.Tipo===t?'selected':''}>${t}</option>`).join('')}
+    </select></div>
+    <div class="field" style="margin:0;min-width:140px"><label>Estado</label><select id="ent-edit-estado-${e.Entidad_ID}" class="fi">
+      <option value="Activo" ${e.Estado==='Activo'?'selected':''}>Activo</option>
+      <option value="Inactivo" ${e.Estado==='Inactivo'?'selected':''}>Inactivo</option>
+    </select></div>
+    <div class="field" style="margin:0;flex:1;min-width:200px"><label>Observaciones</label><input type="text" id="ent-edit-obs-${e.Entidad_ID}" value="${(e.Observaciones||'').replace(/"/g,'&quot;')}"></div>
+    <button class="btn primary" onclick="guardarEntidad('${e.Entidad_ID}')">Guardar</button>
+  </div>`;
+}
+
+function entidadToggleEdit(id){
+  const row=qs(id);
+  if(!row)return;
+  row.style.display=row.style.display!=='none'?'none':'table-row';
+}
+
+function entidadToggleCreateForm(){
+  const panel=qs('entidad-create-form');
+  panel.style.display=panel.style.display!=='none'?'none':'block';
+}
+
+async function crearEntidad(){
+  const nombre=qs('ent-new-nombre').value.trim();
+  const tipo=qs('ent-new-tipo').value;
+  const estado=qs('ent-new-estado').value;
+  const obs=qs('ent-new-obs').value.trim();
+  if(!nombre){toast('Nombre es obligatorio');return;}
+  if(!tipo){toast('Tipo es obligatorio');return;}
+  const bu=getBackendUrl();
+  if(!bu){toast('Configurá la URL del backend primero');return;}
+  try{
+    const res=await fetch(bu+'/intel-comercial/entidades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({Nombre:nombre,Tipo:tipo,Estado:estado,Observaciones:obs})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Error desconocido');
+    toast('✅ Entidad creada: '+data.entidad_id);
+    qs('ent-new-nombre').value='';qs('ent-new-tipo').value='';qs('ent-new-obs').value='';
+    entidadToggleCreateForm();
+    await loadEntidadesPage();
+  }catch(e){
+    toast('❌ '+e.message);
+  }
+}
+
+async function guardarEntidad(entidadId){
+  const nombre=qs('ent-edit-nombre-'+entidadId).value.trim();
+  const tipo=qs('ent-edit-tipo-'+entidadId).value;
+  const estado=qs('ent-edit-estado-'+entidadId).value;
+  const obs=qs('ent-edit-obs-'+entidadId).value.trim();
+  if(!nombre){toast('Nombre es obligatorio');return;}
+  const bu=getBackendUrl();
+  if(!bu){toast('Configurá la URL del backend primero');return;}
+  try{
+    const res=await fetch(bu+'/intel-comercial/entidades/'+encodeURIComponent(entidadId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({Nombre:nombre,Tipo:tipo,Estado:estado,Observaciones:obs})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Error desconocido');
+    toast('✅ Entidad actualizada');
+    await loadEntidadesPage();
+  }catch(e){
+    toast('❌ '+e.message);
+  }
+}
+
+async function toggleEstadoEntidad(entidadId,nuevoEstado){
+  const bu=getBackendUrl();
+  if(!bu){toast('Configurá la URL del backend primero');return;}
+  try{
+    const res=await fetch(bu+'/intel-comercial/entidades/'+encodeURIComponent(entidadId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({Estado:nuevoEstado})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Error desconocido');
+    toast('✅ Estado actualizado a '+nuevoEstado);
+    await loadEntidadesPage();
+  }catch(e){
+    toast('❌ '+e.message);
+  }
 }
 
 // ── DISTRIBUCION ──
