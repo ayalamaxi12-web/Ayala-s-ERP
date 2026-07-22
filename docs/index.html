@@ -212,6 +212,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-section-label">🧠 Inteligencia Comercial</div>
     <div class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this)"><span class="icon">🧠</span> SKUs &amp; Referencias</div>
     <div class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this)"><span class="icon">🏢</span> Entidades</div>
+    <div class="sidebar-item" data-page="intel-referencias" onclick="goPage('intel-referencias',this)"><span class="icon">🔗</span> Referencias</div>
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
@@ -897,6 +898,22 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+<div id="page-intel-referencias" class="page">
+  <div class="section-hdr">Inteligencia Comercial — Referencias</div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn primary" id="btn-load-referencias" onclick="loadReferenciasPage()">🔄 Cargar desde Sheets</button>
+    <span id="referencias-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div class="table-wrap" id="referencias-table-wrap" style="display:none">
+    <table id="referencias-table">
+      <thead><tr>
+        <th>SKU</th><th>Tipo</th><th>Entidad</th><th>Publicación</th><th>PVP Oficial</th><th>Override</th><th>Tolerancia</th><th>Activo</th><th>Fecha Alta</th>
+      </tr></thead>
+      <tbody id="referencias-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="page-distribucion" class="page">
   <div class="section-hdr">Distribución — Red de Distribuidores Autorizados ML</div>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
@@ -1465,6 +1482,7 @@ function goPage(page,el){
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
   if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
+  if(page==='intel-referencias'&&!referenciasPageLoaded)loadReferenciasPage();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
 }
 
@@ -2732,6 +2750,55 @@ async function toggleEstadoEntidad(entidadId,nuevoEstado){
   }catch(e){
     toast('❌ '+e.message);
   }
+}
+
+// ── INTELIGENCIA COMERCIAL — REFERENCIAS (Fase 4, listado de solo lectura) ──
+let referenciasPageLoaded=false;
+
+async function loadReferenciasPage(){
+  const btn=qs('btn-load-referencias'),status=qs('referencias-status');
+  btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo Referencias_Mercado...';
+  try{
+    const refRows=await fetchSheet(COMP_SHEET_ID,'Referencias_Mercado!A1:Z1000').catch(()=>null);
+    if(!refRows){
+      status.textContent='⚠ No existe la pestaña "Referencias_Mercado" todavía — correr /intel-comercial/init primero.';
+      btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';return;
+    }
+    INTEL.referencias=_rowsToObjs(refRows);
+    if(!INTEL.entidades.length){
+      const entRows=await fetchSheet(COMP_SHEET_ID,'Entidades!A1:Z1000').catch(()=>null);
+      if(entRows)INTEL.entidades=_rowsToObjs(entRows);
+    }
+    referenciasPageLoaded=true;
+    qs('referencias-table-wrap').style.display='block';
+    status.textContent=`${INTEL.referencias.length} referencias cargadas`;
+    btn.textContent='🔄 Cargar desde Sheets';
+    renderReferenciasPage();
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+  }
+  btn.disabled=false;
+}
+
+function renderReferenciasPage(){
+  const rows=INTEL.referencias;
+  const tbody=qs('referencias-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text3)">Sin referencias cargadas</td></tr>';return;}
+  tbody.innerHTML=rows.map(r=>{
+    const entidad=INTEL.entidades.find(e=>e.Entidad_ID===r.Entidad_ID);
+    const entidadNombre=entidad?(entidad.Nombre||'—'):(r.Entidad_Nombre||'—');
+    return `<tr>
+      <td class="mono" style="font-weight:600">${r.SKU||''}</td>
+      <td style="font-size:11px">${r.Tipo||'—'}</td>
+      <td style="font-size:11px">${entidadNombre}</td>
+      <td>${r.Link_Publicacion?`<a href="${r.Link_Publicacion}" target="_blank" class="btn-xs" style="text-decoration:none">Abrir →</a>`:'—'}</td>
+      <td class="mono">${r.PVP_Oficial||'—'}</td>
+      <td class="mono">${r.PVP_Override||'—'}</td>
+      <td class="mono">${r.Tolerancia_Pct||'—'}</td>
+      <td style="font-size:11px">${r.Activo||'—'}</td>
+      <td class="mono" style="font-size:11px">${r.Fecha_Alta||'—'}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── DISTRIBUCION ──
