@@ -11,3 +11,11 @@ sqlalchemy==2.0.51
 alembic==1.18.5
 psycopg2-binary==2.9.12
 pytest==9.1.1
+
+# Adaptador SQL de Táctica (SQL Server) — pymssql trae FreeTDS embebido,
+# no requiere instalar un driver ODBC de sistema (más simple en Docker/Railway
+# que pyodbc + msodbcsql).
+pymssql==2.3.13
+
+# Adaptador Excel de ECOM — lectura del reporte que hoy se descarga a mano.
+openpyxl==3.1.5

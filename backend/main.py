@@ -1118,21 +1118,23 @@ def _monitor_leer_catalogo(product_id, wid):
                 'detalle_error': f'API error: {e}'}
 
 def _monitor_try_api_item(item_id):
-    """Intento rápido por API para item individual (no catálogo). Devuelve (precio o None, detalle)."""
+    """Intento rápido por API para item individual (no catálogo).
+    Devuelve (precio, seller_id, official_store_id, detalle) o (None, None, None, detalle)."""
     try:
         r = requests.get(f"https://api.mercadolibre.com/items/{item_id}", headers=ml_headers(), timeout=10)
         if r.status_code == 200:
-            price = r.json().get('price')
+            data = r.json()
+            price = data.get('price')
             if price:
-                return price, ''
-            return None, 'API 200 pero sin precio en la respuesta'
+                return price, data.get('seller_id'), data.get('official_store_id'), ''
+            return None, None, None, 'API 200 pero sin precio en la respuesta'
         try:
             msg = r.json().get('message', r.text[:120])
         except Exception:
             msg = r.text[:120]
-        return None, f'API {r.status_code}: {msg}'
+        return None, None, None, f'API {r.status_code}: {msg}'
     except Exception as e:
-        return None, f'API error: {e}'
+        return None, None, None, f'API error: {e}'
 
 def _monitor_try_selenium(driver, link):
     """Visita la publicación puntual (sin scroll/paginación) y lee el precio del DOM."""
@@ -1183,10 +1185,10 @@ def leer_precio_publicacion(link, driver_holder):
         return _monitor_leer_catalogo(ids['product_id'], ids['wid'])
 
     if ids['item_id']:
-        price, api_detail = _monitor_try_api_item(ids['item_id'])
+        price, seller_id, official_store_id, api_detail = _monitor_try_api_item(ids['item_id'])
         if price:
             return {'precio': price, 'estado': 'OK', 'metodo': 'API',
-                    'seller_id': None, 'official_store_id': None, 'detalle_error': ''}
+                    'seller_id': seller_id, 'official_store_id': official_store_id, 'detalle_error': ''}
         if driver_holder['driver'] is None:
             driver_holder['driver'] = _monitor_launch_driver()
         price2, sel_detail = _monitor_try_selenium(driver_holder['driver'], link)
@@ -1269,7 +1271,7 @@ def run_monitor():
 # ══════════════════════════════════════════════════════
 
 INTEL_SHEETS = {
-    'Entidades': ['Entidad_ID','Nombre','Tipo','Provincia','Localidad','Estado','Responsable','Tolerancia_Default_Pct','Fecha_Alta','Fecha_Ultima_Revision','Observaciones','Link_ML'],
+    'Entidades': ['Entidad_ID','Nombre','Tipo','Provincia','Localidad','Estado','Responsable','Tolerancia_Default_Pct','Fecha_Alta','Fecha_Ultima_Revision','Observaciones','Link_ML','Seller_ID'],
     'Referencias_Mercado': ['Referencia_ID','SKU','Tipo','Entidad_ID','Entidad_Nombre','Link_Publicacion','PVP_Oficial','PVP_Override','Tolerancia_Pct','Activo','Seller_ID_Esperado','Fecha_Alta','Origen','Observaciones'],
     'Discovery_Sugerencias': ['Sugerencia_ID','Entidad_Origen','Titulo_Detectado','Link_Detectado','Precio_Detectado','SKU_Sugerido','Fecha_Deteccion','Estado_Revision','Referencia_ID_Generada'],
     'Intel_Config': ['Tipo','Tolerancia_Default_Pct'],
@@ -1284,12 +1286,23 @@ def init_intel_comercial():
         existing = {ws.title for ws in ss.worksheets()}
         result = {}
         for name, headers in INTEL_SHEETS.items():
-            if name in existing:
+            if name not in existing:
+                sheet = ss.add_worksheet(title=name, rows=1000, cols=len(headers))
+                sheet.append_row(headers)
+                result[name] = 'creada'
+                continue
+            sheet = ss.worksheet(name)
+            current_headers = sheet.row_values(1)
+            faltantes = [h for h in headers if h not in current_headers]
+            if not faltantes:
                 result[name] = 'ya existía'
                 continue
-            sheet = ss.add_worksheet(title=name, rows=1000, cols=len(headers))
-            sheet.append_row(headers)
-            result[name] = 'creada'
+            col = len(current_headers) + 1
+            if col + len(faltantes) - 1 > sheet.col_count:
+                sheet.add_cols(col + len(faltantes) - 1 - sheet.col_count)
+            for i, h in enumerate(faltantes):
+                sheet.update_cell(1, col + i, h)
+            result[name] = f'extendida (+{len(faltantes)} columnas)'
 
         try:
             mon_ws = ss.worksheet('Monitor_Lecturas')
@@ -1715,6 +1728,7 @@ async def crear_entidad(request: Request):
             'Tolerancia_Default_Pct': body.get('Tolerancia_Default_Pct', ''),
             'Fecha_Alta': datetime.now().strftime('%d/%m/%Y'),
             'Observaciones': body.get('Observaciones', ''), 'Link_ML': body.get('Link_ML', ''),
+            'Seller_ID': body.get('Seller_ID', ''),
         })
         return {"status": "ok", "entidad_id": entidad_id}
     except HTTPException:
@@ -1851,6 +1865,121 @@ def eliminar_referencia(referencia_id: str):
             raise HTTPException(status_code=404, detail=f"No existe Referencia_ID {referencia_id}")
         _delete_row(ref_ws, row_index)
         return {"status": "ok", "referencia_id": referencia_id, "eliminado": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════
+# INTELIGENCIA COMERCIAL — "Mix" (Fase 5): carga masiva de links.
+# Por cada {sku, link}: resuelve/crea la Entidad por Seller_ID (no por nombre),
+# bloquea duplicados por (SKU, id de publicación normalizado) y no por URL cruda
+# (la URL de ML trae params de tracking que cambian en cada copia), y dispara el
+# mismo scraper (API primero, Selenium de fallback) que ya usa el monitor unificado.
+# No calcula rentabilidad acá — el frontend ya tiene compMargenAt()+S.pmData.
+# ══════════════════════════════════════════════════════
+
+@app.post("/intel-comercial/mix/cargar")
+async def mix_cargar(request: Request):
+    try:
+        body = await request.json()
+        items = body.get('items', [])
+        if not isinstance(items, list) or not items:
+            raise HTTPException(status_code=400, detail="items debe ser una lista no vacía de {sku, link}")
+
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        ent_ws = ss.worksheet('Entidades')
+        ref_ws = ss.worksheet('Referencias_Mercado')
+        ent_headers = ent_ws.row_values(1)
+        ref_headers = ref_ws.row_values(1)
+
+        ent_id_idx = ent_headers.index('Entidad_ID')
+        ent_seq = _next_seq_id(
+            [r[ent_id_idx] for r in ent_ws.get_all_values()[1:] if len(r) > ent_id_idx and r[ent_id_idx]], 'ENT')
+
+        ref_id_idx = ref_headers.index('Referencia_ID')
+        ref_rows = ref_ws.get_all_values()[1:]
+        ref_seq = _next_seq_id(
+            [r[ref_id_idx] for r in ref_rows if len(r) > ref_id_idx and r[ref_id_idx]], 'REF')
+
+        sku_idx = ref_headers.index('SKU')
+        link_idx = ref_headers.index('Link_Publicacion')
+        existentes = set()
+        for r in ref_rows:
+            sku_v = (r[sku_idx].strip().lower() if len(r) > sku_idx else '')
+            link_v = (r[link_idx] if len(r) > link_idx else '')
+            ids_v = _monitor_extract_ids(link_v)
+            pub_key = ids_v.get('product_id') or ids_v.get('item_id')
+            if sku_v and pub_key:
+                existentes.add((sku_v, str(pub_key)))
+
+        driver_holder = {'driver': None}
+        resultados = []
+        try:
+            for it in items:
+                sku = str(it.get('sku', '')).strip()
+                link = str(it.get('link', '')).strip()
+                if not sku or not link:
+                    resultados.append({'sku': sku, 'link': link, 'estado': 'Error',
+                                        'detalle': 'SKU y Link son obligatorios'})
+                    continue
+
+                ids = _monitor_extract_ids(link)
+                pub_key = ids.get('product_id') or ids.get('item_id')
+                if not pub_key:
+                    resultados.append({'sku': sku, 'link': link, 'estado': 'Error',
+                                        'detalle': 'Link no reconocido (sin product_id ni item_id)'})
+                    continue
+
+                dup_key = (sku.lower(), str(pub_key))
+                if dup_key in existentes:
+                    resultados.append({'sku': sku, 'link': link, 'estado': 'Duplicado',
+                                        'detalle': 'Ya existe una referencia con ese SKU y esa publicación'})
+                    continue
+
+                res = leer_precio_publicacion(link, driver_holder)
+
+                entidad_id, entidad_nombre = '', ''
+                seller_id = res.get('seller_id')
+                if seller_id:
+                    _, entidad_existente = _find_row_by_id(ent_ws, 'Seller_ID', str(seller_id))
+                    if entidad_existente:
+                        entidad_id = entidad_existente.get('Entidad_ID', '')
+                        entidad_nombre = entidad_existente.get('Nombre', '')
+                    else:
+                        ent_seq += 1
+                        entidad_id = f'ENT-{ent_seq:06d}'
+                        entidad_nombre = fetch_seller(seller_id) or f'Vendedor {seller_id}'
+                        _append_row_from_dict(ent_ws, ent_headers, {
+                            'Entidad_ID': entidad_id, 'Nombre': entidad_nombre, 'Tipo': 'Competencia',
+                            'Fecha_Alta': datetime.now().strftime('%d/%m/%Y'), 'Seller_ID': str(seller_id),
+                        })
+
+                ref_seq += 1
+                referencia_id = f'REF-{ref_seq:06d}'
+                _append_row_from_dict(ref_ws, ref_headers, {
+                    'Referencia_ID': referencia_id, 'SKU': sku, 'Tipo': 'Competencia',
+                    'Entidad_ID': entidad_id, 'Entidad_Nombre': entidad_nombre,
+                    'Link_Publicacion': link, 'Seller_ID_Esperado': str(seller_id) if seller_id else '',
+                    'Fecha_Alta': datetime.now().strftime('%d/%m/%Y'), 'Origen': 'Mix',
+                })
+                existentes.add(dup_key)
+
+                resultados.append({
+                    'sku': sku, 'link': link, 'estado': res.get('estado', 'Error'),
+                    'precio_detectado': res.get('precio'), 'metodo': res.get('metodo', ''),
+                    'entidad_id': entidad_id, 'entidad_nombre': entidad_nombre,
+                    'referencia_id': referencia_id, 'detalle': res.get('detalle_error', ''),
+                })
+        finally:
+            if driver_holder['driver'] is not None:
+                try:
+                    driver_holder['driver'].quit()
+                except Exception:
+                    pass
+
+        return {"status": "ok", "resultados": resultados}
     except HTTPException:
         raise
     except Exception as e:
