@@ -53,19 +53,17 @@ de memoria, mandato de `docs/00_LEEME_PRIMERO.md` §4):
   `Shipping.listCost` (confirmado por coincidencia exacta de un valor real,
   7821, contra el fixture de `ingesta_ecom.py`/`test_ingesta_ecom.py`).
 - **Comisión de venta**: no hay un campo único — se resuelve como
-  `sum(payments[].totalFeeAmount)`. Confirmado que el campo existe y tiene
-  magnitud consistente con una comisión (varios miles sobre ventas de
-  decenas de miles); **no confirmado 1:1 contra un valor real del Excel**
-  de Maxx — queda para la comparación de período real (pedido de Maxx,
-  §6 de su instrucción del 2026-08-10).
-- **Postventa/RMA**: `orders.findSettings` (filtro `owner`) lista
-  `"Posventa"` (sin "t") como canal válido — pero el adaptador de Excel
-  (`ingesta_ecom.py`) usa `"Postventa"` (con "t"), verificado por Maxx
-  contra archivos reales. **No se pudo observar una orden real con
-  `owner="Posventa"` en 300 órdenes de los últimos 3 meses** para confirmar
-  que son el mismo concepto. Se implementa contra el valor real de la API
-  (`"Posventa"`) y se lo señala a Maxx explícitamente — no se inventa cuál
-  de los dos "gana".
+  `sum(payments[].totalFeeAmount)`. Confirmado por Maxx (2026-08-10): la
+  fórmula real de la planilla toma comisión de venta + envío y descuenta el
+  costo total, además de imp. cheque/IIBB — coincide con esta suma. Los
+  "impuestos informativos" que trae Ecom (`Payment.retenciones`) son parte
+  de lo que ya cubren el 1,2%/5% calculados por el motor — no se suman
+  aparte, mismo criterio que ya regía para el Excel.
+- **Postventa/RMA**: la API usa `"Posventa"` (sin "t"), el Excel
+  `"Postventa"` (con "t") — **Maxx confirmó (2026-08-10) que son el mismo
+  concepto.** Se detecta con `owner == "Posventa"` (valor real de la API).
+  Verificado además contra una orden real de la muestra: forzó Precio
+  Final/Precio Sin IVA a 0 y conservó el costo, tal como especifica la regla.
 - **SKU por línea**: `OrderList.variant.sku` viene `null` en una porción
   real de las líneas (variantes sin SKU propio cargado en Ecom). Fallback
   confirmado con datos reales: `OrderList.variant.product.sku` (el

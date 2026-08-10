@@ -45,6 +45,7 @@ from .ingesta_ecom_api import EcomApiAdapter
 from .ingesta_tactica import FilaTactica, TacticaSqlAdapter
 from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
 from .persistencia import construir_filas_ecom, guardar_cierre_ecom, guardar_cierre_tactica, registrar_cierre
+from .tc_bna import TcBnaError, obtener_tc_bna
 from .validador import ValidadorRentabilidad
 
 router = APIRouter(prefix="/rentabilidad", tags=["rentabilidad"])
@@ -260,12 +261,32 @@ def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> CalcularTacti
 # ── Período: ECOM API -> adaptador -> motor — mismo criterio que
 # `/tactica/periodo`. `EcomApiAdapter.periodo()` devuelve el mismo
 # `ResultadoIngestaEcom` que `EcomExcelAdapter.procesar()`, así que
-# `construir_filas_ecom` no distingue de dónde vino el dato. ──
+# `construir_filas_ecom` no distingue de dónde vino el dato.
+#
+# TC: pedido de Maxx (2026-08-10) — cuando corre por la API/el ERP, el TC no
+# se tipea a mano, se toma el que informa el BNA al momento de ejecutar
+# (sigue siendo UN solo TC para todo el período, la regla no cambia — ver
+# tc_bna.py). `tc` queda como override opcional para reprocesar con un
+# valor puntual; si se omite, se resuelve solo. El Excel (`/cierres/ecom/excel`)
+# sigue pidiéndolo a mano a propósito: ahí se reproduce el proceso manual
+# de Maxx para comparar contra el mismo TC que él usó ese día. ──
+
+def _resolver_tc(tc: str | None) -> Decimal:
+    if tc:
+        try:
+            return Decimal(tc)
+        except InvalidOperation:
+            raise HTTPException(422, f"TC no numérico: {tc!r}")
+    try:
+        return obtener_tc_bna()
+    except TcBnaError as e:
+        raise HTTPException(502, f"No se pudo obtener el TC del BNA y no se pasó uno manual: {e}")
+
 
 class ConsultarEcomIn(BaseModel):
     desde: date
     hasta: date
-    tc: str  # el TC del período se sigue pasando a mano (igual que con el Excel — ver ingesta_ecom.py)
+    tc: str | None = None  # si se omite, se toma el del BNA al momento de ejecutar
 
 
 class ResultadoEcomOut(BaseModel):
@@ -316,10 +337,7 @@ def consultar_ecom_periodo(payload: ConsultarEcomIn) -> ConsultarEcomOut:
     nada, igual que `/tactica/periodo`."""
     if payload.hasta < payload.desde:
         raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
-    try:
-        tc = Decimal(payload.tc)
-    except InvalidOperation:
-        raise HTTPException(422, f"TC no numérico: {payload.tc!r}")
+    tc = _resolver_tc(payload.tc)
     resultado_ingesta = EcomApiAdapter().periodo(payload.desde, payload.hasta, tc)
     fetch = _fetch_fn_con_cache()
     iva_provider = IvaProvider(fetch_fn=fetch)
@@ -429,7 +447,7 @@ async def cerrar_ecom_excel(
 class GuardarCierreEcomIn(BaseModel):
     desde: date
     hasta: date
-    tc: str
+    tc: str | None = None  # si se omite, se toma el del BNA al momento de ejecutar
 
 
 @router.post("/cierres/ecom", response_model=GuardarCierreEcomOut)
@@ -442,10 +460,7 @@ def cerrar_ecom_api(payload: GuardarCierreEcomIn) -> GuardarCierreEcomOut:
     `guardar_cierre_ecom` no cambia."""
     if payload.hasta < payload.desde:
         raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
-    try:
-        tc = Decimal(payload.tc)
-    except InvalidOperation:
-        raise HTTPException(422, f"TC no numérico: {payload.tc!r}")
+    tc = _resolver_tc(payload.tc)
 
     periodo = _periodo_de_rango(payload.desde, payload.hasta)
     resultado_ingesta = EcomApiAdapter().periodo(payload.desde, payload.hasta, tc)

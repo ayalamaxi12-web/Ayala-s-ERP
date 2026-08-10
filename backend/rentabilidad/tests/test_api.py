@@ -9,16 +9,19 @@ from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
 import pytest
 from fastapi import HTTPException
 
+from rentabilidad import api
 from rentabilidad.api import (
     CalcularTacticaPeriodoIn,
     LineaTacticaIn,
     _periodo_de_rango,
+    _resolver_tc,
     calcular_lineas,
     calcular_periodo_tactica,
     calcular_tactica_periodo,
     extraer_comprobante,
     incidencias_de_periodo,
 )
+from rentabilidad.tc_bna import TcBnaError
 from rentabilidad.config import ConfiguracionFaltante
 from rentabilidad.ingesta_tactica import FilaTactica
 from rentabilidad.models import Regimen, VentaTactica
@@ -216,3 +219,27 @@ def test_incidencias_de_periodo_detecta_duplicados_v16(db_session):
     db_session.commit()
     incidencias = incidencias_de_periodo(db_session, "2026-07", "tactica")
     assert any(i.codigo == "V-16" for i in incidencias)
+
+
+# ── _resolver_tc — pedido de Maxx (2026-08-10): sin TC manual, se toma el
+# del BNA al momento de ejecutar; sigue habiendo override manual. ──
+
+def test_resolver_tc_usa_el_valor_manual_si_se_paso(monkeypatch):
+    monkeypatch.setattr(api, "obtener_tc_bna", lambda: (_ for _ in ()).throw(AssertionError("no debería llamar al BNA")))
+    assert _resolver_tc("1500") == Decimal("1500")
+
+
+def test_resolver_tc_va_al_bna_si_no_se_paso_ninguno(monkeypatch):
+    monkeypatch.setattr(api, "obtener_tc_bna", lambda: Decimal("1460.5"))
+    assert _resolver_tc(None) == Decimal("1460.5")
+
+
+def test_resolver_tc_rechaza_texto_no_numerico():
+    with pytest.raises(HTTPException):
+        _resolver_tc("no-es-un-numero")
+
+
+def test_resolver_tc_da_un_error_claro_si_el_bna_falla_y_no_hay_manual(monkeypatch):
+    monkeypatch.setattr(api, "obtener_tc_bna", lambda: (_ for _ in ()).throw(TcBnaError("BNA caído")))
+    with pytest.raises(HTTPException):
+        _resolver_tc(None)
