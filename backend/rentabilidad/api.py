@@ -41,9 +41,10 @@ from .calculators import LineaTacticaInput, RentabilidadTacticaCalculator
 from .config import ConfiguracionFaltante
 from .db import sesion
 from .ingesta_ecom import EcomExcelAdapter
+from .ingesta_ecom_api import EcomApiAdapter
 from .ingesta_tactica import FilaTactica, TacticaSqlAdapter
 from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
-from .persistencia import guardar_cierre_ecom, guardar_cierre_tactica, registrar_cierre
+from .persistencia import construir_filas_ecom, guardar_cierre_ecom, guardar_cierre_tactica, registrar_cierre
 from .validador import ValidadorRentabilidad
 
 router = APIRouter(prefix="/rentabilidad", tags=["rentabilidad"])
@@ -256,6 +257,83 @@ def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> CalcularTacti
     return CalcularTacticaPeriodoOut(resultados=resultados, total_lineas=len(resultados))
 
 
+# ── Período: ECOM API -> adaptador -> motor — mismo criterio que
+# `/tactica/periodo`. `EcomApiAdapter.periodo()` devuelve el mismo
+# `ResultadoIngestaEcom` que `EcomExcelAdapter.procesar()`, así que
+# `construir_filas_ecom` no distingue de dónde vino el dato. ──
+
+class ConsultarEcomIn(BaseModel):
+    desde: date
+    hasta: date
+    tc: str  # el TC del período se sigue pasando a mano (igual que con el Excel — ver ingesta_ecom.py)
+
+
+class ResultadoEcomOut(BaseModel):
+    numero_orden: str
+    canal_de_venta: str | None
+    estado_pago: str | None
+    excluido: bool
+    precio_final: Decimal
+    precio_sin_iva: Decimal
+    costo_sin_iva: Decimal
+    comision_venta: Decimal
+    costo_envio: Decimal
+    neto: Decimal | None = None
+    costo_total: Decimal | None = None
+    rentabilidad: Decimal | None = None
+
+
+class ConsultarEcomOut(BaseModel):
+    resultados: list[ResultadoEcomOut]
+    total_lineas: int
+    excluidas_por_estado_pago: int
+    incidencias_costo: int
+    config_faltante: list[str]
+
+
+def _providers_ecom(fetch):
+    return dict(
+        clasificacion_provider=ClasificacionProvider(fetch_fn=fetch),
+        vinculacion_provider=VinculacionProvider(fetch_fn=fetch),
+        stock_provider=StockProvider(fetch_fn=fetch),
+        margen_provider=MargenObjetivoProvider(fetch_fn=fetch),
+    )
+
+
+def _venta_ecom_a_out(v: VentaEcom) -> ResultadoEcomOut:
+    return ResultadoEcomOut(
+        numero_orden=v.numero_orden, canal_de_venta=v.canal_de_venta, estado_pago=v.estado_pago,
+        excluido=v.excluido, precio_final=v.precio_final, precio_sin_iva=v.precio_sin_iva,
+        costo_sin_iva=v.costo_sin_iva, comision_venta=v.comision_venta, costo_envio=v.costo_envio,
+        neto=v.neto, costo_total=v.costo_total, rentabilidad=v.rentabilidad,
+    )
+
+
+@router.post("/ecom/periodo", response_model=ConsultarEcomOut)
+def consultar_ecom_periodo(payload: ConsultarEcomIn) -> ConsultarEcomOut:
+    """Lee Ecom directo de la API (`EcomApiAdapter`) para el rango dado y
+    corre cada orden por el motor — sin descargar ningún Excel. No persiste
+    nada, igual que `/tactica/periodo`."""
+    if payload.hasta < payload.desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    try:
+        tc = Decimal(payload.tc)
+    except InvalidOperation:
+        raise HTTPException(422, f"TC no numérico: {payload.tc!r}")
+    resultado_ingesta = EcomApiAdapter().periodo(payload.desde, payload.hasta, tc)
+    fetch = _fetch_fn_con_cache()
+    iva_provider = IvaProvider(fetch_fn=fetch)
+    with sesion() as db:
+        resultado = construir_filas_ecom(db, resultado_ingesta, iva_provider, **_providers_ecom(fetch))
+    return ConsultarEcomOut(
+        resultados=[_venta_ecom_a_out(f) for f in resultado.filas],
+        total_lineas=len(resultado.filas),
+        excluidas_por_estado_pago=len(resultado_ingesta.excluidas_por_estado_pago),
+        incidencias_costo=len(resultado_ingesta.incidencias_costo),
+        config_faltante=resultado.config_faltante,
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # CIERRES — la única vía de escritura en venta_tactica/venta_ecom. Todo lo
 # de arriba es consulta; nada de arriba persiste.
@@ -310,10 +388,10 @@ async def cerrar_ecom_excel(
     tc: str = Form(...),
     archivo: UploadFile = File(...),
 ) -> GuardarCierreEcomOut:
-    """Guardar cierre de Ecom vía Excel (fuente disponible hoy — la API
-    todavía tiene campos sin confirmar, ver ingesta_ecom_api.py). Mismo
-    `EcomExcelAdapter` ya probado; el día que la API esté lista, cambia el
-    adaptador de entrada, no esta capa ni el motor."""
+    """Guardar cierre de Ecom vía Excel — desde que `/cierres/ecom` (API)
+    existe, este es el camino de **comparación/validación**, no la fuente
+    operativa (pedido de Maxx, 2026-08-10). Se mantiene igual: mismo
+    `EcomExcelAdapter` ya probado, sin cambios."""
     if hasta < desde:
         raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
     try:
@@ -339,6 +417,44 @@ async def cerrar_ecom_excel(
             StockProvider(fetch_fn=fetch), MargenObjetivoProvider(fetch_fn=fetch),
         )
         registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="excel")
+    return GuardarCierreEcomOut(
+        periodo=periodo, total_lineas=len(resultado.filas),
+        excluidas=sum(1 for f in resultado.filas if f.excluido),
+        config_faltante=resultado.config_faltante,
+        excluidas_por_estado_pago=len(resultado_ingesta.excluidas_por_estado_pago),
+        incidencias_costo=len(resultado_ingesta.incidencias_costo),
+    )
+
+
+class GuardarCierreEcomIn(BaseModel):
+    desde: date
+    hasta: date
+    tc: str
+
+
+@router.post("/cierres/ecom", response_model=GuardarCierreEcomOut)
+def cerrar_ecom_api(payload: GuardarCierreEcomIn) -> GuardarCierreEcomOut:
+    """Guardar cierre de Ecom **desde la API real** — reemplaza a
+    `/cierres/ecom/excel` como fuente operativa (pedido de Maxx,
+    2026-08-10): el Excel queda solo como comparación/validación, ya no es
+    necesario para que Rentabilidad funcione. `EcomApiAdapter.periodo()`
+    devuelve el mismo `ResultadoIngestaEcom` que el Excel, así que
+    `guardar_cierre_ecom` no cambia."""
+    if payload.hasta < payload.desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    try:
+        tc = Decimal(payload.tc)
+    except InvalidOperation:
+        raise HTTPException(422, f"TC no numérico: {payload.tc!r}")
+
+    periodo = _periodo_de_rango(payload.desde, payload.hasta)
+    resultado_ingesta = EcomApiAdapter().periodo(payload.desde, payload.hasta, tc)
+    fetch = _fetch_fn_con_cache()
+    with sesion() as db:
+        resultado = guardar_cierre_ecom(
+            db, periodo, resultado_ingesta, IvaProvider(fetch_fn=fetch), **_providers_ecom(fetch),
+        )
+        registrar_cierre(db, periodo, payload.desde, payload.hasta, ecom_guardado=True, ecom_origen="api")
     return GuardarCierreEcomOut(
         periodo=periodo, total_lineas=len(resultado.filas),
         excluidas=sum(1 for f in resultado.filas if f.excluido),
