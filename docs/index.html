@@ -199,9 +199,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
     <div class="sidebar-item" data-page="rentabilidad-tactica" onclick="goPage('rentabilidad-tactica',this)"><span class="icon">📊</span> Rentabilidad Táctica</div>
     <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">✅</span> Verificar Táctica</div>
-    <div class="sidebar-item" data-page="verificar-web" onclick="goPage('verificar-web',this)"><span class="icon">🌐</span> Verificar Web</div>     <div class="sidebar-item" data-page="verificador-pm" onclick="goPage('verificador-pm',this)"><span class="icon">📋</span> Verificador PM</div>
-    <div class="sidebar-item" data-page="verificar-fravega" onclick="goPage('verificar-fravega',this)"><span class="icon">🏪</span> Verificar Fravega</div>
-    <div class="sidebar-item" data-page="fravega-api" onclick="goPage('fravega-api',this)"><span class="icon">🔌</span> Fravega API</div>
+  </div>
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">📦 Mercado Libre</div>
     <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
     <div class="sidebar-item" data-page="ofertas-ml" onclick="goPage('ofertas-ml',this)"><span class="icon">🏷️</span> Ofertas ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
@@ -213,6 +214,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this)"><span class="icon">🧠</span> SKUs &amp; Referencias</div>
     <div class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this)"><span class="icon">🏢</span> Entidades</div>
     <div class="sidebar-item" data-page="intel-referencias" onclick="goPage('intel-referencias',this)"><span class="icon">🔗</span> Referencias</div>
+    <div class="sidebar-item" data-page="intel-mix" onclick="goPage('intel-mix',this)"><span class="icon">🧪</span> Mix</div>
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
@@ -468,30 +470,17 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </div>
   </div>
 
-  <!-- CONFIG PANEL -->
+  <!-- CONFIG PANEL — solo TC: las tasas (IIBB/Imp.Cheque/CF1/CF2) ahora son
+       paramétricas del motor (backend/rentabilidad, tabla parametro_tasa),
+       no un ajuste por pantalla. -->
   <div class="card" style="margin-bottom:0">
     <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="tacRentToggleConfig()">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Configuración de deducciones</div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Tipo de cambio</div>
       <span id="tacrent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
     </div>
     <div id="tacrent-cfg-body" style="display:none;margin-top:12px">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer">
-          <input type="checkbox" id="tacrent-cfg-impchq-nc1" checked> IMPCHQ recupera en NC C1 Refacturación
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer">
-          <input type="checkbox" id="tacrent-cfg-cf2-fallado"> CF2 recupera en NC C2 Fallado
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer">
-          <input type="checkbox" id="tacrent-cfg-cf2-refact" checked> CF2 recupera en NC C2 Refacturación
-        </label>
-      </div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
-        <div class="rule-item"><div class="rule-name">IIBB (%)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-iibb" value="5" step="0.1"></div></div>
-        <div class="rule-item"><div class="rule-name">Imp. Cheque (%)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-impchq" value="1.2" step="0.1"></div></div>
-        <div class="rule-item"><div class="rule-name">CF1 — C1 (%)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-cf1" value="3" step="0.1"></div></div>
-        <div class="rule-item"><div class="rule-name">CF2 — C2 (%)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-cf2" value="3" step="0.1"></div></div>
-        <div class="rule-item"><div class="rule-name">TC del día</div><div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto"></div></div>
+        <div class="rule-item"><div class="rule-name">TC del día</div><div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
       </div>
     </div>
   </div>
@@ -506,16 +495,18 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="tacrent-kpi-neg">0</div><div class="stat-label">Negativos</div></div>
   </div>
 
+  <!-- INCIDENCIAS — filas que el motor no pudo calcular (§12 RENTABILIDAD_FUNCIONAL.md:
+       ninguna incidencia se resuelve en silencio, se muestra para revisión manual) -->
+  <div id="tacrent-incidencias" style="display:none;margin:0"></div>
+
   <!-- FILTERS -->
   <div id="tacrent-filters" class="erp-filters" style="display:none">
     <input type="text" id="tacrent-search" placeholder="Buscar empresa, SKU, factura..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;" oninput="tacRentRender()">
     <select id="tacrent-filter-tipo" class="fi" onchange="tacRentRender()">
-      <option value="">Todos los tipos</option>
-      <option value="C1">C1</option>
-      <option value="C2">C2</option>
-      <option value="NC_C1">NC C1</option>
-      <option value="NC_C2">NC C2</option>
-      <option value="PROMO">PROMO</option>
+      <option value="">Todos los regímenes</option>
+      <option value="CUENTA_1">Cuenta 1</option>
+      <option value="CUENTA_2">Cuenta 2</option>
+      <option value="PERDIDA_DEFINITIVA">Pérdida definitiva</option>
     </select>
     <select id="tacrent-filter-pm" class="fi" onchange="tacRentRender()">
       <option value="">Todos los PM</option>
@@ -583,171 +574,6 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </div>
   </div>
 </div>
-<!-- VERIFICAR WEB -->
-<div id="page-verificador-pm" class="page">
-  <div class="section-hdr">Verificador PM</div>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-    <input type="text" id="vpm-search" placeholder="Buscar SKU, descripción o categoría..." autocomplete="off" oninput="renderVerifPM()" style="flex:1;min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none">
-    <select id="vpm-pm" class="fi" onchange="renderVerifPM()"><option value="">Todos los PMs</option></select>
-    <select id="vpm-cat" class="fi" onchange="renderVerifPM()"><option value="">Todas las categorías</option></select>
-    <span id="vpm-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
-  </div>
-  <div id="vpm-empty" style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Conectá las planillas PM en Configuración para ver los datos.</div>
-  <div style="overflow-x:auto"><table id="vpm-table" style="display:none"><thead><tr>
-    <th>SKU</th><th>Categoría</th><th>Subcategoría</th><th>Descripción</th><th>Forma de Pago</th>
-    <th style="text-align:center">Frávega</th><th style="text-align:center">On City</th><th style="text-align:center">May. ML</th>
-    <th style="text-align:center">Publicidad</th><th style="text-align:center">Promoción</th><th style="text-align:center">P. Tachado</th><th style="text-align:center">FULL</th><th>PM</th>
-  </tr></thead><tbody id="vpm-tbody"></tbody></table></div>
-</div>
-  <div id="page-verificar-web" class="page">
-  <div class="section-hdr">Verificar Web</div>
-  <div class="card" style="margin-bottom:8px">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div>
-        <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px">WooCommerce (precios, cats, etiquetas)</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn primary" id="btn-load-woo-sheets" onclick="loadWooSheets()">🔄 WooCommerce</button>
-          <span class="conn-status idle" id="woo-sheets-status">No cargado</span>
-        </div>
-      </div>
-      <div class="filters-sep" style="align-self:stretch"></div>
-      <div>
-        <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px">Ecom Web (links, reglas)</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn primary" id="btn-load-webpub-sheets" onclick="loadWebPubSheets()">🔄 Publicaciones Web</button>
-          <span class="conn-status idle" id="webpub-sheets-status">No cargado</span>
-        </div>
-      </div>
-      <div class="filters-sep" style="align-self:stretch"></div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;line-height:1.6">
-        WooCommerce: precios · categorías · etiquetas · stock<br>
-        Ecom Web: link directo · regla de precio
-      </div>
-    </div>
-    <div id="web-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
-  </div>
-
-  <div id="web-stats-wrap" style="display:none">
-    <div class="stats-row" style="grid-template-columns:repeat(6,1fr);margin-bottom:10px">
-      <div class="stat-card"><div class="stat-value" id="ws-total">0</div><div class="stat-label">Total SKUs</div></div>
-      <div class="stat-card"><div class="stat-value price-ok" id="ws-ok">0</div><div class="stat-label">OK</div></div>
-      <div class="stat-card"><div class="stat-value price-bad" id="ws-diff">0</div><div class="stat-label">Diferencia</div></div>
-      <div class="stat-card"><div class="stat-value" id="ws-nopm" style="color:var(--text2)">0</div><div class="stat-label">Sin PM</div></div>
-      <div class="stat-card"><div class="stat-value price-ok" id="ws-pub">0</div><div class="stat-label">Publicados</div></div>
-      <div class="stat-card"><div class="stat-value" id="ws-cuotas-warn" style="color:var(--accent3)">0</div><div class="stat-label">Alerta cuotas</div></div>
-    </div>
-    <div class="erp-filters">
-      <input type="text" id="web-search" placeholder="Buscar SKU, nombre, categoría o etiqueta..." style="flex:1;min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
-      <select id="web-filter-estado" class="fi">
-        <option value="">Todos</option>
-        <option value="diff">Con diferencia</option>
-        <option value="ok">OK</option>
-        <option value="nopm">Sin PM</option>
-        <option value="cuotas">Alerta cuotas</option>
-        <option value="offstock">Sin stock</option>
-      </select>
-      <select id="web-filter-pub" class="fi">
-        <option value="">Pub. y no</option>
-        <option value="1">Solo publicados</option>
-        <option value="0">No publicados</option>
-      </select>
-      <button class="btn primary" id="btn-export-web">&#11015; Excel WooCommerce</button>
-      <button class="btn" id="btn-web-reset-changes" style="color:var(--yellow);border-color:rgba(255,209,102,.3)">&#8634; Deshacer</button>
-    </div>
-    <div style="padding:6px 12px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap">
-      <span>&#9998; Campos en <span style="color:var(--accent)">celeste</span> editables</span>
-      <span><span style="color:var(--accent3)">&#11044;</span> = cambio pendiente</span>
-      <span><span style="color:var(--accent3)">&#9888;</span> = alerta cuotas</span>
-    </div>
-    <div class="table-wrap" style="overflow-x:auto">
-      <table id="web-table" style="min-width:1900px">
-        <thead><tr>
-          <th data-col="sku" style="min-width:110px">SKU</th>
-          <th data-col="name" style="min-width:160px">Nombre</th>
-          <th data-col="regular" style="min-width:140px">Precio Regular</th>
-          <th data-col="sale" style="min-width:110px">P. Tachado</th>
-          <th style="min-width:60px">% Of.</th>
-          <th data-col="pmPrice" style="min-width:100px">PM Web</th>
-          <th data-col="pmCat" style="min-width:130px">Cat PM</th>
-          <th data-col="diff" style="min-width:65px">Diff</th>
-          <th data-col="regla" style="min-width:130px">Regla</th>
-          <th data-col="categories" style="min-width:180px">Categorías</th>
-          <th data-col="tags" style="min-width:180px">Etiquetas</th>
-          <th data-col="l2" style="min-width:85px">Lista2</th>
-          <th data-col="l3" style="min-width:85px">Lista3</th>
-          <th data-col="stock" style="min-width:55px">Stock</th>
-          <th data-col="published" style="min-width:70px">Estado</th>
-          <th style="min-width:60px">Link</th>
-        </tr></thead>
-        <tbody id="web-tbody"><tr><td colspan="16" style="text-align:center;padding:24px;color:var(--text3)">Cargá WooCommerce y/o Publicaciones Web</td></tr></tbody>
-      </table>
-      <div class="pagination" id="web-pag"></div>
-    </div>
-  </div>
-</div>
-
-<!-- VERIFICAR FRAVEGA -->
-<div id="page-verificar-fravega" class="page">
-  <div class="section-hdr">Verificar Fravega</div>
-  <div class="grid-2" style="margin-bottom:4px">
-    <div class="card">
-      <div class="card-title">CSV de Publicaciones Fravega</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <button class="btn primary" id="btn-load-frave-sheets" onclick="loadFraveSheets()">🔄 Cargar desde Sheets</button>
-        <span class="conn-status idle" id="frave-sheets-status">No cargado</span>
-      </div>
-      <div id="frave-csv-info" style="margin-top:6px;font-size:10px;color:var(--text2)"></div>
-      <div style="margin-top:4px;font-size:10px;color:var(--text3)">Planilla: <span style="color:var(--accent);font-family:'DM Mono',monospace">Publicaciones Fravega</span></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Estado</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.8;margin-bottom:10px">
-        Compara el precio actual en Fravega contra <strong style="color:var(--text)">Precio Fravega</strong> del PM × margen de la regla.<br>
-        Las reglas se configuran en <strong>Reglas de Precio</strong>.<br>
-        La corrección se hace vía <strong>Ecom</strong> — conectá en Verificar Ecom.
-      </div>
-      <div id="frave-pm-status" style="font-size:11px;color:var(--text2)">Conectá las planillas PM en Verificar Ecom</div>
-    </div>
-  </div>
-  <div id="frave-stats-wrap" style="display:none">
-    <div class="stats-row" style="grid-template-columns:repeat(5,1fr);margin-bottom:10px">
-      <div class="stat-card"><div class="stat-value" id="fs-total">0</div><div class="stat-label">Total pubs.</div></div>
-      <div class="stat-card"><div class="stat-value price-ok" id="fs-ok">0</div><div class="stat-label">OK</div></div>
-      <div class="stat-card"><div class="stat-value price-bad" id="fs-diff">0</div><div class="stat-label">Diferencia</div></div>
-      <div class="stat-card"><div class="stat-value" id="fs-nopm" style="color:var(--text2)">0</div><div class="stat-label">Sin PM</div></div>
-      <div class="stat-card"><div class="stat-value" id="fs-paused" style="color:var(--yellow)">0</div><div class="stat-label">Pausados</div></div>
-    </div>
-    <div class="erp-filters">
-      <input type="text" id="frave-search" placeholder="Buscar SKU o título..." style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
-      <select id="frave-filter-estado" class="fi"><option value="">Todos</option><option value="ok">OK</option><option value="warn">Tolerancia</option><option value="bad">Diferencia</option><option value="nopm">Sin PM</option><option value="paused">Pausados</option></select>
-      <select id="frave-filter-regla" class="fi"><option value="">Todas las reglas</option></select>
-      <button class="btn primary" id="btn-fix-frave-all">Corregir todos vía Ecom</button>
-      <button class="btn" id="btn-export-frave">&#11015; CSV</button>
-    </div>
-    <div id="frave-progress-wrap" style="display:none;margin-bottom:8px;padding:0 12px"><div class="fix-log" id="frave-fix-log"></div></div>
-    <div class="table-wrap">
-      <table id="frave-table">
-        <thead><tr>
-          <th data-col="sku">SKU</th>
-          <th data-col="titulo">Título</th>
-          <th data-col="regla">Regla</th>
-          <th data-col="pm">PM</th>
-          <th data-col="base">PM Fravega</th>
-          <th data-col="esperado">Esperado</th>
-          <th data-col="actual">Precio Actual</th>
-          <th data-col="diff">Diff</th>
-          <th data-col="stock">Stock</th>
-          <th data-col="estado">Estado</th>
-          <th>Link</th>
-          <th>Acción</th>
-        </tr></thead>
-        <tbody id="frave-tbody"><tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Cargá el archivo de Fravega</td></tr></tbody>
-      </table>
-      <div class="pagination" id="frave-pag"></div>
-    </div>
-  </div>
-</div>
-
 <!-- COMPETIDORES -->
 <div id="page-competidores" class="page">
   <div class="section-hdr">Competidores ML</div>
@@ -910,6 +736,24 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         <th>SKU</th><th>Tipo</th><th>Entidad</th><th>Publicación</th><th>PVP Oficial</th><th>Override</th><th>Tolerancia</th><th>Activo</th><th>Fecha Alta</th>
       </tr></thead>
       <tbody id="referencias-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="page-intel-mix" class="page">
+  <div class="section-hdr">Inteligencia Comercial — Mix (carga masiva)</div>
+  <p style="font-size:11px;color:var(--text3);margin:0 0 10px">Una línea por publicación: <code>SKU,link</code>. La Entidad se resuelve o se crea sola por Seller_ID — no hace falta cargarla a mano.</p>
+  <textarea id="mix-input" rows="8" placeholder="MONI-OFFICE-21.6IFHD,https://articulo.mercadolibre.com.ar/MLA-...&#10;OTRO-SKU,https://articulo.mercadolibre.com.ar/MLA-..." style="width:100%;max-width:700px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;resize:vertical"></textarea>
+  <div style="display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap">
+    <button class="btn primary" id="btn-mix-procesar" onclick="mixProcesar()">⚙ Procesar Mix</button>
+    <span id="mix-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div class="table-wrap" id="mix-table-wrap" style="display:none">
+    <table id="mix-table">
+      <thead><tr>
+        <th>SKU</th><th>Entidad</th><th>Precio Detectado</th><th>Rentabilidad</th><th>Estado</th><th>Detalle</th>
+      </tr></thead>
+      <tbody id="mix-tbody"></tbody>
     </table>
   </div>
 </div>
@@ -1270,135 +1114,20 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="pagination" id="ofertas-pag"></div>
   </div>
 </div>
-<!-- FRAVEGA API PAGE -->
-<div id="page-fravega-api" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
-    <div>
-      <div class="section-hdr" style="margin-bottom:4px">🔌 Fravega API — Seller Center</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Gestión directa de productos, precios, stock y órdenes</div>
-    </div>
-  </div>
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-title">🔑 Credenciales</div>
-    <p style="font-size:11px;color:var(--text2);margin:8px 0">Credenciales de <b>Catálogo e Inventario</b> (Seller Center)</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px">
-      <div class="field" style="margin:0"><label>Seller ID</label><input id="fvg-seller-id" placeholder="fravegasellerprod1266"></div>
-      <div class="field" style="margin:0"><label>API Key</label><input id="fvg-api-key" placeholder="API Key"></div>
-      <div class="field" style="margin:0"><label>API Token</label><input id="fvg-api-token" placeholder="API Token"></div>
-    </div>
-    <p style="font-size:11px;color:var(--text2);margin:12px 0 8px">Credenciales de <b>VTEX</b> (Pedidos y Facturación)</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="field" style="margin:0"><label>VTEX Key</label><input id="fvg-vtex-key" placeholder="vtexappkey-..."></div>
-      <div class="field" style="margin:0"><label>VTEX Token</label><input id="fvg-vtex-token" placeholder="VTEX Token"></div>
-    </div>
-    <div style="margin-top:10px;display:flex;gap:10px">
-      <button class="btn primary" onclick="fvgSaveCreds()">💾 Guardar credenciales</button>
-      <button class="btn" onclick="fvgTestCreds()">🧪 Probar conexión</button>
-    </div>
-    <div id="fvg-creds-status" style="margin-top:8px;font-size:13px"></div>
-  </div>
-  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-    <button class="btn" onclick="fvgTab('productos')" id="fvg-tab-productos">📦 Productos</button>
-    <button class="btn" onclick="fvgTab('precios')" id="fvg-tab-precios">💲 Precios</button>
-    <button class="btn" onclick="fvgTab('stock')" id="fvg-tab-stock">📊 Stock</button>
-    <button class="btn" onclick="fvgTab('ordenes')" id="fvg-tab-ordenes">🛒 Órdenes</button>
-    <button class="btn" onclick="fvgTab('facturacion')" id="fvg-tab-facturacion">🧾 Facturación</button>
-  </div>
-  <div id="fvg-section-productos">
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title">📦 Listar Productos</div>
-      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
-        <input id="fvg-prod-page" class="fi" placeholder="Página" style="width:120px" value="1">
-        <input id="fvg-prod-size" class="fi" placeholder="Tamaño (máx 100)" style="width:140px" value="20">
-        <button class="btn" onclick="fvgListProducts()">🔄 Cargar productos</button>
-      </div>
-      <div id="fvg-prod-result" style="margin-top:12px;overflow-x:auto"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">🔍 Buscar por RefID (SKU)</div>
-      <div style="display:flex;gap:10px;margin-top:10px">
-        <input id="fvg-refid-input" class="fi" placeholder="RefID / SKU" style="width:200px">
-        <button class="btn" onclick="fvgGetByRefId()">Buscar</button>
-      </div>
-      <div id="fvg-refid-result" style="margin-top:12px"></div>
-    </div>
-  </div>
-  <div id="fvg-section-precios" style="display:none">
-    <div class="card">
-      <div class="card-title">💲 Actualizar Precio por RefID</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
-        <div class="field" style="margin:0"><label>RefID / SKU</label><input id="fvg-price-refid" placeholder="Ej: TN1060COMP"></div>
-        <div class="field" style="margin:0"><label>Precio Tachado (list)</label><input id="fvg-price-list" placeholder="Ej: 15000"></div>
-        <div class="field" style="margin:0"><label>Precio Venta (sale)</label><input id="fvg-price-sale" placeholder="Ej: 12000"></div>
-        <button class="btn" onclick="fvgUpdatePrice()">✅ Actualizar</button>
-      </div>
-      <div id="fvg-price-result" style="margin-top:12px;font-size:13px"></div>
-    </div>
-    <div class="card" style="margin-top:12px">
-      <div class="card-title">💲 Actualizar Precios Masivo</div>
-      <p style="font-size:11px;color:var(--text2);margin:8px 0">Columnas: RefID, Precio Tachado, Precio Venta (separadas por tab)</p>
-      <textarea id="fvg-bulk-price" rows="6" placeholder="RefID&#9;PrecioTachado&#9;PrecioVenta&#10;TN1060COMP&#9;15000&#9;12000" style="width:100%;font-family:monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);margin-top:4px"></textarea>
-      <button class="btn" style="margin-top:10px" onclick="fvgBulkPrice()">⚡ Actualizar todos</button>
-      <div id="fvg-bulk-result" style="margin-top:12px;font-size:13px;max-height:200px;overflow-y:auto"></div>
-    </div>
-  </div>
-  <div id="fvg-section-stock" style="display:none">
-    <div class="card">
-      <div class="card-title">📊 Actualizar Stock por RefID</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:10px;align-items:end">
-        <div class="field" style="margin:0"><label>RefID / SKU</label><input id="fvg-stock-refid" placeholder="Ej: TN1060COMP"></div>
-        <div class="field" style="margin:0"><label>Cantidad</label><input id="fvg-stock-qty" placeholder="Ej: 10"></div>
-        <button class="btn" onclick="fvgUpdateStock()">✅ Actualizar</button>
-      </div>
-      <div id="fvg-stock-result" style="margin-top:12px;font-size:13px"></div>
-    </div>
-  </div>
-  <div id="fvg-section-ordenes" style="display:none">
-    <div class="card">
-      <div class="card-title">🛒 Consultar Órdenes</div>
-      <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap">
-        <input id="fvg-order-id" class="fi" placeholder="ID de orden" style="width:200px">
-        <button class="btn" onclick="fvgGetOrder()">🔍 Buscar orden</button>
-      </div>
-      <div id="fvg-order-result" style="margin-top:12px;overflow-x:auto"></div>
-    </div>
-  </div>
-  <div id="fvg-section-facturacion" style="display:none">
-    <div class="card">
-      <div class="card-title">🧾 Facturar Orden</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-        <div class="field" style="margin:0"><label>ID de Orden</label><input id="fvg-inv-order-id" placeholder="Ej: IIII-prueba"></div>
-        <div class="field" style="margin:0"><label>Número de Factura</label><input id="fvg-inv-number" placeholder="0005-00136332"></div>
-        <div class="field" style="margin:0"><label>Fecha (DD-MM-AAAA)</label><input id="fvg-inv-date" placeholder="16-05-2024"></div>
-        <div class="field" style="margin:0"><label>URL Factura</label><input id="fvg-inv-url" placeholder="https://..."></div>
-        <div class="field" style="margin:0"><label>Tracking (opcional)</label><input id="fvg-inv-tracking" placeholder="Nro. seguimiento"></div>
-        <div class="field" style="margin:0"><label>Courier (opcional)</label><input id="fvg-inv-courier" placeholder="Ej: OCA"></div>
-      </div>
-      <button class="btn" style="margin-top:12px" onclick="fvgInvoiceOrder()">🧾 Facturar</button>
-      <div id="fvg-inv-result" style="margin-top:12px;font-size:13px"></div>
-    </div>
-  </div>
-</div>
 <script>
 const S={
   mlToken:'',mlToken2:'',mlSellerId:'',mlSellerId2:'',sheetsKey:'',ecomCookie:'',ecomEmail:'',
   sheets:{pm1:{id:'',tab:'',name:'Matias'},pm2:{id:'',tab:'',name:'Veronica'},pm3:{id:'',tab:'',name:'Cristian'},pm4:{id:'',tab:'',name:'Laura'}},
-  pmData:{},ecomRows:[],pubData:[],mlPrices:{},tacticaRows:[],catData:{},fraveRows:[],webRows:[],
+  pmData:{},ecomRows:[],pubData:[],mlPrices:{},tacticaRows:[],catData:{},
   tolGreen:0.5,tolYellow:2,shippingThreshold:33000,shippingCost:8500,
-  ePage:1,mPage:1,tPage:1,wPage:1,cPage:1,pageSize:50,
-  eSort:{col:null,dir:1},mlSort:{col:null,dir:1},tSort:{col:null,dir:1},wSort:{col:null,dir:1},cSort:{col:null,dir:1},
+  ePage:1,mPage:1,tPage:1,cPage:1,pageSize:50,
+  eSort:{col:null,dir:1},mlSort:{col:null,dir:1},tSort:{col:null,dir:1},cSort:{col:null,dir:1},
 };
 const CATS_ID='1pog-ebeTNUkIaXHnTsYa5C6SfdFdH4-R-fQ7umIRefg';
 const TACTICA_ID='14g8uYut4uMdTs709wrHb6TLh_IG1DI1ygu053VXk_f8';
 const TACTICA_GID='841347258';
 const ECOM_PUB_ID='1Iudu2dwN1s8Bal5-fDusD844ox3ME56-dSPZWLG8NmE';
 const ECOM_PUB_GID='1078169413'; // gid actualizado - usar nombre de pestaña como fallback
-const WEB_WOO_ID='1szOjECuWvozUQSrEnugzat859XCf95zRHtVjce55l-U';
-const WEB_WOO_GID='74441620';
-const WEB_ECOM_ID='1iBjLqhtGFChzmT6KZnIVfgVOvbo1oUwu7MzxLXJsVXM';
-const WEB_ECOM_GID='549628677';
-const FRAVE_PUB_ID='1QnMqMfn6Yw6en2G3G8h2Nl2QYseDG-JsqI1J46CZLbQ';
-const FRAVE_PUB_GID='34864329';
 const CATS_TAB='GRAL CATEGORIAS';
 const RULES=[
   {key:'ML Unitario',pct:1.00},{key:'ML Unitario Sin Envio',pct:1.00},
@@ -1409,11 +1138,9 @@ const RULES=[
   {key:'ML Kit / Pack Premium -1%',pct:1.29},{key:'ML Kit / Pack Premium con Envio -1%',pct:1.29},
   {key:'3 Cuotas Mayorista',pct:1.15},{key:'6 Cuotas Mayorista',pct:1.25},
   {key:'9 Cuotas Mayorista',pct:1.35},{key:'12 Cuotas Mayorista',pct:1.50},
-  {key:'Precio Fravega',pct:1.00},{key:'Regla Fravega 3 Cuotas',pct:1.08},
-  {key:'Regla Fravega 6 Cuotas',pct:1.15},{key:'Regla Fravega 12 Cuotas',pct:1.215},
   {key:'Fijar Precio 1',pct:1.00},{key:'Fijar Precio 2',pct:1.00},
   {key:'Precios M',pct:1.00},{key:'Oferta Tradicional',pct:1.25},
-  {key:'Precio Oferta Picante',pct:1.00},{key:'Precio WooCommerce',pct:1.00}
+  {key:'Precio Oferta Picante',pct:1.00}
 ];
 const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#8b5cf6'];
 const API_KEY='AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
@@ -1476,9 +1203,6 @@ function goPage(page,el){
   if(page==='verificar-ml')renderML();
   if(page==='verificar-tactica')renderTactica();
   if(page==='rentabilidad-tactica'){tacRentInit();}
-  if(page==='verificar-web')renderWeb();   if(page==='verificador-pm')renderVerifPM();
-  if(page==='verificar-fravega')renderFrave();
-  if(page==='fravega-api'){fvgLoadCreds();fvgTab('productos');}
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
   if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
@@ -1803,202 +1527,6 @@ function renderTactica(){
 }
 function exportTacticaPrecios(){const data=getTacticaData().filter(r=>r.estado==='diff');if(!data.length){toast('Sin diferencias de precio','warning');return;}const lines=[['Codigo','Precio','Lista'].join(',')];data.forEach(r=>{[[r.dl1,1,r.pmL1,r.item.l1],[r.dl2,2,r.pmL2,r.item.l2],[r.dl3,3,r.pmL3,r.item.l3],[r.dl4,4,r.pmL4,r.item.l4],[r.dl5,5,r.pmL5,r.item.l5]].forEach(([diff,lista,pmVal,tacVal])=>{if((diff!==null&&Math.abs(diff)>1.5&&pmVal>0)||(pmVal>0&&tacVal===0)){lines.push([r.item.sku,pmVal,lista].join(','));}});});const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`tactica-precios-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast(`Exportado (${lines.length-1} filas)`);}
 function exportTacticaCostos(){const data=getTacticaData().filter(r=>(r.dcosto!==null&&Math.abs(r.dcosto)>1.5&&r.pmCosto>0)||(r.pmCosto>0&&r.item.costo===0));if(!data.length){toast('Sin diferencias de costo','warning');return;}const lines=[['Codigo','Precio','Lista'].join(',')];data.forEach(r=>lines.push([r.item.sku,r.pmCosto,1].join(',')));const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`tactica-costos-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast(`Exportado (${lines.length-1} filas)`);}
-
-// ── WEB MODULE (unified) ──
-
-// Cross-reference: merge woo rows with ecom pub rows by SKU
-function buildWebUnified(){
-  if(!S.webPubRows)S.webPubRows=[];
-  // Start with woo rows as base
-  const rows=S.webRows.map(item=>{
-    // Find matching ecom pub row for link and regla
-    const pub=S.webPubRows.find(r=>r.skuL===item.skuL);
-    return{
-      ...item,
-      link:pub?pub.link:'',
-      regla:pub?pub.regla:'',
-      pubEstado:pub?pub.estado:'',
-    };
-  });
-  // If no woo rows but we have pub rows, show those too (pub-only)
-  if(!rows.length&&S.webPubRows.length){
-    return S.webPubRows.map(p=>({
-      id:'',type:'',sku:p.sku,skuL:p.skuL,name:p.titulo||'',slug:'',
-      published:true,regular:p.precioActual,sale:0,stock:0,inStock:true,
-      categories:'',tags:'',l1:0,l2:0,l3:0,
-      _regular:null,_sale:null,_categories:null,_tags:null,
-      link:p.link,regla:p.regla,pubEstado:p.estado,
-    }));
-  }
-  return rows;
-}
-
-function getWebPmPrice(item){const pm=S.pmData[item.skuL]||null;return pm?pm.web:0;}
-function getWebPmCat(item){return getCatLabel(item.skuL)||'';}
-function webCatMatches(webCats,pmCatLabel){
-  if(!pmCatLabel||!webCats)return null;
-  const wl=webCats.toLowerCase();
-  const parts=pmCatLabel.toLowerCase().split('>').map(s=>s.trim()).filter(Boolean);
-  return parts.some(p=>p.length>2&&wl.includes(p));
-}
-
-function getWebData(){
-  const srch=(qs('web-search')?.value||'').toLowerCase();
-  const fE=qs('web-filter-estado')?.value||'';
-  const fP=qs('web-filter-pub')?.value||'';
-  return buildWebUnified().map(item=>{
-    const pmPrice=getWebPmPrice(item);
-    const pm=S.pmData[item.skuL]||null;
-    const actualReg=item._regular!==null?item._regular:item.regular;
-    const diff=dPct(actualReg,pmPrice);
-    const hasDiff=diff!==null&&Math.abs(diff)>S.tolYellow||(pm&&pm.web>0&&!actualReg);
-    const editTags=item._tags!==null?item._tags:item.tags;
-    const cuotasAlert=hasCuotasTag(editTags)||hasCuotasTag(item.regla);
-    const cuotasExpected=pmPrice>0?Math.round(pmPrice*getCuotasPct()):null;
-    const estado=!pm?'nopm':hasDiff?'diff':'ok';
-    const editSale=item._sale!==null?item._sale:item.sale;
-    return{...item,pmPrice,pm,diff,estado,cuotasAlert,cuotasExpected,
-      editRegular:item._regular!==null?item._regular:item.regular,
-      editSale:editSale,saleNum:editSale||0,
-      editCats:item._categories!==null?item._categories:item.categories,
-      editTags,pmCat:getWebPmCat(item),
-    };
-  }).filter(r=>{
-    if(srch&&!r.skuL.includes(srch)&&!r.name.toLowerCase().includes(srch)&&
-       !(r.editCats||'').toLowerCase().includes(srch)&&
-       !(r.editTags||'').toLowerCase().includes(srch))return false;
-    if(fE==='diff'&&r.estado!=='diff')return false;
-    if(fE==='ok'&&r.estado!=='ok')return false;
-    if(fE==='nopm'&&r.estado!=='nopm')return false;
-    if(fE==='cuotas'&&!r.cuotasAlert)return false;
-    if(fE==='offstock'&&r.stock>0)return false;
-    if(fP==='1'&&!r.published)return false;
-    if(fP==='0'&&r.published)return false;
-    return true;
-  });
-}
-function renderWeb(){
-  const unified=buildWebUnified();
-  if(!unified.length)return;
-  qs('web-stats-wrap').style.display='block';
-  const all=unified.map(item=>{
-    const pmP=getWebPmPrice(item);
-    const r2=item._regular!==null?item._regular:item.regular;
-    const d=dPct(r2,pmP);
-    const hd=d!==null&&Math.abs(d)>S.tolYellow||(S.pmData[item.skuL]&&pmP>0&&!r2);
-    const pm=S.pmData[item.skuL]||null;
-    return !pm?'nopm':hd?'diff':'ok';
-  });
-  qs('ws-total').textContent=unified.length;
-  qs('ws-ok').textContent=all.filter(s=>s==='ok').length;
-  qs('ws-diff').textContent=all.filter(s=>s==='diff').length;
-  qs('ws-nopm').textContent=all.filter(s=>s==='nopm').length;
-  qs('ws-pub').textContent=unified.filter(r=>r.published).length;
-  const allData=getWebData();
-  qs('ws-cuotas-warn').textContent=allData.filter(r=>r.cuotasAlert).length;
-
-  // Update csv info
-  const parts=[];
-  if(S.webRows.length)parts.push(S.webRows.length+' WooCommerce');
-  if(S.webPubRows.length)parts.push(S.webPubRows.length+' Ecom Web');
-  if(parts.length)qs('web-csv-info').textContent=parts.join(' · ')+' cargados';
-
-  let data=allData;
-  if(S.wSort.col){const col=S.wSort.col,dir=S.wSort.dir;data=[...data].sort((a,b)=>{
-    const va=col==='sku'?a.skuL:col==='name'?a.name:col==='regular'?a.editRegular:col==='sale'?a.editSale||0:col==='pmPrice'?a.pmPrice||0:col==='diff'?Math.abs(a.diff||0):col==='categories'?a.editCats:col==='tags'?a.editTags:col==='pmCat'?a.pmCat:col==='regla'?a.regla:col==='stock'?a.stock:col==='published'?a.published?1:0:col==='l2'?a.l2||0:col==='l3'?a.l3||0:a.estado;
-    const vb=col==='sku'?b.skuL:col==='name'?b.name:col==='regular'?b.editRegular:col==='sale'?b.editSale||0:col==='pmPrice'?b.pmPrice||0:col==='diff'?Math.abs(b.diff||0):col==='categories'?b.editCats:col==='tags'?b.editTags:col==='pmCat'?b.pmCat:col==='regla'?b.regla:col==='stock'?b.stock:col==='published'?b.published?1:0:col==='l2'?b.l2||0:col==='l3'?b.l3||0:b.estado;
-    return va<vb?-dir:va>vb?dir:0;
-  });}
-  document.querySelectorAll('#web-table th[data-col]').forEach(th=>{th.classList.remove('sort-asc','sort-desc');if(th.dataset.col===S.wSort.col)th.classList.add(S.wSort.dir===1?'sort-asc':'sort-desc');});
-  const pages=Math.ceil(data.length/S.pageSize)||1;S.wPage=Math.min(S.wPage,pages);
-  const page=data.slice((S.wPage-1)*S.pageSize,S.wPage*S.pageSize);
-  const tbody=qs('web-tbody');
-  if(!page.length){tbody.innerHTML='<tr><td colspan="16" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';renderPag('web-pag',0,0,'wPage','renderWeb');return;}
-
-  const ES='background:rgba(0,157,188,0.08);border:1px solid rgba(0,157,188,0.25);border-radius:4px;padding:3px 6px;color:var(--text);font-size:10px;font-family:DM Mono,monospace;width:100%;box-sizing:border-box;outline:none;';
-
-  tbody.innerHTML=page.map(r=>{
-    const badge=r.estado==='ok'?'<span class="badge badge-green">OK</span>':r.estado==='diff'?'<span class="badge badge-red">Difiere</span>':'<span class="badge badge-gray">Sin PM</span>';
-    const pubBadge=r.published?'<span class="badge badge-green">Pub.</span>':'<span class="badge badge-gray">No pub.</span>';
-    const stockBadge=r.stock>0?`<span class="badge badge-blue">${r.stock}</span>`:'<span class="badge badge-red">0</span>';
-    const diffStr=r.diff!==null?`<span class="${Math.abs(r.diff)<=S.tolGreen?'price-ok':Math.abs(r.diff)<=S.tolYellow?'price-warn':'price-bad'}">${r.diff>0?'+':''}${r.diff.toFixed(1)}%</span>`:'<span style="color:var(--text3)">—</span>';
-    const ofertaPct=r.editRegular>0&&r.saleNum>0?((r.editRegular-r.saleNum)/r.editRegular*100).toFixed(0)+'%':'—';
-    const changed=r._regular!==null||r._sale!==null||r._categories!==null||r._tags!==null;
-    const dot=changed?'<span style="width:6px;height:6px;background:var(--accent3);border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle"></span>':'';
-    // PM cell with igualar button + cuotas alert
-    const pmCell=r.pmPrice
-      ?`<div style="display:flex;gap:4px;align-items:center">
-          <span class="mono" style="font-size:10px;color:var(--accent)">$${fmtN(r.pmPrice)}</span>
-          <button class="btn-xs" onclick="webIgualar('${r.sku}')" title="Igualar al PM">&#8657;</button>
-        </div>${r.cuotasAlert&&r.cuotasExpected?`<div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:2px 6px;font-size:9px;color:var(--accent3);font-family:DM Mono,monospace;white-space:nowrap;margin-top:2px">&#9888; 12c: $${fmtN(r.cuotasExpected)} <button class="btn-xs" onclick="webIgualarCuotas('${r.sku}')" style="font-size:8px;padding:1px 5px;border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.15);color:var(--accent3)">&#8657;</button></div>`:''}`
-      :'<span style="color:var(--text3);font-size:9px">Sin PM</span>';
-    const catMatch=webCatMatches(r.editCats,r.pmCat);
-    const catPmCell=r.pmCat?`<span style="font-size:9px;font-family:DM Mono,monospace;white-space:nowrap;color:${catMatch===true?'var(--green)':catMatch===false?'var(--accent3)':'var(--text2)'}">${r.pmCat}</span>`:'<span style="color:var(--text3);font-size:9px">—</span>';
-    const reglaCell=r.regla?`<span style="font-size:9px;font-family:DM Mono,monospace;color:${hasCuotasTag(r.regla)?'var(--accent3)':'var(--text2)'}">${r.regla}</span>`:'<span style="color:var(--text3);font-size:9px">—</span>';
-    return`<tr style="${r.cuotasAlert?'border-left:2px solid rgba(245,158,11,0.5);':''}${changed?'background:rgba(245,158,11,0.04)':''}">
-      <td class="sku-cell">${dot}${r.sku}</td>
-      <td style="font-size:10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
-      <td><div style="display:flex;gap:4px;align-items:center">
-        <input style="${ES}width:80px;" type="number" value="${r.editRegular||''}" data-sku="${r.sku}" data-field="regular" onchange="webEdit(this)" placeholder="$">
-        <span style="font-size:9px">${badge}</span>
-      </div></td>
-      <td><input style="${ES}" type="number" value="${r.saleNum||''}" data-sku="${r.sku}" data-field="sale" onchange="webEdit(this)" placeholder="$"></td>
-      <td style="font-size:10px;text-align:center;color:var(--text2)">${ofertaPct}</td>
-      <td>${pmCell}</td>
-      <td>${catPmCell}</td>
-      <td>${diffStr}</td>
-      <td>${reglaCell}</td>
-      <td><input style="${ES}" type="text" value="${(r.editCats||'').replace(/"/g,'')}" data-sku="${r.sku}" data-field="categories" onchange="webEdit(this)" placeholder="Cat1, Cat2..."></td>
-      <td><input style="${ES}" type="text" value="${(r.editTags||'').replace(/"/g,'')}" data-sku="${r.sku}" data-field="tags" onchange="webEdit(this)" placeholder="tag1, tag2..."></td>
-      <td class="mono" style="font-size:10px;color:var(--text2)">${r.l2?'$'+fmtN(r.l2):'-'}</td>
-      <td class="mono" style="font-size:10px;color:var(--text2)">${r.l3?'$'+fmtN(r.l3):'-'}</td>
-      <td>${stockBadge}</td>
-      <td>${pubBadge}</td>
-      <td>${r.link?`<a href="${r.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver &#8594;</a>`:'<span style="color:var(--text3);font-size:9px">—</span>'}</td>
-    </tr>`;
-  }).join('');
-  renderPag('web-pag',pages,data.length,'wPage','renderWeb');
-}
-
-function webEdit(input){
-  const sku=input.dataset.sku;const field=input.dataset.field;const val=input.value.trim();
-  const item=S.webRows.find(r=>r.sku===sku);if(!item)return;
-  if(field==='regular'){const n=parseFloat(val)||0;item._regular=n!==item.regular?n:null;}
-  else if(field==='sale'){const n=parseFloat(val)||0;item._sale=n!==item.sale?n:null;}
-  else if(field==='categories'){item._categories=val!==item.categories?val:null;}
-  else if(field==='tags'){item._tags=val!==item.tags?val:null;}
-  const row=input.closest('tr');if(!row)return;
-  const changed=item._regular!==null||item._sale!==null||item._categories!==null||item._tags!==null;
-  row.style.background=changed?'rgba(245,158,11,0.04)':'';
-  const reg=parseFloat(row.querySelector('[data-field="regular"]').value)||0;
-  const sal=parseFloat(row.querySelector('[data-field="sale"]').value)||0;
-  const cells=[...row.querySelectorAll('td')];
-  if(cells[4])cells[4].textContent=reg>0&&sal>0?((reg-sal)/reg*100).toFixed(0)+'%':'—';
-}
-function webIgualar(sku){const item=S.webRows.find(r=>r.sku===sku);if(!item)return;const pm=S.pmData[item.skuL];if(!pm||!pm.web)return;item._regular=pm.web;toast('Igualado a PM Web: $'+fmtN(pm.web));renderWeb();}
-function webIgualarCuotas(sku){const item=S.webRows.find(r=>r.sku===sku);if(!item)return;const pm=S.pmData[item.skuL];if(!pm||!pm.web)return;const p=Math.round(pm.web*getCuotasPct());item._regular=p;toast('Precio 12 cuotas: $'+fmtN(p));renderWeb();}
-function webResetChanges(){S.webRows.forEach(r=>{r._regular=null;r._sale=null;r._categories=null;r._tags=null;});toast('Cambios descartados');renderWeb();}
-
-function exportWeb(){
-  const allData=getWebData();if(!allData.length){toast('Sin datos','error');return;}
-  const changed=allData.filter(r=>r._regular!==null||r._sale!==null||r._categories!==null||r._tags!==null);
-  const exportData=changed.length>0?changed:allData;
-  const headers=['ID','SKU','Regular price','Sale price','Categories','Tags'];
-  const lines=[headers.join(',')];
-  exportData.forEach(r=>{
-    const reg=r._regular!==null?r._regular:r.regular;
-    const sal=r._sale!==null?r._sale:(r.sale||'');
-    const cats=r._categories!==null?r._categories:r.categories;
-    const tags=r._tags!==null?r._tags:r.tags;
-    lines.push([r.id,r.sku,reg||'',sal||'','"'+(cats||'').replace(/"/g,'""')+'"','"'+(tags||'').replace(/"/g,'""')+'"'].join(','));
-  });
-  const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='woo-import-'+(changed.length>0?changed.length+'-cambios':exportData.length+'-productos')+'-'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click();
-  toast(changed.length>0?'Exportados '+changed.length+' con cambios':'Exportados '+exportData.length);
-}
-
 // ── SHEETS LOADERS ──
 
 async function loadEcomSheets(){
@@ -2066,349 +1594,6 @@ async function loadMLSheets(){
   }catch(e){status.className='conn-status err';status.textContent='Error';toast('Error ML: '+e.message,'error');}
   btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
 }
-
-async function loadWooSheets(){
-  const btn=qs('btn-load-woo-sheets'),status=qs('woo-sheets-status');
-  btn.disabled=true;btn.textContent='⏳ Cargando...';
-  status.className='conn-status idle';status.textContent='Conectando...';
-  try{
-    const{values}=await fetchSheetByGid(WEB_WOO_ID,WEB_WOO_GID,'A1:BZ3000');
-    if(!values||values.length<2)throw new Error('Sin datos');
-    const hdrIdx=findHdrRow(values,['sku','type','regular price','published']);
-    const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
-    const hm=hdrMap(hdrs);
-    function v(row,i){return i>=0&&i<row.length?String(row[i]||'').trim():'';}
-    const iID=findCol(hm,['ID']);const iType=findCol(hm,['Type']);const iSKU=findCol(hm,['SKU']);
-    const iName=findCol(hm,['Name']);const iSlug=findCol(hm,['Slug']);
-    const iPub=findCol(hm,['Published']);const iReg=findCol(hm,['Regular price']);
-    const iSale=findCol(hm,['Sale price']);const iStock=findCol(hm,['Stock']);
-    const iInStock=findCol(hm,["In stock?"]);const iCats=findCol(hm,['Categories']);
-    const iTags=findCol(hm,['Tags']);
-    const iL1=findCol(hm,['Meta: _wcgm_lista1_price']);
-    const iL2=findCol(hm,['Meta: _wcgm_lista2_price']);
-    const iL3=findCol(hm,['Meta: _wcgm_lista3_price']);
-    S.webRows=values.slice(hdrIdx+1).filter(row=>{const t=v(row,iType);return t==='variation'||t==='simple';}).map(row=>({
-      id:v(row,iID),type:v(row,iType),sku:v(row,iSKU),skuL:normSku(v(row,iSKU)),
-      name:v(row,iName),slug:v(row,iSlug),published:v(row,iPub)==='1',
-      regular:parseNum(v(row,iReg)),sale:parseNum(v(row,iSale)),
-      stock:parseInt(v(row,iStock))||0,inStock:v(row,iInStock)==='1',
-      categories:v(row,iCats),tags:(v(row,iTags)||'').replace(/\|/g,','),
-      l1:parseNum(v(row,iL1)),l2:parseNum(v(row,iL2)),l3:parseNum(v(row,iL3)),
-      _regular:null,_sale:null,_categories:null,_tags:null,
-    }));
-    qs('web-csv-info').textContent=S.webRows.length+' SKUs WooCommerce cargados';
-    qs('web-stats-wrap').style.display='block';
-    status.className='conn-status ok';status.textContent=S.webRows.length+' SKUs';
-    toast(S.webRows.length+' productos Web');renderWeb();
-  }catch(e){status.className='conn-status err';status.textContent='Error';toast('Error WooCommerce: '+e.message,'error');}
-  btn.disabled=false;btn.textContent='🔄 WooCommerce';
-}
-
-async function loadWebPubSheets(){
-  const btn=qs('btn-load-webpub-sheets'),status=qs('webpub-sheets-status');
-  btn.disabled=true;btn.textContent='⏳ Cargando...';
-  status.className='conn-status idle';status.textContent='Conectando...';
-  try{
-    const{values}=await fetchSheetByGid(WEB_ECOM_ID,WEB_ECOM_GID,'A1:Z3000');
-    if(!values||values.length<2)throw new Error('Sin datos');
-    const hdrIdx=findHdrRow(values,['sku','precio','regla','link']);
-    const hdrs=values[hdrIdx].map(h=>String(h||'').trim());
-    const hm=hdrMap(hdrs);
-    const iSku=findCol(hm,['SKU asociado','sku asociado','SKU','sku']);
-    const iPrecio=findCol(hm,['Precio','precio']);
-    const iRegla=findCol(hm,['Regla de Precio','regla de precio','Regla']);
-    const iTitulo=findCol(hm,['Titulo','Título','titulo']);
-    const iLink=findCol(hm,['Link','link']);
-    const iEstado=findCol(hm,['Estado','estado']);
-    S.webPubRows=[];
-    values.slice(hdrIdx+1).forEach(row=>{
-      const sku=String(row[iSku>=0?iSku:0]||'').trim();if(!sku)return;
-      S.webPubRows.push({sku,skuL:normSku(sku),
-        titulo:String(row[iTitulo>=0?iTitulo:1]||'').trim(),
-        regla:String(row[iRegla>=0?iRegla:2]||'').trim(),
-        precioActual:parseNum(String(row[iPrecio>=0?iPrecio:3]||'')),
-        link:String(row[iLink>=0?iLink:4]||'').trim(),
-        estado:String(row[iEstado>=0?iEstado:5]||'').trim(),
-      });
-    });
-    qs('webpub-csv-info')&&(qs('webpub-csv-info').textContent=S.webPubRows.length+' pubs cargadas');
-    qs('web-csv-info')&&(qs('web-csv-info').textContent=(S.webRows.length?S.webRows.length+' WooCommerce · ':'')+S.webPubRows.length+' Ecom Web');
-    if(S.webRows.length||S.webPubRows.length)qs('web-stats-wrap').style.display='block';
-    status.className='conn-status ok';status.textContent=S.webPubRows.length+' pubs';
-    toast(S.webPubRows.length+' pubs Ecom Web');renderWeb();
-  }catch(e){status.className='conn-status err';status.textContent='Error';toast('Error Pub Web: '+e.message,'error');}
-  btn.disabled=false;btn.textContent='🔄 Publicaciones Web';
-}
-
-async function loadFraveSheets(){
-  const btn=qs('btn-load-frave-sheets'),status=qs('frave-sheets-status');
-  btn.disabled=true;btn.textContent='⏳ Cargando...';
-  status.className='conn-status idle';status.textContent='Conectando...';
-  try{
-    const rows2=await fetchSheet(FRAVE_PUB_ID,'Worksheet!A1:N3000');const values=rows2;
-    if(!values||values.length<2)throw new Error('Sin datos');
-    _parseFraveRows(values);
-    status.className='conn-status ok';status.textContent=S.fraveRows.length+' pubs';
-  }catch(e){status.className='conn-status err';status.textContent='Error';toast('Error Fravega: '+e.message,'error');}
-  btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
-}
-
-// ── FRAVEGA MODULE ──
-function processFraveCSV(file){
-  // If called with text (legacy), handle it; if File object, use SheetJS
-  if(typeof file === 'string'){
-    _parseFraveText(file);
-    return;
-  }
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      // Try SheetJS for XLSX
-      if(typeof XLSX!=='undefined'){
-        const wb=XLSX.read(e.target.result,{type:'array'});
-        const ws=wb.Sheets[wb.SheetNames[0]];
-        const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-        _parseFraveRows(raw);
-      } else {
-        // Fallback: read as text
-        const text=new TextDecoder('utf-8').decode(new Uint8Array(e.target.result));
-        _parseFraveText(text);
-      }
-    }catch(err){
-      // Fallback to text
-      const text=new TextDecoder('utf-8').decode(new Uint8Array(e.target.result));
-      _parseFraveText(text);
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function _extractFraveSku(link){
-  if(!link)return'';
-  // Extract SKU variante: between /p/ and the last -DIGITS
-  const m=String(link).match(/\/p\/(.+)-\d{5,}(?:[/?#]|$)/);
-  if(m&&m[1])return m[1].trim();
-  // Fallback: between /p/ and last hyphen+digits
-  const m2=String(link).match(/\/p\/([^?#]+)/);
-  if(m2&&m2[1]){
-    const s=m2[1].replace(/\/$/, '');
-    const lastDash=s.lastIndexOf('-');
-    if(lastDash>0&&/^\d+$/.test(s.slice(lastDash+1)))return s.slice(0,lastDash).trim();
-    return s.trim();
-  }
-  return'';
-}
-
-function _parseFraveRows(raw){
-  // Find header row (contains 'SKU asociado' or 'Titulo')
-  let hdrIdx=0;
-  for(let i=0;i<Math.min(5,raw.length);i++){
-    const r=raw[i].map(c=>String(c||'').toLowerCase());
-    if(r.some(c=>c.includes('sku')||c.includes('titulo')||c.includes('precio'))){hdrIdx=i;break;}
-  }
-  const hdrs=raw[hdrIdx].map(c=>String(c||'').trim());
-  const fi=name=>hdrs.findIndex(h=>h.toLowerCase().includes(name.toLowerCase()));
-  const iSku=fi('SKU asociado');
-  const iTitulo=fi('Titulo');
-  const iTituloArt=fi('Título Artículo');
-  const iPrecio=fi('Precio');
-  const iLink=fi('Link');
-  const iRegla=fi('Regla de Precio');
-  const iEstado=fi('Estado');
-  const iStock=fi('Cantidad');
-  S.fraveRows=[];
-  raw.slice(hdrIdx+1).forEach(row=>{
-    const skuMadre=String(row[iSku>=0?iSku:7]||'').trim();
-    const link=String(row[iLink>=0?iLink:9]||'').trim();
-    const skuVariante=_extractFraveSku(link)||skuMadre;
-    if(!skuVariante&&!skuMadre)return;
-    const titulo=String(row[iTituloArt>=0?iTituloArt:(iTitulo>=0?iTitulo:2)]||'').trim();
-    const regla=String(row[iRegla>=0?iRegla:10]||'').trim();
-    const precio=parseNum(String(row[iPrecio>=0?iPrecio:4]||''));
-    const estado=String(row[iEstado>=0?iEstado:6]||'').trim();
-    const stock=parseInt(String(row[iStock>=0?iStock:5]||''))||0;
-    if(!precio&&!skuVariante)return;
-    S.fraveRows.push({
-      sku:skuVariante,skuL:normSku(skuVariante),
-      skuMadre,titulo,regla,
-      precioActual:precio,link,estado,stock,
-    });
-  });
-  _finishFraveLoad();
-}
-
-function _parseFraveText(text){
-  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
-  if(lines.length<2){toast('Archivo muy corto','error');return;}
-  const l0=lines[0]||'';
-  let sep=',';
-  if(l0.split(';').length>l0.split(',').length)sep=';';
-  function splitL(line){const r=[];let cur='',q=false;for(const c of line){if(c==='"'){q=!q;}else if(c===sep&&!q){r.push(cur.trim());cur='';}else cur+=c;}r.push(cur.trim());return r.map(v=>v.replace(/^"|"$/g,'').trim());}
-  // Find header row (skip Estado/Activo filter row)
-  let hdrLine=0;
-  for(let i=0;i<Math.min(4,lines.length);i++){
-    const cols=splitL(lines[i]);
-    if(cols.some(c=>c.toLowerCase().includes('sku')||c.toLowerCase().includes('precio'))){hdrLine=i;break;}
-  }
-  const hdrs=splitL(lines[hdrLine]);
-  const fi=name=>hdrs.findIndex(h=>h.toLowerCase().includes(name.toLowerCase()));
-  const iSku=fi('sku asociado');
-  const iTitArt=fi('título artículo');const iTit=fi('titulo');
-  const iPrecio=fi('precio');const iLink=fi('link');
-  const iRegla=fi('regla de precio');const iEstado=fi('estado');const iStock=fi('cantidad');
-  S.fraveRows=[];
-  lines.slice(hdrLine+1).forEach(line=>{
-    const v=splitL(line);
-    const skuMadre=(v[iSku>=0?iSku:7]||'').trim();
-    const link=(v[iLink>=0?iLink:9]||'').trim();
-    const skuVariante=_extractFraveSku(link)||skuMadre;
-    if(!skuVariante)return;
-    S.fraveRows.push({
-      sku:skuVariante,skuL:normSku(skuVariante),skuMadre,
-      titulo:(v[iTitArt>=0?iTitArt:(iTit>=0?iTit:2)]||'').trim(),
-      regla:(v[iRegla>=0?iRegla:10]||'').trim(),
-      precioActual:parseNum(v[iPrecio>=0?iPrecio:4]),
-      link,estado:(v[iEstado>=0?iEstado:6]||'').trim(),
-      stock:parseInt(v[iStock>=0?iStock:5])||0,
-    });
-  });
-  _finishFraveLoad();
-}
-
-function _finishFraveLoad(){
-  const reglas=[...new Set(S.fraveRows.map(r=>r.regla).filter(Boolean))].sort();
-  const sel=qs('frave-filter-regla');
-  if(sel){sel.innerHTML='<option value="">Todas las reglas</option>';reglas.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o);});}
-  qs('frave-csv-info').textContent=S.fraveRows.length+' publicaciones cargadas';
-  qs('frave-stats-wrap').style.display='block';
-  const pmConectados=Object.entries(S.sheets).filter(e=>e[1].id).map(e=>e[1].name);
-  qs('frave-pm-status').innerHTML=pmConectados.length?`<span style="color:var(--green)">✓ PMs: ${pmConectados.join(', ')}</span>`:`<span style="color:var(--yellow)">⚠ Conectá PMs en Verificar Ecom</span>`;
-  toast(S.fraveRows.length+' publicaciones Fravega');
-  renderFrave();
-}
-function getWebPubRulePct(regla){
-  if(!regla)return 1;
-  const r=RULES.find(x=>x.key.toLowerCase()===regla.toLowerCase());
-  if(r)return r.pct;
-  const rf=RULES.find(x=>regla.toLowerCase().includes(x.key.toLowerCase())||x.key.toLowerCase().includes(regla.toLowerCase()));
-  return rf?rf.pct:1;
-}
-function buildFraveRow(item){
-  const pm=S.pmData[item.skuL]||null;
-  const base=pm?pm.frave:0;
-  const pct=getWebPubRulePct(item.regla);
-  const esperado=base>0?Math.round(base*pct):null;
-  const diff=esperado&&item.precioActual?(item.precioActual-esperado)/esperado*100:null;
-  const isPaused=item.estado&&item.estado.toLowerCase().includes('paus');
-  const st=!pm||!base?'nopm':!esperado?'nopm':Math.abs(diff||0)<=S.tolGreen?'ok':Math.abs(diff||0)<=S.tolYellow?'warn':'bad';
-  return{...item,pm,base,pct,esperado,diff,st,isPaused};
-}
-
-function getFraveData(){
-  const srch=(qs('frave-search')?.value||'').toLowerCase();
-  const fE=qs('frave-filter-estado')?.value||'';
-  const fR=qs('frave-filter-regla')?.value||'';
-  return(S.fraveRows||[]).map(buildFraveRow).filter(r=>{
-    if(srch&&!r.skuL.includes(srch)&&!r.titulo.toLowerCase().includes(srch))return false;
-    if(fR&&r.regla!==fR)return false;
-    if(fE==='paused'&&!r.isPaused)return false;
-    else if(fE&&fE!=='paused'&&r.st!==fE)return false;
-    return true;
-  });
-}
-
-function renderFrave(){
-  const allRows=(S.fraveRows||[]).map(buildFraveRow);
-  qs('fs-total').textContent=allRows.length;
-  qs('fs-ok').textContent=allRows.filter(r=>r.st==='ok').length;
-  qs('fs-diff').textContent=allRows.filter(r=>r.st==='bad').length;
-  qs('fs-nopm').textContent=allRows.filter(r=>r.st==='nopm').length;
-  qs('fs-paused').textContent=allRows.filter(r=>r.isPaused).length;
-  let data=getFraveData();
-  if(!S.fSort)S.fSort={col:null,dir:1};
-  if(S.fSort.col){const col=S.fSort.col,dir=S.fSort.dir;data=[...data].sort((a,b)=>{
-    const va=col==='sku'?a.skuL:col==='titulo'?a.titulo:col==='regla'?a.regla:col==='pm'?a.pm?.pmName||'':col==='base'?a.base||0:col==='esperado'?a.esperado||0:col==='actual'?a.precioActual:col==='diff'?Math.abs(a.diff||0):col==='stock'?a.stock:a.st;
-    const vb=col==='sku'?b.skuL:col==='titulo'?b.titulo:col==='regla'?b.regla:col==='pm'?b.pm?.pmName||'':col==='base'?b.base||0:col==='esperado'?b.esperado||0:col==='actual'?b.precioActual:col==='diff'?Math.abs(b.diff||0):col==='stock'?b.stock:b.st;
-    return va<vb?-dir:va>vb?dir:0;
-  });}
-  document.querySelectorAll('#frave-table th[data-col]').forEach(th=>{th.classList.remove('sort-asc','sort-desc');if(th.dataset.col===S.fSort.col)th.classList.add(S.fSort.dir===1?'sort-asc':'sort-desc');});
-  const pages=Math.ceil(data.length/S.pageSize)||1;
-  if(!S.fPage)S.fPage=1;S.fPage=Math.min(S.fPage,pages);
-  const page=data.slice((S.fPage-1)*S.pageSize,S.fPage*S.pageSize);
-  const tbody=qs('frave-tbody');
-  if(!page.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';return;}
-  const badges={ok:'<span class="badge badge-green">OK</span>',warn:'<span class="badge badge-yellow">Tolerancia</span>',bad:'<span class="badge badge-red">Difiere</span>',nopm:'<span class="badge badge-gray">Sin PM</span>'};
-  tbody.innerHTML=page.map(r=>{
-    const diffStr=r.diff!==null?`<span class="${Math.abs(r.diff)<=S.tolGreen?'price-ok':Math.abs(r.diff)<=S.tolYellow?'price-warn':'price-bad'}">${r.diff>0?'+':''}${r.diff.toFixed(1)}%</span>`:'<span style="color:var(--text3)">—</span>';
-    const estadoBadge=r.isPaused?'<span class="badge badge-yellow">Pausado</span>':'<span class="badge badge-green">Activo</span>';
-    const accion=`<div style="display:flex;gap:4px;align-items:center">
-      <input class="edit-inp frave-new-price" data-sku="${r.sku}" placeholder="Nuevo $" style="width:80px">
-      <button class="btn-xs frave-fix-btn" data-sku="${r.sku}" title="Corregir vía Ecom">✓</button>
-    </div>`;
-    return`<tr>
-      <td class="sku-cell">${r.sku}</td>
-      <td style="font-size:10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.titulo}">${r.titulo||'-'}</td>
-      <td style="font-size:9px;color:var(--text2);font-family:DM Mono,monospace">${r.regla||'-'}</td>
-      <td style="font-size:10px;color:var(--accent)">${r.pm?r.pm.pmName:'-'}</td>
-      <td class="mono" style="font-size:10px">${r.base?'$'+fmtN(r.base):'-'}</td>
-      <td class="mono price-ok" style="font-size:10px">${r.esperado?'$'+fmtN(r.esperado):'-'}</td>
-      <td class="mono" style="font-size:10px;font-weight:700">${r.precioActual?'$'+fmtN(r.precioActual):'-'}</td>
-      <td>${diffStr}</td>
-      <td class="mono" style="font-size:10px">${r.stock||'-'}</td>
-      <td>${badges[r.st]||''} ${estadoBadge}</td>
-      <td>${r.link?`<a href="${r.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'<span style="color:var(--text3);font-size:9px">—</span>'}</td>
-      <td>${accion}</td>
-    </tr>`;
-  }).join('');
-  tbody.querySelectorAll('.frave-fix-btn').forEach(btn=>{btn.addEventListener('click',async()=>{
-    const sku=btn.dataset.sku;const inp=btn.closest('td').querySelector('.frave-new-price');
-    const newPrice=parseNum(inp.value);const row=buildFraveRow(S.fraveRows.find(r=>r.sku===sku)||{});
-    const price=newPrice||row.esperado;if(!price){toast('Sin precio para corregir','error');return;}
-    if(!S.ecomCookie){toast('Conectá Ecom primero','error');return;}
-    try{
-      const d=await ecomUpd(sku,price,'Fravega','',0);
-      if(d&&d.success){const item=S.fraveRows.find(r=>r.sku===sku);if(item)item.precioActual=price;toast('Fravega: '+sku+' → $'+fmtN(price));}
-      else throw new Error(JSON.stringify(d));
-    }catch(e){toast('Error: '+e.message,'error');}
-    inp.value='';renderFrave();
-  });});
-  // Pagination
-  const pag=qs('frave-pag');if(!pag)return;
-  if(pages<=1){pag.innerHTML='';return;}
-  let html=`<span class="page-info-txt">${data.length} resultados</span>`;
-  if(S.fPage>1)html+=`<button class="page-btn" onclick="S.fPage=${S.fPage-1};renderFrave()">‹</button>`;
-  for(let i=Math.max(1,S.fPage-2);i<=Math.min(pages,S.fPage+2);i++)html+=`<button class="page-btn${i===S.fPage?' active':''}" onclick="S.fPage=${i};renderFrave()">${i}</button>`;
-  if(S.fPage<pages)html+=`<button class="page-btn" onclick="S.fPage=${S.fPage+1};renderFrave()">›</button>`;
-  pag.innerHTML=html;
-}
-
-async function fixAllFrave(){
-  if(!S.ecomCookie){toast('Conectá Ecom primero','error');return;}
-  const rows=getFraveData().filter(r=>r.st==='bad'||r.st==='warn');
-  if(!rows.length){toast('Sin diferencias','warning');return;}
-  const btn=qs('btn-fix-frave-all');btn.disabled=true;btn.textContent='Corrigiendo...';
-  qs('frave-progress-wrap').style.display='block';const log=qs('frave-fix-log');log.innerHTML='';
-  let ok=0,err=0;
-  for(const r of rows){
-    if(!r.esperado)continue;
-    try{
-      const d=await ecomUpd(r.sku,r.esperado,'Fravega','',0);
-      if(d&&d.success){ok++;const item=S.fraveRows.find(x=>x.sku===r.sku);if(item)item.precioActual=r.esperado;log.innerHTML+=`<div style="color:var(--green)">✓ ${r.sku} → $${fmtN(r.esperado)}</div>`;}
-      else throw new Error(JSON.stringify(d));
-    }catch(e){err++;log.innerHTML+=`<div style="color:var(--red)">✗ ${r.sku}: ${e.message}</div>`;}
-    log.scrollTop=log.scrollHeight;
-  }
-  btn.disabled=false;btn.textContent='Corregir todos vía Ecom';renderFrave();toast(`Fravega: ${ok} ok, ${err} err`);
-}
-
-function exportFrave(){
-  const data=getFraveData();if(!data.length){toast('Sin datos','error');return;}
-  const h='SKU,Titulo,Regla,PM,PM_Fravega,Esperado,Precio_Actual,Diff_Pct,Stock,Estado';
-  const lines=data.map(r=>[r.sku,`"${r.titulo}"`,r.regla,r.pm?r.pm.pmName:'',r.base||'',r.esperado||'',r.precioActual,r.diff!==null?r.diff.toFixed(2):'',r.stock,r.st].join(','));
-  const blob=new Blob(['\uFEFF'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fravega-verificacion-'+new Date().toISOString().slice(0,10)+'.csv';a.click();toast('Exportado');
-}
-
 // ── COMPETIDORES ──
 async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${API_KEY}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:I2000?key=${API_KEY}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;rows.slice(1).forEach(row=>{const precio=parseFloat(String(row[1]||'0').replace(/[^\d.]/g,''))||0;if(!precio)return;COMP.data.push({vendedor,titulo:row[0]||'',precio,orig_price:parseFloat(String(row[2]||'0').replace(/[^\d.]/g,''))||0,discount:row[3]||'',cuotas:row[4]||'',ventas:parseInt(row[5])||0,link:row[6]||'',sku:(row[7]||'').trim(),cantidad:(row[8]||'1').trim()});});status.textContent=`${vi+1}/${vendorSheets.length} — ${vendedor}`;}// Also load General sheet for SKU/Cantidad cross-reference
   try{
@@ -2590,7 +1775,8 @@ function renderIntelComercial(){
 function _intelSkuDetailHTML(refs){
   const rowsHtml=refs.map(r=>{
     const tipoColor=r.Tipo==='Distribuidor'?'var(--accent)':r.Tipo==='Competencia'?'var(--red)':r.Tipo==='Cuenta Propia'?'var(--green)':'#ffd166';
-    const activo=(r.Activo||'').toLowerCase().startsWith('s');
+    const _av=(r.Activo||'').trim().toLowerCase();
+    const activo=_av===''||_av.startsWith('s')||_av==='activo'||_av==='true'||_av==='1';
     return `<tr>
       <td style="font-size:10px"><span style="color:${tipoColor};font-weight:600">${r.Tipo||'—'}</span></td>
       <td style="font-size:10px">${r.Entidad_Nombre||'—'}</td>
@@ -2797,6 +1983,52 @@ function renderReferenciasPage(){
       <td class="mono">${r.Tolerancia_Pct||'—'}</td>
       <td style="font-size:11px">${r.Activo||'—'}</td>
       <td class="mono" style="font-size:11px">${r.Fecha_Alta||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── INTELIGENCIA COMERCIAL — MIX (Fase 5, carga masiva) ──
+async function mixProcesar(){
+  const raw=qs('mix-input').value;
+  const lines=raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){toast('Pegá al menos una línea SKU,link');return;}
+  const items=lines.map(l=>{const i=l.indexOf(',');return i<0?{sku:'',link:l}:{sku:l.slice(0,i).trim(),link:l.slice(i+1).trim()};});
+  const invalidas=items.filter(it=>!it.sku||!it.link);
+  if(invalidas.length){toast(`${invalidas.length} línea(s) sin el formato SKU,link`,'error');return;}
+  const bu=getBackendUrl();
+  if(!bu){toast('Configurá la URL del backend primero');return;}
+  const btn=qs('btn-mix-procesar'),status=qs('mix-status');
+  btn.disabled=true;btn.textContent='⏳ Procesando...';status.textContent=`Procesando ${items.length} línea(s)...`;
+  try{
+    const res=await fetch(bu+'/intel-comercial/mix/cargar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Error desconocido');
+    status.textContent=`${data.resultados.length} procesadas`;
+    qs('mix-table-wrap').style.display='block';
+    renderMixResultados(data.resultados);
+  }catch(e){
+    status.textContent='❌ Error: '+e.message;
+  }
+  btn.disabled=false;btn.textContent='⚙ Procesar Mix';
+}
+
+function renderMixResultados(resultados){
+  const tbody=qs('mix-tbody');
+  tbody.innerHTML=resultados.map(r=>{
+    const pm=S.pmData[normSku(r.sku||'')]||null;
+    let rentHtml='<span style="color:var(--text3)">Sin PM</span>';
+    if(pm&&r.precio_detectado){
+      const marg=compMargenAt(r.precio_detectado,pm.iva||1.21,pm.costo||0,0);
+      rentHtml=marg.m!==null?(marg.m*100).toFixed(1)+'%':'—';
+    }
+    const estadoColor=r.estado==='OK'?'var(--green)':r.estado==='Duplicado'?'#ffd166':'var(--red)';
+    return `<tr>
+      <td class="mono" style="font-weight:600">${r.sku||''}</td>
+      <td style="font-size:11px">${r.entidad_nombre||'—'}</td>
+      <td class="mono">${r.precio_detectado?fmtN(r.precio_detectado):'—'}</td>
+      <td class="mono">${rentHtml}</td>
+      <td><span style="color:${estadoColor};font-size:10px;font-weight:600">${r.estado||'—'}</span></td>
+      <td style="font-size:10px;color:var(--text3)">${r.detalle||''}</td>
     </tr>`;
   }).join('');
 }
@@ -3097,41 +2329,6 @@ function monitorToggleDetail(id){
 // ── RULES ──
 function renderRules(){qs('rules-grid').innerHTML=RULES.map(r=>`<div class="rule-item"><div class="rule-name">${r.key}</div><div class="rule-pct"><input type="number" step="0.01" value="${r.pct.toFixed(2)}" data-rk="${r.key}"></div></div>`).join('');qs('rules-grid').querySelectorAll('input').forEach(inp=>inp.addEventListener('change',()=>{const r=RULES.find(x=>x.key===inp.dataset.rk);if(r)r.pct=parseFloat(inp.value)||r.pct;}));}
 function populateRuleFilter(){const sel=qs('ml-filter-regla');if(!sel)return;RULES.forEach(r=>{const o=document.createElement('option');o.value=r.key;o.textContent=r.key;sel.appendChild(o);});}
-function renderVerifPM(){
-  const tbody=qs('vpm-tbody'),tbl=qs('vpm-table'),empty=qs('vpm-empty');if(!tbody)return;
-  const all=Object.entries(S.pmData||{});
-  if(!all.length){if(tbl)tbl.style.display='none';if(empty)empty.style.display='block';return;}
-  // poblar filtros una vez
-  const selPM=qs('vpm-pm'),selCat=qs('vpm-cat');
-  if(selPM&&selPM.options.length<=1){[...new Set(all.map(([s,d])=>d.pmName).filter(Boolean))].sort().forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;selPM.appendChild(o);});}
-  if(selCat&&selCat.options.length<=1){[...new Set(all.map(([s,d])=>d.categoria).filter(Boolean))].sort().forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selCat.appendChild(o);});}
-  const q=(qs('vpm-search').value||'').toLowerCase(),fPM=selPM?selPM.value:'',fCat=selCat?selCat.value:'';
-  const chk=v=>v?'<span style="color:var(--green);font-weight:700">✓</span>':'<span style="color:var(--text3)">—</span>';
-  let rows=all.filter(([sku,d])=>{
-    if(fPM&&d.pmName!==fPM)return false;
-    if(fCat&&d.categoria!==fCat)return false;
-    if(q){const hay=sku.toLowerCase().includes(q)||(d.descripcion||'').toLowerCase().includes(q)||(d.categoria||'').toLowerCase().includes(q);if(!hay)return false;}
-    return true;
-  }).sort((a,b)=>a[0].localeCompare(b[0]));
-  if(empty)empty.style.display='none';if(tbl)tbl.style.display='table';
-  qs('vpm-count').textContent=rows.length+' SKUs';
-  tbody.innerHTML=rows.map(([sku,d])=>`<tr>
-    <td class="mono" style="font-size:10px;font-weight:700;color:var(--accent)">${sku.toUpperCase()}</td>
-    <td style="font-size:10px">${d.categoria||'—'}</td>
-    <td style="font-size:10px">${d.subcategoria||'—'}</td>
-    <td style="font-size:10px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(d.descripcion||'').replace(/"/g,'&quot;')}">${d.descripcion||'—'}</td>
-    <td style="font-size:10px;color:var(--yellow)">${d.formaPago||'—'}</td>
-    <td style="text-align:center">${chk(d.chkFravega)}</td>
-    <td style="text-align:center">${chk(d.chkOnCity)}</td>
-    <td style="text-align:center">${chk(d.chkMayML)}</td>
-    <td style="text-align:center">${chk(d.chkPublic)}</td>
-    <td style="text-align:center">${chk(d.chkPromo)}</td>
-    <td style="text-align:center">${chk(d.chkTachado)}</td>
-    <td style="text-align:center">${chk(d.chkFull)}</td>
-    <td><span class="badge badge-blue" style="font-size:9px">${d.pmName||''}</span></td>
-  </tr>`).join('');
-}  
-
 // ── ML TOOLS ──
 async function runTracker(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-tracker');const status=qs('tracker-status');const logEl=qs('tracker-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/tracker/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'tracker');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
 async function runVendedor(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-vendedor');const status=qs('vendedor-status');const logEl=qs('vendedor-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/vendedor/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'vendedor');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
@@ -3810,9 +3007,6 @@ function init(){
   setupDZ('dz-ecom','fi-ecom',f=>readFile(f,processEcomCSV));
   setupDZ('dz-pub','fi-pub',f=>readFile(f,showPubMapper));
   setupDZ('dz-tactica','fi-tactica',f=>readFile(f,processTacticaCSV));
-  setupDZ('dz-web-csv','fi-web-csv',f=>readFile(f,processWebCSV));
-  setupDZ('dz-frave','fi-frave',f=>processFraveCSV(f));
-  setupDZ('dz-webpub','fi-webpub',f=>readFile(f,processWebPubCSV));
   qs('btn-connect-ecom').addEventListener('click',connectEcom);
   qs('btn-connect-ml').addEventListener('click',connectML);
   qs('btn-connect-ml2').addEventListener('click',connectML2);
@@ -3822,12 +3016,6 @@ function init(){
   qs('btn-fix-ml-all').addEventListener('click',fixAllML);
   qs('btn-export-ecom').addEventListener('click',exportEcom);
   qs('btn-export-ml').addEventListener('click',exportML);
-  qs('btn-export-web').addEventListener('click',exportWeb);
-  if(qs('btn-export-webpub'))qs('btn-export-webpub').addEventListener('click',exportWebPub);
-  if(qs('btn-export-frave'))qs('btn-export-frave').addEventListener('click',exportFrave);
-  if(qs('btn-fix-frave-all'))qs('btn-fix-frave-all').addEventListener('click',fixAllFrave);
-  if(qs('btn-web-reset-changes'))qs('btn-web-reset-changes').addEventListener('click',webResetChanges);
-  qs('btn-web-reset-changes').addEventListener('click',webResetChanges);
   qs('btn-export-tactica-precios').addEventListener('click',exportTacticaPrecios);
   qs('btn-export-tactica-costos').addEventListener('click',exportTacticaCostos);
   qs('btn-save-config').addEventListener('click',()=>{S.tolGreen=parseFloat(qs('tol-green').value)||0.5;S.tolYellow=parseFloat(qs('tol-yellow').value)||2;S.shippingThreshold=parseFloat(qs('shipping-threshold').value)||33000;S.shippingCost=parseFloat(qs('shipping-cost').value)||8500;saveStor();toast('Configuración guardada');});
@@ -3841,17 +3029,11 @@ function init(){
   ['ecom-search','ecom-filter-estado'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.ePage=1;renderEcom();});el.addEventListener('change',()=>{S.ePage=1;renderEcom();});}});
   ['ml-search','ml-filter-estado','ml-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.mPage=1;renderML();});el.addEventListener('change',()=>{S.mPage=1;renderML();});}});
   ['tactica-search','tactica-filter-estado','tactica-filter-lista'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.tPage=1;renderTactica();});el.addEventListener('change',()=>{S.tPage=1;renderTactica();});}});
-  ['web-search','web-filter-estado','web-filter-pub'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.wPage=1;renderWeb();});el.addEventListener('change',()=>{S.wPage=1;renderWeb();});}});
-  ['frave-search','frave-filter-estado','frave-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.fPage=1;renderFrave();});el.addEventListener('change',()=>{S.fPage=1;renderFrave();});}});
-  ['webpub-search','webpub-filter-estado','webpub-filter-regla'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{S.wpPage=1;renderWeb();});el.addEventListener('change',()=>{S.wpPage=1;renderWeb();});}});
   ['competidores-search','competidores-sort'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{COMP.page=1;renderCompetidores();});el.addEventListener('change',()=>{COMP.page=1;renderCompetidores();});}});
   setupSortHeaders('ecom-table',S.eSort,renderEcom);
   setupSortHeaders('ml-table',S.mlSort,renderML);
   setupSortHeaders('tactica-table',S.tSort,renderTactica);
   // ms-tactica-pm is already wired via toggleMS onclick
-  setupSortHeaders('web-table',S.wSort,renderWeb);
-  setupSortHeaders('webpub-table',S.wpSort,renderWeb);
-  setupSortHeaders('frave-table',S.fSort,renderFrave);
   setupSortHeaders('comp-table',S.cSort,renderCompetidores);
   ['of-search','of-filter-estado'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{ofertasPage=1;ofertasRender();});el.addEventListener('change',()=>{ofertasPage=1;ofertasRender();});}});
   if(S.mlToken)qs('ml-token').value=S.mlToken;
@@ -3869,186 +3051,6 @@ function init(){
   setTimeout(autoConnectML, 800);
 }
 init();
-
-// ============================================================
-// FRAVEGA API — SELLER CENTER
-// ============================================================
-const FVG_BASE = 'https://ayala-s-erp-production.up.railway.app';
-const FVG_BASE_ORDERS = 'https://ayala-s-erp-production.up.railway.app';
-
-function fvgCreds(){
-  return {
-    sellerId:  localStorage.getItem('fvg_seller_id')||'',
-    apiKey:    localStorage.getItem('fvg_api_key')||'',
-    apiToken:  localStorage.getItem('fvg_api_token')||'',
-    vtexKey:   localStorage.getItem('fvg_vtex_key')||'',
-    vtexToken: localStorage.getItem('fvg_vtex_token')||''
-  };
-}
-function fvgHeaders(){
-  const c=fvgCreds();
-  return {'Content-Type':'application/json','accept':'application/json',
-    'seller-id':c.sellerId,'x-fvg-api-key':c.apiKey,'x-fvg-api-token':c.apiToken};
-}
-function fvgVtexHeaders(){
-  const c=fvgCreds();
-  return {'Content-Type':'application/json','accept':'application/json','X-VTEX-API-AppKey':c.vtexKey,'X-VTEX-API-AppToken':c.vtexToken};
-}
-function fvgSaveCreds(){
-  localStorage.setItem('fvg_seller_id',  qs('fvg-seller-id').value.trim());
-  localStorage.setItem('fvg_api_key',    qs('fvg-api-key').value.trim());
-  localStorage.setItem('fvg_api_token',  qs('fvg-api-token').value.trim());
-  localStorage.setItem('fvg_vtex_key',   qs('fvg-vtex-key').value.trim());
-  localStorage.setItem('fvg_vtex_token', qs('fvg-vtex-token').value.trim());
-  qs('fvg-creds-status').innerHTML='<span style="color:var(--green)">✅ Credenciales guardadas</span>';
-}
-function fvgLoadCreds(){
-  const c=fvgCreds();
-  if(c.sellerId) qs('fvg-seller-id').value=c.sellerId;
-  if(c.apiKey)   qs('fvg-api-key').value=c.apiKey;
-  if(c.apiToken) qs('fvg-api-token').value=c.apiToken;
-  const vtexKey=localStorage.getItem('fvg_vtex_key')||'';
-  const vtexTok=localStorage.getItem('fvg_vtex_token')||'';
-  if(vtexKey)  qs('fvg-vtex-key').value=vtexKey;
-  if(vtexTok)  qs('fvg-vtex-token').value=vtexTok;
-}
-async function fvgTestCreds(){
-  const st=qs('fvg-creds-status');
-  st.innerHTML='⏳ Probando...';
-  try{
-    const r=await fetch(`${FVG_BASE}/fvg/items?page=1&size=1`,{headers:fvgHeaders()});
-    if(r.ok){st.innerHTML='<span style="color:var(--green)">✅ Conexión exitosa</span>';}
-    else{st.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
-  }catch(e){st.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
-function fvgTab(tab){
-  ['productos','precios','stock','ordenes','facturacion'].forEach(t=>{
-    qs(`fvg-section-${t}`).style.display=t===tab?'':'none';
-    const btn=qs(`fvg-tab-${t}`);
-    if(btn){btn.className=t===tab?'btn':'btn btn-secondary';}
-  });
-}
-
-// PRODUCTOS
-async function fvgListProducts(){
-  const pg=qs('fvg-prod-page').value||1, sz=qs('fvg-prod-size').value||20;
-  const el=qs('fvg-prod-result');
-  el.innerHTML='⏳ Cargando...';
-  try{
-    const r=await fetch(`${FVG_BASE}/fvg/items?page=${pg}&size=${sz}`,{headers:fvgHeaders()});
-    const data=await r.json();
-    if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
-    const items=Array.isArray(data)?data:(data.items||data.data||[]);
-    if(!items.length){el.innerHTML='Sin productos';return;}
-    el.innerHTML=`<table class="tabla-ecom"><thead><tr><th>RefID</th><th>SKU</th><th>Título</th><th>Estado</th><th>Precio Venta</th><th>Precio Tachado</th><th>Stock</th><th>Activo</th></tr></thead><tbody>`+
-      items.map(i=>`<tr><td>${i.refId||'-'}</td><td>${i.sku||'-'}</td><td>${i.title||'-'}</td><td>${i.itemState||'-'}</td><td>${i.price?.sale??'-'}</td><td>${i.price?.list??'-'}</td><td>${i.stock?.quantity??'-'}</td><td>${i.active?'✅':'❌'}</td></tr>`).join('')+
-      '</tbody></table>';
-  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
-async function fvgGetByRefId(){
-  const refId=qs('fvg-refid-input').value.trim();
-  const el=qs('fvg-refid-result');
-  if(!refId){el.innerHTML='Ingresá un RefID';return;}
-  el.innerHTML='⏳ Buscando...';
-  try{
-    const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId)}`,{headers:fvgHeaders()});
-    const data=await r.json();
-    if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
-    const i=Array.isArray(data)?data[0]:data;
-    el.innerHTML=`<div class="card" style="margin-top:8px">
-      <b>${i.title}</b><br>
-      <span style="color:var(--text-muted);font-size:12px">RefID: ${i.refId} | SKU: ${i.sku} | Estado: ${i.itemState}</span><br>
-      <span>💲 Venta: <b>$${i.price?.sale}</b> | Tachado: <b>$${i.price?.list}</b> | Stock: <b>${i.stock?.quantity}</b></span>
-    </div>`;
-  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
-
-// PRECIOS
-async function fvgUpdatePrice(){
-  const refId=qs('fvg-price-refid').value.trim();
-  const list=parseFloat(qs('fvg-price-list').value)||0;
-  const sale=parseFloat(qs('fvg-price-sale').value)||0;
-  const el=qs('fvg-price-result');
-  if(!refId||!sale){el.innerHTML='<span style="color:var(--red)">Completá RefID y precio de venta</span>';return;}
-  el.innerHTML='⏳ Actualizando...';
-  try{
-    const body={list,sale};
-    const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId)}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify(body)});
-    if(r.status===203||r.ok){el.innerHTML=`<span style="color:var(--green)">✅ Precio actualizado — ${refId}: venta $${sale}, tachado $${list}</span>`;}
-    else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
-  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
-async function fvgBulkPrice(){
-  const lines=qs('fvg-bulk-price').value.trim().split('\n').filter(Boolean);
-  const el=qs('fvg-bulk-result');
-  el.innerHTML='⏳ Procesando...';
-  let ok=0,err=0,log=[];
-  for(const line of lines){
-    const [refId,listStr,saleStr]=line.split('\t');
-    if(!refId||!saleStr)continue;
-    const list=parseFloat(listStr)||0, sale=parseFloat(saleStr)||0;
-    try{
-      const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId.trim())}/price`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({list,sale})});
-      if(r.status===203||r.ok){ok++;log.push(`<span style="color:var(--green)">✅ ${refId}</span>`);}
-      else{err++;log.push(`<span style="color:var(--red)">❌ ${refId}: ${r.status}</span>`);}
-    }catch(e){err++;log.push(`<span style="color:var(--red)">❌ ${refId}: ${e.message}</span>`);}
-    await new Promise(res=>setTimeout(res,200));
-  }
-  el.innerHTML=`<b>${ok} OK, ${err} errores</b><br>${log.join('<br>')}`;
-}
-
-// STOCK
-async function fvgUpdateStock(){
-  const refId=qs('fvg-stock-refid').value.trim();
-  const qty=parseInt(qs('fvg-stock-qty').value)||0;
-  const el=qs('fvg-stock-result');
-  if(!refId){el.innerHTML='<span style="color:var(--red)">Ingresá un RefID</span>';return;}
-  el.innerHTML='⏳ Actualizando...';
-  try{
-    const r=await fetch(`${FVG_BASE}/fvg/items/${encodeURIComponent(refId)}/stock`,{method:'PUT',headers:fvgHeaders(),body:JSON.stringify({quantity:qty})});
-    if(r.ok||r.status===200){el.innerHTML=`<span style="color:var(--green)">✅ Stock actualizado — ${refId}: ${qty} unidades</span>`;}
-    else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${await r.text()}</span>`;}
-  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
-
-// ORDENES
-async function fvgGetOrder(){
-  const orderId=qs('fvg-order-id').value.trim();
-  const el=qs('fvg-order-result');
-  if(!orderId){el.innerHTML='Ingresá un ID de orden';return;}
-  el.innerHTML='⏳ Buscando...';
-  try{
-    const r=await fetch(`${FVG_BASE_ORDERS}/fvg/orders/${encodeURIComponent(orderId)}`,{headers:fvgHeaders()});
-    const data=await r.json();
-    if(!r.ok){el.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(data)}</span>`;return;}
-    el.innerHTML=`<pre style="background:var(--bg-card);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto">${JSON.stringify(data,null,2)}</pre>`;
-  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
-
-// FACTURACION
-async function fvgInvoiceOrder(){
-  const el=qs('fvg-inv-result');
-  const body=[{
-    orderId:qs('fvg-inv-order-id').value.trim(),
-    invoiceNumber:qs('fvg-inv-number').value.trim(),
-    issuanceDate:qs('fvg-inv-date').value.trim(),
-    invoiceUrl:qs('fvg-inv-url').value.trim(),
-    invoiceKey:'',
-    trackingNumber:qs('fvg-inv-tracking').value.trim(),
-    trackingUrl:'',
-    courier:qs('fvg-inv-courier').value.trim()
-  }];
-  if(!body[0].orderId||!body[0].invoiceNumber||!body[0].issuanceDate||!body[0].invoiceUrl){
-    el.innerHTML='<span style="color:var(--red)">Completá los campos obligatorios (ID Orden, Número, Fecha, URL)</span>';return;
-  }
-  el.innerHTML='⏳ Facturando...';
-  try{
-    const r=await fetch(`${FVG_BASE_ORDERS}/fvg/invoice`,{method:'POST',headers:fvgHeaders(),body:JSON.stringify(body)});
-    const data=await r.json();
-    if(r.status===202||r.ok){el.innerHTML=`<span style="color:var(--green)">✅ Factura enviada correctamente. ID: ${data.id||'-'}</span>`;}
-    else{el.innerHTML=`<span style="color:var(--red)">❌ Error ${r.status}: ${JSON.stringify(data)}</span>`;}
-  }catch(e){el.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
-}
 
 // ============================================================
 // INTELIGENCIA COMPETITIVA
@@ -4867,23 +3869,38 @@ function ofertasExport(){
 }// ── RENTABILIDAD TÁCTICA v2 ─────────────────────────────────────────────────
 (function(){
   const PAGE_SIZE = 50;
+  const LOTE_SIZE = 300; // filas por request al backend — evita timeouts/payloads gigantes en archivos grandes
   const RT_SKUS_BORRAR = ['IMPCHEQUE','FIXTURE-GLOBAL','RECHAZADO','CAMIONETAVW','INTER'];
-  const RT_PREFIJO_C1  = '0003';
-  let tacRawRows=[], tacCalcRows=[], tacFiltered=[], tacPage=1;
+  // Regímenes que el motor efectivamente calculó (RENTABILIDAD_FUNCIONAL.md §6.1).
+  // Todo lo demás (EXCLUIDO/NO_DETERMINADO/NO_RECONOCIDO) o con `incidencia` no
+  // tiene margen válido y va a la bandeja de incidencias, no a la tabla principal.
+  const REGIMENES_CALCULABLES = new Set(['CUENTA_1','CUENTA_2','PERDIDA_DEFINITIVA']);
+  const REGIMEN_LABEL = {CUENTA_1:'Cuenta 1', CUENTA_2:'Cuenta 2', PERDIDA_DEFINITIVA:'Pérdida def.'};
+
+  let tacRawRows=[], tacCalcRows=[], tacIncidencias=[], tacFiltered=[], tacPage=1;
   let tacTCBNA = null;
-  let tacIVAmap = {};  // { SKU: 0.21 }
 
   // ── HELPERS ──
   function _parseNum(v){
     if(v===null||v===undefined||v==='') return 0;
     return parseFloat(String(v).replace(/,/g,'').trim())||0;
   }
+  // Mismo criterio de limpieza que _parseNum (coma = separador de miles, se
+  // descarta) pero se mantiene como texto: el motor calcula en Decimal,
+  // nunca en float (RENTABILIDAD_IMPLEMENTACION.md, prohibición técnica #2)
+  // — convertir a Number acá y volver a stringificar arriesga artefactos de
+  // punto flotante en importes.
+  function _cleanNumStr(v){
+    if(v===null||v===undefined) return '0';
+    const s=String(v).replace(/,/g,'').trim();
+    return s===''?'0':s;
+  }
   function _fmt(n){
-    if(n===0) return '—';
+    if(!n) return '—';
     return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n);
   }
   function _fmtPct(n){
-    if(!isFinite(n)) return '—';
+    if(n===null||n===undefined||!isFinite(n)) return '—';
     return (n*100).toFixed(1)+'%';
   }
   function _debeBorrar(codigo){
@@ -4892,151 +3909,20 @@ function ofertasExport(){
     if(c.includes('ENVIO')) return true;
     return false;
   }
-  function _clasificar(tipoFact, nroFact){
-    const tf=(tipoFact||'').toString();
-    const nro=(nroFact||'').toString().trim();
-    const pref=nro.split('-')[0]||'';
-    // Notas de débito → borrar
-    if(/nota de d[eé]bito/i.test(tf)) return 'ND';
-    // Promos
-    if(/promop/i.test(tf)) return 'PROMO';
-    // MLA NC
-    if(/multiprop[oó]sito.*nota de cr[eé]dito/i.test(tf)){       if(pref==='00007') return 'ND';       return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';     }
-    // NC genéricas
-if(/nota de cr[eé]dito/i.test(tf)){
-      if(pref==='00007') return 'ND';
-      if(/\bCEA\b/.test(tf)) return 'NC_C1';
-      if(/\bCEE\b|\bCVE\b/.test(tf)) return 'NC_C2';
-      return pref===RT_PREFIJO_C1?'NC_C1':'NC_C2';
-    }
-    // FEE (Factura E Electrónica) → C1 siempre
-    if(/\bFEE\b/.test(tf)) return 'C1';
-    // FAE (Factura E no electrónica) → C2 siempre
-    if(/\bFAE\b/.test(tf)) return 'C2';
-    // FEA, FEB, MLA Factura → C1
-    if(/\bFEA\b|\bFEB\b/.test(tf)) return 'C1';
-    if(/multiprop[oó]sito.*factura\b/i.test(tf)) return 'C1';
-    // fallback
-    return pref===RT_PREFIJO_C1?'C1':'C2';
-  }
-  function _esRefact(row){
-    return Math.abs(_parseNum(row['Costo de Lista']))>0 && Math.abs(_parseNum(row['Cantidad']))>0;
-  }
   function _getTC(){
     const manual=parseFloat(document.getElementById('tacrent-cfg-tc')?.value||'0');
     if(manual>100) return manual;
     return tacTCBNA || (window.S&&S.tcBNA) || 1455;
   }
-  function _getIVA(sku){
-    return tacIVAmap[sku] || 0.21;
-  }
-  function _cfg(){
-    return {
-      iibb:   (parseFloat(document.getElementById('tacrent-cfg-iibb')?.value)||5)/100,
-      impchq: (parseFloat(document.getElementById('tacrent-cfg-impchq')?.value)||1.2)/100,
-      cf1:    (parseFloat(document.getElementById('tacrent-cfg-cf1')?.value)||3)/100,
-      cf2:    (parseFloat(document.getElementById('tacrent-cfg-cf2')?.value)||3)/100,
-      impchqNC1Refact: document.getElementById('tacrent-cfg-impchq-nc1')?.checked ?? true,
-      cf2NC2Fallado:   document.getElementById('tacrent-cfg-cf2-fallado')?.checked ?? false,
-      cf2NC2Refact:    document.getElementById('tacrent-cfg-cf2-refact')?.checked ?? true,
-    };
-  }
-
-  // ── CÁLCULO POR FILA ──
-  function _calcFila(row, tipo, cfg){
-    const pv    = _parseNum(row['Precio de Venta']);
-    const costo = _parseNum(row['Costo de Lista']);
-    const cant  = _parseNum(row['Cantidad']);
-    const tc    = _getTC();
-    const ivaCSV = _parseNum(row['IVA']); const iva = ivaCSV > 1 ? ivaCSV - 1 : (ivaCSV > 0 ? ivaCSV : _getIVA(row['Código']));
-    const costoARS = Math.abs(costo) * Math.abs(cant) * tc;
-    const pvConIVA = pv * (1 + iva);
-
-    let fIVA=0, fIMPCHQ=0, fIIBB=0, fCF=0, fCosto=0;
-    // IVA: siempre POSITIVO (solo se muestra en columna, no entra en margen)
-    // IMPCHQ = (PV + IVA) × tasa × -1
-
-    if(tipo==='C1'){
-      fIVA    = pv * iva;                        // positivo, solo display
-      fIMPCHQ = -(pvConIVA * cfg.impchq);        // (PV+IVA) × 1.2% × -1
-      fIIBB   = -(pv * cfg.iibb);
-      fCosto  = -costoARS;
-      fCF     = -(pvConIVA * cfg.cf1);           // (PV+IVA) × 3% × -1
-    }
-    else if(tipo==='C2'){
-      fCosto = -costoARS;
-      fCF    = -(pv * cfg.cf2);
-    }
-    else if(tipo==='PROMO'){
-      // pv negativo; IVA positivo solo base para IMPCHQ, no entra en margen
-      const pvAbs = Math.abs(pv);
-      fIVA    = pvAbs * iva;                     // positivo, solo display
-      fIMPCHQ = -(pvAbs*(1+iva)*cfg.impchq);
-      fIIBB   = -(pvAbs*cfg.iibb);
-    }
-    else if(tipo==='NC_C1'){
-      const refact = _esRefact(row);
-      fIVA    = Math.abs(pv) * iva;             // positivo, solo display
-      fIIBB   = -(pv * cfg.iibb);               // pv negativo → positivo (recupera)
-      fIMPCHQ = cfg.impchqNC1Refact ? -(pvConIVA * cfg.impchq) : 0;
-      fCosto  = -(costo * tc * cant);           // (CostoLista × TC × Cant) × -1 — cant negativa → resultado positivo
-      fCF     = -(pvConIVA * cfg.cf1);          // pv negativo → positivo (recupera)
-    }
-    else if(tipo==='NC_C2'){
-      fCosto = -(costo * tc * cant);            // cant negativa → resultado positivo (recupera)
-      fCF    = -(pv * cfg.cf2);                 // pv negativo → positivo (recupera)
-    }
-
-    // Margen: IVA entra como descuento (fIVA positivo → se resta sumando negativo)
-    // En C1: pv - IVA - IMPCHQ - IIBB - Costo - CF
-    // En NC_C1: pv negativo + IVA(negativo) + resto → todo suma
-    let margen;
-    if(tipo==='C1'){
-      margen = pv + fIMPCHQ + fIIBB + fCosto + fCF;  // IVA no entra, solo base para IMPCHQ y CF1
-    } else if(tipo==='C2'){
-      margen = pv + fCosto + fCF;
-    } else if(tipo==='PROMO'){
-      margen = pv + fIMPCHQ + fIIBB;                  // IVA no entra
-    } else {
-      // NC_C1, NC_C2: IVA no entra en margen (igual que C1/C2)
-      margen = pv + fIMPCHQ + fIIBB + fCosto + fCF;
-    }
-    const margenPct = pv!==0 ? margen/Math.abs(pv) : 0;
-    return { pv, iva:fIVA, impchq:fIMPCHQ, iibb:fIIBB, costo:fCosto, cf:fCF, margen, margenPct, tipo, refact:_esRefact(row) };
-  }
 
   // ── CARGAR TC ──
   async function _loadTC(){
     try{
-      const backendUrl = localStorage.getItem('erp_backend_url')||'https://ayala-s-erp-production.up.railway.app';
-      const r = await fetch(`${backendUrl}/tc/bna`);
+      const r = await fetch(`${getBackendUrl()}/tc/bna`);
       if(!r.ok) return;
       const d = await r.json();
       tacTCBNA = d.venta||d.tc||d.value||null;
     }catch(e){ console.warn('TacRent TC error:',e); }
-  }
-
-  // ── CARGAR IVA desde Sheets PM ──
-  async function _loadIVA(){
-    try{
-      const key = (window.S&&S.sheetsKey)||'AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
-      // Buscar el ID del Sheets PM del selector de Verificar Ecom
-      const pmSel = document.getElementById('ecom-sheet-select')||document.getElementById('pm-sheet-select');
-      let pmId = pmSel?.value || (window.S&&S.pmSheetId) || '';
-      if(!pmId) return;
-      const url=`https://sheets.googleapis.com/v4/spreadsheets/${pmId}/values/A1:Z5000?key=${key}`;
-      const d=await(await fetch(url)).json();
-      if(!d.values||d.values.length<2) return;
-      const hdrs=d.values[0].map(h=>String(h||'').trim().toUpperCase());
-      const iSKU=hdrs.findIndex(h=>h==='SKU'||h==='CÓDIGO'||h==='CODIGO');
-      const iIVA=hdrs.findIndex(h=>h==='IVA');
-      if(iSKU===-1||iIVA===-1) return;
-      d.values.slice(1).forEach(row=>{
-        const sku=String(row[iSKU]||'').trim();
-        const v=parseFloat(String(row[iIVA]||'').replace(',','.').replace('%','').trim());
-        if(sku&&!isNaN(v)) tacIVAmap[sku]=v>1?v/100:v;
-      });
-    }catch(e){ console.warn('TacRent IVA error:',e); }
   }
 
   // ── PARSEAR CSV ──
@@ -5051,28 +3937,71 @@ if(/nota de cr[eé]dito/i.test(tf)){
     return res;
   }
 
-  // ── PROCESAR ──
-  function tacRentRecalc(){
-    const cfg=_cfg();
-    const excluidas=[];
-    tacCalcRows=[];
-    for(const row of tacRawRows){
-      const codigo=(row['Código']||'').trim();
-      const tipoFact=(row['Tipo de Factura']||'').trim();
-      const nroFact=(row['Nº Factura']||'').trim();
-      if(_debeBorrar(codigo)){excluidas.push(row);continue;}
-      const tipo=_clasificar(tipoFact,nroFact);
-      if(tipo==='ND'){excluidas.push(row);continue;}
-      const calc=_calcFila(row,tipo,cfg);
-      tacCalcRows.push({
-        fecha:row['Fecha de Emisión']||'',
-        empresa:row['Empresa']||'',
-        sku:codigo,
-        tipoFact,nroFact,
-        pm:row['PM']||'',
-        ...calc
+  // ── LLAMAR AL MOTOR (backend/rentabilidad — RentabilidadTacticaCalculator) ──
+  async function _calcularEnBackend(filas, tc){
+    const lineas = filas.map(row=>({
+      codigo: (row['Código']||'').trim(),
+      tipo_factura: row['Tipo de Factura']||'',
+      nro_factura: (row['Nº Factura']||'').trim(),
+      cantidad: _cleanNumStr(row['Cantidad']),
+      precio_venta: _cleanNumStr(row['Precio de Venta']),
+      tc: String(tc),
+    }));
+    const resultados=[];
+    for(let i=0;i<lineas.length;i+=LOTE_SIZE){
+      const lote=lineas.slice(i,i+LOTE_SIZE);
+      const r=await fetch(`${getBackendUrl()}/rentabilidad/tactica/calcular`,{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({lineas:lote}),
       });
+      if(!r.ok) throw new Error(`Backend respondió ${r.status}`);
+      const d=await r.json();
+      resultados.push(...d.resultados);
     }
+    return resultados;
+  }
+
+  // ── PROCESAR ──
+  async function tacRentRecalc(){
+    document.getElementById('tacrent-empty').style.display='flex';
+    document.getElementById('tacrent-empty').innerHTML=`<div style="display:flex;align-items:center;gap:12px"><div class="spinner"></div><span style="font-family:'DM Mono',monospace;font-size:12px">Calculando rentabilidad...</span></div>`;
+    document.getElementById('tacrent-table-wrap').style.display='none';
+
+    const tc=_getTC();
+    const activas=[]; let borradas=0;
+    for(const row of tacRawRows){
+      if(_debeBorrar((row['Código']||'').trim())) borradas++; else activas.push(row);
+    }
+
+    let resultados;
+    try{
+      resultados = activas.length ? await _calcularEnBackend(activas, tc) : [];
+    }catch(e){
+      toast('Error calculando rentabilidad: '+e.message,'error');
+      document.getElementById('tacrent-empty').innerHTML=`<div style="color:var(--red);text-align:center">⚠ No se pudo calcular — revisá la URL del backend en Configuración<br><span style="font-size:10px;color:var(--text3)">${e.message}</span></div>`;
+      return;
+    }
+
+    tacCalcRows=[]; tacIncidencias=[];
+    activas.forEach((row,i)=>{
+      const r=resultados[i];
+      const pv=_parseNum(row['Precio de Venta']);
+      const cantidad=_parseNum(row['Cantidad']);
+      const margen = (r.margen_real!==null&&r.margen_real!==undefined) ? Number(r.margen_real) : null;
+      const fila = {
+        fecha:row['Fecha de Emisión']||'', empresa:row['Empresa']||'',
+        sku:(row['Código']||'').trim(), tipoFact:row['Tipo de Factura']||'',
+        nroFact:(row['Nº Factura']||'').trim(), pm:row['PM']||'',
+        tipo:r.regimen, esNC:cantidad<0, incidencia:r.incidencia||null,
+        pv, iva:Number(r.iva)||0, impchq:Number(r.imp_cheque)||0, iibb:Number(r.iibb)||0,
+        costo:Number(r.costo_total_pesos)||0,
+        cf:(Number(r.costo_financiero_1)||0)+(Number(r.costo_financiero_2)||0),
+        margen, margenPct: margen!==null ? (r.margen_pct!=null?Number(r.margen_pct):(pv?margen/Math.abs(pv):0)) : null,
+      };
+      if(r.incidencia || !REGIMENES_CALCULABLES.has(r.regimen)) tacIncidencias.push(fila);
+      else tacCalcRows.push(fila);
+    });
+
     // KPIs
     const tot=tacCalcRows.reduce((a,d)=>({
       pv:a.pv+d.pv,margen:a.margen+d.margen
@@ -5081,7 +4010,7 @@ if(/nota de cr[eé]dito/i.test(tf)){
     const neg=tacCalcRows.filter(d=>d.margen<0).length;
     document.getElementById('tacrent-kpis').style.display='grid';
     document.getElementById('tacrent-kpi-rows').textContent=tacCalcRows.length;
-    document.getElementById('tacrent-kpi-excl').textContent=excluidas.length;
+    document.getElementById('tacrent-kpi-excl').textContent=borradas+tacIncidencias.length;
     document.getElementById('tacrent-kpi-venta').textContent=_fmt(tot.pv);
     document.getElementById('tacrent-kpi-margen').textContent=_fmt(tot.margen);
     document.getElementById('tacrent-kpi-pct').textContent=_fmtPct(pct);
@@ -5090,7 +4019,32 @@ if(/nota de cr[eé]dito/i.test(tf)){
     const pms=[...new Set(tacCalcRows.map(d=>d.pm).filter(Boolean))].sort();
     const selPM=document.getElementById('tacrent-filter-pm');
     selPM.innerHTML='<option value="">Todos los PM</option>'+pms.map(p=>`<option value="${p}">${p}</option>`).join('');
+
+    _renderIncidencias();
     tacRentRender();
+  }
+
+  // ── INCIDENCIAS — §12 RENTABILIDAD_FUNCIONAL.md: se muestran, no se corrigen ──
+  function _renderIncidencias(){
+    const cont=document.getElementById('tacrent-incidencias');
+    if(!tacIncidencias.length){ cont.style.display='none'; cont.innerHTML=''; return; }
+    cont.style.display='block';
+    const filas=tacIncidencias.slice(0,200).map(d=>`<tr>
+        <td>${d.sku}</td><td>${d.nroFact}</td><td style="font-size:10px">${d.tipoFact.slice(0,40)}</td>
+        <td>${REGIMEN_LABEL[d.tipo]||d.tipo}</td>
+        <td style="color:var(--yellow)">${d.incidencia||'—'}</td>
+      </tr>`).join('');
+    cont.innerHTML=`<div class="card" style="border-color:var(--yellow);margin-bottom:0">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">
+        ⚠ ${tacIncidencias.length} fila(s) sin calcular — requieren revisión manual
+      </div>
+      <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+        <table style="min-width:600px"><thead><tr>
+          <th>SKU</th><th>Nº Factura</th><th>Tipo Factura</th><th>Régimen</th><th>Motivo</th>
+        </tr></thead><tbody>${filas}</tbody></table>
+      </div>
+      ${tacIncidencias.length>200?`<div style="font-size:10px;color:var(--text3);margin-top:6px">... y ${tacIncidencias.length-200} más</div>`:''}
+    </div>`;
   }
 
   // ── RENDER ──
@@ -5120,11 +4074,9 @@ if(/nota de cr[eé]dito/i.test(tf)){
     const slice=tacFiltered.slice((tacPage-1)*PAGE_SIZE,tacPage*PAGE_SIZE);
 
     const badgeMap={
-      C1:'background:rgba(99,179,237,.15);color:#63b3ed',
-      C2:'background:rgba(252,211,77,.15);color:#fcd34d',
-      NC_C1:'background:rgba(167,139,250,.15);color:#a78bfa',
-      NC_C2:'background:rgba(251,146,60,.15);color:#fb923c',
-      PROMO:'background:rgba(74,222,128,.15);color:#4ade80'
+      CUENTA_1:'background:rgba(99,179,237,.15);color:#63b3ed',
+      CUENTA_2:'background:rgba(252,211,77,.15);color:#fcd34d',
+      PERDIDA_DEFINITIVA:'background:rgba(248,113,113,.15);color:#f87171',
     };
 
     document.getElementById('tacrent-tbody').innerHTML=slice.map(d=>{
@@ -5137,7 +4089,7 @@ if(/nota de cr[eé]dito/i.test(tf)){
         <td style="font-size:10px">${d.tipoFact.slice(0,28)}</td>
         <td>${d.nroFact}</td>
         <td>${d.pm}</td>
-        <td><span style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;${bs}">${d.tipo}</span></td>
+        <td><span style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;${bs}">${REGIMEN_LABEL[d.tipo]||d.tipo}${d.esNC?' (NC)':''}</span></td>
         <td style="text-align:right">${_fmt(d.pv)}</td>
         <td style="text-align:right">${d.iva?_fmt(d.iva):'—'}</td>
         <td style="text-align:right">${d.iibb?_fmt(d.iibb):'—'}</td>
@@ -5269,12 +4221,12 @@ if(/nota de cr[eé]dito/i.test(tf)){
     const file=event.target.files[0];
     if(!file) return;
     document.getElementById('tacrent-empty').style.display='flex';
-    document.getElementById('tacrent-empty').innerHTML=`<div style="display:flex;align-items:center;gap:12px"><div class="spinner"></div><span style="font-family:'DM Mono',monospace;font-size:12px">Cargando TC e IVA...</span></div>`;
+    document.getElementById('tacrent-empty').innerHTML=`<div style="display:flex;align-items:center;gap:12px"><div class="spinner"></div><span style="font-family:'DM Mono',monospace;font-size:12px">Cargando TC...</span></div>`;
     document.getElementById('tacrent-table-wrap').style.display='none';
     document.getElementById('tacrent-por-pm').style.display='none';
-                          
+    document.getElementById('tacrent-incidencias').style.display='none';
 
-    await Promise.all([_loadTC(), _loadIVA()]);
+    await _loadTC();
 
     const text=await file.text();
     let lines=text.split(/\r?\n/).filter(l=>l.trim());
@@ -5297,8 +4249,8 @@ if(/nota de cr[eé]dito/i.test(tf)){
       tacRawRows.push(row);
     }
     if(!tacRawRows.length){ toast('Sin filas válidas','error'); return; }
-    tacRentRecalc();
     toast(`✅ ${tacRawRows.length} filas cargadas`);
+    await tacRentRecalc();
   };
 
   // ── EXPORT ──

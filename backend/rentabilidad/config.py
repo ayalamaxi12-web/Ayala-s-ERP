@@ -6,6 +6,13 @@ entorno. Ver RENTABILIDAD_IMPLEMENTACION.md para la lista de fuentes.
 """
 import os
 
+from dotenv import load_dotenv
+
+# Conveniencia de desarrollo local: en Railway las variables ya están en el
+# entorno real y esto no hace nada (no hay .env). `backend/.env` está en
+# .gitignore — nunca se commitea.
+load_dotenv()
+
 
 class ConfiguracionFaltante(RuntimeError):
     """Se pidió un valor de configuración que no fue provisto por variable de entorno."""

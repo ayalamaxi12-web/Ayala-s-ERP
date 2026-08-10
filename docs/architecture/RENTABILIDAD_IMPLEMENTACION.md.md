@@ -244,7 +244,10 @@ El paso 5 es la primera puerta real: **si T-1 a T-8 no pasan al centavo, no se a
 9. Modificar el `tc` de una línea existente.
 10. Persistir el costo como snapshot **a los fines del cálculo** (la auditoría es aparte).
 11. Borrar físicamente una fila excluida.
-12. Filtrar por estado de venta o estado de pago.
+12. Filtrar por estado de venta, o por estado de pago entre `Cobrado`/`Cobro
+    Parcial` (se calculan igual). **No aplica** a `Reembolsado`/`Sin
+    cobro`/`En mediación` (u otro estado equivalente): esos sí se excluyen
+    — corrección v2.1 de `RENTABILIDAD_FUNCIONAL.md` §10, 31/07/2026.
 13. Corregir un dato dentro de un control de validación.
 14. Implementar lógica basada en colores o formato de celda.
 15. Importar datos personales del comprador.

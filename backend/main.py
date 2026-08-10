@@ -8,8 +8,22 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 import json
 
+from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
+
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(rentabilidad_router)
+
+
+@app.on_event("startup")
+def _rentabilidad_startup():
+    # Crea el esquema (Alembic) y siembra las tablas paramétricas. No debe
+    # tumbar el resto del ERP si la base de Rentabilidad no está disponible
+    # todavía (ej. RENT_DATABASE_URL sin configurar en un deploy nuevo).
+    try:
+        migrar_y_sembrar()
+    except Exception as e:
+        print(f"Rentabilidad: no se pudo migrar/sembrar en el arranque: {e}")
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
 ML_TOKEN       = os.getenv('ML_TOKEN', '')
@@ -736,91 +750,6 @@ async def ecom_debug_html(request: Request):
                 "variants_found": len(variants), "variants": variants[:3]}
     except Exception as e:
         return {"error": str(e)}
-
-# ══════════════════════════════════════════════════════
-# FRAVEGA PROXY
-# ══════════════════════════════════════════════════════
-
-FVG_BASE_CATALOG = "https://seller-center-integration.production.fravega.com"
-FVG_BASE_ORDERS  = "https://seller-center-api.fravega.com"
-
-def fvg_headers(request: Request):
-    return {
-        "Content-Type": "application/json", "accept": "application/json",
-        "seller-id": request.headers.get("seller-id", ""),
-        "x-fvg-api-key": request.headers.get("x-fvg-api-key", ""),
-        "x-fvg-api-token": request.headers.get("x-fvg-api-token", ""),
-    }
-
-def fvg_safe_json(r):
-    try:
-        return {"status": r.status_code, "body": r.json()}
-    except Exception:
-        return {"status": r.status_code, "body": r.text[:2000]}
-
-@app.get("/fvg/debug")
-async def fvg_debug(request: Request):
-    results = {}
-    hdrs = fvg_headers(request)
-    for path in ["/api/v1/item?page=1&size=1", "/api/item?page=1&size=1", "/api/v1/items?page=1&size=1"]:
-        try:
-            r = requests.get(f"{FVG_BASE_CATALOG}{path}", headers=hdrs, timeout=10)
-            results[path] = {"status": r.status_code, "body": r.text[:500]}
-        except Exception as e:
-            results[path] = {"error": str(e)}
-    return results
-
-@app.get("/fvg/items")
-async def fvg_list_items(request: Request, page: int = 1, size: int = 20):
-    try:
-        r = requests.get(f"{FVG_BASE_CATALOG}/api/item?page={page}&size={size}&sellerId={request.headers.get('seller-id','')}",
-                         headers=fvg_headers(request), timeout=20)
-        return fvg_safe_json(r)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/fvg/items/{ref_id}")
-async def fvg_get_item(ref_id: str, request: Request):
-    try:
-        r = requests.get(f"{FVG_BASE_CATALOG}/api/item/refId/{ref_id}", headers=fvg_headers(request), timeout=20)
-        return fvg_safe_json(r)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/fvg/items/{ref_id}/price")
-async def fvg_update_price(ref_id: str, request: Request):
-    body = await request.json()
-    try:
-        r = requests.put(f"{FVG_BASE_CATALOG}/api/item/refId/{ref_id}/price", headers=fvg_headers(request), json=body, timeout=20)
-        return fvg_safe_json(r)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/fvg/items/{ref_id}/stock")
-async def fvg_update_stock(ref_id: str, request: Request):
-    body = await request.json()
-    try:
-        r = requests.put(f"{FVG_BASE_CATALOG}/api/item/refId/{ref_id}/stock", headers=fvg_headers(request), json=body, timeout=20)
-        return fvg_safe_json(r)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/fvg/orders/{order_id}")
-async def fvg_get_order(order_id: str, request: Request):
-    try:
-        r = requests.get(f"{FVG_BASE_ORDERS}/api/v1/orders/{order_id}", headers=fvg_headers(request), timeout=20)
-        return fvg_safe_json(r)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/fvg/invoice")
-async def fvg_invoice(request: Request):
-    body = await request.json()
-    try:
-        r = requests.post(f"{FVG_BASE_ORDERS}/api/v1/invoice", headers=fvg_headers(request), json=body, timeout=20)
-        return fvg_safe_json(r)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ══════════════════════════════════════════════════════
 # COMPETIDORES — Refresh histórico
