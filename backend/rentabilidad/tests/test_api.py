@@ -2,11 +2,23 @@
 el cálculo en sí (ya cubierto por test_tactica_regresion.py). Mismo patrón
 que el resto de `rentabilidad/`: proveedores con `fetch_fn` de fixture, sin
 red ni credenciales reales."""
+from datetime import date
 from decimal import Decimal
 
 from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
-from rentabilidad.api import LineaTacticaIn, calcular_lineas, extraer_comprobante
+import pytest
+from fastapi import HTTPException
+
+from rentabilidad.api import (
+    CalcularTacticaPeriodoIn,
+    LineaTacticaIn,
+    calcular_lineas,
+    calcular_periodo_tactica,
+    calcular_tactica_periodo,
+    extraer_comprobante,
+)
 from rentabilidad.config import ConfiguracionFaltante
+from rentabilidad.ingesta_tactica import FilaTactica
 from rentabilidad.models import Regimen
 
 TOLERANCIA = Decimal("0.01")
@@ -111,3 +123,51 @@ def test_sheet_id_faltante_no_rompe_el_lote_completo(db_session):
     [r] = calcular_lineas([linea], db_session, costo, iva)
     assert r.incidencia.startswith("CONFIG_FALTANTE")
     assert r.margen_real is None
+
+
+# ── calcular_periodo_tactica — mismo motor, entrando por SQL en vez de CSV ──
+# `FilaTactica.tipo_factura` ya viene resuelto (a diferencia de
+# `LineaTacticaIn.tipo_factura`, que es texto crudo) — no hay
+# `extraer_comprobante` de por medio en este camino.
+
+def _fila_tactica(**overrides) -> FilaTactica:
+    base = dict(
+        fecha=date(2026, 7, 31), empresa="Sign Solutions SA", codigo="CF217ACOMP",
+        descripcion=None, fabricante=None, tipo_producto=None, vendedor=None,
+        nro_factura="00003-00127071", tipo_factura="FEA",
+        cantidad=Decimal("6"), precio_venta=Decimal("31153.50"), tc=Decimal("1500"),
+    )
+    base.update(overrides)
+    return FilaTactica(**base)
+
+
+def test_t1_via_periodo_reproduce_el_mismo_caso_de_aceptacion(db_session):
+    costo, iva = _providers("2.65", "IVA Debito 21%")
+    [r] = calcular_periodo_tactica([_fila_tactica()], db_session, costo, iva)
+    assert r.regimen == Regimen.CUENTA_1.value
+    assert _cerca(r.iva, "6542.235")
+    assert _cerca(r.margen_real, "4162.60")
+
+
+def test_periodo_config_faltante_es_incidencia_por_linea_no_500(db_session):
+    costo = CostoVigenteProvider(sheet_id=None)
+    iva = IvaProvider(sheet_id=None)
+    [r] = calcular_periodo_tactica([_fila_tactica()], db_session, costo, iva)
+    assert r.incidencia.startswith("CONFIG_FALTANTE")
+    assert r.margen_real is None
+
+
+def test_periodo_procesa_varias_filas_independientemente(db_session):
+    costo, iva = _providers("2.65", "IVA Debito 21%")
+    filas = [_fila_tactica(nro_factura="00003-00000001"), _fila_tactica(nro_factura="00003-00000002")]
+    resultados = calcular_periodo_tactica(filas, db_session, costo, iva)
+    assert [r.nro_factura for r in resultados] == ["00003-00000001", "00003-00000002"]
+    assert all(r.margen_real is not None for r in resultados)
+
+
+def test_periodo_rechaza_hasta_anterior_a_desde_sin_tocar_sql():
+    # La validación de rango corre antes de instanciar TacticaSqlAdapter —
+    # por eso este test no necesita red ni RENT_TACTICA_SQL_* configurado.
+    payload = CalcularTacticaPeriodoIn(desde=date(2026, 8, 10), hasta=date(2026, 8, 1))
+    with pytest.raises(HTTPException):
+        calcular_tactica_periodo(payload)

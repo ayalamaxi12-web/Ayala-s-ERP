@@ -10,6 +10,7 @@ motor. No persiste nada en `venta_tactica` — esa es una etapa separada
 construida todavía a propósito.
 """
 import re
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from .adapters import CostoVigenteProvider, IvaProvider
 from .calculators import LineaTacticaInput, RentabilidadTacticaCalculator
 from .config import ConfiguracionFaltante
 from .db import sesion
+from .ingesta_tactica import FilaTactica, TacticaSqlAdapter
 from .models import Regimen
 
 router = APIRouter(prefix="/rentabilidad", tags=["rentabilidad"])
@@ -161,3 +163,67 @@ def calcular_tactica(payload: CalcularTacticaIn) -> CalcularTacticaOut:
     with sesion() as db:
         resultados = calcular_lineas(payload.lineas, db, costo_provider, iva_provider)
     return CalcularTacticaOut(resultados=resultados)
+
+
+# ── Período: SQL de Táctica -> adaptador -> motor ──
+#
+# A diferencia de `calcular_tactica` (arriba), acá no hay texto crudo de
+# "Tipo de Factura" que traducir: `FilaTactica.a_linea_input()` (ver
+# `ingesta_tactica.py`) ya entrega el código corto de comprobante resuelto
+# desde `CAE`, así que no se llama a `extraer_comprobante`.
+
+
+class CalcularTacticaPeriodoIn(BaseModel):
+    desde: date
+    hasta: date
+
+
+class CalcularTacticaPeriodoOut(BaseModel):
+    resultados: list[ResultadoTacticaOut]
+    total_lineas: int
+
+
+def calcular_periodo_tactica(
+    filas: list[FilaTactica],
+    db: Session,
+    costo_provider: CostoVigenteProvider,
+    iva_provider: IvaProvider,
+) -> list[ResultadoTacticaOut]:
+    """Misma orquestación que `calcular_lineas`, sobre filas ya traducidas
+    por el adaptador SQL en vez de sobre el CSV que sube el operador."""
+    calculador = RentabilidadTacticaCalculator(db, costo_provider, iva_provider)
+    resultados: list[ResultadoTacticaOut] = []
+    for fila in filas:
+        try:
+            r = calculador.calcular(fila.a_linea_input())
+            resultados.append(ResultadoTacticaOut(
+                codigo=fila.codigo, nro_factura=fila.nro_factura,
+                regimen=r.regimen.value, costo_lista=r.costo_lista,
+                iva_producto=r.iva_producto, iva=r.iva, imp_cheque=r.imp_cheque,
+                iibb=r.iibb, costo_total_pesos=r.costo_total_pesos,
+                costo_financiero_1=r.costo_financiero_1, costo_financiero_2=r.costo_financiero_2,
+                margen_real=r.margen_real, margen_pct=r.margen_pct,
+                precio_venta_iva=r.precio_venta_iva, incidencia=r.incidencia,
+            ))
+        except ConfiguracionFaltante as e:
+            resultados.append(ResultadoTacticaOut(
+                codigo=fila.codigo, nro_factura=fila.nro_factura,
+                regimen=Regimen.NO_RECONOCIDO.value, incidencia=f"CONFIG_FALTANTE: {e}",
+            ))
+    return resultados
+
+
+@router.post("/tactica/periodo", response_model=CalcularTacticaPeriodoOut)
+def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> CalcularTacticaPeriodoOut:
+    """Lee Táctica directo del SQL Server (`TacticaSqlAdapter`, ya
+    probado) para el rango dado y corre cada línea por el motor — sin subir
+    ningún CSV a mano. No persiste nada, igual que `/tactica/calcular`."""
+    if payload.hasta < payload.desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta)
+    fetch = _fetch_fn_con_cache()
+    costo_provider = CostoVigenteProvider(fetch_fn=fetch)
+    iva_provider = IvaProvider(fetch_fn=fetch)
+    with sesion() as db:
+        resultados = calcular_periodo_tactica(filas, db, costo_provider, iva_provider)
+    return CalcularTacticaPeriodoOut(resultados=resultados, total_lineas=len(resultados))
