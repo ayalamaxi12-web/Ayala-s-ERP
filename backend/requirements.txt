@@ -19,3 +19,6 @@ pymssql==2.3.13
 
 # Adaptador Excel de ECOM — lectura del reporte que hoy se descarga a mano.
 openpyxl==3.1.5
+
+# Requerido por FastAPI para recibir archivos/form-data (endpoints /cierres/ecom/excel).
+python-multipart==0.0.32

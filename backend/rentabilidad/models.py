@@ -334,3 +334,27 @@ class AuditoriaCosto(Base):
     columna_origen: Mapped[str | None] = mapped_column(String(4), nullable=True)  # "S" o "R" (§5.6)
     leido_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     calculo_id: Mapped[str] = mapped_column(String(64), index=True)
+
+
+class CierreRentabilidad(Base):
+    """Metadata de un cierre guardado — no interviene en el cálculo ni en
+    ningún total. Existe para que "Históricos de Rentabilidad" pueda listar
+    qué períodos están guardados sin adivinarlo a partir de `periodo` en
+    `venta_tactica`/`venta_ecom`, y para registrar cuándo se generó cada uno
+    (pedido explícito de Maxx, 2026-08-10: separar consulta en vivo —nunca
+    persiste— de cierre —acción explícita, queda como snapshot histórico).
+
+    Táctica y Ecom pueden guardarse en pasos separados (Ecom hoy depende
+    del Excel mientras la API no esté lista) — por eso dos flags en vez de
+    una sola fecha de "cierre completo".
+    """
+
+    __tablename__ = "cierre_rentabilidad"
+
+    periodo: Mapped[str] = mapped_column(String(64), primary_key=True)
+    desde: Mapped[date] = mapped_column(Date)
+    hasta: Mapped[date] = mapped_column(Date)
+    generado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    tactica_guardado: Mapped[bool] = mapped_column(Boolean, default=False)
+    ecom_guardado: Mapped[bool] = mapped_column(Boolean, default=False)
+    ecom_origen: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "excel" | "api"

@@ -3,30 +3,57 @@
 pantalla "Rentabilidad Táctica" de `docs/index.html` deje de calcular en
 JavaScript y use el motor ya probado.
 
-No agrega reglas de negocio: traduce filas del CSV que hoy sube el operador
-a `LineaTacticaInput` y devuelve `ResultadoTactica` tal cual lo calcula el
-motor. No persiste nada en `venta_tactica` — esa es una etapa separada
-(persistencia, Etapa 9/10 de RENTABILIDAD_IMPLEMENTACION.md §9), no
-construida todavía a propósito.
+No agrega reglas de negocio: traduce filas del CSV/SQL/Excel a los inputs
+del motor y devuelve el resultado tal cual lo calcula.
+
+**Dos familias de endpoints, deliberadamente separadas** (ajuste de
+arquitectura pedido por Maxx, 2026-08-10):
+
+- `/tactica/calcular`, `/tactica/periodo` — **consulta**. Calculan y
+  devuelven, nunca escriben en `venta_tactica`/`venta_ecom`. Se puede
+  llamar todas las veces que haga falta en un día sin dejar rastro en la
+  base (`persistencia.construir_filas_*`).
+- `/cierres/*` — **cierre**. La única forma de escribir en las tablas de
+  hechos; queda registrado en `cierre_rentabilidad` con cuándo se guardó.
 """
 import re
+import tempfile
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import gsheets, seed
-from .adapters import CostoVigenteProvider, IvaProvider
+from .adapters import (
+    ClasificacionProvider,
+    CostoVigenteProvider,
+    IvaProvider,
+    MargenObjetivoProvider,
+    ResponsableProvider,
+    StockProvider,
+    VinculacionProvider,
+)
+from .agregaciones import ECOM_DIMENSIONES, TACTICA_DIMENSIONES, agregar_ecom, agregar_tactica
 from .calculators import LineaTacticaInput, RentabilidadTacticaCalculator
 from .config import ConfiguracionFaltante
 from .db import sesion
+from .ingesta_ecom import EcomExcelAdapter
 from .ingesta_tactica import FilaTactica, TacticaSqlAdapter
-from .models import Regimen
+from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
+from .persistencia import guardar_cierre_ecom, guardar_cierre_tactica, registrar_cierre
+from .validador import ValidadorRentabilidad
 
 router = APIRouter(prefix="/rentabilidad", tags=["rentabilidad"])
+
+
+def _periodo_de_rango(desde: date, hasta: date) -> str:
+    """Etiqueta de período para un rango de fechas — reemplaza el nombre de
+    hoja mensual ("Junio-Julio") por algo derivable y sin ambigüedad. Es
+    metadata de partición, no una regla de negocio (§1.2 IMPLEMENTACION)."""
+    return f"{desde.isoformat()}_{hasta.isoformat()}"
 
 RENTABILIDAD_DIR = Path(__file__).resolve().parent
 
@@ -227,3 +254,207 @@ def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> CalcularTacti
     with sesion() as db:
         resultados = calcular_periodo_tactica(filas, db, costo_provider, iva_provider)
     return CalcularTacticaPeriodoOut(resultados=resultados, total_lineas=len(resultados))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CIERRES — la única vía de escritura en venta_tactica/venta_ecom. Todo lo
+# de arriba es consulta; nada de arriba persiste.
+# ══════════════════════════════════════════════════════════════════════════
+
+class GuardarCierreIn(BaseModel):
+    desde: date
+    hasta: date
+
+
+class GuardarCierreOut(BaseModel):
+    periodo: str
+    total_lineas: int
+    excluidas: int
+    config_faltante: list[str]
+
+
+@router.post("/cierres/tactica", response_model=GuardarCierreOut)
+def cerrar_tactica(payload: GuardarCierreIn) -> GuardarCierreOut:
+    """Guardar cierre de Táctica: SQL -> motor -> `venta_tactica`, y lo
+    registra en `cierre_rentabilidad`. Reemplaza cualquier cierre previo del
+    mismo rango (recarga completa del período, ver `persistencia.py`)."""
+    if payload.hasta < payload.desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    periodo = _periodo_de_rango(payload.desde, payload.hasta)
+    filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta)
+    fetch = _fetch_fn_con_cache()
+    with sesion() as db:
+        resultado = guardar_cierre_tactica(
+            db, periodo, filas,
+            CostoVigenteProvider(fetch_fn=fetch), IvaProvider(fetch_fn=fetch),
+            ClasificacionProvider(fetch_fn=fetch), ResponsableProvider(fetch_fn=fetch),
+            MargenObjetivoProvider(fetch_fn=fetch),
+        )
+        registrar_cierre(db, periodo, payload.desde, payload.hasta, tactica_guardado=True)
+    return GuardarCierreOut(
+        periodo=periodo, total_lineas=len(resultado.filas),
+        excluidas=sum(1 for f in resultado.filas if f.excluido),
+        config_faltante=resultado.config_faltante,
+    )
+
+
+class GuardarCierreEcomOut(GuardarCierreOut):
+    excluidas_por_estado_pago: int
+    incidencias_costo: int
+
+
+@router.post("/cierres/ecom/excel", response_model=GuardarCierreEcomOut)
+async def cerrar_ecom_excel(
+    desde: date = Form(...),
+    hasta: date = Form(...),
+    tc: str = Form(...),
+    archivo: UploadFile = File(...),
+) -> GuardarCierreEcomOut:
+    """Guardar cierre de Ecom vía Excel (fuente disponible hoy — la API
+    todavía tiene campos sin confirmar, ver ingesta_ecom_api.py). Mismo
+    `EcomExcelAdapter` ya probado; el día que la API esté lista, cambia el
+    adaptador de entrada, no esta capa ni el motor."""
+    if hasta < desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    try:
+        tc_decimal = Decimal(tc)
+    except InvalidOperation:
+        raise HTTPException(422, f"TC no numérico: {tc!r}")
+
+    periodo = _periodo_de_rango(desde, hasta)
+    contenido = await archivo.read()
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp.write(contenido)
+        tmp_path = tmp.name
+    try:
+        resultado_ingesta = EcomExcelAdapter().procesar(tmp_path, tc_decimal)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    fetch = _fetch_fn_con_cache()
+    with sesion() as db:
+        resultado = guardar_cierre_ecom(
+            db, periodo, resultado_ingesta, IvaProvider(fetch_fn=fetch),
+            ClasificacionProvider(fetch_fn=fetch), VinculacionProvider(fetch_fn=fetch),
+            StockProvider(fetch_fn=fetch), MargenObjetivoProvider(fetch_fn=fetch),
+        )
+        registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="excel")
+    return GuardarCierreEcomOut(
+        periodo=periodo, total_lineas=len(resultado.filas),
+        excluidas=sum(1 for f in resultado.filas if f.excluido),
+        config_faltante=resultado.config_faltante,
+        excluidas_por_estado_pago=len(resultado_ingesta.excluidas_por_estado_pago),
+        incidencias_costo=len(resultado_ingesta.incidencias_costo),
+    )
+
+
+class CierreOut(BaseModel):
+    periodo: str
+    desde: date
+    hasta: date
+    generado_en: str
+    tactica_guardado: bool
+    ecom_guardado: bool
+    ecom_origen: str | None
+
+
+@router.get("/cierres", response_model=list[CierreOut])
+def listar_cierres() -> list[CierreOut]:
+    """Históricos de Rentabilidad: qué períodos están guardados. No
+    devuelve los datos del cierre — para eso, `/agregaciones/*` e
+    `/incidencias` con el mismo `periodo`."""
+    with sesion() as db:
+        cierres = db.query(CierreRentabilidad).order_by(CierreRentabilidad.desde.desc()).all()
+        return [
+            CierreOut(
+                periodo=c.periodo, desde=c.desde, hasta=c.hasta,
+                generado_en=c.generado_en.isoformat(),
+                tactica_guardado=c.tactica_guardado, ecom_guardado=c.ecom_guardado,
+                ecom_origen=c.ecom_origen,
+            )
+            for c in cierres
+        ]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# AGREGACIONES E INCIDENCIAS — leen `venta_tactica`/`venta_ecom`, así que
+# solo tienen datos para un `periodo` que ya pasó por /cierres/*.
+# ══════════════════════════════════════════════════════════════════════════
+
+class FilaAgregadaOut(BaseModel):
+    dimension_valor: str | None
+    suma_1: Decimal
+    suma_2: Decimal
+    suma_costo: Decimal
+    suma_resultado: Decimal
+    pct: Decimal | None
+    cantidad_lineas: int
+
+
+@router.get("/agregaciones/tactica", response_model=list[FilaAgregadaOut])
+def agregaciones_tactica(periodo: str, dimension: str, incluir_excluidos: bool = False) -> list[FilaAgregadaOut]:
+    if dimension not in TACTICA_DIMENSIONES:
+        raise HTTPException(422, f"'dimension' debe ser una de {sorted(TACTICA_DIMENSIONES)}.")
+    with sesion() as db:
+        filas = agregar_tactica(db, periodo, dimension, incluir_excluidos)
+    return [
+        FilaAgregadaOut(
+            dimension_valor=f.dimension_valor, suma_1=f.suma_precio_venta_iva, suma_2=f.suma_precio_venta,
+            suma_costo=f.suma_costo_total_pesos, suma_resultado=f.suma_margen_real,
+            pct=f.pct, cantidad_lineas=f.cantidad_lineas,
+        )
+        for f in filas
+    ]
+
+
+@router.get("/agregaciones/ecom", response_model=list[FilaAgregadaOut])
+def agregaciones_ecom(periodo: str, dimension: str, incluir_excluidos: bool = False) -> list[FilaAgregadaOut]:
+    if dimension not in ECOM_DIMENSIONES:
+        raise HTTPException(422, f"'dimension' debe ser una de {sorted(ECOM_DIMENSIONES)}.")
+    with sesion() as db:
+        filas = agregar_ecom(db, periodo, dimension, incluir_excluidos)
+    return [
+        FilaAgregadaOut(
+            dimension_valor=f.dimension_valor, suma_1=f.suma_precio_final, suma_2=f.suma_precio_sin_iva,
+            suma_costo=f.suma_costo_total, suma_resultado=f.suma_rentabilidad,
+            pct=f.pct, cantidad_lineas=f.cantidad_lineas,
+        )
+        for f in filas
+    ]
+
+
+class IncidenciaOut(BaseModel):
+    codigo: str
+    severidad: str
+    entidad: str
+    referencia: str
+    detalle: str
+
+
+def incidencias_de_periodo(db: Session, periodo: str, entidad: str) -> list:
+    """Lógica pura del endpoint — corre el validador (ya probado en
+    test_validador.py) sobre lo que esté persistido para este `periodo`.
+    Nunca calcula ni corrige nada, solo lee y reporta (§5 IMPLEMENTACION)."""
+    validador = ValidadorRentabilidad(db)
+    incidencias = []
+    if entidad == "tactica":
+        for fila in db.query(VentaTactica).filter(VentaTactica.periodo == periodo).all():
+            incidencias.extend(validador.validar_linea_tactica(fila))
+        incidencias.extend(validador.detectar_duplicados_tactica(periodo))
+    else:
+        for fila in db.query(VentaEcom).filter(VentaEcom.periodo == periodo).all():
+            incidencias.extend(validador.validar_linea_ecom(fila))
+        incidencias.extend(validador.detectar_duplicados_ecom(periodo))
+    return incidencias
+
+
+@router.get("/incidencias", response_model=list[IncidenciaOut])
+def listar_incidencias(periodo: str, entidad: str) -> list[IncidenciaOut]:
+    if entidad not in ("tactica", "ecom"):
+        raise HTTPException(422, "'entidad' debe ser 'tactica' o 'ecom'.")
+    with sesion() as db:
+        incidencias = incidencias_de_periodo(db, periodo, entidad)
+    return [
+        IncidenciaOut(codigo=i.codigo, severidad=i.severidad, entidad=i.entidad, referencia=i.referencia, detalle=i.detalle)
+        for i in incidencias
+    ]

@@ -12,14 +12,16 @@ from fastapi import HTTPException
 from rentabilidad.api import (
     CalcularTacticaPeriodoIn,
     LineaTacticaIn,
+    _periodo_de_rango,
     calcular_lineas,
     calcular_periodo_tactica,
     calcular_tactica_periodo,
     extraer_comprobante,
+    incidencias_de_periodo,
 )
 from rentabilidad.config import ConfiguracionFaltante
 from rentabilidad.ingesta_tactica import FilaTactica
-from rentabilidad.models import Regimen
+from rentabilidad.models import Regimen, VentaTactica
 
 TOLERANCIA = Decimal("0.01")
 
@@ -171,3 +173,46 @@ def test_periodo_rechaza_hasta_anterior_a_desde_sin_tocar_sql():
     payload = CalcularTacticaPeriodoIn(desde=date(2026, 8, 10), hasta=date(2026, 8, 1))
     with pytest.raises(HTTPException):
         calcular_tactica_periodo(payload)
+
+
+# ── _periodo_de_rango — etiqueta del cierre, sin ambigüedad de nombre de hoja ──
+
+def test_periodo_de_rango_es_estable_y_ordenable():
+    assert _periodo_de_rango(date(2026, 7, 23), date(2026, 8, 22)) == "2026-07-23_2026-08-22"
+
+
+# ── incidencias_de_periodo — wiring del validador ya probado, no reglas nuevas ──
+
+def test_incidencias_de_periodo_tactica_detecta_sin_pm(db_session):
+    db_session.add(VentaTactica(
+        periodo="2026-07", fecha=date(2026, 7, 31), empresa="Cliente Demo",
+        codigo="SKU1", tipo_factura="FEA", nro_factura="00003-00000001",
+        cantidad=Decimal(1), precio_venta=Decimal(1000), tc=Decimal(1500),
+        regimen=Regimen.CUENTA_1, pm=None,
+    ))
+    db_session.commit()
+    incidencias = incidencias_de_periodo(db_session, "2026-07", "tactica")
+    assert any(i.codigo == "V-13" for i in incidencias)
+
+
+def test_incidencias_de_periodo_solo_mira_el_periodo_pedido(db_session):
+    db_session.add(VentaTactica(
+        periodo="OTRO-PERIODO", fecha=date(2026, 6, 1), empresa="X", codigo="SKU1",
+        tipo_factura="FEA", nro_factura="1", cantidad=Decimal(1),
+        precio_venta=Decimal(1000), tc=Decimal(1500), regimen=Regimen.CUENTA_1,
+    ))
+    db_session.commit()
+    assert incidencias_de_periodo(db_session, "2026-07", "tactica") == []
+
+
+def test_incidencias_de_periodo_detecta_duplicados_v16(db_session):
+    for i in range(2):
+        db_session.add(VentaTactica(
+            periodo="2026-07", fecha=date(2026, 7, 31), empresa="Cliente Demo",
+            codigo="SKU1", tipo_factura="FEA", nro_factura="00003-00000001",
+            cantidad=Decimal(1), precio_venta=Decimal(1000), tc=Decimal(1500),
+            regimen=Regimen.CUENTA_1, pm="Matias",
+        ))
+    db_session.commit()
+    incidencias = incidencias_de_periodo(db_session, "2026-07", "tactica")
+    assert any(i.codigo == "V-16" for i in incidencias)
