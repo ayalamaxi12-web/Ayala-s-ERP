@@ -3,16 +3,36 @@ Ayala's ERP - Backend API
 """
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 import json
 
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
+from rentabilidad.config import ConfiguracionFaltante
 
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(rentabilidad_router)
+
+
+# Starlette no agrega los headers de CORSMiddleware a una excepción que se
+# escapa sin manejar (ServerErrorMiddleware, que sí devuelve el 500, corre
+# POR FUERA de CORSMiddleware) — el navegador nunca llega a leer ese 500 y
+# lo reporta como "Failed to fetch", sin mostrar el error real. Encontrado
+# en vivo (2026-08-11) probando /rentabilidad/tactica/periodo sin
+# RENT_TACTICA_SQL_* configurado. Estos handlers devuelven una Response
+# normal, que sí pasa por el middleware con los headers correctos.
+@app.exception_handler(ConfiguracionFaltante)
+async def _configuracion_faltante_handler(request: Request, exc: ConfiguracionFaltante):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(Exception)
+async def _error_no_manejado_handler(request: Request, exc: Exception):
+    print(f"Error no manejado en {request.url.path}: {exc!r}")
+    return JSONResponse(status_code=500, content={"detail": f"Error interno: {exc}"})
 
 
 @app.on_event("startup")

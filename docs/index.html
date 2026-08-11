@@ -460,27 +460,55 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 <div id="page-rentabilidad-tactica" class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
     <div>
-      <div class="section-hdr" style="margin-bottom:4px">📊 Rentabilidad Táctica</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Calculadora de rentabilidad real por factura · C1 / C2 / NC / PROMOS</div>
+      <div class="section-hdr" style="margin-bottom:4px">📊 Rentabilidad</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Táctica (SQL) + ECOM (API) · motor real, sin depender de Excel</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <label for="tacrent-file-input" class="btn primary" style="cursor:pointer">📂 Cargar CSV</label>
-      <input type="file" id="tacrent-file-input" accept=".csv" style="display:none" onchange="tacRentHandleFile(event)">
-      <button class="btn" id="tacrent-btn-export" onclick="tacRentExport()" style="display:none">⬇ Exportar CSV</button>
+      <button class="btn" id="rent-btn-historicos" onclick="rentToggleHistoricos()">🕘 Históricos</button>
     </div>
   </div>
 
-  <!-- CONFIG PANEL — solo TC: las tasas (IIBB/Imp.Cheque/CF1/CF2) ahora son
-       paramétricas del motor (backend/rentabilidad, tabla parametro_tasa),
-       no un ajuste por pantalla. -->
+  <!-- PERÍODO — consulta = no persiste; guardar cierre = sí, y queda en Históricos -->
+  <div class="card" style="margin-bottom:0">
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="margin:0"><label>Fecha desde</label><input type="date" id="rent-desde"></div>
+      <div class="field" style="margin:0"><label>Fecha hasta</label><input type="date" id="rent-hasta"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary" id="rent-btn-consultar" onclick="rentConsultar()">🔍 Consultar</button>
+        <button class="btn" id="rent-btn-guardar-cierre" onclick="rentGuardarCierre()" style="display:none">💾 Guardar Cierre</button>
+      </div>
+    </div>
+    <div id="rent-status" style="font-size:10px;color:var(--text3);margin-top:8px;font-family:'DM Mono',monospace"></div>
+  </div>
+
+  <!-- HISTÓRICOS -->
+  <div id="rent-historicos-panel" style="display:none;margin-top:0">
+    <div class="card" style="margin-bottom:0">
+      <div class="section-hdr" style="margin-bottom:10px">🕘 Históricos de Rentabilidad</div>
+      <div id="rent-historicos-lista" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">Cargando...</div>
+      <div id="rent-historicos-detalle" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- TABS: Táctica / Ecom -->
+  <div style="display:flex;gap:2px;margin:12px 0 -1px;position:relative;z-index:1">
+    <button class="btn" id="rent-tab-btn-tactica" onclick="rentSwitchTab('tactica')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Táctica</button>
+    <button class="btn" id="rent-tab-btn-ecom" onclick="rentSwitchTab('ecom')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Ecom</button>
+  </div>
+
+  <div id="rent-tab-body-tactica">
+  <!-- AVANZADO — CSV manual, solo para comparar/validar contra el proceso legacy -->
   <div class="card" style="margin-bottom:0">
     <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="tacRentToggleConfig()">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Tipo de cambio</div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Avanzado: CSV manual (validación) / TC</div>
       <span id="tacrent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
     </div>
     <div id="tacrent-cfg-body" style="display:none;margin-top:12px">
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
-        <div class="rule-item"><div class="rule-name">TC del día</div><div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="rule-item"><div class="rule-name">TC del día (CSV)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
+        <label for="tacrent-file-input" class="btn" style="cursor:pointer">📂 Cargar CSV</label>
+        <input type="file" id="tacrent-file-input" accept=".csv" style="display:none" onchange="tacRentHandleFile(event)">
+        <button class="btn" id="tacrent-btn-export" onclick="tacRentExport()" style="display:none">⬇ Exportar CSV</button>
       </div>
     </div>
   </div>
@@ -521,9 +549,9 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
   <!-- EMPTY STATE -->
   <div id="tacrent-empty" style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;flex-direction:column;gap:12px">
-    <div style="font-size:32px">📂</div>
-    <div>Cargá el CSV de facturación de Táctica para comenzar</div>
-    <div style="font-size:10px;color:var(--text3)">Formato: exportación CSV con columnas estándar de Táctica</div>
+    <div style="font-size:32px">📊</div>
+    <div>Elegí un período arriba y tocá "Consultar"</div>
+    <div style="font-size:10px;color:var(--text3)">Trae los datos directo de Táctica (SQL) — no hace falta ningún archivo</div>
   </div>
 
   <!-- TABLE -->
@@ -573,6 +601,72 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       </table>
     </div>
   </div>
+  </div><!-- /rent-tab-body-tactica -->
+
+  <div id="rent-tab-body-ecom" style="display:none">
+    <div class="card" style="margin-bottom:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="ecoRentToggleConfig()">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Avanzado: Excel manual (comparación) / TC</div>
+        <span id="ecorent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
+      </div>
+      <div id="ecorent-cfg-body" style="display:none;margin-top:12px">
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="rule-item"><div class="rule-name">TC manual (override)</div><div class="rule-pct"><input type="number" id="ecorent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px">El Excel de Ecom queda como comparación — ver pestaña "Verificar Ecom" para subirlo. Acá siempre se consulta la API real.</div>
+      </div>
+    </div>
+
+    <div id="ecorent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px">
+      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-rows">0</div><div class="stat-label">Órdenes activas</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--text3)" id="ecorent-kpi-excl">0</div><div class="stat-label">Excluidas/incidencias</div></div>
+      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-venta">—</div><div class="stat-label">Precio Final Total</div></div>
+      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-margen">—</div><div class="stat-label">Rentabilidad $</div></div>
+      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-pct">—</div><div class="stat-label">Rentabilidad %</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="ecorent-kpi-neg">0</div><div class="stat-label">Negativos</div></div>
+    </div>
+
+    <div id="ecorent-incidencias" style="display:none;margin:0"></div>
+
+    <div id="ecorent-filters" class="erp-filters" style="display:none">
+      <input type="text" id="ecorent-search" placeholder="Buscar Nº orden, canal..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;" oninput="ecoRentRender()">
+      <select id="ecorent-filter-canal" class="fi" onchange="ecoRentRender()">
+        <option value="">Todos los canales</option>
+      </select>
+      <select id="ecorent-filter-margen" class="fi" onchange="ecoRentRender()">
+        <option value="">Todos los márgenes</option>
+        <option value="pos">Positivos</option>
+        <option value="neg">Negativos</option>
+      </select>
+      <span id="ecorent-filter-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+
+    <div id="ecorent-empty" style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;flex-direction:column;gap:12px">
+      <div style="font-size:32px">📊</div>
+      <div>Elegí un período arriba y tocá "Consultar"</div>
+      <div style="font-size:10px;color:var(--text3)">Trae las órdenes directo de la API de Ecom — no hace falta ningún Excel</div>
+    </div>
+
+    <div id="ecorent-table-wrap" class="table-wrap" style="display:none;overflow-x:auto">
+      <table id="ecorent-table" style="min-width:1200px">
+        <thead><tr>
+          <th>Nº Orden</th>
+          <th>Canal</th>
+          <th>Estado Pago</th>
+          <th style="text-align:right">Precio Final</th>
+          <th style="text-align:right">Precio S/IVA</th>
+          <th style="text-align:right">Comisión</th>
+          <th style="text-align:right">Envío</th>
+          <th style="text-align:right">Costo</th>
+          <th style="text-align:right">Neto</th>
+          <th style="text-align:right">Rentabilidad</th>
+        </tr></thead>
+        <tbody id="ecorent-tbody"></tbody>
+        <tfoot id="ecorent-tfoot"></tfoot>
+      </table>
+      <div class="pagination" id="ecorent-pag"></div>
+    </div>
+  </div><!-- /rent-tab-body-ecom -->
 </div>
 <!-- COMPETIDORES -->
 <div id="page-competidores" class="page">
@@ -3879,6 +3973,9 @@ function ofertasExport(){
 
   let tacRawRows=[], tacCalcRows=[], tacIncidencias=[], tacFiltered=[], tacPage=1;
   let tacTCBNA = null;
+  // ── Consulta/Cierre por período (Táctica SQL + Ecom API) — 2026-08-11 ──
+  let ecoCalcRows=[], ecoIncidencias=[], ecoFiltered=[], ecoPage=1;
+  let rentUltimaConsulta=null;
 
   // ── HELPERS ──
   function _parseNum(v){
@@ -4283,7 +4380,366 @@ function ofertasExport(){
     b.style.display=open?'block':'none';
     a.textContent=open?'▼':'▶';
   };
+  // ══ CONSULTA / CIERRE POR PERÍODO — Táctica SQL + Ecom API ══════════════
+  // "Consultar" nunca persiste (backend/rentabilidad/persistencia.py:
+  // construir_filas_*). "Guardar Cierre" es la única acción que escribe en
+  // la base, y solo corre cuando el usuario la toca explícitamente.
+
+  function _tacticaOutAFila(r){
+    const margen=(r.margen_real!==null&&r.margen_real!==undefined)?Number(r.margen_real):null;
+    const pv=Number(r.precio_venta)||0;
+    let incidencia=null;
+    if(r.excluido){ incidencia=r.motivo_exclusion||'EXCLUIDO'; }
+    else if(margen===null){
+      if(!REGIMENES_CALCULABLES.has(r.regimen)) incidencia=r.regimen;
+      else if(r.costo_lista===null||r.costo_lista===undefined) incidencia='COSTO_NO_RESUELTO';
+      else if(r.regimen==='CUENTA_1'&&(r.iva_producto===null||r.iva_producto===undefined)) incidencia='IVA_NO_RESUELTO';
+      else incidencia='SIN_MARGEN';
+    }
+    return {
+      fecha:r.fecha||'', empresa:r.empresa||'', sku:r.codigo||'', tipoFact:r.tipo_factura||'',
+      nroFact:r.nro_factura||'', pm:r.pm||'', tipo:r.regimen, esNC:Number(r.cantidad)<0,
+      incidencia, excluido:!!r.excluido, pv,
+      iva:Number(r.iva)||0, impchq:Number(r.imp_cheque)||0, iibb:Number(r.iibb)||0,
+      costo:Number(r.costo_total_pesos)||0,
+      cf:(Number(r.costo_financiero_1)||0)+(Number(r.costo_financiero_2)||0),
+      margen, margenPct: margen!==null?(r.margen_pct!=null?Number(r.margen_pct):(pv?margen/Math.abs(pv):0)):null,
+    };
+  }
+
+  function _ecomOutAFila(r){
+    const rentabilidad=(r.rentabilidad!==null&&r.rentabilidad!==undefined)?Number(r.rentabilidad):null;
+    return {
+      orden:r.numero_orden, canal:r.canal_de_venta||'(sin canal)', estadoPago:r.estado_pago||'',
+      excluido:!!r.excluido, precioFinal:Number(r.precio_final)||0, precioSinIva:Number(r.precio_sin_iva)||0,
+      comision:Number(r.comision_venta)||0, envio:Number(r.costo_envio)||0,
+      costoTotal:r.costo_total!=null?Number(r.costo_total):0,
+      neto:r.neto!=null?Number(r.neto):null, rentabilidad,
+    };
+  }
+
+  function _avisarIncidenciasGlobales(prefix, incidencias, configFaltante){
+    if(configFaltante&&configFaltante.length) toast(`${prefix}: ${configFaltante.length} línea(s) sin poder calcular (configuración faltante — revisá Configuración)`,'error');
+    const porCodigo={};
+    (incidencias||[]).forEach(i=>{ porCodigo[i.codigo]=(porCodigo[i.codigo]||0)+1; });
+    const resumen=Object.entries(porCodigo).map(([c,n])=>`${c}:${n}`).join(', ');
+    if(resumen) toast(`${prefix} — incidencias del validador: ${resumen}`);
+  }
+
+  window.rentSwitchTab = function(tab){
+    const isTac=tab==='tactica';
+    document.getElementById('rent-tab-body-tactica').style.display=isTac?'block':'none';
+    document.getElementById('rent-tab-body-ecom').style.display=isTac?'none':'block';
+    const bt=document.getElementById('rent-tab-btn-tactica'), be=document.getElementById('rent-tab-btn-ecom');
+    bt.style.borderBottomColor=isTac?'var(--accent)':'transparent'; bt.style.opacity=isTac?'1':'.6';
+    be.style.borderBottomColor=isTac?'transparent':'var(--accent)'; be.style.opacity=isTac?'.6':'1';
+  };
+
+  window.rentConsultar = async function(){
+    const desde=document.getElementById('rent-desde').value;
+    const hasta=document.getElementById('rent-hasta').value;
+    if(!desde||!hasta){ toast('Elegí fecha desde y hasta','error'); return; }
+    if(hasta<desde){ toast('"Hasta" no puede ser anterior a "desde"','error'); return; }
+
+    const statusEl=document.getElementById('rent-status');
+    const btnConsultar=document.getElementById('rent-btn-consultar');
+    statusEl.textContent='Consultando Táctica (SQL) + Ecom (API)... puede tardar según el tamaño del período.';
+    btnConsultar.disabled=true;
+    document.getElementById('rent-btn-guardar-cierre').style.display='none';
+    const bu=getBackendUrl();
+
+    // Táctica y Ecom se piden en paralelo — si una fuente está caída/lenta
+    // (ej. sin RENT_TACTICA_SQL_* configurado) no debe demorar a la otra.
+    let tacResp=null, ecoResp=null, tacErr=null, ecoErr=null;
+    const pTactica=(async()=>{
+      try{
+        const r=await fetch(`${bu}/rentabilidad/tactica/periodo`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({desde,hasta})});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
+        tacResp=d;
+      }catch(e){ tacErr=e.message; }
+    })();
+    const pEcom=(async()=>{
+      try{
+        const body={desde,hasta};
+        const tcManual=parseFloat(document.getElementById('ecorent-cfg-tc')?.value||'0');
+        if(tcManual>0) body.tc=String(tcManual);
+        const r=await fetch(`${bu}/rentabilidad/ecom/periodo`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
+        ecoResp=d;
+      }catch(e){ ecoErr=e.message; }
+    })();
+    await Promise.all([pTactica, pEcom]);
+
+    btnConsultar.disabled=false;
+
+    if(tacResp){
+      tacCalcRows=[]; tacIncidencias=[];
+      tacResp.resultados.forEach(r=>{
+        const fila=_tacticaOutAFila(r);
+        if(fila.margen===null||fila.excluido) tacIncidencias.push(fila); else tacCalcRows.push(fila);
+      });
+      const tot=tacCalcRows.reduce((a,d)=>({pv:a.pv+d.pv,margen:a.margen+d.margen}),{pv:0,margen:0});
+      const pct=tot.pv?tot.margen/Math.abs(tot.pv):0;
+      const neg=tacCalcRows.filter(d=>d.margen<0).length;
+      document.getElementById('tacrent-kpis').style.display='grid';
+      document.getElementById('tacrent-kpi-rows').textContent=tacCalcRows.length;
+      document.getElementById('tacrent-kpi-excl').textContent=tacIncidencias.length;
+      document.getElementById('tacrent-kpi-venta').textContent=_fmt(tot.pv);
+      document.getElementById('tacrent-kpi-margen').textContent=_fmt(tot.margen);
+      document.getElementById('tacrent-kpi-pct').textContent=_fmtPct(pct);
+      document.getElementById('tacrent-kpi-neg').textContent=neg;
+      const pms=[...new Set(tacCalcRows.map(d=>d.pm).filter(Boolean))].sort();
+      const selPM=document.getElementById('tacrent-filter-pm');
+      selPM.innerHTML='<option value="">Todos los PM</option>'+pms.map(p=>`<option value="${p}">${p}</option>`).join('');
+      _renderIncidencias();
+      tacRentRender();
+      _avisarIncidenciasGlobales('Táctica', tacResp.incidencias, tacResp.config_faltante);
+    }
+
+    if(ecoResp){
+      ecoCalcRows=[]; ecoIncidencias=[];
+      ecoResp.resultados.forEach(r=>{
+        const fila=_ecomOutAFila(r);
+        if(fila.rentabilidad===null||fila.excluido) ecoIncidencias.push(fila); else ecoCalcRows.push(fila);
+      });
+      _kpisEco();
+      _renderIncidenciasEco();
+      ecoRentRender();
+      const avisos=[];
+      if(ecoResp.excluidas_por_estado_pago) avisos.push(`${ecoResp.excluidas_por_estado_pago} excluida(s) por estado de pago`);
+      if(ecoResp.incidencias_costo) avisos.push(`${ecoResp.incidencias_costo} con costo sin resolver`);
+      if(avisos.length) toast(`Ecom — ${avisos.join(', ')}`);
+      if(ecoResp.config_faltante&&ecoResp.config_faltante.length) toast(`Ecom: ${ecoResp.config_faltante.length} orden(es) sin poder calcular (configuración faltante)`,'error');
+    }
+
+    const partes=[];
+    partes.push(tacResp?`Táctica: ${tacResp.total_lineas} líneas`:`Táctica: error — ${tacErr}`);
+    partes.push(ecoResp?`Ecom: ${ecoResp.total_lineas} órdenes`:`Ecom: error — ${ecoErr}`);
+    statusEl.textContent=partes.join(' · ')+' — consulta en vivo, no se guardó nada.';
+
+    if(tacResp||ecoResp){
+      document.getElementById('rent-btn-guardar-cierre').style.display='';
+      rentUltimaConsulta={desde,hasta};
+    }
+    if(tacErr) toast('Error consultando Táctica: '+tacErr,'error');
+    if(ecoErr) toast('Error consultando Ecom: '+ecoErr,'error');
+  };
+
+  window.rentGuardarCierre = async function(){
+    if(!rentUltimaConsulta){ toast('Primero hacé una consulta','error'); return; }
+    const {desde,hasta}=rentUltimaConsulta;
+    if(!confirm(`¿Guardar cierre de Rentabilidad para ${desde} → ${hasta}?\n\nEsto reemplaza cualquier cierre previo guardado para ese mismo rango exacto de fechas.`)) return;
+
+    const bu=getBackendUrl();
+    const statusEl=document.getElementById('rent-status');
+    const btn=document.getElementById('rent-btn-guardar-cierre');
+    statusEl.textContent='Guardando cierre...';
+    btn.disabled=true;
+    const resultados=[null,null];
+
+    const pTactica=(async()=>{
+      try{
+        const r=await fetch(`${bu}/rentabilidad/cierres/tactica`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({desde,hasta})});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
+        resultados[0]=`Táctica: ${d.total_lineas} líneas guardadas (${d.excluidas} excluidas)`;
+      }catch(e){ resultados[0]=`Táctica: error — ${e.message}`; }
+    })();
+    const pEcom=(async()=>{
+      try{
+        const body={desde,hasta};
+        const tcManual=parseFloat(document.getElementById('ecorent-cfg-tc')?.value||'0');
+        if(tcManual>0) body.tc=String(tcManual);
+        const r=await fetch(`${bu}/rentabilidad/cierres/ecom`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
+        resultados[1]=`Ecom: ${d.total_lineas} órdenes guardadas (${d.excluidas} excluidas)`;
+      }catch(e){ resultados[1]=`Ecom: error — ${e.message}`; }
+    })();
+    await Promise.all([pTactica, pEcom]);
+
+    btn.disabled=false;
+    statusEl.textContent='Cierre guardado — '+resultados.join(' · ');
+    toast('Cierre guardado — ya está disponible en Históricos');
+    if(document.getElementById('rent-historicos-panel').style.display!=='none') rentLoadHistoricos();
+  };
+
+  // ── ECOM — render, KPIs, incidencias, paginación (mismo patrón que Táctica,
+  // sin desglose por PM en esta primera versión) ──
+
+  function _kpisEco(){
+    const tot=ecoCalcRows.reduce((a,d)=>({pf:a.pf+d.precioFinal,rent:a.rent+(d.rentabilidad||0)}),{pf:0,rent:0});
+    const pct=tot.pf?tot.rent/Math.abs(tot.pf):0;
+    const neg=ecoCalcRows.filter(d=>d.rentabilidad<0).length;
+    document.getElementById('ecorent-kpis').style.display='grid';
+    document.getElementById('ecorent-kpi-rows').textContent=ecoCalcRows.length;
+    document.getElementById('ecorent-kpi-excl').textContent=ecoIncidencias.length;
+    document.getElementById('ecorent-kpi-venta').textContent=_fmt(tot.pf);
+    document.getElementById('ecorent-kpi-margen').textContent=_fmt(tot.rent);
+    document.getElementById('ecorent-kpi-pct').textContent=_fmtPct(pct);
+    document.getElementById('ecorent-kpi-neg').textContent=neg;
+    const canales=[...new Set(ecoCalcRows.map(d=>d.canal).filter(Boolean))].sort();
+    const sel=document.getElementById('ecorent-filter-canal');
+    sel.innerHTML='<option value="">Todos los canales</option>'+canales.map(c=>`<option value="${c}">${c}</option>`).join('');
+  }
+
+  function _renderIncidenciasEco(){
+    const cont=document.getElementById('ecorent-incidencias');
+    if(!ecoIncidencias.length){ cont.style.display='none'; cont.innerHTML=''; return; }
+    cont.style.display='block';
+    const filas=ecoIncidencias.slice(0,200).map(d=>`<tr>
+        <td>${d.orden}</td><td style="font-size:10px">${d.canal}</td><td style="font-size:10px">${d.estadoPago}</td>
+        <td style="color:var(--yellow)">${d.excluido?'Excluida por estado de pago':'Costo no resuelto'}</td>
+      </tr>`).join('');
+    cont.innerHTML=`<div class="card" style="border-color:var(--yellow);margin-bottom:0">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">
+        ⚠ ${ecoIncidencias.length} orden(es) sin calcular o excluida(s) — no suman en los totales
+      </div>
+      <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+        <table style="min-width:500px"><thead><tr>
+          <th>Nº Orden</th><th>Canal</th><th>Estado Pago</th><th>Motivo</th>
+        </tr></thead><tbody>${filas}</tbody></table>
+      </div>
+      ${ecoIncidencias.length>200?`<div style="font-size:10px;color:var(--text3);margin-top:6px">... y ${ecoIncidencias.length-200} más</div>`:''}
+    </div>`;
+  }
+
+  function ecoRentRender(){
+    const q=(document.getElementById('ecorent-search')?.value||'').toLowerCase();
+    const fCanal=document.getElementById('ecorent-filter-canal')?.value||'';
+    const fMgn=document.getElementById('ecorent-filter-margen')?.value||'';
+
+    ecoFiltered=ecoCalcRows.filter(d=>{
+      if(fCanal&&d.canal!==fCanal) return false;
+      if(fMgn==='pos'&&d.rentabilidad<0) return false;
+      if(fMgn==='neg'&&d.rentabilidad>=0) return false;
+      if(q&&![d.orden,d.canal,d.estadoPago].some(v=>String(v).toLowerCase().includes(q))) return false;
+      return true;
+    });
+
+    document.getElementById('ecorent-filter-count').textContent=`${ecoFiltered.length} órdenes`;
+    document.getElementById('ecorent-empty').style.display='none';
+    document.getElementById('ecorent-filters').style.display='flex';
+    document.getElementById('ecorent-table-wrap').style.display='block';
+
+    const totalPages=Math.max(1,Math.ceil(ecoFiltered.length/PAGE_SIZE));
+    ecoPage=Math.min(ecoPage,totalPages);
+    const slice=ecoFiltered.slice((ecoPage-1)*PAGE_SIZE,ecoPage*PAGE_SIZE);
+
+    document.getElementById('ecorent-tbody').innerHTML=slice.map(d=>{
+      const mc=d.rentabilidad>=0?'color:#4ade80':'color:#f87171';
+      return `<tr>
+        <td>${d.orden}</td><td style="font-size:10px">${d.canal}</td><td style="font-size:10px">${d.estadoPago}</td>
+        <td style="text-align:right">${_fmt(d.precioFinal)}</td>
+        <td style="text-align:right">${_fmt(d.precioSinIva)}</td>
+        <td style="text-align:right">${_fmt(d.comision)}</td>
+        <td style="text-align:right">${_fmt(d.envio)}</td>
+        <td style="text-align:right">${_fmt(d.costoTotal)}</td>
+        <td style="text-align:right">${d.neto!=null?_fmt(d.neto):'—'}</td>
+        <td style="text-align:right;${mc}"><b>${_fmt(d.rentabilidad)}</b></td>
+      </tr>`;
+    }).join('');
+
+    const tot=ecoFiltered.reduce((a,d)=>({
+      pf:a.pf+d.precioFinal,psi:a.psi+d.precioSinIva,com:a.com+d.comision,env:a.env+d.envio,
+      costo:a.costo+d.costoTotal,rent:a.rent+(d.rentabilidad||0),
+    }),{pf:0,psi:0,com:0,env:0,costo:0,rent:0});
+    const mc=tot.rent>=0?'color:#4ade80':'color:#f87171';
+    document.getElementById('ecorent-tfoot').innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--accent)">
+      <td colspan="3">TOTAL (${ecoFiltered.length} órdenes)</td>
+      <td style="text-align:right">${_fmt(tot.pf)}</td>
+      <td style="text-align:right">${_fmt(tot.psi)}</td>
+      <td style="text-align:right">${_fmt(tot.com)}</td>
+      <td style="text-align:right">${_fmt(tot.env)}</td>
+      <td style="text-align:right">${_fmt(tot.costo)}</td>
+      <td></td>
+      <td style="text-align:right;${mc}">${_fmt(tot.rent)}</td>
+    </tr>`;
+
+    let pag='';
+    if(ecoPage>1) pag+=`<button class="page-btn" onclick="ecoRentChangePage(-1)">‹</button>`;
+    for(let i=Math.max(1,ecoPage-2);i<=Math.min(totalPages,ecoPage+2);i++)
+      pag+=`<button class="page-btn${i===ecoPage?' active':''}" onclick="ecoRentSetPage(${i})">${i}</button>`;
+    if(ecoPage<totalPages) pag+=`<button class="page-btn" onclick="ecoRentChangePage(1)">›</button>`;
+    document.getElementById('ecorent-pag').innerHTML=`<span class="page-info-txt">${ecoPage}/${totalPages}</span>${pag}`;
+  }
+
+  window.ecoRentRender = ecoRentRender;
+  window.ecoRentChangePage = d=>{ const p=Math.ceil(ecoFiltered.length/PAGE_SIZE); ecoPage=Math.max(1,Math.min(p,ecoPage+d)); ecoRentRender(); };
+  window.ecoRentSetPage = p=>{ ecoPage=p; ecoRentRender(); };
+  window.ecoRentToggleConfig = function(){
+    const b=document.getElementById('ecorent-cfg-body');
+    const a=document.getElementById('ecorent-cfg-arrow');
+    const open=b.style.display==='none';
+    b.style.display=open?'block':'none';
+    a.textContent=open?'▼':'▶';
+  };
+
+  // ── HISTÓRICOS ──
+
+  window.rentToggleHistoricos = function(){
+    const p=document.getElementById('rent-historicos-panel');
+    const open=p.style.display==='none';
+    p.style.display=open?'block':'none';
+    if(open) rentLoadHistoricos();
+  };
+
+  async function rentLoadHistoricos(){
+    const cont=document.getElementById('rent-historicos-lista');
+    cont.textContent='Cargando...';
+    document.getElementById('rent-historicos-detalle').innerHTML='';
+    try{
+      const bu=getBackendUrl();
+      const r=await fetch(`${bu}/rentabilidad/cierres`);
+      if(!r.ok) throw new Error(`status ${r.status}`);
+      const cierres=await r.json();
+      if(!cierres.length){ cont.innerHTML='Todavía no hay ningún cierre guardado.'; return; }
+      cont.innerHTML=`<table style="width:100%"><thead><tr>
+          <th style="text-align:left">Período</th><th style="text-align:left">Generado</th>
+          <th>Táctica</th><th>Ecom</th><th></th>
+        </tr></thead><tbody>${cierres.map(c=>`
+          <tr>
+            <td>${c.desde} → ${c.hasta}</td>
+            <td>${new Date(c.generado_en).toLocaleString('es-AR')}</td>
+            <td style="text-align:center">${c.tactica_guardado?'✅':'—'}</td>
+            <td style="text-align:center">${c.ecom_guardado?'✅ ('+(c.ecom_origen||'?')+')':'—'}</td>
+            <td><button class="btn-xs" onclick="rentVerCierre('${c.periodo}')">Ver</button></td>
+          </tr>`).join('')}</tbody></table>`;
+    }catch(e){ cont.innerHTML=`<span style="color:var(--red)">Error: ${e.message}</span>`; }
+  }
+
+  window.rentVerCierre = async function(periodo){
+    const cont=document.getElementById('rent-historicos-detalle');
+    cont.innerHTML='Cargando agregación por PM...';
+    const bu=getBackendUrl();
+    try{
+      const [tac,eco]=await Promise.all([
+        fetch(`${bu}/rentabilidad/agregaciones/tactica?periodo=${encodeURIComponent(periodo)}&dimension=pm`).then(r=>r.ok?r.json():[]),
+        fetch(`${bu}/rentabilidad/agregaciones/ecom?periodo=${encodeURIComponent(periodo)}&dimension=pm`).then(r=>r.ok?r.json():[]),
+      ]);
+      const filaTac=(f)=>`<tr><td>${f.dimension_valor||'(sin PM)'}</td><td style="text-align:right">${_fmt(f.suma_1)}</td><td style="text-align:right">${_fmt(f.suma_resultado)}</td><td style="text-align:right">${f.cantidad_lineas}</td></tr>`;
+      cont.innerHTML=`
+        <div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px">Cierre ${periodo} — por PM</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><div style="font-size:10px;color:var(--accent);margin-bottom:4px">TÁCTICA</div>
+            <table style="width:100%"><thead><tr><th>PM</th><th>Venta</th><th>Margen</th><th>Líneas</th></tr></thead>
+            <tbody>${tac.map(filaTac).join('')||'<tr><td colspan="4">Sin datos</td></tr>'}</tbody></table></div>
+          <div><div style="font-size:10px;color:var(--accent);margin-bottom:4px">ECOM</div>
+            <table style="width:100%"><thead><tr><th>PM</th><th>Precio Final</th><th>Rentabilidad</th><th>Órdenes</th></tr></thead>
+            <tbody>${eco.map(filaTac).join('')||'<tr><td colspan="4">Sin datos</td></tr>'}</tbody></table></div>
+        </div>`;
+    }catch(e){ cont.innerHTML=`<span style="color:var(--red)">Error: ${e.message}</span>`; }
+  };
+
   window.tacRentInit = function(){
+    if(!document.getElementById('rent-desde').value){
+      const hoy=new Date();
+      const hace30=new Date(hoy.getTime()-30*86400000);
+      document.getElementById('rent-hasta').value=hoy.toISOString().slice(0,10);
+      document.getElementById('rent-desde').value=hace30.toISOString().slice(0,10);
+    }
     if(tacCalcRows.length) tacRentRender();
   };
 

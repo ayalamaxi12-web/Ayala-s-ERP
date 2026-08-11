@@ -10,6 +10,8 @@ import json
 import os
 from typing import Sequence
 
+from .config import ConfiguracionFaltante
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -19,15 +21,29 @@ SCOPES = [
 def get_client():
     """Devuelve un cliente gspread autorizado. Import perezoso de gspread/
     google-auth para que el resto de `rentabilidad/` (modelos, calculadores)
-    no dependa de esas libs ni de credenciales para correr sus tests."""
+    no dependa de esas libs ni de credenciales para correr sus tests.
+
+    Sin `GOOGLE_CREDENTIALS_JSON` ni `credentials.json`, no hay forma de
+    autenticar contra Sheets — mismo concepto que "falta configurar la
+    fuente" (`RENT_SHEET_*` sin setear), aunque sea otra variable la que
+    falte. Se traduce a `ConfiguracionFaltante` para que cualquier
+    llamador que ya maneja esa excepción (los adaptadores, `_opcional` en
+    persistencia.py) la trate igual — encontrado en vivo (2026-08-11):
+    con `RENT_SHEET_GLOBAL_ID` configurado pero sin credenciales, esto
+    tiraba `FileNotFoundError` sin capturar en ningún lado."""
     import gspread
     from google.oauth2.service_account import Credentials
 
     creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if creds_json:
-        creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=SCOPES)
-    else:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    try:
+        if creds_json:
+            creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=SCOPES)
+        else:
+            creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    except (FileNotFoundError, ValueError) as e:
+        raise ConfiguracionFaltante(
+            "Falta 'GOOGLE_CREDENTIALS_JSON' o el archivo 'credentials.json' para leer Google Sheets."
+        ) from e
     return gspread.authorize(creds)
 
 

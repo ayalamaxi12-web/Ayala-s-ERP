@@ -20,6 +20,7 @@ from rentabilidad.ingesta_ecom import FilaEcom, ResultadoIngestaEcom
 from rentabilidad.ingesta_tactica import FilaTactica
 from rentabilidad.models import MotivoExclusion, SkuExcluido, VentaEcom, VentaTactica
 from rentabilidad.persistencia import (
+    _opcional,
     construir_filas_ecom,
     construir_filas_tactica,
     guardar_cierre_ecom,
@@ -270,3 +271,23 @@ def test_registrar_cierre_no_pisa_flags_no_mencionados(db_session):
     assert cierre.tactica_guardado is True  # sigue en True, esta llamada no lo tocó
     assert cierre.ecom_guardado is True
     assert cierre.ecom_origen == "excel"
+
+
+# ── _opcional — bug real encontrado en vivo (2026-08-11): con
+# RENT_SHEET_GLOBAL_ID configurado pero sin credenciales de Google, un
+# lookup informativo tiraba FileNotFoundError (no ConfiguracionFaltante) y
+# tumbaba la consulta completa. Atrapa Exception a propósito. ──
+
+def test_opcional_degrada_ante_configuracion_faltante():
+    from rentabilidad.config import ConfiguracionFaltante
+    assert _opcional(lambda: (_ for _ in ()).throw(ConfiguracionFaltante("x")), "default") == "default"
+
+
+def test_opcional_degrada_ante_cualquier_excepcion_del_proveedor_externo():
+    # No es ConfiguracionFaltante — es la clase de error real que se vio en
+    # vivo (credenciales de Sheets ausentes vía FileNotFoundError).
+    assert _opcional(lambda: (_ for _ in ()).throw(FileNotFoundError("credentials.json")), "default") == "default"
+
+
+def test_opcional_devuelve_el_valor_si_no_hay_error():
+    assert _opcional(lambda: "valor real", "default") == "valor real"

@@ -71,13 +71,24 @@ def _primer_sku(skus_vendidos: str) -> str:
 
 def _opcional(fn, default):
     """Corre un lookup de clasificación (informativo — PM, subcategoría,
-    responsable, márgenes objetivo, stock, vinculación...) y si su fuente no
-    está configurada, degrada a `default` en vez de abortar la fila entera.
-    Solo el cálculo del motor (costo/IVA, mandatorio) debe poder frenar una
-    fila — el resto es INFORMATIVO/CALCULADO-clasificación, no el resultado."""
+    responsable, márgenes objetivo, stock, vinculación...) y si falla,
+    degrada a `default` en vez de abortar la fila entera. Solo el cálculo
+    del motor (costo/IVA, mandatorio) debe poder frenar una fila — el resto
+    es INFORMATIVO/CALCULADO-clasificación, no el resultado.
+
+    Atrapa `Exception` a propósito, no solo `ConfiguracionFaltante`:
+    encontrado en vivo (2026-08-11, corriendo `/ecom/periodo` contra la API
+    real) que con `RENT_SHEET_GLOBAL_ID` configurado pero sin
+    `credentials.json`/`GOOGLE_CREDENTIALS_JSON` en el entorno, Google
+    Sheets no levanta `ConfiguracionFaltante` (la fuente SÍ está
+    configurada) sino `FileNotFoundError` — y sin este catch más amplio,
+    un solo error de credenciales/red en un lookup opcional tumbaba la
+    consulta completa. Es intencional y no tapa bugs de este módulo: lo
+    que corre adentro de `fn()` es siempre una llamada a un proveedor
+    externo (Sheets), nunca lógica propia."""
     try:
         return fn()
-    except ConfiguracionFaltante:
+    except Exception:
         return default
 
 
