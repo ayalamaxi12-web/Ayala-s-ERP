@@ -5,7 +5,13 @@ red ni credenciales reales."""
 from datetime import date
 from decimal import Decimal
 
-from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+from rentabilidad.adapters import (
+    ClasificacionProvider,
+    CostoVigenteProvider,
+    IvaProvider,
+    MargenObjetivoProvider,
+    ResponsableProvider,
+)
 import pytest
 from fastapi import HTTPException
 
@@ -15,16 +21,18 @@ from rentabilidad.api import (
     LineaTacticaIn,
     _periodo_de_rango,
     _resolver_tc,
+    _venta_tactica_a_out,
     calcular_lineas,
-    calcular_periodo_tactica,
     calcular_tactica_periodo,
     extraer_comprobante,
     incidencias_de_periodo,
+    incidencias_en_memoria_tactica,
 )
 from rentabilidad.tc_bna import TcBnaError
 from rentabilidad.config import ConfiguracionFaltante
 from rentabilidad.ingesta_tactica import FilaTactica
-from rentabilidad.models import Regimen, VentaTactica
+from rentabilidad.models import MotivoExclusion, Regimen, VentaTactica
+from rentabilidad.persistencia import construir_filas_tactica
 
 TOLERANCIA = Decimal("0.01")
 
@@ -130,7 +138,9 @@ def test_sheet_id_faltante_no_rompe_el_lote_completo(db_session):
     assert r.margen_real is None
 
 
-# ── calcular_periodo_tactica — mismo motor, entrando por SQL en vez de CSV ──
+# ── /tactica/periodo — construir_filas_tactica (con clasificación) ya está
+# probado en test_persistencia.py; acá solo se prueba el wiring propio de
+# este endpoint: la traducción a VentaTacticaOut y el validador en memoria.
 # `FilaTactica.tipo_factura` ya viene resuelto (a diferencia de
 # `LineaTacticaIn.tipo_factura`, que es texto crudo) — no hay
 # `extraer_comprobante` de por medio en este camino.
@@ -146,28 +156,52 @@ def _fila_tactica(**overrides) -> FilaTactica:
     return FilaTactica(**base)
 
 
-def test_t1_via_periodo_reproduce_el_mismo_caso_de_aceptacion(db_session):
+def _sin_clasificar_tactica():
+    return dict(
+        clasificacion_provider=ClasificacionProvider(sheet_id=None),
+        responsable_provider=ResponsableProvider(sheet_id=None),
+        margen_provider=MargenObjetivoProvider(sheet_ids={}, sheet_master_id=None),
+    )
+
+
+def test_periodo_venta_tactica_a_out_expone_los_campos_que_necesita_el_frontend(db_session):
+    # PM/subcategoría no vienen de un CSV en este camino — se resuelven con
+    # el mismo provider que usa /cierres/tactica (a diferencia de
+    # calcular_lineas, que hoy toma el PM directo de la columna del archivo).
     costo, iva = _providers("2.65", "IVA Debito 21%")
-    [r] = calcular_periodo_tactica([_fila_tactica()], db_session, costo, iva)
-    assert r.regimen == Regimen.CUENTA_1.value
-    assert _cerca(r.iva, "6542.235")
-    assert _cerca(r.margen_real, "4162.60")
+    resultado = construir_filas_tactica(db_session, [_fila_tactica()], costo, iva, **_sin_clasificar_tactica())
+    [out] = [_venta_tactica_a_out(f) for f in resultado.filas]
+    assert out.codigo == "CF217ACOMP"
+    assert out.empresa == "Sign Solutions SA"
+    assert out.regimen == Regimen.CUENTA_1.value
+    assert _cerca(out.margen_real, "4162.60")
+    assert out.pm is None  # sin clasificación configurada, degrada a None (no rompe)
 
 
-def test_periodo_config_faltante_es_incidencia_por_linea_no_500(db_session):
-    costo = CostoVigenteProvider(sheet_id=None)
-    iva = IvaProvider(sheet_id=None)
-    [r] = calcular_periodo_tactica([_fila_tactica()], db_session, costo, iva)
-    assert r.incidencia.startswith("CONFIG_FALTANTE")
-    assert r.margen_real is None
-
-
-def test_periodo_procesa_varias_filas_independientemente(db_session):
+def test_periodo_incidencias_en_memoria_detecta_sin_pm(db_session):
     costo, iva = _providers("2.65", "IVA Debito 21%")
-    filas = [_fila_tactica(nro_factura="00003-00000001"), _fila_tactica(nro_factura="00003-00000002")]
-    resultados = calcular_periodo_tactica(filas, db_session, costo, iva)
-    assert [r.nro_factura for r in resultados] == ["00003-00000001", "00003-00000002"]
-    assert all(r.margen_real is not None for r in resultados)
+    resultado = construir_filas_tactica(db_session, [_fila_tactica()], costo, iva, **_sin_clasificar_tactica())
+    incidencias = incidencias_en_memoria_tactica(resultado.filas)
+    assert any(i.codigo == "V-13" for i in incidencias)
+
+
+def test_periodo_incidencias_en_memoria_detecta_duplicados_sin_persistir(db_session):
+    costo, iva = _providers("2.65", "IVA Debito 21%")
+    filas = [_fila_tactica(), _fila_tactica()]  # mismo nro_factura + codigo
+    resultado = construir_filas_tactica(db_session, filas, costo, iva, **_sin_clasificar_tactica())
+    incidencias = incidencias_en_memoria_tactica(resultado.filas)
+    assert any(i.codigo == "V-16" for i in incidencias)
+
+
+def test_periodo_excluido_por_sku_excluido_se_ve_en_venta_tactica_a_out(db_session):
+    from rentabilidad.models import SkuExcluido
+    db_session.add(SkuExcluido(sku="CF217ACOMP", motivo=MotivoExclusion.FIXTURE, activo=True))
+    db_session.commit()
+    costo, iva = _providers("2.65", "IVA Debito 21%")
+    resultado = construir_filas_tactica(db_session, [_fila_tactica()], costo, iva, **_sin_clasificar_tactica())
+    [out] = [_venta_tactica_a_out(f) for f in resultado.filas]
+    assert out.excluido is True
+    assert out.motivo_exclusion == MotivoExclusion.FIXTURE.value
 
 
 def test_periodo_rechaza_hasta_anterior_a_desde_sin_tocar_sql():

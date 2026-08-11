@@ -42,11 +42,17 @@ from .config import ConfiguracionFaltante
 from .db import sesion
 from .ingesta_ecom import EcomExcelAdapter
 from .ingesta_ecom_api import EcomApiAdapter
-from .ingesta_tactica import FilaTactica, TacticaSqlAdapter
+from .ingesta_tactica import TacticaSqlAdapter
 from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
-from .persistencia import construir_filas_ecom, guardar_cierre_ecom, guardar_cierre_tactica, registrar_cierre
+from .persistencia import (
+    construir_filas_ecom,
+    construir_filas_tactica,
+    guardar_cierre_ecom,
+    guardar_cierre_tactica,
+    registrar_cierre,
+)
 from .tc_bna import TcBnaError, obtener_tc_bna
-from .validador import ValidadorRentabilidad
+from .validador import Incidencia, ValidadorRentabilidad
 
 router = APIRouter(prefix="/rentabilidad", tags=["rentabilidad"])
 
@@ -130,6 +136,14 @@ class ResultadoTacticaOut(BaseModel):
     incidencia: str | None = None
 
 
+class IncidenciaOut(BaseModel):
+    codigo: str
+    severidad: str
+    entidad: str
+    referencia: str
+    detalle: str
+
+
 class CalcularTacticaIn(BaseModel):
     lineas: list[LineaTacticaIn]
 
@@ -194,68 +208,112 @@ def calcular_tactica(payload: CalcularTacticaIn) -> CalcularTacticaOut:
     return CalcularTacticaOut(resultados=resultados)
 
 
-# ── Período: SQL de Táctica -> adaptador -> motor ──
+# ── Período: SQL de Táctica -> adaptador -> motor -> clasificación ──
 #
-# A diferencia de `calcular_tactica` (arriba), acá no hay texto crudo de
-# "Tipo de Factura" que traducir: `FilaTactica.a_linea_input()` (ver
-# `ingesta_tactica.py`) ya entrega el código corto de comprobante resuelto
-# desde `CAE`, así que no se llama a `extraer_comprobante`.
-
+# A diferencia de `calcular_tactica` (arriba, CSV manual), acá el PM no
+# viene de ninguna columna de archivo: se resuelve con el mismo
+# `ClasificacionProvider` que usa `/cierres/tactica` — por eso este camino
+# usa `persistencia.construir_filas_tactica` (que ya hace esa clasificación)
+# en vez del `calcular_lineas` liviano de arriba. No persiste nada: son los
+# mismos objetos en memoria que usaría el cierre, solo que se descartan.
 
 class CalcularTacticaPeriodoIn(BaseModel):
     desde: date
     hasta: date
 
 
-class CalcularTacticaPeriodoOut(BaseModel):
-    resultados: list[ResultadoTacticaOut]
+class VentaTacticaOut(BaseModel):
+    fecha: date
+    empresa: str
+    codigo: str
+    tipo_factura: str
+    nro_factura: str
+    cantidad: Decimal
+    precio_venta: Decimal
+    regimen: str
+    pm: str | None = None
+    subcategoria: str | None = None
+    responsable: str | None = None
+    excluido: bool = False
+    motivo_exclusion: str | None = None
+    costo_lista: Decimal | None = None
+    iva_producto: Decimal | None = None
+    iva: Decimal | None = None
+    imp_cheque: Decimal | None = None
+    iibb: Decimal | None = None
+    costo_total_pesos: Decimal | None = None
+    costo_financiero_1: Decimal | None = None
+    costo_financiero_2: Decimal | None = None
+    margen_real: Decimal | None = None
+    margen_pct: Decimal | None = None
+    precio_venta_iva: Decimal | None = None
+
+
+class ConsultarTacticaOut(BaseModel):
+    resultados: list[VentaTacticaOut]
     total_lineas: int
+    excluidas: int
+    config_faltante: list[str]
+    incidencias: list[IncidenciaOut]
 
 
-def calcular_periodo_tactica(
-    filas: list[FilaTactica],
-    db: Session,
-    costo_provider: CostoVigenteProvider,
-    iva_provider: IvaProvider,
-) -> list[ResultadoTacticaOut]:
-    """Misma orquestación que `calcular_lineas`, sobre filas ya traducidas
-    por el adaptador SQL en vez de sobre el CSV que sube el operador."""
-    calculador = RentabilidadTacticaCalculator(db, costo_provider, iva_provider)
-    resultados: list[ResultadoTacticaOut] = []
+def _venta_tactica_a_out(v: VentaTactica) -> VentaTacticaOut:
+    return VentaTacticaOut(
+        fecha=v.fecha, empresa=v.empresa, codigo=v.codigo, tipo_factura=v.tipo_factura,
+        nro_factura=v.nro_factura, cantidad=v.cantidad, precio_venta=v.precio_venta,
+        regimen=v.regimen.value if v.regimen else Regimen.NO_RECONOCIDO.value,
+        pm=v.pm, subcategoria=v.subcategoria, responsable=v.responsable,
+        excluido=v.excluido, motivo_exclusion=v.motivo_exclusion.value if v.motivo_exclusion else None,
+        costo_lista=v.costo_lista, iva_producto=v.iva_producto, iva=v.iva,
+        imp_cheque=v.imp_cheque, iibb=v.iibb, costo_total_pesos=v.costo_total_pesos,
+        costo_financiero_1=v.costo_financiero_1, costo_financiero_2=v.costo_financiero_2,
+        margen_real=v.margen_real, margen_pct=v.margen_pct, precio_venta_iva=v.precio_venta_iva,
+    )
+
+
+def incidencias_en_memoria_tactica(filas: list[VentaTactica]) -> list:
+    """Mismo validador que usa `/incidencias`, pero sobre filas que todavía
+    no se persistieron — `detectar_duplicados_tactica` consulta la tabla
+    por período, así que V-16 se reimplementa acá en memoria (mismo
+    criterio: comprobante+SKU repetido)."""
+    validador = ValidadorRentabilidad(None)
+    incidencias = [i for fila in filas for i in validador.validar_linea_tactica(fila)]
+    conteos: dict[tuple[str, str], int] = {}
     for fila in filas:
-        try:
-            r = calculador.calcular(fila.a_linea_input())
-            resultados.append(ResultadoTacticaOut(
-                codigo=fila.codigo, nro_factura=fila.nro_factura,
-                regimen=r.regimen.value, costo_lista=r.costo_lista,
-                iva_producto=r.iva_producto, iva=r.iva, imp_cheque=r.imp_cheque,
-                iibb=r.iibb, costo_total_pesos=r.costo_total_pesos,
-                costo_financiero_1=r.costo_financiero_1, costo_financiero_2=r.costo_financiero_2,
-                margen_real=r.margen_real, margen_pct=r.margen_pct,
-                precio_venta_iva=r.precio_venta_iva, incidencia=r.incidencia,
-            ))
-        except ConfiguracionFaltante as e:
-            resultados.append(ResultadoTacticaOut(
-                codigo=fila.codigo, nro_factura=fila.nro_factura,
-                regimen=Regimen.NO_RECONOCIDO.value, incidencia=f"CONFIG_FALTANTE: {e}",
-            ))
-    return resultados
+        clave = (fila.nro_factura, fila.codigo)
+        conteos[clave] = conteos.get(clave, 0) + 1
+    for (nro, codigo), n in conteos.items():
+        if n > 1:
+            incidencias.append(Incidencia("V-16", "INFORMATIVO", "TACTICA", f"{nro}/{codigo}", f"Duplicado: {n} filas."))
+    return incidencias
 
 
-@router.post("/tactica/periodo", response_model=CalcularTacticaPeriodoOut)
-def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> CalcularTacticaPeriodoOut:
+@router.post("/tactica/periodo", response_model=ConsultarTacticaOut)
+def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> ConsultarTacticaOut:
     """Lee Táctica directo del SQL Server (`TacticaSqlAdapter`, ya
-    probado) para el rango dado y corre cada línea por el motor — sin subir
-    ningún CSV a mano. No persiste nada, igual que `/tactica/calcular`."""
+    probado), corre motor + clasificación (mismo camino que `/cierres/
+    tactica`) y devuelve el resultado — no persiste nada."""
     if payload.hasta < payload.desde:
         raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
     filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta)
     fetch = _fetch_fn_con_cache()
-    costo_provider = CostoVigenteProvider(fetch_fn=fetch)
-    iva_provider = IvaProvider(fetch_fn=fetch)
     with sesion() as db:
-        resultados = calcular_periodo_tactica(filas, db, costo_provider, iva_provider)
-    return CalcularTacticaPeriodoOut(resultados=resultados, total_lineas=len(resultados))
+        resultado = construir_filas_tactica(
+            db, filas, CostoVigenteProvider(fetch_fn=fetch), IvaProvider(fetch_fn=fetch),
+            ClasificacionProvider(fetch_fn=fetch), ResponsableProvider(fetch_fn=fetch),
+            MargenObjetivoProvider(fetch_fn=fetch),
+        )
+        incidencias = incidencias_en_memoria_tactica(resultado.filas)
+    return ConsultarTacticaOut(
+        resultados=[_venta_tactica_a_out(f) for f in resultado.filas],
+        total_lineas=len(resultado.filas),
+        excluidas=sum(1 for f in resultado.filas if f.excluido),
+        config_faltante=resultado.config_faltante,
+        incidencias=[
+            IncidenciaOut(codigo=i.codigo, severidad=i.severidad, entidad=i.entidad, referencia=i.referencia, detalle=i.detalle)
+            for i in incidencias
+        ],
+    )
 
 
 # ── Período: ECOM API -> adaptador -> motor — mismo criterio que
@@ -552,14 +610,6 @@ def agregaciones_ecom(periodo: str, dimension: str, incluir_excluidos: bool = Fa
         )
         for f in filas
     ]
-
-
-class IncidenciaOut(BaseModel):
-    codigo: str
-    severidad: str
-    entidad: str
-    referencia: str
-    detalle: str
 
 
 def incidencias_de_periodo(db: Session, periodo: str, entidad: str) -> list:
