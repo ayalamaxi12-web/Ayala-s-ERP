@@ -394,6 +394,13 @@ query BuscarIds($page: Int, $start: Int!, $end: Int!, $tab: ID, $filters: [FindF
 
 _LOGISTIC_TYPE_FULFILLMENT = "fulfillment"
 
+# Regla de negocio de Maxx (2026-08-13): por encima de este precio UNITARIO
+# de publicación, ML da envío gratis al comprador y el vendedor lo absorbe
+# — es por precio de la publicación, no por total de carrito (confirmado
+# sin excepciones sobre 14 órdenes reales, ver docstring de
+# `_fila_desde_orden`). Si cambia, lo confirma Maxx, no se reinterpreta.
+_UMBRAL_ENVIO_GRATIS_FULL = Decimal(33000)
+
 # `findSettings.tabs.options` real (2026-08-12): active/closed/draft/
 # inactive/trash. Para Rentabilidad participan las órdenes activas
 # (en curso) y cerradas (ya facturadas) — draft/inactive/trash no son
@@ -561,6 +568,21 @@ def _decimal(v) -> Decimal:
     return Decimal(str(v)) if v not in (None, "") else Decimal(0)
 
 
+def _supera_umbral_envio_gratis_full(lineas: list[dict]) -> bool:
+    """Precio unitario de CUALQUIER línea (`subtotal/quantity`) por encima
+    de `_UMBRAL_ENVIO_GRATIS_FULL` — es por publicación, no por total del
+    carrito (ver docstring de `_fila_desde_orden`: una orden de 5 unidades
+    a $9.899 c/u no absorbe envío aunque el total supere el umbral)."""
+    for l in lineas:
+        cantidad = _decimal(l.get("quantity"))
+        if cantidad <= 0:
+            continue
+        precio_unitario = _decimal(l.get("subtotal")) / cantidad
+        if precio_unitario >= _UMBRAL_ENVIO_GRATIS_FULL:
+            return True
+    return False
+
+
 def _fila_desde_orden(
     orden: dict, tc: Decimal, canales: dict[str, str], estados_pago: dict[str, str], ids_full: set[str] = frozenset()
 ) -> FilaEcom:
@@ -608,35 +630,29 @@ def _fila_desde_orden(
     `freeShipping`). `listCost` es la tarifa de lista; `cost` es lo que
     realmente paga el comprador; la diferencia es lo que absorbe el
     vendedor — confirmado contra 315 órdenes reales (2026-08-12): coincide
-    en 296 (94%) sin ningún tratamiento especial. De las 12 que no
-    coincidían (todas mostraban Costo Envío=0 en el Excel), las 12 eran
-    órdenes `logistic_type=fulfillment` (ML Full) — por eso se agregó la
-    excepción de abajo. **Pero no es una regla limpia**: al menos 2 órdenes
-    Full más (1409820, 1409866 — ambas `PLANCHA-SUB-AUTO-GORRA`) SÍ tenían
-    Costo Envío real igual a `listCost-cost`, no 0 — la excepción de Full
-    rompe esos 2 casos. Medido en conjunto sobre las 315 órdenes: CON la
-    excepción de Full, 225 coinciden (vs. 215 SIN ella) — es la opción
-    neta mejor pero no 100% correcta.
+    en 296 (94%) sin ningún tratamiento especial. Las 12 que no coincidían
+    (todas mostraban Costo Envío=0 en el Excel) eran, las 12, órdenes
+    `logistic_type=fulfillment` (ML Full).
 
-    La excepción es por **SKU/producto, no por orden**: confirmado
-    revisando otras órdenes reales del mismo día — toda orden con SKU
-    `PLANCHA-SUB-*` (planchas de sublimación, un producto grande/pesado)
-    cobra el envío real dentro de Full; SKUs chicos (`CB435A...`,
-    `WEEDINGTOOLS...`) dan 0 de forma consistente en Full. Coincide con la
-    sospecha de Maxx (2026-08-13): parece un cargo de sobre-volumen/peso
-    que ML cobra igual dentro de Full. **No se puede derivar del catálogo
-    de Ecom**: `Product.width/height/length/weight` vienen `null` para
-    estos SKUs (confirmado por introspección) — Ecom no tiene cargados
-    esos datos. Resolver esto bien necesita el dato de peso/dimensión (o
-    la clasificación de "envío especial") del lado de Mercado Libre, no de
-    Ecom — queda para cuando se conecte la API de ML directamente (fase ya
-    planeada por Maxx), no se inventa un umbral de peso/tamaño acá.
+    Dentro de Full, el envío absorbido depende del **precio unitario de la
+    publicación** (regla de negocio de Maxx: por encima de $33.000 ML da
+    envío gratis al comprador y el vendedor lo absorbe), no del total del
+    carrito ni de un umbral fijo por SKU. Confirmado 2026-08-13 revisando
+    en vivo Ecom/ML/Excel, sin excepciones sobre 14 órdenes reales del
+    2026-08-12: las 12 con Costo Envío=0 tenían precio unitario
+    (`subtotal/quantity` de la línea) por debajo de $33.000, incluida la
+    orden `1409779` (5 unidades a $9.899 c/u = $49.495 de total — supera
+    los $33.000 en total pero NO por unidad, y no absorbe envío: el
+    umbral es por publicación, no por carrito). Las 2 con Costo Envío
+    real (`1409820`, `1409866`, ambas `PLANCHA-SUB-AUTO-GORRA`, 1 unidad a
+    $320.999) superan los $33.000 por unidad. `_UMBRAL_ENVIO_GRATIS_FULL`
+    es ese corte; si Maxx confirma que cambió, se actualiza acá, no se
+    reinterpreta.
 
     `logistic_type=fulfillment` no es un campo legible por orden (solo
     existe como filtro de búsqueda, confirmado por introspección) — por
-    eso se arma el set `ids_fulfillment`
-    aparte (`ids_fulfillment()`, una consulta por período, no por orden) y
-    se pasa acá."""
+    eso se arma el set `ids_fulfillment` aparte (`ids_fulfillment()`, una
+    consulta por período, no por orden) y se pasa acá."""
     lineas = orden.get("orderLists") or []
 
     costo = sum(
@@ -645,7 +661,7 @@ def _fila_desde_orden(
     )
     comision = sum((_decimal(p.get("totalFeeAmount")) for p in (orden.get("payments") or [])), Decimal(0))
     shipping = orden.get("shipping") or {}
-    if orden["id"] in ids_full:
+    if orden["id"] in ids_full and not _supera_umbral_envio_gratis_full(lineas):
         costo_envio = Decimal(0)
     else:
         costo_envio = _decimal(shipping.get("listCost")) - _decimal(shipping.get("cost"))

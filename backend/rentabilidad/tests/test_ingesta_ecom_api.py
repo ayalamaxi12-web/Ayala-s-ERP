@@ -465,12 +465,40 @@ def test_fila_desde_orden_costo_envio_es_listcost_menos_cost():
     assert fila.costo_envio == Decimal("7230.00")
 
 
-def test_fila_desde_orden_costo_envio_es_cero_si_es_fulfillment():
-    # Las 12 órdenes reales que no cerraban con listCost-cost eran, las 12,
-    # órdenes Full (logistic_type=fulfillment) -- ahí Costo Envío es
-    # siempre 0 sin importar listCost/cost (el costo de Full se cobra
-    # aparte, no por orden).
-    orden = _orden(id="99", shipping={"listCost": 18251.87, "cost": 0})
+def test_fila_desde_orden_costo_envio_es_cero_si_es_fulfillment_bajo_el_umbral():
+    # Dentro de Full, con precio unitario bajo el umbral de envío gratis
+    # ($33.000, regla de negocio de Maxx) el vendedor no absorbe nada.
+    orden = _orden(id="99", shipping={"listCost": 18251.87, "cost": 0}, orderLists=[{
+        "quantity": 1, "subtotal": 9899, "subtotalSinImpuestos": 8000,
+        "variant": {"sku": "X", "cost": 1, "product": {"sku": None}},
+    }])
+    fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
+    assert fila.costo_envio == Decimal(0)
+
+
+def test_fila_desde_orden_costo_envio_no_es_cero_si_es_fulfillment_supera_el_umbral():
+    # Corrección real 2026-08-13: la excepción de Full no es "siempre 0" --
+    # 1409820/1409866 (PLANCHA-SUB-AUTO-GORRA, $320.999 c/u) SÍ absorbían
+    # envío real dentro de Full. El corte es el precio UNITARIO de la
+    # publicación (Maxx: por encima de $33.000 ML da envío gratis al
+    # comprador y el vendedor lo absorbe), no el total del carrito --
+    # confirmado sin excepciones sobre 14 órdenes reales del 2026-08-12.
+    orden = _orden(id="99", shipping={"listCost": 21420, "cost": 0}, orderLists=[{
+        "quantity": 1, "subtotal": 320999, "subtotalSinImpuestos": 290000,
+        "variant": {"sku": "PLANCHA-SUB-AUTO-GORRA", "cost": 100, "product": {"sku": None}},
+    }])
+    fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
+    assert fila.costo_envio == Decimal(21420)
+
+
+def test_fila_desde_orden_umbral_de_envio_gratis_es_por_unidad_no_por_carrito():
+    # 1409779 real: 5 unidades a $9.899 c/u = $49.495 de total -- supera
+    # los $33.000 en TOTAL pero no por unidad, y no absorbe envío. El
+    # umbral es por precio de la publicación, no por total del carrito.
+    orden = _orden(id="99", shipping={"listCost": 18251.87, "cost": 0}, orderLists=[{
+        "quantity": 5, "subtotal": 49495, "subtotalSinImpuestos": 40000,
+        "variant": {"sku": "X", "cost": 1, "product": {"sku": None}},
+    }])
     fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
     assert fila.costo_envio == Decimal(0)
 
