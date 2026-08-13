@@ -6,23 +6,30 @@ La traducción Order (API) -> FilaEcom (`_fila_desde_orden`, `EcomApiAdapter`)
 se prueba contra fixtures con la FORMA REAL de la respuesta, capturada
 mediante introspección + una muestra de órdenes reales el 2026-08-10 (ver
 docstring de ingesta_ecom_api.py) — no inventada."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
 from rentabilidad.config import ConfiguracionFaltante
 from rentabilidad.ingesta_ecom_api import (
+    TAB_ACTIVE,
+    TAB_CLOSED,
     EcomApiAdapter,
     EcomApiClient,
     EcomApiError,
     _Respuesta,
+    _buscar_ordenes_de_tab,
     _cookie_de_headers,
     _fila_desde_orden,
+    _limite_dias_de_rango,
     _proxima_expiracion,
     _sku_de_linea,
     _tabla_de_filtro,
+    _unix,
+    _unix_fin_de_dia,
     buscar_ordenes,
+    ids_fulfillment,
 )
 
 # Traducciones reales, capturadas de orders.findSettings.filters (2026-08-10) —
@@ -39,13 +46,14 @@ def _orden(**overrides) -> dict:
     recortada de la muestra real del 2026-08-10."""
     base = {
         "id": "78672152",
+        "customOrderId": "1234567",
         "owner": "MlShipping",
         "paymentStatus": "paid",
-        "shipping": {"listCost": 7821},
+        "shipping": {"listCost": 7821, "cost": 0},
         "payments": [{"totalFeeAmount": 7392.8}, {"totalFeeAmount": 122.94}],
         "orderLists": [{
             "quantity": 1, "subtotal": 20618.4, "subtotalSinImpuestos": 17040,
-            "variant": {"sku": "CF217ACOMP", "costUsd": 0.002, "product": {"sku": None}},
+            "variant": {"sku": "CF217ACOMP", "cost": 0.002, "product": {"sku": None}},
         }],
     }
     base.update(overrides)
@@ -59,6 +67,8 @@ def _post_login_ok(cookie="CAKEPHP=abc123"):
         llamadas.append((url, json_body, cookie_enviada))
         if url.endswith("/doLogin.json"):
             return _Respuesta(200, {"set-cookie": f"{cookie}; Path=/, otracosa=1"}, {"success": True})
+        if "customRangeLimit" in json_body["query"]:
+            return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
         return _Respuesta(200, {}, {"data": {"orders": {"find": {"pageInfo": {"page": 1, "pageCount": 1, "count": 0}, "data": []}}}})
 
     return post, llamadas
@@ -176,6 +186,30 @@ def test_sin_credenciales_ni_variable_de_entorno_levanta_configuracion_faltante(
         cliente.graphql("query { x }")
 
 
+# ── _unix/_unix_fin_de_dia — límites en huso ART, no UTC ──
+# Bug real confirmado contra la API (2026-08-12): calcular los límites en
+# UTC hacía que pedir "un solo día" trajera ESE día + el día anterior
+# completo (nunca el siguiente) — porque Ecom compara `MtOrder.created` en
+# huso Argentina (UTC-3): la medianoche UTC de un día son las 21:00 ART del
+# día anterior. Confirmado con 3 consultas de un solo día contra la API real
+# sin ninguna recursión de por medio (ver docstring del módulo).
+
+def test_unix_calcula_medianoche_en_huso_argentino_no_utc():
+    ART = timezone(timedelta(hours=-3))
+    dia = date(2026, 7, 23)
+    assert _unix(dia) == int(datetime(2026, 7, 23, 0, 0, 0, tzinfo=ART).timestamp())
+    # Si se calculara en UTC (bug real, 2026-08-12), este valor sería 3
+    # horas menor -- exactamente lo que hacía que Ecom lo bucketeara como
+    # el día anterior.
+    assert _unix(dia) != int(datetime(2026, 7, 23, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+
+def test_unix_fin_de_dia_calcula_el_cierre_del_dia_en_huso_argentino():
+    ART = timezone(timedelta(hours=-3))
+    dia = date(2026, 7, 23)
+    assert _unix_fin_de_dia(dia) == int(datetime(2026, 7, 23, 23, 59, 59, tzinfo=ART).timestamp())
+
+
 # ── buscar_ordenes — pagina orders.find, "data" es el wrapper confirmado ──
 
 def test_buscar_ordenes_arma_el_rango_de_fechas():
@@ -183,11 +217,29 @@ def test_buscar_ordenes_arma_el_rango_de_fechas():
     cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
     resultado = buscar_ordenes(cliente, date(2026, 7, 23), date(2026, 8, 22))
     assert resultado == []
-    _, body_graphql, _ = llamadas[-1]
-    assert body_graphql["variables"]["start"] < body_graphql["variables"]["end"]
+    llamadas_find = [l for l in llamadas if "byDate" in l[1].get("query", "")]
+    for _, body_graphql, _ in llamadas_find:
+        assert body_graphql["variables"]["start"] < body_graphql["variables"]["end"]
 
 
-def test_buscar_ordenes_pagina_hasta_pagecount():
+def test_buscar_ordenes_de_tab_filtra_siempre_por_fecha_de_creacion():
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        assert 'field: "MtOrder.created"' in json_body["query"]
+        return _Respuesta(200, {}, {"data": {"orders": {"find": {
+            "pageInfo": {"page": 1, "pageCount": 1, "count": 0}, "data": [],
+        }}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    _buscar_ordenes_de_tab(cliente, date(2026, 7, 1), date(2026, 7, 31), TAB_ACTIVE, limite_dias=100)
+
+
+def test_buscar_ordenes_de_tab_pagina_hasta_pagina_vacia_sin_confiar_en_pagecount():
+    # pageCount "engañoso": siempre dice que hay una página más de las que
+    # en realidad quedan -- si el código confiara en pageCount, seguiría
+    # pidiendo para siempre. El corte real es la página vacía (comportamiento
+    # confirmado contra la API real, 2026-08-12 — ver docstring del módulo).
     paginas_pedidas = []
 
     def post(url, json_body, cookie):
@@ -195,15 +247,147 @@ def test_buscar_ordenes_pagina_hasta_pagecount():
             return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
         pagina = json_body["variables"]["page"]
         paginas_pedidas.append(pagina)
-        ordenes = [_orden(id=str(pagina))]
+        datos = [_orden(id=str(pagina))] if pagina <= 2 else []
         return _Respuesta(200, {}, {"data": {"orders": {"find": {
-            "pageInfo": {"page": pagina, "pageCount": 3, "count": 3}, "data": ordenes,
+            "pageInfo": {"page": pagina, "pageCount": pagina + 1, "count": 30 * (pagina + 1)}, "data": datos,
+        }}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    ordenes = _buscar_ordenes_de_tab(cliente, date(2026, 7, 1), date(2026, 7, 31), TAB_ACTIVE, limite_dias=100)
+    assert paginas_pedidas == [1, 2, 3]
+    assert [o["id"] for o in ordenes] == ["1", "2"]
+
+
+def test_buscar_ordenes_de_tab_parte_el_rango_si_la_pagina_1_reporta_el_techo():
+    # Comportamiento real confirmado 2026-08-12: cuando el conteo real supera
+    # el techo, la página 1 de CUALQUIER rango con más de un día reporta
+    # count=300 (el valor "truncado"); un rango de 1 día exacto ya da el
+    # total real, siempre por debajo del techo en este escenario de prueba.
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        v = json_body["variables"]
+        dias = round((v["end"] - v["start"]) / 86400)
+        if dias >= 2 and v["page"] == 1:
+            return _Respuesta(200, {}, {"data": {"orders": {"find": {
+                "pageInfo": {"page": 1, "pageCount": 10, "count": 300}, "data": [_orden(id="nunca_deberia_sobrevivir")],
+            }}}})
+        datos = [_orden(id=f"{v['start']}-{v['page']}")] if v["page"] == 1 else []
+        return _Respuesta(200, {}, {"data": {"orders": {"find": {
+            "pageInfo": {"page": v["page"], "pageCount": 1, "count": 1}, "data": datos,
+        }}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    ordenes = _buscar_ordenes_de_tab(cliente, date(2026, 7, 1), date(2026, 7, 4), TAB_CLOSED, limite_dias=100)
+    # se partió hasta rangos de 1 día -- la "página 1 truncada" de cualquier
+    # rango más ancho nunca llega a formar parte del resultado final.
+    assert "nunca_deberia_sobrevivir" not in [o["id"] for o in ordenes]
+    assert len(ordenes) == 4  # 4 días -> 4 rangos de 1 día -> 1 orden real cada uno
+
+
+def test_buscar_ordenes_de_tab_parte_el_rango_si_excede_el_limite_de_dias():
+    rangos = []
+
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        v = json_body["variables"]
+        rangos.append((v["start"], v["end"]))
+        datos = [_orden(id=str(len(rangos)))] if v["page"] == 1 else []
+        return _Respuesta(200, {}, {"data": {"orders": {"find": {
+            "pageInfo": {"page": v["page"], "pageCount": 1, "count": 1}, "data": datos,
+        }}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    ordenes = _buscar_ordenes_de_tab(cliente, date(2026, 1, 1), date(2026, 4, 1), TAB_ACTIVE, limite_dias=30)
+    # 90 días con límite de 30 -> tuvo que partirse en más de un sub-rango,
+    # ninguno de más de 30 días (el límite real de la API, §docstring).
+    assert len(rangos) > 1
+    for start, end in rangos:
+        dias = (end - start) // 86400 + 1
+        assert dias <= 30
+
+
+def test_limite_dias_de_rango_lee_customrangelimit_de_findsettings():
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    assert _limite_dias_de_rango(cliente) == 100
+
+
+def test_buscar_ordenes_combina_active_y_closed_sin_pedir_draft_inactive_trash():
+    tabs_pedidos = []
+
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        query = json_body["query"]
+        if "customRangeLimit" in query:
+            return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
+        v = json_body["variables"]
+        tabs_pedidos.append(v["tab"])
+        datos = [_orden(id=f"{v['tab']}-1")] if v["page"] == 1 else []
+        return _Respuesta(200, {}, {"data": {"orders": {"find": {
+            "pageInfo": {"page": v["page"], "pageCount": 1, "count": 1}, "data": datos,
         }}}})
 
     cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
     ordenes = buscar_ordenes(cliente, date(2026, 7, 1), date(2026, 7, 31))
-    assert paginas_pedidas == [1, 2, 3]
-    assert [o["id"] for o in ordenes] == ["1", "2", "3"]
+    # nunca se pide draft/inactive/trash -- solo los dos tabs que representan
+    # ventas reales (decisión de Maxx, 2026-08-12).
+    assert set(tabs_pedidos) == {TAB_ACTIVE, TAB_CLOSED}
+    assert sorted(o["id"] for o in ordenes) == ["active-1", "closed-1"]
+
+
+def test_buscar_ordenes_deduplica_por_id_si_aparece_en_mas_de_un_tab():
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        query = json_body["query"]
+        if "customRangeLimit" in query:
+            return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
+        v = json_body["variables"]
+        datos = [_orden(id="99")] if v["page"] == 1 else []
+        return _Respuesta(200, {}, {"data": {"orders": {"find": {
+            "pageInfo": {"page": v["page"], "pageCount": 1, "count": 1}, "data": datos,
+        }}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    ordenes = buscar_ordenes(cliente, date(2026, 7, 1), date(2026, 7, 31))
+    assert [o["id"] for o in ordenes] == ["99"]  # una sola vez, no dos aunque haya salido de ambos tabs
+
+
+# ── ids_fulfillment — logistic_type=fulfillment no es un campo legible por
+# orden, solo un filtro de búsqueda (confirmado por introspección,
+# 2026-08-13) — se arma un set aparte para poder forzar Costo Envío=0. ──
+
+def test_ids_fulfillment_filtra_por_logistic_type_y_combina_ambos_tabs():
+    filtros_pedidos = []
+
+    def post(url, json_body, cookie):
+        if url.endswith("doLogin.json"):
+            return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
+        query = json_body["query"]
+        if "customRangeLimit" in query:
+            return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
+        v = json_body["variables"]
+        filtros_pedidos.append((v["tab"], v["filters"]))
+        datos = [{"id": f"{v['tab']}-1"}] if v["page"] == 1 else []
+        return _Respuesta(200, {}, {"data": {"orders": {"find": {
+            "pageInfo": {"page": v["page"], "pageCount": 1, "count": 1}, "data": datos,
+        }}}})
+
+    cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
+    limite_dias = _limite_dias_de_rango(cliente)
+    ids = ids_fulfillment(cliente, date(2026, 7, 1), date(2026, 7, 31), limite_dias)
+
+    assert ids == {"active-1", "closed-1"}
+    for tab, filtros in filtros_pedidos:
+        assert filtros == [{"filter": "logistic_type", "values": ["fulfillment"]}]
+    assert {f[0] for f in filtros_pedidos} == {TAB_ACTIVE, TAB_CLOSED}
 
 
 # ── _tabla_de_filtro — traducción código->etiqueta en vivo, sin hardcodear ──
@@ -242,7 +426,10 @@ def test_sku_de_linea_sin_variante_devuelve_none():
 
 def test_fila_desde_orden_normal_reproduce_los_campos_esperados():
     fila = _fila_desde_orden(_orden(), Decimal(1500), _CANALES, _ESTADOS_PAGO)
-    assert fila.numero_orden == "78672152"
+    # numero_orden viene de customOrderId, NO de id (bug real 2026-08-13 —
+    # ver docstring del módulo: id=71583764 no es lo que Ecom/Excel llaman
+    # "Número Orden", customOrderId sí).
+    assert fila.numero_orden == "1234567"
     assert fila.canal_de_venta == "Mercadolibre Carrito"
     assert fila.estado_pago == "Cobrado"
     assert fila.skus_vendidos == "CF217ACOMP"
@@ -254,10 +441,38 @@ def test_fila_desde_orden_normal_reproduce_los_campos_esperados():
     assert fila.incidencia is None
 
 
+def test_fila_desde_orden_usa_id_si_falta_customorderid():
+    fila = _fila_desde_orden(_orden(customOrderId=None), Decimal(1500), _CANALES, _ESTADOS_PAGO)
+    assert fila.numero_orden == "78672152"
+
+
 def test_fila_desde_orden_traduce_estado_de_pago_y_le_quita_el_espacio():
     # 'partially_paid' -> 'Cobro Parcial ' (espacio real de la API) -> strip()
     fila = _fila_desde_orden(_orden(paymentStatus="partially_paid"), Decimal(1500), _CANALES, _ESTADOS_PAGO)
     assert fila.estado_pago == "Cobro Parcial"
+
+
+def test_fila_desde_orden_costo_envio_es_listcost_menos_cost():
+    # Segunda corrección real 2026-08-13 (la primera, basada en
+    # freeShipping, fallaba en ambos sentidos contra órdenes reales del
+    # 2026-08-12 -- ver docstring del módulo): listCost es la tarifa de
+    # lista, cost es lo que paga el comprador, la diferencia es lo que
+    # absorbe el vendedor. Confirmado en 296 de 315 órdenes reales.
+    fila = _fila_desde_orden(
+        _orden(shipping={"listCost": 11173.09, "cost": 3943.09}),
+        Decimal(1500), _CANALES, _ESTADOS_PAGO,
+    )
+    assert fila.costo_envio == Decimal("7230.00")
+
+
+def test_fila_desde_orden_costo_envio_es_cero_si_es_fulfillment():
+    # Las 12 órdenes reales que no cerraban con listCost-cost eran, las 12,
+    # órdenes Full (logistic_type=fulfillment) -- ahí Costo Envío es
+    # siempre 0 sin importar listCost/cost (el costo de Full se cobra
+    # aparte, no por orden).
+    orden = _orden(id="99", shipping={"listCost": 18251.87, "cost": 0})
+    fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
+    assert fila.costo_envio == Decimal(0)
 
 
 def test_fila_desde_orden_postventa_fuerza_precios_a_cero_conserva_costo():
@@ -270,7 +485,7 @@ def test_fila_desde_orden_postventa_fuerza_precios_a_cero_conserva_costo():
 def test_fila_desde_orden_costo_cero_es_incidencia():
     orden = _orden(orderLists=[{
         "quantity": 1, "subtotal": 100, "subtotalSinImpuestos": 90,
-        "variant": {"sku": "X", "costUsd": 0, "product": {"sku": None}},
+        "variant": {"sku": "X", "cost": 0, "product": {"sku": None}},
     }])
     fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO)
     assert fila.incidencia == "COSTO_NO_RESUELTO"
@@ -295,14 +510,21 @@ def _post_adapter(ordenes, canales=None, estados_pago=None):
         if url.endswith("doLogin.json"):
             return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
         query = json_body["query"]
+        if "customRangeLimit" in query:
+            return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
         if "findSettings" in query:
             filtros = [
                 {"id": "owner", "options": [{"id": k, "name": v} for k, v in (canales or _CANALES).items()]},
                 {"id": "payment", "options": [{"id": k, "name": v} for k, v in (estados_pago or _ESTADOS_PAGO).items()]},
             ]
             return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"filters": filtros}}}})
+        # Se llama una vez por tab (active, closed); ambas devuelven el mismo
+        # fixture -- el dedupe de `buscar_ordenes` es quien evita que cuente
+        # doble, no este fake (mismo principio que en los tests de arriba).
+        variables = json_body["variables"]
+        datos = ordenes if variables["page"] == 1 else []
         return _Respuesta(200, {}, {"data": {"orders": {"find": {
-            "pageInfo": {"page": 1, "pageCount": 1, "count": len(ordenes)}, "data": ordenes,
+            "pageInfo": {"page": variables["page"], "pageCount": 1, "count": len(datos)}, "data": datos,
         }}}})
 
     return post
@@ -310,11 +532,11 @@ def _post_adapter(ordenes, canales=None, estados_pago=None):
 
 def test_adapter_periodo_separa_lineas_excluidas_e_incidencias():
     ordenes = [
-        _orden(id="1"),  # normal, paid
-        _orden(id="2", paymentStatus="refunded"),  # excluida por estado
-        _orden(id="3", orderLists=[{  # incidencia de costo
+        _orden(id="1", customOrderId="1"),  # normal, paid
+        _orden(id="2", customOrderId="2", paymentStatus="refunded"),  # excluida por estado
+        _orden(id="3", customOrderId="3", orderLists=[{  # incidencia de costo
             "quantity": 1, "subtotal": 100, "subtotalSinImpuestos": 90,
-            "variant": {"sku": "X", "costUsd": 0, "product": {"sku": None}},
+            "variant": {"sku": "X", "cost": 0, "product": {"sku": None}},
         }]),
     ]
     adaptador = EcomApiAdapter(EcomApiClient(email="x@x.com", password="s", post_fn=_post_adapter(ordenes)))
