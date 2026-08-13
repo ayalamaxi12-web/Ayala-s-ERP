@@ -14,12 +14,14 @@ business/COMERCIAL/
 ├── 01_COMERCIAL_FUNCIONAL.md    ← especificación funcional del dominio
 ├── 02_CONTRATO_DE_CANAL.md      ← qué debe cumplir todo canal, sea cual sea
 └── canales/
-    ├── 00_LEEME_CANALES.md      ← cómo se documenta un canal nuevo
-    ├── mercadolibre/            ← documentado
-    ├── woocommerce/             ← vacío, pendiente
-    ├── fravega/                 ← vacío, pendiente
-    └── oncity/                  ← vacío, pendiente
+    └── mercadolibre/
+        ├── 01_MAPA_API.md       ← qué endpoint resuelve qué necesidad
+        ├── 02_MCP.md            ← cómo consultar la documentación oficial
+        ├── 03_MODULO_FULL.md    ← Full y conciliación de stock
+        └── mcp.json             ← configuración del MCP, lista para pegar
 ```
+
+Las carpetas de WooCommerce, Frávega y OnCity se crean cuando se documente cada canal, no antes.
 
 **Mercado Libre es un canal, no el módulo.** Está primero porque es el de mayor volumen y el único con documentación completa, no porque sea el dominio. Todo lo que valga para cualquier canal va en `01` o `02`; lo que sea específico de una plataforma va en su carpeta dentro de `canales/`.
 
@@ -37,7 +39,8 @@ Esa separación es la razón de que la carpeta esté armada así: agregar un can
 | 4 | `02_CONTRATO_DE_CANAL.md` | Qué capacidades debe exponer un canal |
 | 5 | `canales/{canal}/01_MAPA_API.md` | Qué endpoint de ese canal resuelve qué necesidad |
 | 6 | `canales/{canal}/02_MCP.md` | Cómo consultar la documentación oficial de ese canal |
-| 7 | `../../architecture/COMERCIAL_IMPLEMENTACION.md` | Diseño técnico |
+| 7 | `canales/{canal}/03_*.md` en adelante | Módulos específicos de ese canal |
+| 8 | `../../architecture/COMERCIAL_IMPLEMENTACION.md` | Diseño técnico |
 
 **Rentabilidad se lee antes que Comercial, no después.** Comercial fija precios, y un precio sin margen calculado es una decisión a ciegas. La cascada de rentabilidad es un insumo del dominio comercial, no un módulo paralelo.
 
@@ -90,11 +93,38 @@ Flujo obligatorio antes de escribir código que toque un canal:
 
 ## 5. Cuándo empieza la implementación
 
-**Después de que Rentabilidad esté terminada y su suite de regresión pase al centavo.** No antes.
+**La puerta es sobre ESCRITURA, no sobre lectura.** La distinción es la que decide qué se puede
+construir hoy.
 
-El motivo no es procedimental. Comercial escribe precios en canales reales; si el margen que respalda esos precios no está validado, el sistema automatiza pérdidas a escala. La Fase 2 de Rentabilidad —el motor corriendo en modo sombra con el Reporte de Divergencia— es la puerta.
+### Escritura al canal — bloqueada
 
-Mientras Rentabilidad no cierre, en esta carpeta se **documenta**, no se implementa.
+Publicar precios, activar promociones, modificar publicaciones, mover stock. **Nada de esto se
+implementa hasta que Rentabilidad esté terminada y su suite de regresión pase al centavo.**
+
+El motivo no es procedimental. Comercial escribe precios en canales reales; si el margen que
+respalda esos precios no está validado, el sistema automatiza pérdidas a escala. La Fase 2 de
+Rentabilidad —el motor corriendo en modo sombra con el Reporte de Divergencia— es la puerta.
+
+### Lectura, conciliación y diagnóstico — habilitadas
+
+Traer stock, ventas, visitas y estado de publicaciones. Comparar contra los sistemas propios.
+Detectar diferencias y mostrarlas. **Nada de esto toca un precio ni escribe al canal, así que
+el riesgo que la puerta previene no aplica.**
+
+`canales/mercadolibre/03_MODULO_FULL.md` está enteramente de este lado y puede construirse ya.
+
+### Por qué importa que esté escrito
+
+Sin esta distinción, la regla se lee como una prohibición total y pasa una de dos cosas: o se
+frena trabajo que no tiene riesgo, o alguien la interpreta por su cuenta y arranca igual.
+**Interpretar una regla de negocio en lugar de preguntar es el modo de falla más peligroso.**
+
+### Sobre leer Táctica y ECOM
+
+El §8 excluye la **documentación** de Táctica y ECOM de esta carpeta, porque son sistemas
+transitorios. Eso no prohíbe leerlos: la conciliación necesita el stock del depósito Full de
+ECOM y el factor de descuento de las vinculaciones. **Leer está habilitado. Escribir en ellos,
+no.**
 
 ---
 
@@ -114,6 +144,11 @@ Heredados de `01_TRASPASO_ERP.md` y no negociables acá:
 
 **Ante duda no resuelta: marcar como pendiente, no inventar.**
 
+**Un número que no se puede medir no se estima en silencio.** Si un dato viene de una fuente
+que puede estar sesgada —por ejemplo, ventas de un producto que estuvo sin stock— el sistema
+tiene que **marcar el dato como no confiable**, no promediarlo y seguir. Ver
+`canales/mercadolibre/03_MODULO_FULL.md` §2.
+
 ---
 
 ## 7. Estado de la documentación
@@ -125,7 +160,9 @@ Heredados de `01_TRASPASO_ERP.md` y no negociables acá:
 | `02_CONTRATO_DE_CANAL.md` | **Solo estructura** |
 | `canales/mercadolibre/01_MAPA_API.md` | Completo a nivel de área. Detalle de endpoints se consulta con MCP |
 | `canales/mercadolibre/02_MCP.md` | Completo |
-| `canales/woocommerce/`, `fravega/`, `oncity/` | Vacías |
+| `canales/mercadolibre/03_MODULO_FULL.md` | Completo. **Listo para implementar** — es lectura, ver §5 |
+| `canales/mercadolibre/00_FICHA.md` | **No existe.** El `02_CONTRATO_DE_CANAL` §7 la pide |
+| WooCommerce, Frávega, OnCity | Sin documentar. Las carpetas se crean al documentarlas |
 | `../../architecture/COMERCIAL_IMPLEMENTACION.md` | **Solo plantilla** |
 
 ---
@@ -133,6 +170,6 @@ Heredados de `01_TRASPASO_ERP.md` y no negociables acá:
 ## 8. Qué NO va en esta carpeta
 
 - Reglas de cálculo de margen o de la cascada de rentabilidad → van en `RENTABILIDAD_FUNCIONAL.md`
-- Documentación de Táctica o Ecom → son sistemas transitorios, ver `01_TRASPASO_ERP.md`
+- Documentación de Táctica o Ecom → son sistemas transitorios, ver `01_TRASPASO_ERP.md`. **Esto es sobre dónde vive la documentación, no una prohibición de leerlos** — ver §5
 - Código, nombres de clase, esquemas de tabla → van en `architecture/COMERCIAL_IMPLEMENTACION.md`
 - Un módulo separado de Inteligencia Competitiva → está **dentro** de Comercial como capacidad, no aparte

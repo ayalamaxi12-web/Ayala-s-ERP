@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mercadolibre": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.mercadolibre.com/mcp"]
+    }
+  }
+}
