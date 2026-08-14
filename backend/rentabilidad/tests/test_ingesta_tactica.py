@@ -24,7 +24,10 @@ def _row(**overrides) -> dict:
         Numero=127128,
         CAE=86316189981185.0,
         Cantidad=6,
-        PrecioVenta=31153.50,
+        # ImportePrecioVenta1 es UNITARIO (bug real corregido 2026-08-14, ver
+        # docstring del módulo) -- 5192.25/unidad × 6 = 31153.50, el total
+        # real de línea que Maxx confirmó contra T-1 de RENTABILIDAD_FUNCIONAL.
+        PrecioVenta=5192.25,
         TC=1500,
     )
     base.update(overrides)
@@ -77,11 +80,27 @@ def test_lineas_traduce_fila_factura_a_cuenta_1():
 
 
 def test_lineas_traduce_nota_de_credito_no_electronica_a_cuenta_2():
-    fila_cruda = _row(CAE=0, Cantidad=-1, PrecioVenta=-4315.75, NroSucursal=5001, Numero=19036008)
+    # ImportePrecioVenta1 es una magnitud positiva (unitaria) -- el signo de
+    # la nota de crédito lo aporta `cantidad`, no un valor negativo cargado
+    # en el precio (mismo criterio que el costo, L siempre positivo).
+    fila_cruda = _row(CAE=0, Cantidad=-1, PrecioVenta=4315.75, NroSucursal=5001, Numero=19036008)
     adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
     [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
     assert fila.tipo_factura == "CVE"
     assert fila.nro_factura == "05001-19036008"
+    assert fila.precio_venta == Decimal("-4315.75")
+
+
+def test_lineas_precio_venta_es_unitario_por_cantidad_no_el_valor_crudo():
+    # Bug real corregido 2026-08-14: ImportePrecioVenta1 es un precio
+    # UNITARIO -- confirmado contra la factura real 00003-00127258 (SKU
+    # HP664XLKCOMP-PRM, cantidad 12): Táctica muestra $223.804,80 de
+    # importe en esa línea, que es 18.650,40 (ImportePrecioVenta1) × 12,
+    # no el valor crudo sin multiplicar.
+    fila_cruda = _row(Cantidad=12, PrecioVenta=18650.40)
+    adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
+    [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
+    assert fila.precio_venta == Decimal("223804.80")
 
 
 def test_a_linea_input_produce_el_contrato_del_calculador():

@@ -21,6 +21,25 @@ AFIP = Cuenta 2; no-cero = Cuenta 1) — nunca de la letra fiscal A/B/E, que
 Maxx confirma indistinguible en el cálculo. El prefijo de talonario
 (pérdida definitiva, `00007`/`05007`) tiene prioridad absoluta y ya lo
 resuelve `resolver_regimen` a partir de `nro_factura`, sin cambios acá.
+
+**Bug real corregido 2026-08-14, encontrado al validar contra Táctica real
+(no de una fixture — Maxx vio el margen absurdo en una orden puntual y lo
+señaló):** `facturasitems.ImportePrecioVenta1` es un precio **unitario**,
+no el total de la línea — confirmado sin excepciones sobre 20 líneas
+reales del 2026-08-12 con cantidad>1: coincide exacto con
+`ImporteUnitario1` en 19 de 20 (la única distinta tenía un descuento de
+vendedor aplicado — Maxx: "los vendedores tienen que jugar con los
+números", el precio final de venta puede diferir del de lista, pero sigue
+siendo unitario). Verificado además contra la factura real
+`00003-00127258` (SKU `HP664XLKCOMP-PRM`, cantidad 12): Táctica muestra
+$223.804,80 como importe de esa línea, que es exactamente
+`ImportePrecioVenta1 (18.650,40) × Cantidad (12)` — no el valor crudo sin
+multiplicar. `_fila_desde_row` multiplica por `cantidad` antes de armar
+`FilaTactica.precio_venta`, igual criterio que ya usa el costo (`O = L *
+N`, L unitario en USD, N=cantidad) — y de paso resuelve el signo en notas
+de crédito de la misma forma: `ImportePrecioVenta1` es una magnitud
+positiva, `cantidad` (negativa en NC) es quien determina el signo del
+total, sin necesidad de un caso especial.
 """
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -125,7 +144,10 @@ def _fila_desde_row(row: dict) -> FilaTactica:
         nro_factura=_nro_factura(row["NroSucursal"], row["Numero"]),
         tipo_factura=_tipo_factura(row["CAE"], cantidad),
         cantidad=cantidad,
-        precio_venta=Decimal(str(row["PrecioVenta"])),
+        # ImportePrecioVenta1 es un precio unitario -- el total real de la
+        # línea (lo que Táctica muestra facturado) es unitario × cantidad,
+        # igual criterio que el costo (ver docstring del módulo).
+        precio_venta=Decimal(str(row["PrecioVenta"])) * cantidad,
         tc=Decimal(str(tc)),
     )
 
