@@ -1,20 +1,20 @@
 """Adaptadores de solo lectura (§2 RENTABILIDAD_IMPLEMENTACION.md).
 
-Cada proveedor separa la lectura de red (gspread, vía `sheet_id` + `fetch_fn`)
-de la lógica de cascada documentada, que es lo que se testea sin red: los
-tests inyectan `fetch_fn` con filas de fixture. Si `sheet_id` no está
-configurado, el proveedor igual existe (adjustment #7) y solo falla —
-`ConfiguracionFaltante`, con mensaje claro— cuando efectivamente se lo usa.
+Cada proveedor Sheets-based separa la lectura de red (gspread, vía
+`sheet_id` + `fetch_fn`) de la lógica de cascada documentada, que es lo que
+se testea sin red: los tests inyectan `fetch_fn` con filas de fixture. Si
+`sheet_id` no está configurado, el proveedor igual existe (adjustment #7) y
+solo falla — `ConfiguracionFaltante`, con mensaje claro— cuando efectivamente
+se lo usa.
+
+`CostoVigenteProvider`/`IvaProvider` son la excepción: leen SQL directo de
+Táctica, no Sheets (ver docstring de cada clase — cambio de fuente
+confirmado por Maxx 2026-08-14).
 
 GAPS DOCUMENTALES (implementados con el mejor criterio disponible, marcados
 para confirmar contra la hoja real — no son reglas inventadas, son
 supuestos de "qué columna/hoja exacta" que el relevamiento no precisó):
 
-- `CostoVigenteProvider` asume que el SKU vive en la columna A de `Global`
-  (el funcional da las columnas S/R por letra pero no dice dónde está la
-  clave de búsqueda).
-- `IvaProvider` busca por título de columna ('sku'/'codigo' y 'iva') en
-  `Importacion Tactica`, ya que el funcional no da los títulos exactos.
 - `StockProvider` busca por título ('stock', 'ventas 30 dias') en `Global`
   por el mismo motivo.
 - `ResponsableProvider` implementa un lookup directo por empresa; las
@@ -54,60 +54,127 @@ class _AdaptadorBase:
         return self._fetch_fn(self._sheet_id, tab)
 
 
-class CostoVigenteProvider(_AdaptadorBase):
-    """Cascada exacta de RENTABILIDAD_FUNCIONAL.md §5.6."""
+ConsultarCatalogoTactica = Callable[[], list[dict]]
 
-    def __init__(self, sheet_id: str | None = None, fetch_fn: FetchFn | None = None):
-        super().__init__(sheet_id or config.SHEET_GLOBAL_ID, fetch_fn, "RENT_SHEET_GLOBAL_ID")
+# Costo vigente + IVA por SKU, directo de la base de Táctica — reemplaza a
+# `Global`/`Importacion Tactica` (Sheets). Cambio de fuente confirmado por
+# Maxx (2026-08-14): esas hojas eran una bajada manual del propio sistema,
+# usada solo mientras no había acceso directo a la base; con acceso SQL ya
+# confirmado (2026-08-14, servidor 10.10.10.99/FG), se lee del sistema, no
+# de su copia. Ver docstrings de `CostoVigenteProvider`/`IvaProvider`.
+#
+# - IVA: `productos.IDTasaIVAVentas` -> `tasasiva.RecID` da `Descripcion`
+#   ("IVA Debito 21%"/"10.5%"/...) -- confirmado contra productos reales,
+#   coincide exacto con los valores que ya esperaba `IvaProvider.FACTORES`.
+# - Costo: `productosprecios.Costo` por `IDProducto` -- confirmado con un
+#   producto real que el valor es IDÉNTICO en las 6 listas de precio
+#   (NroLista 1-6), así que no importa cuál se traiga; se toma la de menor
+#   NroLista vía `OUTER APPLY ... ORDER BY NroLista` para no depender de
+#   que exista una lista en particular.
+_QUERY_CATALOGO_COSTO_IVA = """
+SELECT
+    p.Codigo AS sku,
+    costo_lista.Costo AS costo,
+    ti.Descripcion AS iva_descripcion
+FROM productos p
+OUTER APPLY (
+    SELECT TOP 1 pp.Costo
+    FROM productosprecios pp
+    WHERE pp.IDProducto = p.RecID
+    ORDER BY pp.NroLista
+) costo_lista
+LEFT JOIN tasasiva ti ON ti.RecID = p.IDTasaIVAVentas
+WHERE p.Codigo IS NOT NULL AND p.Codigo <> ''
+"""
+
+
+def _consultar_catalogo_tactica_real() -> list[dict]:
+    """Import perezoso de pymssql — mismo principio que
+    `ingesta_tactica._ejecutar_query_real()`: el resto del módulo no
+    depende de este driver ni de conectividad real para correr sus tests."""
+    import pymssql
+
+    conn = pymssql.connect(
+        server=requerido("RENT_TACTICA_SQL_SERVER"),
+        user=requerido("RENT_TACTICA_SQL_USER"),
+        password=requerido("RENT_TACTICA_SQL_PASSWORD"),
+        database=requerido("RENT_TACTICA_SQL_DATABASE"),
+        login_timeout=20,
+        as_dict=True,
+    )
+    try:
+        cur = conn.cursor()
+        cur.execute(_QUERY_CATALOGO_COSTO_IVA)
+        return list(cur)
+    finally:
+        conn.close()
+
+
+class CostoVigenteProvider:
+    """Costo vigente USD por SKU — RENTABILIDAD_FUNCIONAL.md §5.6, corregido
+    2026-08-14. La cascada original (columna S de `Global`, con fallback a
+    columna R si S es 0) ya no aplica: `productosprecios.Costo` es un único
+    valor por producto en la base de Táctica, confirmado idéntico entre
+    listas de precio — no hay dos fuentes entre las que elegir. El
+    documento funcional se actualizó para reflejar esto (decisión de Maxx,
+    2026-08-14).
+
+    "El 0 se trata como sin costo, no como costo cero" (§5.6) se conserva
+    tal cual: sigue siendo funcionalmente relevante, solo cambió de dónde
+    sale el valor."""
+
+    def __init__(self, consultar: ConsultarCatalogoTactica | None = None):
+        self._consultar = consultar or _consultar_catalogo_tactica_real
+        self._catalogo: dict[str, dict] | None = None
+
+    def _obtener_catalogo(self) -> dict[str, dict]:
+        if self._catalogo is None:
+            self._catalogo = {fila["sku"]: fila for fila in self._consultar()}
+        return self._catalogo
 
     def obtener(self, sku: str) -> Decimal | None:
         return self.obtener_con_origen(sku)[0]
 
     def obtener_con_origen(self, sku: str) -> tuple[Decimal | None, str | None]:
-        """Igual que `obtener`, pero además indica qué columna del libro
-        ("S" o "R") aportó el valor — insumo de la auditoría de costo
-        (Etapa 10, §4 RENTABILIDAD_IMPLEMENTACION.md)."""
-        filas = self._filas(config.TAB_GLOBAL)
-        idx_s, idx_r = _letra_a_indice("S"), _letra_a_indice("R")
-        fila = next((f for f in filas if gsheets.valor(f, 0) == sku), None)
-        if fila is None:
-            # "si la búsqueda falla... usar Global columna R" — pero sin fila
-            # no hay valor de R para ese SKU: no hay nada que devolver.
+        """Igual que `obtener`, pero además indica el origen — insumo de la
+        auditoría de costo (Etapa 10, §4 RENTABILIDAD_IMPLEMENTACION.md).
+        Antes distinguía columna "S"/"R" de Sheets; con una única fuente
+        SQL, el origen es siempre "SQL" cuando hay valor."""
+        fila = self._obtener_catalogo().get(sku)
+        if fila is None or fila.get("costo") is None:
             return None, None
-        valor_s = gsheets.valor(fila, idx_s)
-        if valor_s and Decimal(valor_s.replace(",", ".")) != 0:
-            return Decimal(valor_s.replace(",", ".")), "S"
-        # valor_s vacío o 0 ("0 se trata como sin costo") → columna R
-        valor_r = gsheets.valor(fila, idx_r)
-        if valor_r:
-            try:
-                return Decimal(valor_r.replace(",", ".")), "R"
-            except Exception:
-                return None, None
-        return None, None
+        costo = Decimal(str(fila["costo"]))
+        if costo == 0:
+            # "el 0 se trata como sin costo" (§5.6) — se mantiene igual
+            return None, None
+        return costo, "SQL"
 
 
-class IvaProvider(_AdaptadorBase):
-    """§5.4 — comparación exacta de cadena, sensible a mayúsculas, sin normalizar."""
+class IvaProvider:
+    """§5.4 — comparación exacta de cadena, sensible a mayúsculas, sin
+    normalizar. Corregido 2026-08-14: lee `tasasiva.Descripcion` (vía
+    `productos.IDTasaIVAVentas`) directo de la base de Táctica, no de la
+    hoja `Importacion Tactica` — mismo cambio de fuente que
+    `CostoVigenteProvider`, misma tabla de origen (`_QUERY_CATALOGO_COSTO_IVA`,
+    ambos proveedores comparten forma de consulta aunque cada instancia
+    cachea la suya)."""
 
     FACTORES = {"IVA Debito 21%": Decimal("1.21"), "IVA Debito 10.5%": Decimal("1.105")}
 
-    def __init__(self, sheet_id: str | None = None, fetch_fn: FetchFn | None = None):
-        super().__init__(sheet_id or config.SHEET_GLOBAL_ID, fetch_fn, "RENT_SHEET_GLOBAL_ID")
+    def __init__(self, consultar: ConsultarCatalogoTactica | None = None):
+        self._consultar = consultar or _consultar_catalogo_tactica_real
+        self._catalogo: dict[str, dict] | None = None
+
+    def _obtener_catalogo(self) -> dict[str, dict]:
+        if self._catalogo is None:
+            self._catalogo = {fila["sku"]: fila for fila in self._consultar()}
+        return self._catalogo
 
     def factor(self, sku: str) -> Decimal | None:
-        filas = self._filas(config.TAB_IMPORTACION_TACTICA)
-        if not filas:
+        fila = self._obtener_catalogo().get(sku)
+        if fila is None:
             return None
-        hdr_idx = gsheets.encontrar_fila_headers(filas, ["sku", "codigo", "iva"])
-        mapa = gsheets.mapa_columnas(filas[hdr_idx])
-        idx_sku = gsheets.indice_columna(mapa, ["sku", "codigo"])
-        idx_iva = gsheets.indice_columna(mapa, ["iva"])
-        for fila in filas[hdr_idx + 1:]:
-            if gsheets.valor(fila, idx_sku) == sku:
-                texto = gsheets.valor(fila, idx_iva)
-                return self.FACTORES.get(texto)  # comparación exacta — sin .get con default normalizado
-        return None
+        return self.FACTORES.get(fila.get("iva_descripcion"))  # comparación exacta — sin default normalizado
 
 
 class ClasificacionProvider(_AdaptadorBase):

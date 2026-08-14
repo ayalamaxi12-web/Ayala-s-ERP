@@ -44,7 +44,7 @@ def test_e1_ml_carrito_iva_10_5(db_session):
     assert _cerca(r.facturacion_usd, "454.71")
     assert _cerca(r.pct_rentabilidad, "0.5879")
 
-    iva_provider = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: [["SKU", "IVA"], ["SKU-E1", "IVA Debito 10.5%"]])
+    iva_provider = IvaProvider(consultar=lambda: [{"sku": "SKU-E1", "iva_descripcion": "IVA Debito 10.5%"}])
     ao = resolver_ao_orden(iva_provider, "SKU-E1")
     ap = calcular_facturacion_iva(linea.precio_final, ao)
     assert _cerca(ap, "753675.195")

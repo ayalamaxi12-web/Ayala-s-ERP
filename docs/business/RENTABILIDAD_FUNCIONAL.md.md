@@ -113,7 +113,9 @@ Todas paramétricas.
 
 ### 5.4 Tratamiento del IVA
 
-**El ERP nunca calcula IVA manualmente y nunca reconstruye alícuotas.** Consume el factor informado por Táctica/Importaciones.
+**El ERP nunca calcula IVA manualmente y nunca reconstruye alícuotas.** Consume el factor informado por Táctica.
+
+**Actualizado 2026-08-14:** se lee directo de la base de Táctica en vivo (`productos.IDTasaIVAVentas` → `tasasiva.Descripcion`), no de la hoja `Importacion Tactica` — mismo cambio de fuente que §5.6, mismo motivo (el Sheet era una copia manual, ya no hace falta con acceso directo a la base). La regla de resolución no cambia, solo de dónde sale el texto.
 
 Resolución del factor, por lookup del SKU sobre el régimen textual del producto:
 
@@ -147,14 +149,17 @@ El TC se toma del día de la operación **al momento de la carga**, y es **oblig
 
 ### 5.6 Costo vigente
 
-**Resolución del costo unitario USD — cascada exacta:**
+**Actualizado 2026-08-14 (decisión de Maxx):** la fuente pasó de la hoja `Global` (una bajada manual del propio sistema, usada mientras no había acceso directo a la base de Táctica) a la base de Táctica en vivo, ahora que el acceso SQL está confirmado. El Sheet nunca fue la fuente real — era una copia; con el sistema accesible, se lee del sistema.
 
-1. Buscar el SKU en `Global`, **columna S** (costo vigente).
-2. Si el valor obtenido es **0**, buscar el mismo SKU en `Global`, **columna R**.
-3. Si la búsqueda falla o devuelve error, usar `Global` columna R.
-4. Si también falla, el costo queda vacío y la línea se marca como incidencia bloqueante.
+**Resolución del costo unitario USD:**
 
-> **El 0 se trata como "sin costo", no como costo cero.** Esta distinción es funcionalmente relevante y debe replicarse tal cual.
+1. Buscar el SKU (`productos.Codigo`) en la base de Táctica y tomar `productosprecios.Costo` (moneda 2 = USD).
+2. Si el valor es **0**, el costo queda vacío y la línea se marca como incidencia bloqueante.
+3. Si el SKU no se encuentra, mismo resultado: incidencia bloqueante.
+
+**La cascada de dos columnas (S con fallback a R) ya no aplica.** `productosprecios.Costo` es un valor único por producto — confirmado idéntico entre las distintas listas de precio (`NroLista`) de un mismo producto, no hay dos fuentes distintas entre las que elegir.
+
+> **El 0 se trata como "sin costo", no como costo cero.** Esta distinción es funcionalmente relevante y debe replicarse tal cual — no cambió con el cambio de fuente.
 
 **Decisión funcional explícita:** la rentabilidad reemplaza el costo histórico por el costo vigente del sistema. Cada vez que se recalcula un período, el costo utilizado es el que Táctica tiene publicado **en ese momento**.
 

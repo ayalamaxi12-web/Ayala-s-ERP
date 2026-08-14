@@ -24,26 +24,11 @@ def _cerca(actual, esperado):
     return abs(Decimal(actual) - Decimal(esperado)) <= TOLERANCIA
 
 
-def _fila_global(sku: str, costo_l: str):
-    fila = [""] * 30
-    fila[0] = sku
-    fila[18] = costo_l  # columna S — "sin costo" nunca es el caso acá
-    return fila
-
-
-def _fila_iva(sku: str, texto: str):
-    return ["SKU", "IVA"], [sku, texto]
-
-
 def _calculador(db_session, costo_l: str, iva_texto: str | None):
-    filas_costo = [_fila_global("SKU", costo_l)]
-    if iva_texto:
-        hdr, fila = _fila_iva("SKU", iva_texto)
-        filas_iva = [hdr, fila]
-    else:
-        filas_iva = []
-    costo_provider = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas_costo)
-    iva_provider = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas_iva)
+    catalogo = [{"sku": "SKU", "costo": costo_l, "iva_descripcion": iva_texto}]
+    consultar = lambda: catalogo
+    costo_provider = CostoVigenteProvider(consultar=consultar)
+    iva_provider = IvaProvider(consultar=consultar)
     return RentabilidadTacticaCalculator(db_session, costo_provider, iva_provider)
 
 

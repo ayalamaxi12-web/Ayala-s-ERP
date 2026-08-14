@@ -46,12 +46,10 @@ def _sin_clasificar():
 
 
 def _costo_iva(costo_s="2.65", iva_texto="IVA Debito 21%", sku="CF217ACOMP"):
-    fila_global = [""] * 30
-    fila_global[0] = sku
-    fila_global[18] = costo_s
-    filas_iva = [["SKU", "IVA"], [sku, iva_texto]]
-    costo = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: [fila_global])
-    iva = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas_iva)
+    catalogo = [{"sku": sku, "costo": costo_s, "iva_descripcion": iva_texto}]
+    consultar = lambda: catalogo
+    costo = CostoVigenteProvider(consultar=consultar)
+    iva = IvaProvider(consultar=consultar)
     return costo, iva
 
 
@@ -104,7 +102,7 @@ def test_persistir_periodo_tactica_no_toca_otros_periodos(db_session):
 
 
 def test_persistir_periodo_tactica_sin_costo_configurado_salta_la_fila_no_rompe(db_session):
-    costo_sin_config = CostoVigenteProvider(sheet_id=None)
+    costo_sin_config = CostoVigenteProvider()
     _, iva = _costo_iva()
     resultado = guardar_cierre_tactica(
         db_session, "2026-07", [_fila_tactica()], costo_sin_config, iva, **_sin_clasificar(),
@@ -176,7 +174,7 @@ def test_persistir_ecom_persiste_las_tres_categorias_del_adaptador(db_session):
     resultado_ingesta = ResultadoIngestaEcom(
         lineas=[normal], excluidas_por_estado_pago=[excluida], incidencias_costo=[incidencia],
     )
-    iva = IvaProvider(sheet_id=None)
+    iva = IvaProvider()
     resultado = guardar_cierre_ecom(db_session, "2026-07", resultado_ingesta, iva, **_sin_clasificar_ecom())
     db_session.commit()
 
@@ -195,7 +193,7 @@ def test_persistir_ecom_persiste_las_tres_categorias_del_adaptador(db_session):
 
 
 def test_persistir_ecom_recarga_sin_duplicar(db_session):
-    iva = IvaProvider(sheet_id=None)
+    iva = IvaProvider()
     r1 = ResultadoIngestaEcom(lineas=[_fila_ecom(numero_orden="A")], excluidas_por_estado_pago=[], incidencias_costo=[])
     guardar_cierre_ecom(db_session, "2026-07", r1, iva, **_sin_clasificar_ecom())
     db_session.commit()
@@ -209,7 +207,7 @@ def test_persistir_ecom_recarga_sin_duplicar(db_session):
 def test_persistir_ecom_excluye_por_sku_excluido(db_session):
     db_session.add(SkuExcluido(sku="SKU-1", motivo=MotivoExclusion.SKU_AUXILIAR, activo=True))
     db_session.commit()
-    iva = IvaProvider(sheet_id=None)
+    iva = IvaProvider()
     resultado_ingesta = ResultadoIngestaEcom(lineas=[_fila_ecom()], excluidas_por_estado_pago=[], incidencias_costo=[])
     guardar_cierre_ecom(db_session, "2026-07", resultado_ingesta, iva, **_sin_clasificar_ecom())
     db_session.commit()
@@ -232,7 +230,7 @@ def test_construir_filas_tactica_no_agrega_nada_a_la_sesion(db_session):
 
 
 def test_construir_filas_ecom_no_agrega_nada_a_la_sesion(db_session):
-    iva = IvaProvider(sheet_id=None)
+    iva = IvaProvider()
     resultado_ingesta = ResultadoIngestaEcom(lineas=[_fila_ecom()], excluidas_por_estado_pago=[], incidencias_costo=[])
     resultado = construir_filas_ecom(db_session, resultado_ingesta, iva, **_sin_clasificar_ecom())
     assert len(resultado.filas) == 1

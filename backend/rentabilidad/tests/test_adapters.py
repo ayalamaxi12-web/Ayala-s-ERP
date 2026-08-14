@@ -17,49 +17,50 @@ from rentabilidad.adapters import (
 )
 from rentabilidad.config import ConfiguracionFaltante
 
-# ── CostoVigenteProvider (§5.6) ──
+# ── CostoVigenteProvider (§5.6) — SQL directo de Táctica, no Sheets ──
+# (cambio de fuente confirmado por Maxx 2026-08-14: `productosprecios.Costo`
+# es un único valor por producto, ya no hay cascada de dos columnas S/R).
 
-def _fila_global(sku: str, valor_r: str = "", valor_s: str = ""):
-    """Global: SKU en col A(0). R=17, S=18."""
-    fila = [""] * 30
-    fila[0] = sku
-    fila[17] = valor_r
-    fila[18] = valor_s
-    return fila
+def _fila_catalogo(sku: str, costo=None, iva_descripcion=None):
+    return {"sku": sku, "costo": costo, "iva_descripcion": iva_descripcion}
 
 
-def test_costo_vigente_usa_columna_s_si_no_es_cero():
-    filas = [_fila_global("SKU1", valor_r="1.00", valor_s="2.65")]
-    prov = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+def test_costo_vigente_lee_de_la_consulta_inyectada():
+    catalogo = [_fila_catalogo("SKU1", costo="2.65")]
+    prov = CostoVigenteProvider(consultar=lambda: catalogo)
     assert prov.obtener("SKU1") == Decimal("2.65")
 
 
-def test_costo_vigente_cae_a_r_si_s_es_cero():
-    filas = [_fila_global("SKU1", valor_r="1.50", valor_s="0")]
-    prov = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
-    assert prov.obtener("SKU1") == Decimal("1.50")  # "0 es sin costo", no costo cero
-
-
-def test_costo_vigente_cae_a_r_si_s_vacio():
-    filas = [_fila_global("SKU1", valor_r="1.50", valor_s="")]
-    prov = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
-    assert prov.obtener("SKU1") == Decimal("1.50")
+def test_costo_vigente_cero_se_trata_como_sin_costo():
+    catalogo = [_fila_catalogo("SKU1", costo="0")]
+    prov = CostoVigenteProvider(consultar=lambda: catalogo)
+    assert prov.obtener("SKU1") is None  # "0 es sin costo", no costo cero
 
 
 def test_costo_vigente_sku_no_encontrado_devuelve_none():
-    filas = [_fila_global("OTRO", valor_r="1.50", valor_s="2.65")]
-    prov = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    catalogo = [_fila_catalogo("OTRO", costo="2.65")]
+    prov = CostoVigenteProvider(consultar=lambda: catalogo)
     assert prov.obtener("SKU1") is None
 
 
-def test_costo_vigente_s_y_r_vacios_devuelve_none():
-    filas = [_fila_global("SKU1", valor_r="", valor_s="")]
-    prov = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+def test_costo_vigente_sin_costo_configurado_devuelve_none():
+    catalogo = [_fila_catalogo("SKU1", costo=None)]
+    prov = CostoVigenteProvider(consultar=lambda: catalogo)
     assert prov.obtener("SKU1") is None
 
 
-def test_costo_vigente_sin_sheet_id_configurado_levanta_error_claro():
-    prov = CostoVigenteProvider(sheet_id=None)
+def test_costo_vigente_origen_es_sql():
+    catalogo = [_fila_catalogo("SKU1", costo="2.65")]
+    prov = CostoVigenteProvider(consultar=lambda: catalogo)
+    assert prov.obtener_con_origen("SKU1") == (Decimal("2.65"), "SQL")
+
+
+def test_costo_vigente_sin_configurar_levanta_error_claro():
+    # Sin RENT_TACTICA_SQL_* configuradas (limpiadas por el fixture autouse
+    # de conftest.py), la consulta real levanta ConfiguracionFaltante recién
+    # al usarse -- no al construirse (mismo principio que el resto de los
+    # adaptadores).
+    prov = CostoVigenteProvider()
     with pytest.raises(ConfiguracionFaltante):
         prov.obtener("SKU1")
 
@@ -67,26 +68,26 @@ def test_costo_vigente_sin_sheet_id_configurado_levanta_error_claro():
 # ── IvaProvider (§5.4) — comparación exacta, sensible a mayúsculas ──
 
 def test_iva_factor_21_por_ciento():
-    filas = [["SKU", "IVA"], ["SKU1", "IVA Debito 21%"]]
-    prov = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    catalogo = [_fila_catalogo("SKU1", iva_descripcion="IVA Debito 21%")]
+    prov = IvaProvider(consultar=lambda: catalogo)
     assert prov.factor("SKU1") == Decimal("1.21")
 
 
 def test_iva_factor_10_5_por_ciento():
-    filas = [["SKU", "IVA"], ["SKU1", "IVA Debito 10.5%"]]
-    prov = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    catalogo = [_fila_catalogo("SKU1", iva_descripcion="IVA Debito 10.5%")]
+    prov = IvaProvider(consultar=lambda: catalogo)
     assert prov.factor("SKU1") == Decimal("1.105")
 
 
 def test_iva_valor_no_reconocido_devuelve_none():
-    filas = [["SKU", "IVA"], ["SKU1", "iva debito 21%"]]  # minúsculas: no matchea
-    prov = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    catalogo = [_fila_catalogo("SKU1", iva_descripcion="iva debito 21%")]  # minúsculas: no matchea
+    prov = IvaProvider(consultar=lambda: catalogo)
     assert prov.factor("SKU1") is None
 
 
 def test_iva_sku_no_encontrado():
-    filas = [["SKU", "IVA"], ["OTRO", "IVA Debito 21%"]]
-    prov = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    catalogo = [_fila_catalogo("OTRO", iva_descripcion="IVA Debito 21%")]
+    prov = IvaProvider(consultar=lambda: catalogo)
     assert prov.factor("SKU1") is None
 
 

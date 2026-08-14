@@ -60,7 +60,15 @@ class ValidadorRentabilidad:
 
     def validar_linea_tactica(self, linea: VentaTactica) -> list[Incidencia]:
         incidencias: list[Incidencia] = []
-        ref = linea.id
+        # Bug real encontrado 2026-08-14 al validar contra Táctica real: acá
+        # decía `linea.id` (PK interna, default de Python vía SQLAlchemy que
+        # solo se asigna al hacer flush/INSERT -- en la consulta en vivo,
+        # que nunca persiste, queda `None` y rompe la serialización de
+        # `IncidenciaOut.referencia`). `nro_factura` es el identificador real
+        # de negocio, igual criterio que ya usa `validar_linea_ecom` con
+        # `numero_orden` (línea 141) -- no una regla nueva, consistencia con
+        # el propio código.
+        ref = linea.nro_factura
 
         # V-1 — comprobante no reconocido / no determinado (MLA, P-01)
         if linea.regimen in (Regimen.NO_DETERMINADO, Regimen.NO_RECONOCIDO):

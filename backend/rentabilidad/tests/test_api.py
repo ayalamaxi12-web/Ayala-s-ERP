@@ -68,18 +68,11 @@ def test_extraccion_no_confunde_fea_con_fae():
 
 # ── calcular_lineas — traducción de tipos + orquestación, motor ya probado ──
 
-def _fila_global(sku: str, costo_s: str):
-    fila = [""] * 30
-    fila[0] = sku
-    fila[18] = costo_s
-    return fila
-
-
 def _providers(costo_s: str, iva_texto: str | None, sku="CF217ACOMP"):
-    filas_costo = [_fila_global(sku, costo_s)]
-    filas_iva = [["SKU", "IVA"], [sku, iva_texto]] if iva_texto else []
-    costo = CostoVigenteProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas_costo)
-    iva = IvaProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas_iva)
+    catalogo = [{"sku": sku, "costo": costo_s, "iva_descripcion": iva_texto}]
+    consultar = lambda: catalogo
+    costo = CostoVigenteProvider(consultar=consultar)
+    iva = IvaProvider(consultar=consultar)
     return costo, iva
 
 
@@ -124,11 +117,12 @@ def test_costo_no_resuelto_es_incidencia_no_numero(db_session):
     assert r.margen_real is None
 
 
-def test_sheet_id_faltante_no_rompe_el_lote_completo(db_session):
-    # Sin sheet_id configurado, el proveedor levanta ConfiguracionFaltante —
-    # el endpoint lo captura como incidencia en vez de tirar abajo el request.
-    costo = CostoVigenteProvider(sheet_id=None)
-    iva = IvaProvider(sheet_id=None)
+def test_config_faltante_no_rompe_el_lote_completo(db_session):
+    # Sin RENT_TACTICA_SQL_* configuradas (limpiadas por el fixture autouse),
+    # el proveedor levanta ConfiguracionFaltante — el endpoint lo captura
+    # como incidencia en vez de tirar abajo el request.
+    costo = CostoVigenteProvider()
+    iva = IvaProvider()
     linea = LineaTacticaIn(
         codigo="CF217ACOMP", tipo_factura="FEA",
         nro_factura="00003-00000001", cantidad="1", precio_venta="1000", tc="1500",

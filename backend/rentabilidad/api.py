@@ -35,6 +35,7 @@ from .adapters import (
     ResponsableProvider,
     StockProvider,
     VinculacionProvider,
+    _consultar_catalogo_tactica_real,
 )
 from .agregaciones import ECOM_DIMENSIONES, TACTICA_DIMENSIONES, agregar_ecom, agregar_tactica
 from .calculators import LineaTacticaInput, RentabilidadTacticaCalculator
@@ -95,9 +96,7 @@ def migrar_y_sembrar() -> None:
 
 
 def _fetch_fn_con_cache():
-    """Una sola lectura de red por (sheet_id, tab) para todo el request — sin
-    esto, `CostoVigenteProvider`/`IvaProvider` releerían la hoja completa por
-    cada línea del CSV (una línea de rentabilidad por SKU, no por request)."""
+    """Una sola lectura de red por (sheet_id, tab) para todo el request."""
     cache: dict[tuple[str, str], list[list[str]]] = {}
 
     def fetch(spreadsheet_id: str, tab: str) -> list[list[str]]:
@@ -107,6 +106,23 @@ def _fetch_fn_con_cache():
         return cache[clave]
 
     return fetch
+
+
+def _consultar_catalogo_tactica_con_cache():
+    """Una sola consulta SQL a Táctica para todo el request — sin esto,
+    `CostoVigenteProvider`/`IvaProvider` (cada uno con su propia instancia)
+    releerían el catálogo completo por separado. Mismo principio que
+    `_fetch_fn_con_cache`, para la fuente SQL de costo/IVA (ver
+    adapters.py, cambio de fuente 2026-08-14)."""
+    cache: list[dict] | None = None
+
+    def consultar() -> list[dict]:
+        nonlocal cache
+        if cache is None:
+            cache = _consultar_catalogo_tactica_real()
+        return cache
+
+    return consultar
 
 
 class LineaTacticaIn(BaseModel):
@@ -200,9 +216,9 @@ def calcular_lineas(
 
 @router.post("/tactica/calcular", response_model=CalcularTacticaOut)
 def calcular_tactica(payload: CalcularTacticaIn) -> CalcularTacticaOut:
-    fetch = _fetch_fn_con_cache()
-    costo_provider = CostoVigenteProvider(fetch_fn=fetch)
-    iva_provider = IvaProvider(fetch_fn=fetch)
+    consultar = _consultar_catalogo_tactica_con_cache()
+    costo_provider = CostoVigenteProvider(consultar=consultar)
+    iva_provider = IvaProvider(consultar=consultar)
     with sesion() as db:
         resultados = calcular_lineas(payload.lineas, db, costo_provider, iva_provider)
     return CalcularTacticaOut(resultados=resultados)
@@ -297,9 +313,10 @@ def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> ConsultarTact
         raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
     filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta)
     fetch = _fetch_fn_con_cache()
+    consultar = _consultar_catalogo_tactica_con_cache()
     with sesion() as db:
         resultado = construir_filas_tactica(
-            db, filas, CostoVigenteProvider(fetch_fn=fetch), IvaProvider(fetch_fn=fetch),
+            db, filas, CostoVigenteProvider(consultar=consultar), IvaProvider(consultar=consultar),
             ClasificacionProvider(fetch_fn=fetch), ResponsableProvider(fetch_fn=fetch),
             MargenObjetivoProvider(fetch_fn=fetch),
         )
@@ -398,7 +415,7 @@ def consultar_ecom_periodo(payload: ConsultarEcomIn) -> ConsultarEcomOut:
     tc = _resolver_tc(payload.tc)
     resultado_ingesta = EcomApiAdapter().periodo(payload.desde, payload.hasta, tc)
     fetch = _fetch_fn_con_cache()
-    iva_provider = IvaProvider(fetch_fn=fetch)
+    iva_provider = IvaProvider(consultar=_consultar_catalogo_tactica_con_cache())
     with sesion() as db:
         resultado = construir_filas_ecom(db, resultado_ingesta, iva_provider, **_providers_ecom(fetch))
     return ConsultarEcomOut(
@@ -437,10 +454,11 @@ def cerrar_tactica(payload: GuardarCierreIn) -> GuardarCierreOut:
     periodo = _periodo_de_rango(payload.desde, payload.hasta)
     filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta)
     fetch = _fetch_fn_con_cache()
+    consultar = _consultar_catalogo_tactica_con_cache()
     with sesion() as db:
         resultado = guardar_cierre_tactica(
             db, periodo, filas,
-            CostoVigenteProvider(fetch_fn=fetch), IvaProvider(fetch_fn=fetch),
+            CostoVigenteProvider(consultar=consultar), IvaProvider(consultar=consultar),
             ClasificacionProvider(fetch_fn=fetch), ResponsableProvider(fetch_fn=fetch),
             MargenObjetivoProvider(fetch_fn=fetch),
         )
@@ -488,7 +506,7 @@ async def cerrar_ecom_excel(
     fetch = _fetch_fn_con_cache()
     with sesion() as db:
         resultado = guardar_cierre_ecom(
-            db, periodo, resultado_ingesta, IvaProvider(fetch_fn=fetch),
+            db, periodo, resultado_ingesta, IvaProvider(consultar=_consultar_catalogo_tactica_con_cache()),
             ClasificacionProvider(fetch_fn=fetch), VinculacionProvider(fetch_fn=fetch),
             StockProvider(fetch_fn=fetch), MargenObjetivoProvider(fetch_fn=fetch),
         )
@@ -525,7 +543,7 @@ def cerrar_ecom_api(payload: GuardarCierreEcomIn) -> GuardarCierreEcomOut:
     fetch = _fetch_fn_con_cache()
     with sesion() as db:
         resultado = guardar_cierre_ecom(
-            db, periodo, resultado_ingesta, IvaProvider(fetch_fn=fetch), **_providers_ecom(fetch),
+            db, periodo, resultado_ingesta, IvaProvider(consultar=_consultar_catalogo_tactica_con_cache()), **_providers_ecom(fetch),
         )
         registrar_cierre(db, periodo, payload.desde, payload.hasta, ecom_guardado=True, ecom_origen="api")
     return GuardarCierreEcomOut(
