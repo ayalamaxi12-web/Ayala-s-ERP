@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 
 from rentabilidad.models import (
+    MotivoExclusion,
     ParametroTasa,
     PrefijoPerdidaDefinitiva,
     Regimen,
@@ -49,8 +50,17 @@ def test_regimen_comprobante_segun_funcional_6_1(db_session):
     assert mapa["MLA"] == Regimen.NO_DETERMINADO
 
 
-def test_sku_excluido_vacia_pendiente_p05(db_session):
-    assert db_session.query(SkuExcluido).count() == 0
+def test_sku_excluido_tiene_los_skus_de_envio_confirmados(db_session):
+    # P-05 (antes pendiente, "vacía por defecto") se resolvió 2026-08-14: se
+    # sembraron los SKU de flete/envío confirmados contra la base real de
+    # Táctica (ver seed.py, SKU_EXCLUIDO) -- Táctica los factura como línea
+    # de comprobante, pero su "costo vigente" cargado es el precio de venta
+    # en pesos, no un costo real en USD, así que el motor calculaba pérdidas
+    # de millones por línea si no se excluían.
+    skus = {s.sku for s in db_session.query(SkuExcluido).all()}
+    assert "ENVIOS-BSAS-C1" in skus
+    assert "FLETES" in skus
+    assert all(s.motivo == MotivoExclusion.ENVIO for s in db_session.query(SkuExcluido).all())
 
 
 def test_sku_auxiliar_promos(db_session):

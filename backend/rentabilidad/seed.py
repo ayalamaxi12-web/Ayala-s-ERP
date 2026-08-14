@@ -16,7 +16,15 @@ comprobante de nota de débito antes de dar el motor por completo.
 """
 from sqlalchemy.orm import Session
 
-from .models import ParametroTasa, PrefijoPerdidaDefinitiva, Regimen, RegimenComprobante, SkuAuxiliar
+from .models import (
+    MotivoExclusion,
+    ParametroTasa,
+    PrefijoPerdidaDefinitiva,
+    Regimen,
+    RegimenComprobante,
+    SkuAuxiliar,
+    SkuExcluido,
+)
 
 # §5.3 — tasas, todas paramétricas
 TASAS = [
@@ -56,6 +64,31 @@ SKU_AUXILIAR = [
     dict(patron="PROMOS-*", descripcion="Aportes Promociones 21% — cae en pérdida definitiva vía prefijo 00007"),
 ]
 
+# SKUs de flete/envío — encontrados y confirmados 2026-08-14 al validar
+# Rentabilidad Táctica contra la base real: Táctica factura el flete como una
+# línea de comprobante más, pero el "costo vigente" cargado para esos SKUs en
+# `productosprecios.Costo` es el propio precio de venta en pesos, no un costo
+# unitario real en USD. El motor, al tratarlo como costo USD y multiplicarlo
+# por el TC (§5.6), calculaba pérdidas de millones de pesos por línea (ej.
+# `ENVIOS-BSAS-C1+18KG`: precio $5.609, costo cargado "5609" → margen de
+# -$8.520.636,50 en una sola línea). Decisión de Maxx (2026-08-14): son
+# cargos de flete, no ventas de producto con margen — se excluyen del
+# cálculo, no se corrige la fórmula ni se reinterpreta el costo.
+# Lista relevada contra `productos` en vivo (`Codigo LIKE '%ENVIO%' OR
+# '%FLETE%'`), no solo los 5 SKUs que aparecieron en la muestra de un día.
+SKU_EXCLUIDO = [
+    dict(sku=sku, motivo=MotivoExclusion.ENVIO, activo=True)
+    for sku in (
+        "ENVIOS-BSAS-C1", "ENVIOS-BSAS-C1+18KG", "ENVIOS-BSAS-C1-ESPECIAL",
+        "ENVIOS-BSAS-C2", "ENVIOS-BSAS-C2+18KG", "ENVIOS-BSAS-C2-ESPECIAL",
+        "ENVIOS-BSAS-C3", "ENVIOS-BSAS-C3+18KG", "ENVIOS-BSAS-C3-ESPECIAL",
+        "ENVIOS-BSAS-C4", "ENVIOS-BSAS-C4+18KG", "ENVIOS-BSAS-C4-ESPECIAL",
+        "ENVIOS-BSAS-C5", "ENVIOS-BSAS-C5+18KG", "ENVIOS-BSAS-C5-ESPECIAL",
+        "ENVIOS-CABA", "ENVIOS-CABA+18KG", "ENVIOS-CABA-ESPECIAL",
+        "FLETE", "FLETECLIENTE", "FLETEI", "FLETES", "FLETES A COBRAR",
+    )
+]
+
 
 def seed(db: Session) -> None:
     """Idempotente: no duplica filas si ya existen (por PK)."""
@@ -64,6 +97,7 @@ def seed(db: Session) -> None:
         ("prefijos", [dict(prefijo=p) for p in PREFIJOS_PERDIDA_DEFINITIVA], PrefijoPerdidaDefinitiva),
         ("regimenes", REGIMEN_COMPROBANTE, RegimenComprobante),
         ("sku_auxiliar", SKU_AUXILIAR, SkuAuxiliar),
+        ("sku_excluido", SKU_EXCLUIDO, SkuExcluido),
     ):
         for fila in filas:
             pk_col = list(modelo.__table__.primary_key.columns)[0].name
