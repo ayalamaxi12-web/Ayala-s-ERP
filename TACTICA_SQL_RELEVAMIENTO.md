@@ -218,7 +218,83 @@ borrado físico").
 
 ---
 
-## 6. Estado
+## 7. Costo vigente e IVA — confirmado contra la base real (2026-08-14)
+
+Hasta acá `CostoVigenteProvider`/`IvaProvider` leían de la hoja `Global`/
+`Importacion Tactica` (una bajada manual del propio sistema). Con acceso SQL
+confirmado, Maxx pidió leer directo de la base — el Sheet nunca fue la
+fuente real, era una copia. `RENTABILIDAD_FUNCIONAL.md` §5.4/§5.6
+actualizados en consecuencia.
+
+**Costo vigente** — `productos` → `productosprecios`:
+
+```
+productos.Codigo (= SKU)
+  → productos.RecID
+  → productosprecios.IDProducto
+  → productosprecios.Costo   (USD, NroMonedaCosto=2)
+```
+
+`productosprecios` tiene una fila por `NroLista` (distintas listas de
+precio) — confirmado con un producto real que `Costo` es **idéntico en
+las 6 listas** (2.72 en las 6), así que no hace falta elegir cuál: se
+toma la de menor `NroLista` vía `OUTER APPLY ... ORDER BY NroLista` para
+no depender de que exista una lista puntual. La cascada de dos columnas
+S/R de la hoja `Global` no tiene equivalente acá — no hace falta, hay un
+solo valor.
+
+**IVA** — `productos` → `tasasiva`:
+
+```
+productos.Codigo (= SKU)
+  → productos.IDTasaIVAVentas
+  → tasasiva.RecID
+  → tasasiva.Descripcion   ("IVA Debito 21%" / "IVA Debito 10.5%" / ...)
+```
+
+`tasasiva` completa (RecID reales omitidos, son binarios): Débito y
+Crédito, cada uno en 21% / 10.5% / 0% / 27%; Crédito además tiene 5% y
+2.5%. Solo "IVA Debito 21%"/"IVA Debito 10.5%" son válidos para el motor
+(§5.4) — el resto cae en "no reconocido", igual que ya hacía el código
+contra la hoja.
+
+Query combinada (implementada en `adapters.py`,
+`_QUERY_CATALOGO_COSTO_IVA`):
+
+```sql
+SELECT
+    p.Codigo AS sku,
+    costo_lista.Costo AS costo,
+    ti.Descripcion AS iva_descripcion
+FROM productos p
+OUTER APPLY (
+    SELECT TOP 1 pp.Costo
+    FROM productosprecios pp
+    WHERE pp.IDProducto = p.RecID
+    ORDER BY pp.NroLista
+) costo_lista
+LEFT JOIN tasasiva ti ON ti.RecID = p.IDTasaIVAVentas
+WHERE p.Codigo IS NOT NULL AND p.Codigo <> ''
+```
+
+Validado en vivo (2026-08-14): 277 líneas reales del 12/08/2026, 0
+`config_faltante`, márgenes calculados correctamente sin ninguna
+dependencia de Sheets.
+
+**Tablas relacionadas, vistas pero no usadas todavía** (relevamiento del
+mismo día, quedan documentadas por si hacen falta a futuro):
+`productosimpuestos` (relación producto↔impuesto, tipo genérico, no se
+usó porque `productos.IDTasaIVAVentas` ya resuelve directo), `productosstock`
+/`vw_productosstock_readable` (stock, `Peso`/`Ancho`/`Largo`/`Profundidad`
+por producto — vino todo `NULL` para los SKUs probados, no sirvió para la
+investigación de sobre-volumen de Mercado Libre Full de esa sesión),
+`productosproveedores` (precio de compra por proveedor, no el costo
+vigente que usa el motor), `productosstockmovimientos` (historial de
+movimientos de stock con `ImporteCosto1..6` por movimiento — podría ser
+la fuente de un costo histórico real si algún día hace falta reconstruir
+el costo vigente de un período pasado, no investigado en profundidad).
+
+## 8. Estado
 
 1. ~~Verificar columna SQL de "Electrónica"~~ — resuelto en §5 (`facturas.CAE`).
 2. ~~Escribir el adaptador SQL de solo lectura~~ — **hecho**:
@@ -227,10 +303,13 @@ borrado físico").
    en vivo contra el servidor real: 60 líneas del 31/07/2026, 59 `FEA` + 1
    `FAE` — y esa única `FAE` es exactamente la factura `05001-19036022` que
    ya habíamos confirmado manualmente como Cuenta 2 en §5. Coincide perfecto.
-3. Pendiente, no bloqueante: variables de entorno
+3. ~~Costo vigente e IVA desde Sheets~~ — resuelto en §7: ahora leen SQL
+   directo (`productosprecios.Costo`, `tasasiva.Descripcion`), sin
+   dependencia de `Global`/`Importacion Tactica`.
+4. Pendiente, no bloqueante: variables de entorno
    `RENT_TACTICA_SQL_SERVER/USER/PASSWORD/DATABASE` en Railway para
-   producción (por ahora solo probadas localmente); columna `Familia` si se
-   termina necesitando (no es un campo de `VentaTactica` hoy); la etapa de
-   ingesta/persistencia real hacia la tabla `venta_tactica` (asignar
-   `periodo`, chequear `SkuExcluido`) — el adaptador de este documento solo
-   resuelve la lectura, no persiste.
+   producción (por ahora solo probadas localmente, `backend/.env`); columna
+   `Familia` si se termina necesitando (no es un campo de `VentaTactica`
+   hoy); la etapa de ingesta/persistencia real hacia la tabla
+   `venta_tactica` (asignar `periodo`, chequear `SkuExcluido`) — el
+   adaptador de este documento solo resuelve la lectura, no persiste.
