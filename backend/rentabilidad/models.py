@@ -67,6 +67,11 @@ class VentaTactica(Base):
     excluido: Mapped[bool] = mapped_column(Boolean, default=False)
     motivo_exclusion: Mapped[MotivoExclusion | None] = mapped_column(Enum(MotivoExclusion), nullable=True)
     regimen: Mapped[Regimen | None] = mapped_column(Enum(Regimen), nullable=True)
+    # "motor" (SQL/API en vivo) vs "importado_sheet" (migración histórica de
+    # las pestañas viejas del Sheet, sin recorrer el motor) -- pedido de Maxx
+    # 2026-08-18, para saber de entrada de dónde salió cada fila sin tener
+    # que adivinar por fecha.
+    origen: Mapped[str] = mapped_column(String(32), default="motor")
 
     # A · Fecha · DATO
     fecha: Mapped[date] = mapped_column(Date)
@@ -157,6 +162,9 @@ class VentaEcom(Base):
     periodo: Mapped[str] = mapped_column(String(64), index=True)
     excluido: Mapped[bool] = mapped_column(Boolean, default=False)
     motivo_exclusion: Mapped[MotivoExclusion | None] = mapped_column(Enum(MotivoExclusion), nullable=True)
+    # "motor" (API en vivo) vs "importado_sheet" (migración histórica) -- ver
+    # docstring del mismo campo en VentaTactica.
+    origen: Mapped[str] = mapped_column(String(32), default="motor")
 
     # A · Número Orden · DATO — sin `unique`: V-16 (§12) es informativo, no
     # se bloquea a nivel de esquema (mismo criterio que venta_tactica).
