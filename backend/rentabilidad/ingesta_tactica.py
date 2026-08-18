@@ -151,22 +151,32 @@ def _tipo_factura(cae, cantidad: Decimal) -> str:
     return "CEA" if electronica else "CVE"
 
 
-def _fila_desde_row(row: dict) -> FilaTactica:
+def _fila_desde_row(row: dict, tc_override: Decimal | None = None) -> FilaTactica:
     # Cantidad/PrecioVenta vienen siempre en positivo desde Táctica -- la
     # Nota de Crédito (facturas.Tipo=1, ver docstring del módulo) revierte
     # la venta, así que se le invierte el signo acá, antes de armar la fila.
     es_nota_de_credito = row["TipoComprobante"] == _TIPO_NOTA_CREDITO
     signo = -1 if es_nota_de_credito else 1
     cantidad = Decimal(str(row["Cantidad"])) * signo
-    tc = row["TC"]
-    if tc is None:
-        # §5.5 del funcional: TC obligatorio e inmutable. Sin cotización
-        # vinculada a la línea no hay valor que inventar (prohibición #3,
-        # extendida por analogía: no asumir un TC por defecto).
-        raise ValueError(
-            f"Línea sin cotización de moneda (IDCotizacionMoneda) — "
-            f"factura {_nro_factura(row['NroSucursal'], row['Numero'])}, SKU {row['Codigo']!r}."
-        )
+    # `tc_override` (pedido explícito de Maxx 2026-08-18): un TC manual,
+    # elegido a mano en el frontend, reemplaza la cotización de Táctica
+    # para TODAS las líneas del período por igual -- no hay fuente
+    # confiable de TC histórico del BNA por fecha (ver commit), así que
+    # mientras no exista, esta es la única forma de corregir un período
+    # puntual. Con override, ni siquiera hace falta que la línea tenga
+    # cotización propia.
+    if tc_override is not None:
+        tc = tc_override
+    else:
+        tc = row["TC"]
+        if tc is None:
+            # §5.5 del funcional: TC obligatorio e inmutable. Sin cotización
+            # vinculada a la línea no hay valor que inventar (prohibición #3,
+            # extendida por analogía: no asumir un TC por defecto).
+            raise ValueError(
+                f"Línea sin cotización de moneda (IDCotizacionMoneda) — "
+                f"factura {_nro_factura(row['NroSucursal'], row['Numero'])}, SKU {row['Codigo']!r}."
+            )
     fecha = row["FechaEmision"]
     return FilaTactica(
         fecha=fecha.date() if isinstance(fecha, datetime) else fecha,
@@ -227,5 +237,5 @@ class TacticaSqlAdapter:
     def __init__(self, ejecutar_query: EjecutarQuery | None = None):
         self._ejecutar_query = ejecutar_query or _ejecutar_query_real
 
-    def lineas(self, desde: date, hasta: date) -> list[FilaTactica]:
-        return [_fila_desde_row(row) for row in self._ejecutar_query(desde, hasta)]
+    def lineas(self, desde: date, hasta: date, tc_override: Decimal | None = None) -> list[FilaTactica]:
+        return [_fila_desde_row(row, tc_override) for row in self._ejecutar_query(desde, hasta)]

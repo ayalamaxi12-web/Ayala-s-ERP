@@ -236,6 +236,9 @@ def calcular_tactica(payload: CalcularTacticaIn) -> CalcularTacticaOut:
 class CalcularTacticaPeriodoIn(BaseModel):
     desde: date
     hasta: date
+    tc: str | None = None  # TC manual (pedido de Maxx 2026-08-18) -- reemplaza
+    # la cotización de Táctica en TODAS las líneas del período; si se omite,
+    # cada línea usa su propia cotización de Táctica sin cambios.
 
 
 class VentaTacticaOut(BaseModel):
@@ -311,7 +314,13 @@ def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> ConsultarTact
     tactica`) y devuelve el resultado — no persiste nada."""
     if payload.hasta < payload.desde:
         raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
-    filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta)
+    tc_override = None
+    if payload.tc:
+        try:
+            tc_override = Decimal(payload.tc)
+        except InvalidOperation:
+            raise HTTPException(422, f"TC no numérico: {payload.tc!r}")
+    filas = TacticaSqlAdapter().lineas(payload.desde, payload.hasta, tc_override)
     fetch = _fetch_fn_con_cache()
     consultar = _consultar_catalogo_tactica_con_cache()
     with sesion() as db:

@@ -156,6 +156,25 @@ def test_lineas_sin_cotizacion_de_moneda_falla_explicito_no_asume_tc():
         adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
 
 
+def test_lineas_tc_override_reemplaza_cotizacion_de_todas_las_lineas():
+    # Pedido de Maxx 2026-08-18: sin fuente confiable de TC histórico del
+    # BNA por fecha, un TC manual elegido a mano reemplaza la cotización
+    # de Táctica en TODAS las líneas del período por igual.
+    filas_crudas = [_row(TC=1500), _row(TC=1520, NroSucursal=5001, Numero=19036009)]
+    adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: filas_crudas)
+    filas = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31), tc_override=Decimal("1487.50"))
+    assert [f.tc for f in filas] == [Decimal("1487.50"), Decimal("1487.50")]
+
+
+def test_lineas_tc_override_permite_linea_sin_cotizacion_propia():
+    # Con override no hace falta que la línea tenga su propia cotización
+    # -- lo contrario de test_lineas_sin_cotizacion_de_moneda_falla_explicito_no_asume_tc.
+    fila_cruda = _row(TC=None)
+    adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
+    [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31), tc_override=Decimal("1487.50"))
+    assert fila.tc == Decimal("1487.50")
+
+
 def test_lineas_pasa_el_rango_de_fechas_recibido():
     capturado = {}
 
