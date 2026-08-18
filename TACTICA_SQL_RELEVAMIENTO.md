@@ -92,7 +92,7 @@ funcional: tomado al momento de la carga, no se recalcula).
 | I · Tipo de Factura | `tipo_factura` | **Ninguna columna decodificada — GAP, ver §5** | — |
 | J · Nº Factura | `nro_factura` | `LPAD(talonarios.NroSucursal,5,'0') + '-' + LPAD(facturas.Numero,8,'0')` | Alta — el prefijo `NroSucursal` calza exacto con los prefijos de pérdida definitiva ya sembrados en `seed.py` (`00007`, `05007` ⇔ `NroSucursal` 7 y 5007, confirmado por conteo real) |
 | N · Cantidad | `cantidad` | `facturasitems.Cantidad` | Alta |
-| P · Precio de Venta | `precio_venta` | `facturasitems.ImportePrecioVenta1 × Cantidad` (slot de pesos — `ImportePrecioVenta{N}` corresponde a `moneda.Numero=N`; slot 1 = Pesos) | **Corregida 2026-08-14** — la fila original decía "Alta" para `ImportePrecioVenta1` solo, sin multiplicar; era la lectura equivocada. `ImportePrecioVenta1` es un precio **unitario** (idéntico a `ImporteUnitario1` en 19/20 líneas reales de una muestra con cantidad>1, y el que difiere es por descuento de vendedor, no por ser un total ya escalado). Confirmado contra factura real `00003-00127258` (SKU `HP664XLKCOMP-PRM`, cantidad 12): Táctica muestra $223.804,80 de importe, que es `18.650,40 × 12`, no el valor crudo sin multiplicar — Maxx lo confirmó mirando la factura real. Mismo criterio que el costo (`L` unitario, `N`=cantidad da el total); el signo de notas de crédito también sale de multiplicar por `cantidad` (negativa), sin caso especial. |
+| P · Precio de Venta | `precio_venta` | `facturasitems.ImportePrecio1` (slot de pesos, ya totalizado por línea — no requiere multiplicar por `cantidad`) | **Corregida 2026-08-14, dos vueltas.** 1ª vuelta (incompleta): se creyó que `ImportePrecioVenta1` era unitario y que `× Cantidad` daba el total, validado contra la factura `00003-00127258` (`HP664XLKCOMP-PRM`) — coincidía por casualidad, porque ahí `ImportePrecioVenta1 == ImporteUnitario1`. 2ª vuelta (la vigente): Maxx detectó otra factura real, `00003-00127272` (cliente Polgraf SH, SKU `WFSLV-15%-152X30`, cantidad 8), donde el importe correcto confirmado es $1.336.800,00 — `ImportePrecioVenta1 × Cantidad` da $1.417.248 (mal), mientras que `ImporteUnitario1 × Cantidad` = `ImportePrecio1` = $1.336.800,00 (correcto). Confirmado además sobre 100 líneas reales con `ImportePrecioVenta1 <> ImporteUnitario1`: en el 100% de los casos `ImportePrecio1 == ImporteUnitario1 × Cantidad`, nunca `ImportePrecioVenta1 × Cantidad`. `ImportePrecioVenta1` es otro campo (parece un precio de referencia/sugerido, no el efectivamente facturado) y ya no se usa. **Signo de Nota de Crédito resuelto el mismo día** (ver §5): `facturas.Tipo=1` invierte el signo de `cantidad`/`precio_venta`; `facturas.Tipo=2` (Nota de Débito) se excluye por completo. |
 | V · TC | `tc` | `monedacotizaciones.CotMoneda2` (vía `facturasitems.IDCotizacionMoneda`) | Alta — verificado contra cotización real del día |
 
 Todo lo demás en `VentaTactica` (`costo_lista`, `iva`, `margen_real`, etc.)
@@ -146,6 +146,26 @@ Mismo comportamiento exacto para las tres letras fiscales, siempre que sea
 - La Nota de Crédito revierte exactamente lo mismo (misma fórmula,
   cantidades/importes ya vienen en negativo desde el origen — no hay lógica
   de reversa separada, es la fórmula de Cuenta 1 aplicada tal cual).
+
+  **Corregido 2026-08-14 (mismo día, tercera vuelta):** el supuesto ("vienen
+  en negativo desde el origen") era falso — se confirmó por SQL que
+  `facturasitems` no tiene ninguna fila con `Cantidad < 0` en toda la tabla,
+  ni casi ninguna con `ImportePrecio1 < 0` (2 filas, ambas de centavos por
+  redondeo). El campo real que marca Nota de Crédito es **`facturas.Tipo`**
+  (no `talonarios.Tipo`, que es otro campo, un enum interno de 26 valores
+  sin decodificar) — es el mismo campo que alimenta el filtro "Tipo de
+  Factura" del buscador de Táctica (desplegable de 3 opciones, confirmado
+  por Maxx mirando la pantalla real: Factura, Nota de Crédito, Nota de
+  Débito, en ese orden): `Tipo=0` Factura, `Tipo=1` Nota de Crédito,
+  `Tipo=2` Nota de Débito. Verificado contra 5 facturas reales que Maxx
+  confirmó como Nota de Crédito (distintas sucursales/letras/regímenes:
+  `05001-19036035` CVE, `00003-00009815` CEA, `00003-00001128` CEB,
+  `00004-00000069` CEE, `00007-00000001` CVA) — las 5 tienen `Tipo=1` sin
+  excepción. Regla de negocio (Maxx): Nota de Débito se excluye por
+  completo (`f.Tipo <> 2` en el `WHERE` de `_QUERY`), Nota de Crédito sí
+  participa pero con `cantidad`/`precio_venta` invertidos en signo
+  (`_fila_desde_row`), ya que el costo también se invierte río abajo al
+  multiplicarse por `cantidad`.
 
 Corresponde a `Regimen.CUENTA_1` — ya implementado en
 `RentabilidadTacticaCalculator` sin cambios.

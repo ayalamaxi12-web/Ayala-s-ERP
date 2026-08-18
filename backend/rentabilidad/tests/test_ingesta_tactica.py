@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from rentabilidad.calculators import LineaTacticaInput
-from rentabilidad.ingesta_tactica import TacticaSqlAdapter, _nro_factura, _tipo_factura
+from rentabilidad.ingesta_tactica import _QUERY, TacticaSqlAdapter, _nro_factura, _tipo_factura
 
 
 def _row(**overrides) -> dict:
@@ -23,11 +23,12 @@ def _row(**overrides) -> dict:
         NroSucursal=3,
         Numero=127128,
         CAE=86316189981185.0,
+        TipoComprobante=0,  # facturas.Tipo: 0=Factura, 1=Nota de Crédito, 2=Nota de Débito
         Cantidad=6,
-        # ImportePrecioVenta1 es UNITARIO (bug real corregido 2026-08-14, ver
-        # docstring del módulo) -- 5192.25/unidad × 6 = 31153.50, el total
-        # real de línea que Maxx confirmó contra T-1 de RENTABILIDAD_FUNCIONAL.
-        PrecioVenta=5192.25,
+        # PrecioVenta viene de ImportePrecio1 -- ya es el total de línea
+        # (bug real corregido 2026-08-14, ver docstring del módulo), no un
+        # unitario a multiplicar.
+        PrecioVenta=31153.50,
         TC=1500,
     )
     base.update(overrides)
@@ -80,27 +81,48 @@ def test_lineas_traduce_fila_factura_a_cuenta_1():
 
 
 def test_lineas_traduce_nota_de_credito_no_electronica_a_cuenta_2():
-    # ImportePrecioVenta1 es una magnitud positiva (unitaria) -- el signo de
-    # la nota de crédito lo aporta `cantidad`, no un valor negativo cargado
-    # en el precio (mismo criterio que el costo, L siempre positivo).
-    fila_cruda = _row(CAE=0, Cantidad=-1, PrecioVenta=4315.75, NroSucursal=5001, Numero=19036008)
+    # Nota de Crédito confirmada 2026-08-14 (tercera vuelta, ver docstring del
+    # módulo): facturas.Tipo=1, no el signo de Cantidad -- Cantidad/PrecioVenta
+    # llegan siempre en positivo desde Táctica, el adaptador invierte el signo.
+    fila_cruda = _row(
+        CAE=0, TipoComprobante=1, Cantidad=1, PrecioVenta=4315.75,
+        NroSucursal=5001, Numero=19036008,
+    )
     adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
     [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
     assert fila.tipo_factura == "CVE"
     assert fila.nro_factura == "05001-19036008"
+    assert fila.cantidad == Decimal("-1")
     assert fila.precio_venta == Decimal("-4315.75")
 
 
-def test_lineas_precio_venta_es_unitario_por_cantidad_no_el_valor_crudo():
-    # Bug real corregido 2026-08-14: ImportePrecioVenta1 es un precio
-    # UNITARIO -- confirmado contra la factura real 00003-00127258 (SKU
-    # HP664XLKCOMP-PRM, cantidad 12): Táctica muestra $223.804,80 de
-    # importe en esa línea, que es 18.650,40 (ImportePrecioVenta1) × 12,
-    # no el valor crudo sin multiplicar.
-    fila_cruda = _row(Cantidad=12, PrecioVenta=18650.40)
+def test_lineas_factura_comun_no_invierte_signo():
+    fila_cruda = _row(TipoComprobante=0, Cantidad=6, PrecioVenta=31153.50)
     adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
     [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
-    assert fila.precio_venta == Decimal("223804.80")
+    assert fila.cantidad == Decimal("6")
+    assert fila.precio_venta == Decimal("31153.50")
+
+
+def test_query_excluye_nota_de_debito_por_completo():
+    # Maxx, 2026-08-14: "lo que diga nota de debito se borra directamente
+    # no entra en calculo" -- se filtra en el propio WHERE, nunca llega a
+    # traducirse a FilaTactica.
+    assert "f.Tipo <> 2" in _QUERY
+
+
+def test_lineas_precio_venta_viene_de_importe_precio1_no_de_importe_precio_venta1():
+    # Bug real corregido 2026-08-14 (segunda vuelta): ImportePrecioVenta1 NO
+    # es el total facturado -- confirmado con la factura real 00003-00127272
+    # (cliente Polgraf SH, SKU WFSLV-15%-152X30, cantidad 8): el importe
+    # correcto es $1.336.800,00 (ImporteUnitario1 × cantidad = ImportePrecio1),
+    # mientras que ImportePrecioVenta1 × cantidad daba $1.417.248 -- mal.
+    # `PrecioVenta` en la fila cruda ya es ImportePrecio1, el total de línea
+    # tal cual lo factura Táctica, no algo a multiplicar acá.
+    fila_cruda = _row(Cantidad=8, PrecioVenta=1336800.0)
+    adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
+    [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
+    assert fila.precio_venta == Decimal("1336800.0")
 
 
 def test_a_linea_input_produce_el_contrato_del_calculador():

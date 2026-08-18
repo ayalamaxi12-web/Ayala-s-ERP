@@ -22,24 +22,49 @@ Maxx confirma indistinguible en el cálculo. El prefijo de talonario
 (pérdida definitiva, `00007`/`05007`) tiene prioridad absoluta y ya lo
 resuelve `resolver_regimen` a partir de `nro_factura`, sin cambios acá.
 
-**Bug real corregido 2026-08-14, encontrado al validar contra Táctica real
-(no de una fixture — Maxx vio el margen absurdo en una orden puntual y lo
-señaló):** `facturasitems.ImportePrecioVenta1` es un precio **unitario**,
-no el total de la línea — confirmado sin excepciones sobre 20 líneas
-reales del 2026-08-12 con cantidad>1: coincide exacto con
-`ImporteUnitario1` en 19 de 20 (la única distinta tenía un descuento de
-vendedor aplicado — Maxx: "los vendedores tienen que jugar con los
-números", el precio final de venta puede diferir del de lista, pero sigue
-siendo unitario). Verificado además contra la factura real
-`00003-00127258` (SKU `HP664XLKCOMP-PRM`, cantidad 12): Táctica muestra
-$223.804,80 como importe de esa línea, que es exactamente
-`ImportePrecioVenta1 (18.650,40) × Cantidad (12)` — no el valor crudo sin
-multiplicar. `_fila_desde_row` multiplica por `cantidad` antes de armar
-`FilaTactica.precio_venta`, igual criterio que ya usa el costo (`O = L *
-N`, L unitario en USD, N=cantidad) — y de paso resuelve el signo en notas
-de crédito de la misma forma: `ImportePrecioVenta1` es una magnitud
-positiva, `cantidad` (negativa en NC) es quien determina el signo del
-total, sin necesidad de un caso especial.
+**Bug real corregido 2026-08-14 (primer intento, INCOMPLETO — ver
+corrección siguiente):** se creyó que `facturasitems.ImportePrecioVenta1`
+era el precio unitario correcto y que multiplicarlo por `cantidad` daba el
+total de línea, validado contra la factura `00003-00127258` (SKU
+`HP664XLKCOMP-PRM`, cantidad 12, $223.804,80). Ese caso coincidía por
+casualidad: ahí `ImportePrecioVenta1 == ImporteUnitario1`.
+
+**Corrección 2026-08-14 (segunda vuelta, la vigente):** Maxx detectó otra
+factura real, `00003-00127272` (cliente Polgraf SH, SKU
+`WFSLV-15%-152X30`, cantidad 8), donde el importe correcto confirmado es
+$1.336.800,00 — y ahí `ImportePrecioVenta1 (177.156,0) × cantidad` da
+$1.417.248, **mal**. Consultando la factura completa:
+`ImporteUnitario1=167.100,0`, `ImportePrecio1=1.336.800,0` — coincide con
+`ImporteUnitario1 × cantidad`, no con `ImportePrecioVenta1`. Se verificó
+además sobre una muestra de 100 líneas reales con
+`ImportePrecioVenta1 <> ImporteUnitario1`: en el 100% de los casos
+`ImportePrecio1 == ImporteUnitario1 × Cantidad`, nunca coincide con
+`ImportePrecioVenta1 × Cantidad`. `ImportePrecioVenta1` es otro campo
+(parece un precio de referencia/sugerido — no el efectivamente facturado)
+y no se usa acá. `_fila_desde_row` ahora toma `ImportePrecio1`
+directamente (ya viene totalizado por línea desde Táctica, no hace falta
+recalcularlo multiplicando).
+
+**Corrección 2026-08-14 (tercera vuelta, Nota de Crédito/Débito —
+confirmada por Maxx contra 5 facturas reales de distintos períodos/letras/
+sucursales: CVE 05001-19036035, CEA 00003-00009815, CEB 00003-00001128,
+CEE 00004-00000069, CVA 00007-00000001):** `Cantidad`/`ImportePrecio1`
+vienen SIEMPRE en positivo en `facturasitems` — Táctica no usa el signo
+para marcar Nota de Crédito. Lo marca `facturas.Tipo`, el mismo campo que
+alimenta el filtro "Tipo de Factura" del buscador de Táctica (desplegable
+con 3 opciones en este orden: Factura, Nota de Crédito, Nota de Débito —
+confirmado por Maxx mirando la pantalla real): `Tipo=0` Factura, `Tipo=1`
+Nota de Crédito, `Tipo=2` Nota de Débito. Las 5 facturas reales que Maxx
+confirmó como Nota de Crédito tienen `Tipo=1` sin excepción. Regla de
+negocio de Maxx: **Nota de Débito se excluye por completo, no entra en el
+cálculo** — filtrada en el propio `WHERE` de `_QUERY`. **Nota de Crédito sí
+participa**, pero como revierte una venta, `_fila_desde_row` le invierte el
+signo a `cantidad` (y por lo tanto a `precio_venta`, que ya viene positivo
+desde `ImportePrecio1`) — mismo criterio que ya asumían `_tipo_factura`/los
+tests desde el principio (cantidad negativa = NC), solo que ahora el signo
+sale de `facturas.Tipo`, no de una columna que nunca es negativa. El costo
+también queda invertido río abajo, porque el calculador multiplica el
+costo unitario por `cantidad` (ya negativa).
 """
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -53,13 +78,17 @@ from .calculators import LineaTacticaInput
 # + vendedor + cotización de la línea (TC inmutable, tomado al momento de la
 # carga — §5.5 del funcional). Ver TACTICA_SQL_RELEVAMIENTO.md §2 y §3 para
 # la validación de cada join contra datos reales.
+_TIPO_FACTURA = 0
+_TIPO_NOTA_CREDITO = 1
+_TIPO_NOTA_DEBITO = 2
+
 _QUERY = """
     SELECT
         f.FechaEmision, fis.RazonSocial AS Empresa,
         fi.Codigo, fi.Descripcion, fi.Fabricante, fi.TipoProducto,
         u.Usuario AS Vendedor,
-        t.NroSucursal, f.Numero, f.CAE,
-        fi.Cantidad, fi.ImportePrecioVenta1 AS PrecioVenta,
+        t.NroSucursal, f.Numero, f.CAE, f.Tipo AS TipoComprobante,
+        fi.Cantidad, fi.ImportePrecio1 AS PrecioVenta,
         mc.CotMoneda2 AS TC
     FROM facturas f
     JOIN talonarios t              ON t.RecID = f.IDTalonario
@@ -68,8 +97,9 @@ _QUERY = """
     LEFT JOIN usuarios u           ON u.RecID = fi.IDUsuarioVendedor
     LEFT JOIN monedacotizaciones mc ON mc.RecID = fi.IDCotizacionMoneda
     WHERE f.FechaEmision BETWEEN %(desde)s AND %(hasta)s
+      AND f.Tipo <> {nota_debito}
     ORDER BY f.FechaEmision, f.Numero
-"""
+""".format(nota_debito=_TIPO_NOTA_DEBITO)
 
 
 @dataclass
@@ -122,7 +152,12 @@ def _tipo_factura(cae, cantidad: Decimal) -> str:
 
 
 def _fila_desde_row(row: dict) -> FilaTactica:
-    cantidad = Decimal(str(row["Cantidad"]))
+    # Cantidad/PrecioVenta vienen siempre en positivo desde Táctica -- la
+    # Nota de Crédito (facturas.Tipo=1, ver docstring del módulo) revierte
+    # la venta, así que se le invierte el signo acá, antes de armar la fila.
+    es_nota_de_credito = row["TipoComprobante"] == _TIPO_NOTA_CREDITO
+    signo = -1 if es_nota_de_credito else 1
+    cantidad = Decimal(str(row["Cantidad"])) * signo
     tc = row["TC"]
     if tc is None:
         # §5.5 del funcional: TC obligatorio e inmutable. Sin cotización
@@ -144,10 +179,10 @@ def _fila_desde_row(row: dict) -> FilaTactica:
         nro_factura=_nro_factura(row["NroSucursal"], row["Numero"]),
         tipo_factura=_tipo_factura(row["CAE"], cantidad),
         cantidad=cantidad,
-        # ImportePrecioVenta1 es un precio unitario -- el total real de la
-        # línea (lo que Táctica muestra facturado) es unitario × cantidad,
-        # igual criterio que el costo (ver docstring del módulo).
-        precio_venta=Decimal(str(row["PrecioVenta"])) * cantidad,
+        # ImportePrecio1 ya es el total facturado de la línea (Táctica lo
+        # calcula como ImporteUnitario1 × Cantidad) -- no ImportePrecioVenta1,
+        # que es otro campo y no coincide con lo facturado (ver docstring).
+        precio_venta=Decimal(str(row["PrecioVenta"])) * signo,
         tc=Decimal(str(tc)),
     )
 
