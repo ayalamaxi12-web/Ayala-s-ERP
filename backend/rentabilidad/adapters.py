@@ -121,7 +121,19 @@ class CostoVigenteProvider:
 
     "El 0 se trata como sin costo, no como costo cero" (§5.6) se conserva
     tal cual: sigue siendo funcionalmente relevante, solo cambió de dónde
-    sale el valor."""
+    sale el valor.
+
+    Bug real corregido 2026-08-18: `productos.Codigo` es una columna de
+    ancho fijo en la base de Táctica y viene con espacios finales de
+    padding (confirmado con `TN1060COMP` — el valor real es
+    `'TN1060COMP      '`, 16 bytes). El catálogo se armaba con esa clave
+    sin limpiar, mientras que el `codigo` de cada línea (`ingesta_tactica.
+    _fila_desde_row`) ya llega recortado — la comparación de diccionario
+    nunca podía coincidir para ningún SKU con padding real, no de forma
+    intermitente: se verificó contra 5 facturas reales de `TN1060COMP`
+    (2026-07-31 a 2026-08-14), las 5 con `costo_lista=None`. Maxx notó el
+    mismo patrón de espacios finales al bajar el Excel de Táctica a mano
+    (SKU y empresa/responsable) y lo confirmó como la misma causa."""
 
     def __init__(self, consultar: ConsultarCatalogoTactica | None = None):
         self._consultar = consultar or _consultar_catalogo_tactica_real
@@ -129,7 +141,7 @@ class CostoVigenteProvider:
 
     def _obtener_catalogo(self) -> dict[str, dict]:
         if self._catalogo is None:
-            self._catalogo = {fila["sku"]: fila for fila in self._consultar()}
+            self._catalogo = {fila["sku"].strip(): fila for fila in self._consultar()}
         return self._catalogo
 
     def obtener(self, sku: str) -> Decimal | None:
@@ -167,7 +179,9 @@ class IvaProvider:
 
     def _obtener_catalogo(self) -> dict[str, dict]:
         if self._catalogo is None:
-            self._catalogo = {fila["sku"]: fila for fila in self._consultar()}
+            # Mismo bug de padding que `CostoVigenteProvider` (ver su
+            # docstring, corregido 2026-08-18) — misma fuente, mismo fix.
+            self._catalogo = {fila["sku"].strip(): fila for fila in self._consultar()}
         return self._catalogo
 
     def factor(self, sku: str) -> Decimal | None:

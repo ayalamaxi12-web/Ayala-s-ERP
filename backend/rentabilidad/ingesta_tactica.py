@@ -170,7 +170,12 @@ def _fila_desde_row(row: dict) -> FilaTactica:
     fecha = row["FechaEmision"]
     return FilaTactica(
         fecha=fecha.date() if isinstance(fecha, datetime) else fecha,
-        empresa=row["Empresa"],
+        # `fis.RazonSocial` viene con padding de la misma forma que
+        # `productos.Codigo` (ver `CostoVigenteProvider`, corregido
+        # 2026-08-18) -- sin recortar, rompe el match contra
+        # `ResponsableProvider` (comparación exacta contra la hoja "BASE
+        # GENERAL", que sí llega recortada vía `gsheets.valor`).
+        empresa=(row["Empresa"] or "").strip(),
         codigo=(row["Codigo"] or "").strip(),
         descripcion=row["Descripcion"],
         fabricante=row["Fabricante"],

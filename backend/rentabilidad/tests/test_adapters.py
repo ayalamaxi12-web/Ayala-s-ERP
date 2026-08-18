@@ -55,6 +55,18 @@ def test_costo_vigente_origen_es_sql():
     assert prov.obtener_con_origen("SKU1") == (Decimal("2.65"), "SQL")
 
 
+def test_costo_vigente_sku_con_padding_en_catalogo_resuelve_igual():
+    # Bug real corregido 2026-08-18: `productos.Codigo` es una columna de
+    # ancho fijo en Táctica y llega con espacios finales de padding
+    # (confirmado con TN1060COMP: 'TN1060COMP      ', 16 bytes) -- el
+    # `codigo` de cada línea ya llega recortado (`ingesta_tactica.
+    # _fila_desde_row`), así que el catálogo tiene que recortar su propia
+    # clave o el `.get()` nunca matchea.
+    catalogo = [_fila_catalogo("SKU1      ", costo="1.24")]
+    prov = CostoVigenteProvider(consultar=lambda: catalogo)
+    assert prov.obtener("SKU1") == Decimal("1.24")
+
+
 def test_costo_vigente_sin_configurar_levanta_error_claro():
     # Sin RENT_TACTICA_SQL_* configuradas (limpiadas por el fixture autouse
     # de conftest.py), la consulta real levanta ConfiguracionFaltante recién
@@ -83,6 +95,13 @@ def test_iva_valor_no_reconocido_devuelve_none():
     catalogo = [_fila_catalogo("SKU1", iva_descripcion="iva debito 21%")]  # minúsculas: no matchea
     prov = IvaProvider(consultar=lambda: catalogo)
     assert prov.factor("SKU1") is None
+
+
+def test_iva_sku_con_padding_en_catalogo_resuelve_igual():
+    # Mismo bug/fix que CostoVigenteProvider (misma fuente SQL) — ver su test.
+    catalogo = [_fila_catalogo("SKU1      ", iva_descripcion="IVA Debito 21%")]
+    prov = IvaProvider(consultar=lambda: catalogo)
+    assert prov.factor("SKU1") == Decimal("1.21")
 
 
 def test_iva_sku_no_encontrado():

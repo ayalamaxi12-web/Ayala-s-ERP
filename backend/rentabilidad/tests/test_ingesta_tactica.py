@@ -80,6 +80,20 @@ def test_lineas_traduce_fila_factura_a_cuenta_1():
     assert fila.fecha == date(2026, 7, 31)
 
 
+def test_lineas_recorta_padding_de_codigo_y_empresa():
+    # Bug real corregido 2026-08-18: `productos.Codigo`/`fis.RazonSocial`
+    # son columnas de ancho fijo en Táctica y llegan con espacios finales
+    # de padding (confirmado con TN1060COMP, `'TN1060COMP      '`) -- sin
+    # recortar, rompe el match contra `CostoVigenteProvider`/
+    # `ResponsableProvider`. Maxx notó el mismo patrón al bajar el Excel a
+    # mano (SKU y empresa/responsable).
+    fila_cruda = _row(Codigo="SKU1      ", Empresa="Sign Solutions SA      ")
+    adapter = TacticaSqlAdapter(ejecutar_query=lambda desde, hasta: [fila_cruda])
+    [fila] = adapter.lineas(date(2026, 7, 1), date(2026, 7, 31))
+    assert fila.codigo == "SKU1"
+    assert fila.empresa == "Sign Solutions SA"
+
+
 def test_lineas_traduce_nota_de_credito_no_electronica_a_cuenta_2():
     # Nota de Crédito confirmada 2026-08-14 (tercera vuelta, ver docstring del
     # módulo): facturas.Tipo=1, no el signo de Cantidad -- Cantidad/PrecioVenta
