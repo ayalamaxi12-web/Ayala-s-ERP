@@ -16,7 +16,6 @@ arquitectura pedido por Maxx, 2026-08-10):
 - `/cierres/*` — **cierre**. La única forma de escribir en las tablas de
   hechos; queda registrado en `cierre_rentabilidad` con cuándo se guardó.
 """
-import re
 import tempfile
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -45,6 +44,7 @@ from .ingesta_ecom import EcomExcelAdapter
 from .ingesta_ecom_api import EcomApiAdapter
 from .ingesta_tactica import TacticaSqlAdapter
 from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
+from .importar_historico import guardar_historico, importar
 from .persistencia import (
     construir_filas_ecom,
     construir_filas_tactica,
@@ -58,28 +58,14 @@ from .validador import Incidencia, ValidadorRentabilidad
 router = APIRouter(prefix="/rentabilidad", tags=["rentabilidad"])
 
 
-def _periodo_de_rango(desde: date, hasta: date) -> str:
-    """Etiqueta de período para un rango de fechas — reemplaza el nombre de
-    hoja mensual ("Junio-Julio") por algo derivable y sin ambigüedad. Es
-    metadata de partición, no una regla de negocio (§1.2 IMPLEMENTACION)."""
-    return f"{desde.isoformat()}_{hasta.isoformat()}"
+# `_periodo_de_rango`/`extraer_comprobante` viven en regimen.py (no acá) para
+# que `importar_historico.py` los pueda usar sin import circular con la API
+# -- se re-exportan con estos nombres para no romper nada que ya los importe
+# de `rentabilidad.api`.
+from .regimen import extraer_comprobante
+from .regimen import periodo_de_rango as _periodo_de_rango
 
 RENTABILIDAD_DIR = Path(__file__).resolve().parent
-
-# §6.1 del funcional: la tabla que empareja la descripción textual del
-# comprobante (lo que trae la columna "Tipo de Factura" del export de
-# Táctica) con el código corto que espera `resolver_regimen` — ambos nombran
-# la misma columna I, el código ya viene embebido como palabra suelta dentro
-# del texto descriptivo. No es una regla nueva, es la tabla §6.1 usada para
-# traducir formato, igual que `_tipo_factura()` en ingesta_tactica.py hace
-# desde CAE en vez de desde texto.
-_CODIGOS_COMPROBANTE = ("FEA", "FEB", "FEE", "FAE", "CEA", "CEB", "CEE", "CVE", "CVA", "CVB", "MLA")
-_RE_COMPROBANTE = re.compile(r"\b(" + "|".join(_CODIGOS_COMPROBANTE) + r")\b")
-
-
-def extraer_comprobante(texto_tipo_factura: str) -> str:
-    m = _RE_COMPROBANTE.search((texto_tipo_factura or "").upper())
-    return m.group(1) if m else (texto_tipo_factura or "").strip()
 
 
 def migrar_y_sembrar() -> None:
@@ -666,3 +652,50 @@ def listar_incidencias(periodo: str, entidad: str) -> list[IncidenciaOut]:
         IncidenciaOut(codigo=i.codigo, severidad=i.severidad, entidad=i.entidad, referencia=i.referencia, detalle=i.detalle)
         for i in incidencias
     ]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# MIGRACIÓN HISTÓRICA — endpoint de un solo uso (2026-08-18, ver
+# importar_historico.py). Corre del lado del servidor porque necesita
+# RENT_DATABASE_URL/GOOGLE_CREDENTIALS_JSON de Railway, sin exponer esas
+# credenciales fuera del backend. No pensado como feature permanente del
+# frontend -- se llama una vez por curl para la migración inicial.
+# ══════════════════════════════════════════════════════════════════════════
+
+class ImportarHistoricoIn(BaseModel):
+    sheet_id: str
+    hasta_fecha_exclusive: date
+
+
+class ImportarHistoricoOut(BaseModel):
+    total_tactica: int
+    total_ecom: int
+    por_periodo_tactica: dict[str, int]
+    por_periodo_ecom: dict[str, int]
+    filas_ignoradas: dict[str, int]
+
+
+@router.post("/importar-historico", response_model=ImportarHistoricoOut)
+def importar_historico(payload: ImportarHistoricoIn) -> ImportarHistoricoOut:
+    with sesion() as db:
+        todas_las_pestanas = gsheets.listar_pestanas(payload.sheet_id)
+        resultado = importar(
+            db, payload.sheet_id, todas_las_pestanas, gsheets.leer_valores,
+            payload.hasta_fecha_exclusive,
+        )
+        guardar_historico(db, resultado)
+
+        por_periodo_tactica: dict[str, int] = {}
+        for venta in resultado.tactica:
+            por_periodo_tactica[venta.periodo] = por_periodo_tactica.get(venta.periodo, 0) + 1
+        por_periodo_ecom: dict[str, int] = {}
+        for venta in resultado.ecom:
+            por_periodo_ecom[venta.periodo] = por_periodo_ecom.get(venta.periodo, 0) + 1
+
+    return ImportarHistoricoOut(
+        total_tactica=len(resultado.tactica),
+        total_ecom=len(resultado.ecom),
+        por_periodo_tactica=por_periodo_tactica,
+        por_periodo_ecom=por_periodo_ecom,
+        filas_ignoradas=resultado.filas_ignoradas,
+    )

@@ -54,6 +54,14 @@ def leer_valores(spreadsheet_id: str, tab: str) -> list[list[str]]:
     return ws.get_all_values()
 
 
+def listar_pestanas(spreadsheet_id: str) -> list[str]:
+    """Nombres de todas las pestañas del libro -- usado por
+    `importar_historico.py` para autodetectar cuáles son fuente (ECOM/
+    TACTICA) sin tener que listarlas a mano."""
+    client = get_client()
+    return [ws.title for ws in client.open_by_key(spreadsheet_id).worksheets()]
+
+
 # ── Helpers de columna por título — implementación propia, no un port del
 # `hdrMap`/`findCol` de docs/index.html (adjustment #8: sin reutilizar JS). ──
 

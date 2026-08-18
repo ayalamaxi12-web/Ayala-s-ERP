@@ -38,9 +38,10 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy.orm import Session
 
 from . import gsheets
-from .api import _periodo_de_rango, extraer_comprobante
 from .models import VentaEcom, VentaTactica
 from .persistencia import registrar_cierre
+from .regimen import extraer_comprobante
+from .regimen import periodo_de_rango as _periodo_de_rango
 from .regimen import resolver_regimen
 
 ORIGEN_IMPORTADO = "importado_sheet"
