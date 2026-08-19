@@ -197,7 +197,6 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="sidebar-section">
     <div class="sidebar-section-label">🛠 Gestión de Precios</div>
     <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
-    <div class="sidebar-item" data-page="rentabilidad-tactica" onclick="goPage('rentabilidad-tactica',this)"><span class="icon">📊</span> Rentabilidad Táctica</div>
     <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">✅</span> Verificar Táctica</div>
   </div>
   <div class="sidebar-sep"></div>
@@ -230,6 +229,111 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 <div class="app-body">
+<div id="rent-query-bar" class="card" style="margin:10px 20px 0;display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-hdr" style="margin-bottom:2px">📊 Consulta en vivo</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Táctica (SQL) + Ecom (API) unificado — el resultado se ve abajo con el mismo módulo que el histórico</div>
+    </div>
+    <button class="btn" id="rent-btn-historicos" onclick="rentToggleHistoricos()">🕘 Cierres guardados</button>
+  </div>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="field" style="margin:0"><label>Fecha desde</label><input type="date" id="rent-desde"></div>
+    <div class="field" style="margin:0"><label>Fecha hasta</label><input type="date" id="rent-hasta"></div>
+    <div class="field" style="margin:0">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="rent-tc-manual-check" onchange="document.getElementById('rent-tc-manual-input').style.display=this.checked?'':'none'"> TC manual (Táctica)</label>
+      <input type="number" step="0.01" id="rent-tc-manual-input" placeholder="ej. 1487.50" style="display:none;margin-top:4px;width:110px">
+    </div>
+    <div class="field" style="margin:0">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="rent-tc-manual-check-eco" onchange="document.getElementById('rent-tc-manual-input-eco').style.display=this.checked?'':'none'"> TC manual (Ecom)</label>
+      <input type="number" step="0.01" id="rent-tc-manual-input-eco" placeholder="Auto (BNA)" style="display:none;margin-top:4px;width:110px">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn primary" id="rent-btn-consultar" onclick="rentConsultar()">🔍 Consultar</button>
+      <button class="btn" id="rent-btn-guardar-cierre" onclick="rentGuardarCierre()" style="display:none">💾 Guardar Cierre</button>
+    </div>
+  </div>
+  <div id="rent-status" style="font-size:10px;color:var(--text3);margin-top:8px;font-family:'DM Mono',monospace"></div>
+  <div id="rent-historicos-panel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+    <div class="section-hdr" style="margin-bottom:10px">🕘 Cierres guardados</div>
+    <div id="rent-historicos-lista" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">Cargando...</div>
+    <div id="rent-historicos-detalle" style="margin-top:12px"></div>
+  </div>
+  <div id="rent-incidencias-tactica" style="display:none;margin-top:10px"></div>
+  <div id="rent-incidencias-ecom" style="display:none;margin-top:10px"></div>
+  <div style="margin-top:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="tacRentToggleConfig()">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Avanzado: validar contra CSV manual de Táctica</div>
+      <span id="tacrent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
+    </div>
+    <div id="tacrent-cfg-body" style="display:none;margin-top:12px">
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="rule-item"><div class="rule-name">TC del día (CSV)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
+        <label for="tacrent-file-input" class="btn" style="cursor:pointer">📂 Cargar CSV</label>
+        <input type="file" id="tacrent-file-input" accept=".csv" style="display:none" onchange="tacRentHandleFile(event)">
+        <button class="btn" id="tacrent-btn-export" onclick="tacRentExport()" style="display:none">⬇ Exportar CSV</button>
+      </div>
+      <div id="tacrent-incidencias" style="display:none;margin-top:10px"></div>
+      <div id="tacrent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:10px">
+        <div class="stat-card"><div class="stat-value" id="tacrent-kpi-rows">0</div><div class="stat-label">Filas activas</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--text3)" id="tacrent-kpi-excl">0</div><div class="stat-label">Excluidas</div></div>
+        <div class="stat-card"><div class="stat-value" id="tacrent-kpi-venta">—</div><div class="stat-label">Venta Total</div></div>
+        <div class="stat-card"><div class="stat-value" id="tacrent-kpi-margen">—</div><div class="stat-label">Margen $</div></div>
+        <div class="stat-card"><div class="stat-value" id="tacrent-kpi-pct">—</div><div class="stat-label">Margen %</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="tacrent-kpi-neg">0</div><div class="stat-label">Negativos</div></div>
+      </div>
+      <div id="tacrent-empty" style="display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;flex-direction:column;gap:12px">
+        <div style="font-size:28px">📂</div>
+        <div>Cargá un CSV de Táctica para comparar contra el motor</div>
+      </div>
+      <div id="tacrent-filters" class="erp-filters" style="display:none;margin-top:10px">
+        <input type="text" id="tacrent-search" placeholder="Buscar empresa, SKU, factura..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;" oninput="tacRentRender()">
+        <select id="tacrent-filter-tipo" class="fi" onchange="tacRentRender()">
+          <option value="">Todos los regímenes</option>
+          <option value="CUENTA_1">Cuenta 1</option>
+          <option value="CUENTA_2">Cuenta 2</option>
+          <option value="PERDIDA_DEFINITIVA">Pérdida definitiva</option>
+        </select>
+        <select id="tacrent-filter-pm" class="fi" onchange="tacRentRender()">
+          <option value="">Todos los PM</option>
+        </select>
+        <select id="tacrent-filter-margen" class="fi" onchange="tacRentRender()">
+          <option value="">Todos los márgenes</option>
+          <option value="pos">Positivos</option>
+          <option value="neg">Negativos</option>
+        </select>
+        <span id="tacrent-filter-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+      </div>
+      <div id="tacrent-table-wrap" class="table-wrap" style="display:none;overflow-x:auto;margin-top:10px">
+        <table id="tacrent-table" style="min-width:1400px">
+          <thead><tr>
+            <th>Fecha</th><th>Empresa</th><th>SKU</th><th>Tipo F.</th><th>Nº Factura</th><th>PM</th><th>Tipo</th>
+            <th style="text-align:right">PV</th><th style="text-align:right">IVA</th><th style="text-align:right">IIBB</th>
+            <th style="text-align:right">Imp.CHQ</th><th style="text-align:right">Costo ARS</th><th style="text-align:right">CF</th>
+            <th style="text-align:right">Margen $</th><th style="text-align:right">Margen %</th>
+          </tr></thead>
+          <tbody id="tacrent-tbody"></tbody>
+          <tfoot id="tacrent-tfoot"></tfoot>
+        </table>
+        <div class="pagination" id="tacrent-pag"></div>
+      </div>
+      <div id="tacrent-por-pm" style="display:none;margin-top:8px">
+        <div class="section-hdr" style="margin-bottom:10px">Resumen por PM</div>
+        <div class="table-wrap">
+          <table id="tacrent-pm-table">
+            <thead><tr>
+              <th style="width:22px"></th><th>PM</th><th style="text-align:right">Venta Total</th>
+              <th style="text-align:right">Margen $</th><th style="text-align:right">Margen %</th>
+              <th style="text-align:right">IVA</th><th style="text-align:right">IIBB</th>
+              <th style="text-align:right">Imp.CHQ</th><th style="text-align:right">Costo ARS</th><th style="text-align:right">CF</th>
+            </tr></thead>
+            <tbody id="tacrent-pm-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="dash-filters-bar" class="dash-filters">
   <div class="filter-group"><span class="filter-label p1">● Desde</span><input type="date" id="f-desde"></div>
   <div class="filter-group"><span class="filter-label p1">Hasta</span><input type="date" id="f-hasta"></div>
@@ -455,222 +559,6 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div class="pagination" id="tactica-pag"></div>
     </div>
   </div>
-</div>
-<!-- RENTABILIDAD TÁCTICA -->
-<div id="page-rentabilidad-tactica" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
-    <div>
-      <div class="section-hdr" style="margin-bottom:4px">📊 Rentabilidad</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Táctica (SQL) + ECOM (API) · motor real, sin depender de Excel</div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn" id="rent-btn-historicos" onclick="rentToggleHistoricos()">🕘 Históricos</button>
-    </div>
-  </div>
-
-  <!-- PERÍODO — consulta = no persiste; guardar cierre = sí, y queda en Históricos -->
-  <div class="card" style="margin-bottom:0">
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-      <div class="field" style="margin:0"><label>Fecha desde</label><input type="date" id="rent-desde"></div>
-      <div class="field" style="margin:0"><label>Fecha hasta</label><input type="date" id="rent-hasta"></div>
-      <div class="field" style="margin:0">
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="rent-tc-manual-check" onchange="document.getElementById('rent-tc-manual-input').style.display=this.checked?'':'none'"> TC manual (Táctica)</label>
-        <input type="number" step="0.01" id="rent-tc-manual-input" placeholder="ej. 1487.50" style="display:none;margin-top:4px;width:110px">
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn primary" id="rent-btn-consultar" onclick="rentConsultar()">🔍 Consultar</button>
-        <button class="btn" id="rent-btn-guardar-cierre" onclick="rentGuardarCierre()" style="display:none">💾 Guardar Cierre</button>
-      </div>
-    </div>
-    <div id="rent-status" style="font-size:10px;color:var(--text3);margin-top:8px;font-family:'DM Mono',monospace"></div>
-  </div>
-
-  <!-- HISTÓRICOS -->
-  <div id="rent-historicos-panel" style="display:none;margin-top:0">
-    <div class="card" style="margin-bottom:0">
-      <div class="section-hdr" style="margin-bottom:10px">🕘 Históricos de Rentabilidad</div>
-      <div id="rent-historicos-lista" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">Cargando...</div>
-      <div id="rent-historicos-detalle" style="margin-top:12px"></div>
-    </div>
-  </div>
-
-  <!-- TABS: Táctica / Ecom -->
-  <div style="display:flex;gap:2px;margin:12px 0 -1px;position:relative;z-index:1">
-    <button class="btn" id="rent-tab-btn-tactica" onclick="rentSwitchTab('tactica')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Táctica</button>
-    <button class="btn" id="rent-tab-btn-ecom" onclick="rentSwitchTab('ecom')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Ecom</button>
-  </div>
-
-  <div id="rent-tab-body-tactica">
-  <!-- AVANZADO — CSV manual, solo para comparar/validar contra el proceso legacy -->
-  <div class="card" style="margin-bottom:0">
-    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="tacRentToggleConfig()">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Avanzado: CSV manual (validación) / TC</div>
-      <span id="tacrent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
-    </div>
-    <div id="tacrent-cfg-body" style="display:none;margin-top:12px">
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div class="rule-item"><div class="rule-name">TC del día (CSV)</div><div class="rule-pct"><input type="number" id="tacrent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
-        <label for="tacrent-file-input" class="btn" style="cursor:pointer">📂 Cargar CSV</label>
-        <input type="file" id="tacrent-file-input" accept=".csv" style="display:none" onchange="tacRentHandleFile(event)">
-        <button class="btn" id="tacrent-btn-export" onclick="tacRentExport()" style="display:none">⬇ Exportar CSV</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- KPIs -->
-  <div id="tacrent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px">
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-rows">0</div><div class="stat-label">Filas activas</div></div>
-    <div class="stat-card"><div class="stat-value" style="color:var(--text3)" id="tacrent-kpi-excl">0</div><div class="stat-label">Excluidas</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-venta">—</div><div class="stat-label">Venta Total</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-margen">—</div><div class="stat-label">Margen $</div></div>
-    <div class="stat-card"><div class="stat-value" id="tacrent-kpi-pct">—</div><div class="stat-label">Margen %</div></div>
-    <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="tacrent-kpi-neg">0</div><div class="stat-label">Negativos</div></div>
-  </div>
-
-  <!-- INCIDENCIAS — filas que el motor no pudo calcular (§12 RENTABILIDAD_FUNCIONAL.md:
-       ninguna incidencia se resuelve en silencio, se muestra para revisión manual) -->
-  <div id="tacrent-incidencias" style="display:none;margin:0"></div>
-
-  <!-- FILTERS -->
-  <div id="tacrent-filters" class="erp-filters" style="display:none">
-    <input type="text" id="tacrent-search" placeholder="Buscar empresa, SKU, factura..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;" oninput="tacRentRender()">
-    <select id="tacrent-filter-tipo" class="fi" onchange="tacRentRender()">
-      <option value="">Todos los regímenes</option>
-      <option value="CUENTA_1">Cuenta 1</option>
-      <option value="CUENTA_2">Cuenta 2</option>
-      <option value="PERDIDA_DEFINITIVA">Pérdida definitiva</option>
-    </select>
-    <select id="tacrent-filter-pm" class="fi" onchange="tacRentRender()">
-      <option value="">Todos los PM</option>
-    </select>
-    <select id="tacrent-filter-margen" class="fi" onchange="tacRentRender()">
-      <option value="">Todos los márgenes</option>
-      <option value="pos">Positivos</option>
-      <option value="neg">Negativos</option>
-    </select>
-    <span id="tacrent-filter-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
-  </div>
-
-  <!-- EMPTY STATE -->
-  <div id="tacrent-empty" style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;flex-direction:column;gap:12px">
-    <div style="font-size:32px">📊</div>
-    <div>Elegí un período arriba y tocá "Consultar"</div>
-    <div style="font-size:10px;color:var(--text3)">Trae los datos directo de Táctica (SQL) — no hace falta ningún archivo</div>
-  </div>
-
-  <!-- TABLE -->
-  <div id="tacrent-table-wrap" class="table-wrap" style="display:none;overflow-x:auto">
-    <table id="tacrent-table" style="min-width:1400px">
-      <thead><tr>
-        <th>Fecha</th>
-        <th>Empresa</th>
-        <th>SKU</th>
-        <th>Tipo F.</th>
-        <th>Nº Factura</th>
-        <th>PM</th>
-        <th>Tipo</th>
-        <th style="text-align:right">PV</th>
-        <th style="text-align:right">IVA</th>
-        <th style="text-align:right">IIBB</th>
-        <th style="text-align:right">Imp.CHQ</th>
-        <th style="text-align:right">Costo ARS</th>
-        <th style="text-align:right">CF</th>
-        <th style="text-align:right">Margen $</th>
-        <th style="text-align:right">Margen %</th>
-      </tr></thead>
-      <tbody id="tacrent-tbody"></tbody>
-      <tfoot id="tacrent-tfoot"></tfoot>
-    </table>
-    <div class="pagination" id="tacrent-pag"></div>
-  </div>
-
-  <!-- POR PM -->
-  <div id="tacrent-por-pm" style="display:none;margin-top:8px">
-    <div class="section-hdr" style="margin-bottom:10px">Resumen por PM</div>
-    <div class="table-wrap">
-      <table id="tacrent-pm-table">
-        <thead><tr>
-          <th style="width:22px"></th>
-          <th>PM</th>
-          <th style="text-align:right">Venta Total</th>
-          <th style="text-align:right">Margen $</th>
-          <th style="text-align:right">Margen %</th>
-          <th style="text-align:right">IVA</th>
-          <th style="text-align:right">IIBB</th>
-          <th style="text-align:right">Imp.CHQ</th>
-          <th style="text-align:right">Costo ARS</th>
-          <th style="text-align:right">CF</th>
-        </tr></thead>
-        <tbody id="tacrent-pm-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-  </div><!-- /rent-tab-body-tactica -->
-
-  <div id="rent-tab-body-ecom" style="display:none">
-    <div class="card" style="margin-bottom:0">
-      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="ecoRentToggleConfig()">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">⚙ Avanzado: Excel manual (comparación) / TC</div>
-        <span id="ecorent-cfg-arrow" style="font-size:11px;color:var(--text3)">▶</span>
-      </div>
-      <div id="ecorent-cfg-body" style="display:none;margin-top:12px">
-        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-          <div class="rule-item"><div class="rule-name">TC manual (override)</div><div class="rule-pct"><input type="number" id="ecorent-cfg-tc" value="0" step="1" placeholder="Auto (BNA)"></div></div>
-        </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:8px">El Excel de Ecom queda como comparación — ver pestaña "Verificar Ecom" para subirlo. Acá siempre se consulta la API real.</div>
-      </div>
-    </div>
-
-    <div id="ecorent-kpis" style="display:none;grid-template-columns:repeat(6,1fr);gap:10px">
-      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-rows">0</div><div class="stat-label">Órdenes activas</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--text3)" id="ecorent-kpi-excl">0</div><div class="stat-label">Excluidas/incidencias</div></div>
-      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-venta">—</div><div class="stat-label">Precio Final Total</div></div>
-      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-margen">—</div><div class="stat-label">Rentabilidad $</div></div>
-      <div class="stat-card"><div class="stat-value" id="ecorent-kpi-pct">—</div><div class="stat-label">Rentabilidad %</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="ecorent-kpi-neg">0</div><div class="stat-label">Negativos</div></div>
-    </div>
-
-    <div id="ecorent-incidencias" style="display:none;margin:0"></div>
-
-    <div id="ecorent-filters" class="erp-filters" style="display:none">
-      <input type="text" id="ecorent-search" placeholder="Buscar Nº orden, canal..." style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;" oninput="ecoRentRender()">
-      <select id="ecorent-filter-canal" class="fi" onchange="ecoRentRender()">
-        <option value="">Todos los canales</option>
-      </select>
-      <select id="ecorent-filter-margen" class="fi" onchange="ecoRentRender()">
-        <option value="">Todos los márgenes</option>
-        <option value="pos">Positivos</option>
-        <option value="neg">Negativos</option>
-      </select>
-      <span id="ecorent-filter-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
-    </div>
-
-    <div id="ecorent-empty" style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;flex-direction:column;gap:12px">
-      <div style="font-size:32px">📊</div>
-      <div>Elegí un período arriba y tocá "Consultar"</div>
-      <div style="font-size:10px;color:var(--text3)">Trae las órdenes directo de la API de Ecom — no hace falta ningún Excel</div>
-    </div>
-
-    <div id="ecorent-table-wrap" class="table-wrap" style="display:none;overflow-x:auto">
-      <table id="ecorent-table" style="min-width:1200px">
-        <thead><tr>
-          <th>Nº Orden</th>
-          <th>Canal</th>
-          <th>Estado Pago</th>
-          <th style="text-align:right">Precio Final</th>
-          <th style="text-align:right">Precio S/IVA</th>
-          <th style="text-align:right">Comisión</th>
-          <th style="text-align:right">Envío</th>
-          <th style="text-align:right">Costo</th>
-          <th style="text-align:right">Neto</th>
-          <th style="text-align:right">Rentabilidad</th>
-        </tr></thead>
-        <tbody id="ecorent-tbody"></tbody>
-        <tfoot id="ecorent-tfoot"></tfoot>
-      </table>
-      <div class="pagination" id="ecorent-pag"></div>
-    </div>
-  </div><!-- /rent-tab-body-ecom -->
 </div>
 <!-- COMPETIDORES -->
 <div id="page-competidores" class="page">
@@ -1244,7 +1132,6 @@ const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b
 const API_KEY='AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
 const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
 const HIST_ID='1Wzs3SmmIGcGd_NJGfe5qJRBYkJBbyKjrl4rF7reojIE';
-const DASH_SHEETS=['Base Diciembre - Enero','Base Enero - Febrero','Base Febrero - Marzo','Base Marzo - Abril','Base Abril - Mayo ECOM','Base Abril - Mayo TACTICA','Base Mayo - Junio ECOM','Base Mayo - Junio TACTICA'];
 const COMP_SHEET_ID='15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
 const OFERTAS_ID='1VnXE8Ukv91yI0Vu7DOkhHH5na6QTvy9uweFu12DcZ7c';
 const OFERTAS_TABS=['Ofertas Catalogo IT','Ofertas Catalogo MT'];
@@ -1292,15 +1179,15 @@ function goPage(page,el){
   if(el)el.classList.add('active');
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
+  qs('rent-query-bar').style.display=page==='dashboard'?'block':'none';
   closeSidebar();
-  if(page==='dashboard'&&!dashLoaded)loadDashboard();
+  if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded)loadDashboard();}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
   if(page==='brasil'&&!brLoaded)loadBrasil();
   if(page==='verificar-ecom')renderEcom();
   if(page==='verificar-ml')renderML();
   if(page==='verificar-tactica')renderTactica();
-  if(page==='rentabilidad-tactica'){tacRentInit();}
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
   if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
@@ -2436,91 +2323,51 @@ function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInter
 
 // ── DASHBOARD ──
 async function fetchSheet(sheetId,name){const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${API_KEY}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
-function parseVentas(rows,sheetName){if(rows.length<2)return[];const H=rows[0].map(h=>(h||'').trim());const ci=name=>H.indexOf(name);// Try multiple column name variants
-  function ciMulti(...names){for(const n of names){const i=ci(n);if(i>=0)return i;}return -1;}
-  const IDX={
-    fecha:ciMulti('FechaCreaciónVenta','Fecha Creación Venta','Fecha Creacion Venta','FechaCreacionVenta','Fecha'),
-    canal:ciMulti('Canal De Venta','Canal de Venta','Canal'),
-    skus:ciMulti("Sku's Vendidos","SKU's Vendidos","Skus Vendidos","SKU"),
-    precioFinal:ciMulti('Precio Final','PrecioFinal','Precio final','PRECIO FINAL','precio final'),
-    precioSinIva:ciMulti('Precio SIN IVA','Precio Sin IVA','precio sin iva','PRECIO SIN IVA'),
-    numOrden:ciMulti('Número Orden','Numero Orden','NumeroOrden','Nro Orden','Número de Orden'),
-    rentabilidad:ciMulti('Rentabilidad','Rentabilidad Venta'),
-    categoria:ciMulti('Categoria','Categoría','Category'),
-    utilidad:ciMulti('Utilidad Venta','Utilidad'),
-    facturUSD:ciMulti('Facturacion USD','Facturación USD','FacturacionUSD'),
-    costo:ciMulti('Costo Total','Costo','CostoTotal'),
-    pm:ciMulti('PM','Pm'),
-    vendedor:ciMulti('Responsable De Ventas','Vendedor','Responsable')
-  };
-  // ── Detección de base TÁCTICA (estructura distinta a ECOM) ──
-  const esTactica=/tactica/i.test(sheetName)||(ci('Margen real')>=0&&IDX.precioFinal<0);
-  if(esTactica){
-    const T={fecha:ci('Fecha'),codigo:ci('Codigo'),cant:ci('Cantidad'),
-      pvIva:ci('Precio de Venta IVA'),pv:ci('Precio de Venta'),
-      margenReal:ci('Margen real'),margen:ci('Margen'),costo:ci('Costo Total Pesos'),pm:ci('PM'),
-      sub:ci('Subcategoria'),resp:ci('Responsable'),nro:ci('Nº Factura')};
-    const pvCol=T.pvIva>=0?T.pvIva:T.pv;
-    const out=[];
-    for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;
-      const pf=pn(r[pvCol]);if(pf===0)continue;
-      const fecha=parseDate(r[T.fecha]);const sku=(r[T.codigo]||'').trim();
-      out.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:'TACTICA',
-        skuRaw:sku,skus:sku?[sku]:[],numOrden:T.nro>=0?String(r[T.nro]||'').trim():'',
-        precioFinal:pf,precioSinIva:T.pv>=0?pn(r[T.pv]):0,
-        rentabilidad:T.margenReal>=0?pn(r[T.margenReal]):0,utilidad:0,facturUSD:0,
-        costo:T.costo>=0?Math.abs(pn(r[T.costo])):0,pm:(r[T.pm]||'').trim(),
-        vendedor:T.resp>=0?(r[T.resp]||'').trim():'',categoria:(r[T.sub]||'Sin categoría').trim()});}
-    if(out.length<5){console.warn('TACTICA '+sheetName+' <5 filas, ignorada');return[];}
-    console.log('✓ '+sheetName+' (TACTICA): '+out.length+' ventas');
-    return out;
-  }                                   
-  if(IDX.precioFinal<0){console.warn('No se encontró columna Precio Final en',sheetName,'Headers:',H);return[];}const parsed=[];for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||r.length<5)continue;const pf=pn(r[IDX.precioFinal]);if(pf===0)continue;
-    const fecha=parseDate(r[IDX.fecha]);const skuRaw=(r[IDX.skus]||'').trim();const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);
-    parsed.push({sheet:sheetName,fecha,fechaStr:dateToStr(fecha),canal:(r[IDX.canal]||'Sin canal').trim(),skuRaw,skus,numOrden:IDX.numOrden>=0?String(r[IDX.numOrden]||'').trim():'',precioFinal:pf,precioSinIva:IDX.precioSinIva>=0?pn(r[IDX.precioSinIva]):0,rentabilidad:pn(r[IDX.rentabilidad]),utilidad:pn(r[IDX.utilidad]),facturUSD:pn(r[IDX.facturUSD]),costo:pn(r[IDX.costo]),pm:(r[IDX.pm]||'').trim(),vendedor:(r[IDX.vendedor]||'').trim(),categoria:(r[IDX.categoria]||'Sin categoría').trim()});}if(parsed.length<5){console.warn('Pestaña '+sheetName+' tiene menos de 5 filas válidas, ignorada');return [];}return parsed;}
+// ── Fila unificada — mismo shape que usaba parseVentas() del Sheet (sheet
+// pasa a ser el `periodo` real del motor). Un solo mapeo para histórico
+// (/historico/tactica,ecom) y consulta en vivo (/tactica/periodo,
+// /ecom/periodo) -- pedido de Maxx 2026-08-19, ver
+// [[project_rentabilidad-architecture]]. Táctica no trae "categoría" propia
+// (solo subcategoría) -- se usa subcategoría como categoría, mismo criterio
+// que ya tenía el parseVentas viejo. ──
+function _fechaLocal(iso){return iso?new Date(iso+'T00:00:00'):null;}
+function mapVentaTacticaOut(v){
+  const pf=Number(v.precio_venta_iva??v.precio_venta??0);
+  return{periodo:v.periodo||null,fecha:_fechaLocal(v.fecha),fechaStr:v.fecha||'',
+    canal:'Canal Tactica',skuRaw:v.codigo||'',skus:v.codigo?[v.codigo]:[],
+    numOrden:v.nro_factura||'',precioFinal:pf,precioSinIva:Number(v.precio_venta||0),
+    rentabilidad:Number(v.margen_real||0),utilidad:0,facturUSD:0,
+    costo:Math.abs(Number(v.costo_total_pesos||0)),pm:v.pm||'',
+    vendedor:v.responsable||'',categoria:v.subcategoria||'Sin categoría'};
+}
+function mapVentaEcomOut(v){
+  const skuRaw=v.skus_vendidos||'';const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);
+  return{periodo:v.periodo||null,fecha:_fechaLocal(v.fecha),fechaStr:v.fecha||'',
+    canal:v.canal_de_venta||'Sin canal',skuRaw,skus,numOrden:v.numero_orden||'',
+    precioFinal:Number(v.precio_final||0),precioSinIva:Number(v.precio_sin_iva||0),
+    rentabilidad:Number(v.rentabilidad||0),utilidad:Number(v.utilidad_venta||0),
+    facturUSD:Number(v.facturacion_usd||0),costo:Number(v.costo_total||0),pm:v.pm||'',
+    vendedor:v.responsable_de_ventas||'',categoria:v.categoria||'Sin categoría'};
+}
+function _fmtPeriodoLabel(p){
+  if(!p)return'';const[d1,d2]=p.split('_');
+  const short=s=>{const t=(s||'').split('-');return t.length===3?`${+t[2]}/${+t[1]}`:s;};
+  return d1&&d2?`${short(d1)}→${short(d2)}`:p;
+}
 async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';allSalesData=[];
-  // Auto-detect all "Base X - Y" sheets dynamically
-  let sheetsToLoad=DASH_SHEETS;
+  const bu=getBackendUrl();
+  if(!bu){qs('page-dashboard').innerHTML='<div class="loading-block"><span style="color:var(--red)">Falta configurar la URL del backend en Configuración</span></div>';return;}
   try{
-    const meta=await(await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${DASH_SHEET_ID}?key=${API_KEY}`)).json();
-    if(meta.error){
-      qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">Error accediendo al Sheets: ${meta.error.message}<br><small>Verificá que el Sheets esté compartido como "cualquier persona con el enlace puede ver"</small></span></div>`;
-      return;
-    }
-    const allTabs=(meta.sheets||[]).map(s=>s.properties.title);
-    const baseTabs=allTabs.filter(t=>t.toLowerCase().startsWith('base ')&&!t.toLowerCase().includes('brasil'));
-    if(baseTabs.length>0)sheetsToLoad=baseTabs;
-    console.log('Pestañas a cargar:', sheetsToLoad.join(', '));
-  }catch(e){console.warn('Could not auto-detect sheets:',e);}
-  let loadErrors=[];
-  // Extra safety: skip Brasil sheet in case it slipped through
-  const filteredSheets=sheetsToLoad.filter(s=>!s.toLowerCase().includes('brasil'));
-  const results=await Promise.all(filteredSheets.map(async sheet=>{
-    try{
-      const rows=await fetchSheet(DASH_SHEET_ID,sheet+'!A1:AM60000');
-      const parsed=parseVentas(rows,sheet);
-      if(parsed.length>0)console.log(`✓ ${sheet}: ${parsed.length} ventas`);
-      else console.warn(`✗ ${sheet}: sin datos válidos (ignorada)`);
-      return parsed;
-    }
-    catch(e){loadErrors.push(sheet+': '+e.message);return[];}
-  }));
-  // Only include sheets that returned valid data
-  results.forEach(r=>allSalesData=allSalesData.concat(r));
-  // Deduplicate across sheets: same order+SKU in different Base periods = keep only one
-  // Key: order number + SKU raw + canal (NOT just order, as one order can have multiple SKUs)
-  const globalSeen=new Set();
-  allSalesData=allSalesData.filter(d=>{
-    if(!d.numOrden)return true; // no order number = always keep
-    const key=`${d.numOrden}|||${d.skuRaw}|||${d.canal}`;
-    if(globalSeen.has(key))return false;
-    globalSeen.add(key);
-    return true;
-  });
-  if(!allSalesData.length&&loadErrors.length){
-    qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">No se pudo cargar ninguna pestaña.<br><small>${loadErrors.join('<br>')}</small></span></div>`;
+    const[tac,eco]=await Promise.all([
+      fetch(`${bu}/rentabilidad/historico/tactica`).then(r=>{if(!r.ok)throw new Error(`Táctica: status ${r.status}`);return r.json();}),
+      fetch(`${bu}/rentabilidad/historico/ecom`).then(r=>{if(!r.ok)throw new Error(`Ecom: status ${r.status}`);return r.json();}),
+    ]);
+    allSalesData=tac.map(mapVentaTacticaOut).concat(eco.map(mapVentaEcomOut));
+  }catch(e){
+    qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">No se pudo cargar el histórico del backend.<br><small>${e.message}</small></span></div>`;
     return;
-  }if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span style="color:var(--red)">Sin datos</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} órdenes`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
+  }
+  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
 function applyFilters(){activeFilters={desde:qs('f-desde').value,hasta:qs('f-hasta').value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues('ms-canal'),categoria:getMSValues('ms-categoria'),pm:getMSValues('ms-pm'),sku:qs('f-sku').value.trim().toLowerCase()};renderDashboard();}
 function resetFilters(){['f-desde','f-hasta','f-desde2','f-hasta2','f-sku'].forEach(id=>qs(id).value='');['ms-canal','ms-categoria','ms-pm'].forEach(id=>clearMS(id));activeFilters={};renderDashboard();}
 function getFiltered(){const f=activeFilters;let data1=[...allSalesData];if(f.canal)data1=data1.filter(d=>f.canal.includes(d.canal));if(f.categoria)data1=data1.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data1=data1.filter(d=>f.pm.includes(d.pm));if(f.sku)data1=data1.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde)data1=data1.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data1=data1.filter(d=>d.fechaStr<=f.hasta);let data2=null;if(f.desde2||f.hasta2){data2=[...allSalesData];if(f.canal)data2=data2.filter(d=>f.canal.includes(d.canal));if(f.categoria)data2=data2.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data2=data2.filter(d=>f.pm.includes(d.pm));if(f.sku)data2=data2.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde2)data2=data2.filter(d=>d.fechaStr>=f.desde2);if(f.hasta2)data2=data2.filter(d=>d.fechaStr<=f.hasta2);}return{data1,data2};}
@@ -2599,7 +2446,8 @@ function renderDashboard(){
   const chartDays=[...new Set([...Object.keys(byDay1),...Object.keys(byDay2)])].sort();
   const fmtDay=str=>{const[y,m,d]=str.split('-');return`${+d}/${+m}`;};
   const delta=(v1,v2)=>{if(!useComparison||!k2||!v2)return'';const pct=(v1-v2)/Math.abs(v2)*100;const up=pct>=0;return`<div style="font-size:9px;color:${up?'var(--green)':'var(--red)'};margin-top:3px;font-family:'DM Mono',monospace">${up?'↑':'↓'} ${Math.abs(pct).toFixed(1)}%</div>`;};
-  const crossData=DASH_SHEETS.map(s=>{const rows=allSalesData.filter(d=>d.sheet===s);const fact=rows.reduce((s,d)=>s+d.precioFinal,0);const rent=rows.reduce((s,d)=>s+d.rentabilidad,0);return{label:s.replace('Base ','').replace(' - ','/'),fact,rent,rentPct:fact>0?rent/fact*100:0};}).filter(d=>d.fact>0);
+  const periodos=[...new Set(allSalesData.map(d=>d.periodo).filter(Boolean))].sort();
+  const crossData=periodos.map(p=>{const rows=allSalesData.filter(d=>d.periodo===p);const fact=rows.reduce((s,d)=>s+d.precioFinal,0);const rent=rows.reduce((s,d)=>s+d.rentabilidad,0);return{label:_fmtPeriodoLabel(p),fact,rent,rentPct:fact>0?rent/fact*100:0};}).filter(d=>d.fact>0);
   const rentMap={},cntMap={};data.forEach(d=>{if(d.precioFinal>0){rentMap[d.categoria]=(rentMap[d.categoria]||0)+d.rentabilidad;cntMap[d.categoria]=(cntMap[d.categoria]||0)+1;}});
   window._dashCtx=useComparison&&k2?{label1,label2,k1,k2,topCanal1:Object.entries(groupSum(data,'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5),topCanal2:Object.entries(groupSum(data2||[],'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5)}:null;
   pg.innerHTML=`
@@ -3978,7 +3826,6 @@ function ofertasExport(){
   let tacRawRows=[], tacCalcRows=[], tacIncidencias=[], tacFiltered=[], tacPage=1;
   let tacTCBNA = null;
   // ── Consulta/Cierre por período (Táctica SQL + Ecom API) — 2026-08-11 ──
-  let ecoCalcRows=[], ecoIncidencias=[], ecoFiltered=[], ecoPage=1;
   let rentUltimaConsulta=null;
 
   // ── HELPERS ──
@@ -4430,14 +4277,23 @@ function ofertasExport(){
     if(resumen) toast(`${prefix} — incidencias del validador: ${resumen}`);
   }
 
-  window.rentSwitchTab = function(tab){
-    const isTac=tab==='tactica';
-    document.getElementById('rent-tab-body-tactica').style.display=isTac?'block':'none';
-    document.getElementById('rent-tab-body-ecom').style.display=isTac?'none':'block';
-    const bt=document.getElementById('rent-tab-btn-tactica'), be=document.getElementById('rent-tab-btn-ecom');
-    bt.style.borderBottomColor=isTac?'var(--accent)':'transparent'; bt.style.opacity=isTac?'1':'.6';
-    be.style.borderBottomColor=isTac?'transparent':'var(--accent)'; be.style.opacity=isTac?'.6':'1';
-  };
+  // ── Incidencias de una consulta en vivo (§12: se muestran, no se corrigen) —
+  // genérico para Táctica/Ecom, targetea el container de rent-query-bar. ──
+  function _renderIncidenciasVivo(containerId, titulo, filas, campos){
+    const cont=document.getElementById(containerId);
+    if(!filas.length){ cont.style.display='none'; cont.innerHTML=''; return; }
+    cont.style.display='block';
+    const filasHtml=filas.slice(0,200).map(f=>`<tr>${campos.map(c=>`<td style="font-size:10px">${f[c.key]??''}</td>`).join('')}</tr>`).join('');
+    cont.innerHTML=`<div class="card" style="border-color:var(--yellow);margin-bottom:0">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">
+        ⚠ ${titulo} — ${filas.length} línea(s) sin calcular o excluida(s) — no suman en los totales
+      </div>
+      <div class="table-wrap" style="max-height:200px;overflow-y:auto">
+        <table style="min-width:500px"><thead><tr>${campos.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead><tbody>${filasHtml}</tbody></table>
+      </div>
+      ${filas.length>200?`<div style="font-size:10px;color:var(--text3);margin-top:6px">... y ${filas.length-200} más</div>`:''}
+    </div>`;
+  }
 
   window.rentConsultar = async function(){
     const desde=document.getElementById('rent-desde').value;
@@ -4471,8 +4327,10 @@ function ofertasExport(){
     const pEcom=(async()=>{
       try{
         const body={desde,hasta};
-        const tcManual=parseFloat(document.getElementById('ecorent-cfg-tc')?.value||'0');
-        if(tcManual>0) body.tc=String(tcManual);
+        if(document.getElementById('rent-tc-manual-check-eco').checked){
+          const tcManual=parseFloat(document.getElementById('rent-tc-manual-input-eco').value||'0');
+          if(tcManual>0) body.tc=String(tcManual);
+        }
         const r=await fetch(`${bu}/rentabilidad/ecom/periodo`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         const d=await r.json();
         if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
@@ -4483,44 +4341,58 @@ function ofertasExport(){
 
     btnConsultar.disabled=false;
 
+    // Pedido de Maxx 2026-08-19: la consulta en vivo se ve con el MISMO
+    // módulo de filtros/gráficos/comparación que el histórico -- reemplaza
+    // allSalesData (cancela cualquier comparación de períodos activa) en
+    // vez de armar su propia tabla cruda por línea.
+    const periodoLabel=`${desde}_${hasta}`;
+    const nuevasFilas=[];
+    const tacIncidenciasVivo=[], ecoIncidenciasVivo=[];
+
     if(tacResp){
-      tacCalcRows=[]; tacIncidencias=[];
       tacResp.resultados.forEach(r=>{
-        const fila=_tacticaOutAFila(r);
-        if(fila.margen===null||fila.excluido) tacIncidencias.push(fila); else tacCalcRows.push(fila);
+        const clasif=_tacticaOutAFila(r);
+        if(clasif.margen===null||clasif.excluido){ tacIncidenciasVivo.push(clasif); }
+        else { const fila=mapVentaTacticaOut(r); fila.periodo=fila.periodo||periodoLabel; nuevasFilas.push(fila); }
       });
-      const tot=tacCalcRows.reduce((a,d)=>({pv:a.pv+d.pv,margen:a.margen+d.margen}),{pv:0,margen:0});
-      const pct=tot.pv?tot.margen/Math.abs(tot.pv):0;
-      const neg=tacCalcRows.filter(d=>d.margen<0).length;
-      document.getElementById('tacrent-kpis').style.display='grid';
-      document.getElementById('tacrent-kpi-rows').textContent=tacCalcRows.length;
-      document.getElementById('tacrent-kpi-excl').textContent=tacIncidencias.length;
-      document.getElementById('tacrent-kpi-venta').textContent=_fmt(tot.pv);
-      document.getElementById('tacrent-kpi-margen').textContent=_fmt(tot.margen);
-      document.getElementById('tacrent-kpi-pct').textContent=_fmtPct(pct);
-      document.getElementById('tacrent-kpi-neg').textContent=neg;
-      const pms=[...new Set(tacCalcRows.map(d=>d.pm).filter(Boolean))].sort();
-      const selPM=document.getElementById('tacrent-filter-pm');
-      selPM.innerHTML='<option value="">Todos los PM</option>'+pms.map(p=>`<option value="${p}">${p}</option>`).join('');
-      _renderIncidencias();
-      tacRentRender();
       _avisarIncidenciasGlobales('Táctica', tacResp.incidencias, tacResp.config_faltante);
     }
-
     if(ecoResp){
-      ecoCalcRows=[]; ecoIncidencias=[];
       ecoResp.resultados.forEach(r=>{
-        const fila=_ecomOutAFila(r);
-        if(fila.rentabilidad===null||fila.excluido) ecoIncidencias.push(fila); else ecoCalcRows.push(fila);
+        const clasif=_ecomOutAFila(r);
+        if(clasif.rentabilidad===null||clasif.excluido){
+          clasif.incidencia=clasif.excluido?'Excluida por estado de pago':'Costo no resuelto';
+          ecoIncidenciasVivo.push(clasif);
+        } else { const fila=mapVentaEcomOut(r); fila.periodo=fila.periodo||periodoLabel; nuevasFilas.push(fila); }
       });
-      _kpisEco();
-      _renderIncidenciasEco();
-      ecoRentRender();
       const avisos=[];
       if(ecoResp.excluidas_por_estado_pago) avisos.push(`${ecoResp.excluidas_por_estado_pago} excluida(s) por estado de pago`);
       if(ecoResp.incidencias_costo) avisos.push(`${ecoResp.incidencias_costo} con costo sin resolver`);
       if(avisos.length) toast(`Ecom — ${avisos.join(', ')}`);
       if(ecoResp.config_faltante&&ecoResp.config_faltante.length) toast(`Ecom: ${ecoResp.config_faltante.length} orden(es) sin poder calcular (configuración faltante)`,'error');
+    }
+
+    _renderIncidenciasVivo('rent-incidencias-tactica','Táctica',tacIncidenciasVivo,[
+      {key:'sku',label:'SKU'},{key:'nroFact',label:'Nº Factura'},{key:'tipoFact',label:'Tipo Factura'},
+      {key:'tipo',label:'Régimen'},{key:'incidencia',label:'Motivo'},
+    ]);
+    _renderIncidenciasVivo('rent-incidencias-ecom','Ecom',ecoIncidenciasVivo,[
+      {key:'orden',label:'Nº Orden'},{key:'canal',label:'Canal'},{key:'estadoPago',label:'Estado Pago'},
+      {key:'incidencia',label:'Motivo'},
+    ]);
+
+    if(tacResp||ecoResp){
+      allSalesData=nuevasFilas;
+      const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();
+      canales.forEach((c,i)=>{ if(!canalColors[c]) canalColors[c]=PALETTE[i%PALETTE.length]; });
+      initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));
+      initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));
+      initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));
+      document.getElementById('f-desde2').value=''; document.getElementById('f-hasta2').value='';
+      document.getElementById('f-desde').value=desde; document.getElementById('f-hasta').value=hasta;
+      activeFilters={desde,hasta,canal:getMSValues('ms-canal'),categoria:getMSValues('ms-categoria'),pm:getMSValues('ms-pm'),sku:''};
+      dashLoaded=true;
+      renderDashboard();
     }
 
     const partes=[];
@@ -4559,8 +4431,10 @@ function ofertasExport(){
     const pEcom=(async()=>{
       try{
         const body={desde,hasta};
-        const tcManual=parseFloat(document.getElementById('ecorent-cfg-tc')?.value||'0');
-        if(tcManual>0) body.tc=String(tcManual);
+        if(document.getElementById('rent-tc-manual-check-eco').checked){
+          const tcManual=parseFloat(document.getElementById('rent-tc-manual-input-eco').value||'0');
+          if(tcManual>0) body.tc=String(tcManual);
+        }
         const r=await fetch(`${bu}/rentabilidad/cierres/ecom`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         const d=await r.json();
         if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
@@ -4571,121 +4445,11 @@ function ofertasExport(){
 
     btn.disabled=false;
     statusEl.textContent='Cierre guardado — '+resultados.join(' · ');
-    toast('Cierre guardado — ya está disponible en Históricos');
+    toast('Cierre guardado — recargando histórico...');
     if(document.getElementById('rent-historicos-panel').style.display!=='none') rentLoadHistoricos();
+    dashLoaded=false;
+    await loadDashboard();
   };
-
-  // ── ECOM — render, KPIs, incidencias, paginación (mismo patrón que Táctica,
-  // sin desglose por PM en esta primera versión) ──
-
-  function _kpisEco(){
-    const tot=ecoCalcRows.reduce((a,d)=>({pf:a.pf+d.precioFinal,rent:a.rent+(d.rentabilidad||0)}),{pf:0,rent:0});
-    const pct=tot.pf?tot.rent/Math.abs(tot.pf):0;
-    const neg=ecoCalcRows.filter(d=>d.rentabilidad<0).length;
-    document.getElementById('ecorent-kpis').style.display='grid';
-    document.getElementById('ecorent-kpi-rows').textContent=ecoCalcRows.length;
-    document.getElementById('ecorent-kpi-excl').textContent=ecoIncidencias.length;
-    document.getElementById('ecorent-kpi-venta').textContent=_fmt(tot.pf);
-    document.getElementById('ecorent-kpi-margen').textContent=_fmt(tot.rent);
-    document.getElementById('ecorent-kpi-pct').textContent=_fmtPct(pct);
-    document.getElementById('ecorent-kpi-neg').textContent=neg;
-    const canales=[...new Set(ecoCalcRows.map(d=>d.canal).filter(Boolean))].sort();
-    const sel=document.getElementById('ecorent-filter-canal');
-    sel.innerHTML='<option value="">Todos los canales</option>'+canales.map(c=>`<option value="${c}">${c}</option>`).join('');
-  }
-
-  function _renderIncidenciasEco(){
-    const cont=document.getElementById('ecorent-incidencias');
-    if(!ecoIncidencias.length){ cont.style.display='none'; cont.innerHTML=''; return; }
-    cont.style.display='block';
-    const filas=ecoIncidencias.slice(0,200).map(d=>`<tr>
-        <td>${d.orden}</td><td style="font-size:10px">${d.canal}</td><td style="font-size:10px">${d.estadoPago}</td>
-        <td style="color:var(--yellow)">${d.excluido?'Excluida por estado de pago':'Costo no resuelto'}</td>
-      </tr>`).join('');
-    cont.innerHTML=`<div class="card" style="border-color:var(--yellow);margin-bottom:0">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">
-        ⚠ ${ecoIncidencias.length} orden(es) sin calcular o excluida(s) — no suman en los totales
-      </div>
-      <div class="table-wrap" style="max-height:220px;overflow-y:auto">
-        <table style="min-width:500px"><thead><tr>
-          <th>Nº Orden</th><th>Canal</th><th>Estado Pago</th><th>Motivo</th>
-        </tr></thead><tbody>${filas}</tbody></table>
-      </div>
-      ${ecoIncidencias.length>200?`<div style="font-size:10px;color:var(--text3);margin-top:6px">... y ${ecoIncidencias.length-200} más</div>`:''}
-    </div>`;
-  }
-
-  function ecoRentRender(){
-    const q=(document.getElementById('ecorent-search')?.value||'').toLowerCase();
-    const fCanal=document.getElementById('ecorent-filter-canal')?.value||'';
-    const fMgn=document.getElementById('ecorent-filter-margen')?.value||'';
-
-    ecoFiltered=ecoCalcRows.filter(d=>{
-      if(fCanal&&d.canal!==fCanal) return false;
-      if(fMgn==='pos'&&d.rentabilidad<0) return false;
-      if(fMgn==='neg'&&d.rentabilidad>=0) return false;
-      if(q&&![d.orden,d.canal,d.estadoPago].some(v=>String(v).toLowerCase().includes(q))) return false;
-      return true;
-    });
-
-    document.getElementById('ecorent-filter-count').textContent=`${ecoFiltered.length} órdenes`;
-    document.getElementById('ecorent-empty').style.display='none';
-    document.getElementById('ecorent-filters').style.display='flex';
-    document.getElementById('ecorent-table-wrap').style.display='block';
-
-    const totalPages=Math.max(1,Math.ceil(ecoFiltered.length/PAGE_SIZE));
-    ecoPage=Math.min(ecoPage,totalPages);
-    const slice=ecoFiltered.slice((ecoPage-1)*PAGE_SIZE,ecoPage*PAGE_SIZE);
-
-    document.getElementById('ecorent-tbody').innerHTML=slice.map(d=>{
-      const mc=d.rentabilidad>=0?'color:#4ade80':'color:#f87171';
-      return `<tr>
-        <td>${d.orden}</td><td style="font-size:10px">${d.canal}</td><td style="font-size:10px">${d.estadoPago}</td>
-        <td style="text-align:right">${_fmt(d.precioFinal)}</td>
-        <td style="text-align:right">${_fmt(d.precioSinIva)}</td>
-        <td style="text-align:right">${_fmt(d.comision)}</td>
-        <td style="text-align:right">${_fmt(d.envio)}</td>
-        <td style="text-align:right">${_fmt(d.costoTotal)}</td>
-        <td style="text-align:right">${d.neto!=null?_fmt(d.neto):'—'}</td>
-        <td style="text-align:right;${mc}"><b>${_fmt(d.rentabilidad)}</b></td>
-      </tr>`;
-    }).join('');
-
-    const tot=ecoFiltered.reduce((a,d)=>({
-      pf:a.pf+d.precioFinal,psi:a.psi+d.precioSinIva,com:a.com+d.comision,env:a.env+d.envio,
-      costo:a.costo+d.costoTotal,rent:a.rent+(d.rentabilidad||0),
-    }),{pf:0,psi:0,com:0,env:0,costo:0,rent:0});
-    const mc=tot.rent>=0?'color:#4ade80':'color:#f87171';
-    document.getElementById('ecorent-tfoot').innerHTML=`<tr style="font-weight:700;border-top:2px solid var(--accent)">
-      <td colspan="3">TOTAL (${ecoFiltered.length} órdenes)</td>
-      <td style="text-align:right">${_fmt(tot.pf)}</td>
-      <td style="text-align:right">${_fmt(tot.psi)}</td>
-      <td style="text-align:right">${_fmt(tot.com)}</td>
-      <td style="text-align:right">${_fmt(tot.env)}</td>
-      <td style="text-align:right">${_fmt(tot.costo)}</td>
-      <td></td>
-      <td style="text-align:right;${mc}">${_fmt(tot.rent)}</td>
-    </tr>`;
-
-    let pag='';
-    if(ecoPage>1) pag+=`<button class="page-btn" onclick="ecoRentChangePage(-1)">‹</button>`;
-    for(let i=Math.max(1,ecoPage-2);i<=Math.min(totalPages,ecoPage+2);i++)
-      pag+=`<button class="page-btn${i===ecoPage?' active':''}" onclick="ecoRentSetPage(${i})">${i}</button>`;
-    if(ecoPage<totalPages) pag+=`<button class="page-btn" onclick="ecoRentChangePage(1)">›</button>`;
-    document.getElementById('ecorent-pag').innerHTML=`<span class="page-info-txt">${ecoPage}/${totalPages}</span>${pag}`;
-  }
-
-  window.ecoRentRender = ecoRentRender;
-  window.ecoRentChangePage = d=>{ const p=Math.ceil(ecoFiltered.length/PAGE_SIZE); ecoPage=Math.max(1,Math.min(p,ecoPage+d)); ecoRentRender(); };
-  window.ecoRentSetPage = p=>{ ecoPage=p; ecoRentRender(); };
-  window.ecoRentToggleConfig = function(){
-    const b=document.getElementById('ecorent-cfg-body');
-    const a=document.getElementById('ecorent-cfg-arrow');
-    const open=b.style.display==='none';
-    b.style.display=open?'block':'none';
-    a.textContent=open?'▼':'▶';
-  };
-
   // ── HISTÓRICOS ──
 
   window.rentToggleHistoricos = function(){
@@ -4742,7 +4506,7 @@ function ofertasExport(){
     }catch(e){ cont.innerHTML=`<span style="color:var(--red)">Error: ${e.message}</span>`; }
   };
 
-  window.tacRentInit = function(){
+  window.rentQueryBarInit = function(){
     if(!document.getElementById('rent-desde').value){
       const hoy=new Date();
       const hace30=new Date(hoy.getTime()-30*86400000);

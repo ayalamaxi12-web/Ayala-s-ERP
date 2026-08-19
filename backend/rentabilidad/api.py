@@ -228,6 +228,12 @@ class CalcularTacticaPeriodoIn(BaseModel):
 
 
 class VentaTacticaOut(BaseModel):
+    # `periodo` es None en resultados de /tactica/periodo (consulta en vivo,
+    # construir_filas_tactica no lo asigna -- no persiste) y viene poblado
+    # solo en filas ya guardadas (histórico/cierre). "Ventas & Rentabilidad"
+    # (docs/index.html) sintetiza su propia etiqueta de período para consulta
+    # en vivo cuando esto es None -- ver [[project_rentabilidad-architecture]].
+    periodo: str | None = None
     fecha: date
     empresa: str
     codigo: str
@@ -264,7 +270,7 @@ class ConsultarTacticaOut(BaseModel):
 
 def _venta_tactica_a_out(v: VentaTactica) -> VentaTacticaOut:
     return VentaTacticaOut(
-        fecha=v.fecha, empresa=v.empresa, codigo=v.codigo, tipo_factura=v.tipo_factura,
+        periodo=v.periodo, fecha=v.fecha, empresa=v.empresa, codigo=v.codigo, tipo_factura=v.tipo_factura,
         nro_factura=v.nro_factura, cantidad=v.cantidad, precio_venta=v.precio_venta,
         regimen=v.regimen.value if v.regimen else Regimen.NO_RECONOCIDO.value,
         pm=v.pm, subcategoria=v.subcategoria, responsable=v.responsable,
@@ -372,6 +378,19 @@ class ResultadoEcomOut(BaseModel):
     neto: Decimal | None = None
     costo_total: Decimal | None = None
     rentabilidad: Decimal | None = None
+    # Agregado 2026-08-19 para que "Ventas & Rentabilidad" (docs/index.html)
+    # pueda armar la misma fila unificada que ya arma `parseVentas()` del
+    # Sheet -- estos campos ya existían en `VentaEcom`, solo faltaba
+    # exponerlos acá (ver [[project_rentabilidad-architecture]]).
+    fecha: date | None = None
+    skus_vendidos: str | None = None
+    pm: str | None = None
+    subcategoria: str | None = None
+    categoria: str | None = None
+    responsable_de_ventas: str | None = None
+    utilidad_venta: Decimal | None = None
+    facturacion_usd: Decimal | None = None
+    periodo: str | None = None
 
 
 class ConsultarEcomOut(BaseModel):
@@ -397,6 +416,11 @@ def _venta_ecom_a_out(v: VentaEcom) -> ResultadoEcomOut:
         excluido=v.excluido, precio_final=v.precio_final, precio_sin_iva=v.precio_sin_iva,
         costo_sin_iva=v.costo_sin_iva, comision_venta=v.comision_venta, costo_envio=v.costo_envio,
         neto=v.neto, costo_total=v.costo_total, rentabilidad=v.rentabilidad,
+        fecha=v.fecha_creacion_venta, skus_vendidos=v.skus_vendidos, pm=v.pm,
+        subcategoria=v.subcategoria, categoria=v.categoria,
+        responsable_de_ventas=v.responsable_de_ventas,
+        utilidad_venta=v.utilidad_venta, facturacion_usd=v.facturacion_usd,
+        periodo=v.periodo,
     )
 
 
@@ -699,3 +723,40 @@ def importar_historico(payload: ImportarHistoricoIn) -> ImportarHistoricoOut:
         por_periodo_ecom=por_periodo_ecom,
         filas_ignoradas=resultado.filas_ignoradas,
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# HISTÓRICO — lectura fila por fila de TODO lo persistido (migrado del Sheet
+# vía /importar-historico + lo que se vaya guardando por /cierres/*), sin
+# filtrar por período. Pedido de Maxx (2026-08-19): unificar "Ventas &
+# Rentabilidad" (docs/index.html, page-dashboard) con este motor -- esa
+# página ya arma sus filtros/gráficos/comparaciones sobre una fila por
+# línea, así que se devuelve el mismo shape que ya usan /tactica/periodo y
+# /ecom/periodo (VentaTacticaOut/ResultadoEcomOut) para que el frontend use
+# un solo mapeo tanto para histórico como para consulta en vivo.
+# ══════════════════════════════════════════════════════════════════════════
+
+def historico_tactica_de(db: Session, incluir_excluidos: bool = False) -> list[VentaTacticaOut]:
+    q = db.query(VentaTactica)
+    if not incluir_excluidos:
+        q = q.filter(VentaTactica.excluido.is_(False))
+    return [_venta_tactica_a_out(f) for f in q.order_by(VentaTactica.fecha).all()]
+
+
+def historico_ecom_de(db: Session, incluir_excluidos: bool = False) -> list[ResultadoEcomOut]:
+    q = db.query(VentaEcom)
+    if not incluir_excluidos:
+        q = q.filter(VentaEcom.excluido.is_(False))
+    return [_venta_ecom_a_out(f) for f in q.order_by(VentaEcom.fecha_creacion_venta).all()]
+
+
+@router.get("/historico/tactica", response_model=list[VentaTacticaOut])
+def historico_tactica(incluir_excluidos: bool = False) -> list[VentaTacticaOut]:
+    with sesion() as db:
+        return historico_tactica_de(db, incluir_excluidos)
+
+
+@router.get("/historico/ecom", response_model=list[ResultadoEcomOut])
+def historico_ecom(incluir_excluidos: bool = False) -> list[ResultadoEcomOut]:
+    with sesion() as db:
+        return historico_ecom_de(db, incluir_excluidos)

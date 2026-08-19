@@ -271,3 +271,87 @@ def test_resolver_tc_da_un_error_claro_si_el_bna_falla_y_no_hay_manual(monkeypat
     monkeypatch.setattr(api, "obtener_tc_bna", lambda: (_ for _ in ()).throw(TcBnaError("BNA caído")))
     with pytest.raises(HTTPException):
         _resolver_tc(None)
+
+
+# ── /historico/* — lectura fila por fila de TODO lo persistido (migración +
+# cierres), sin filtrar por período. Pedido de Maxx (2026-08-19) para
+# unificar "Ventas & Rentabilidad" (docs/index.html) con este motor. ──
+
+def test_historico_tactica_de_devuelve_todo_lo_persistido(db_session):
+    db_session.add(VentaTactica(
+        periodo="2026-06-23_2026-07-22", fecha=date(2026, 7, 1), empresa="Cliente Demo",
+        codigo="SKU1", tipo_factura="FEA", nro_factura="00003-00000001",
+        cantidad=Decimal(1), precio_venta=Decimal(1000), tc=Decimal(1500),
+        regimen=Regimen.CUENTA_1, pm="Matias", subcategoria="Impresoras",
+        responsable="Juan", margen_real=Decimal(300),
+    ))
+    db_session.commit()
+    [out] = api.historico_tactica_de(db_session)
+    assert out.codigo == "SKU1"
+    assert out.periodo == "2026-06-23_2026-07-22"
+    assert out.pm == "Matias"
+    assert out.subcategoria == "Impresoras"
+    assert _cerca(out.margen_real, "300")
+
+
+def test_historico_ecom_de_expone_fecha_sku_pm_categoria(db_session):
+    from rentabilidad.models import VentaEcom
+    db_session.add(VentaEcom(
+        periodo="2026-06-23_2026-07-22", numero_orden="123", skus_vendidos="SKU1,SKU2",
+        fecha_creacion_venta=date(2026, 7, 1), costo_sin_iva=Decimal(1),
+        comision_venta=Decimal(0), comision_cobro=Decimal(0), costo_envio=Decimal(0),
+        precio_sin_iva=Decimal(100), precio_final=Decimal(120), tc=Decimal(1500),
+        canal_de_venta="Mercadolibre", costo_total=Decimal(40), rentabilidad=Decimal(20),
+        pm="Cristian", subcategoria="Mouses", categoria="Perifericos",
+        responsable_de_ventas="Ana", utilidad_venta=Decimal(15), facturacion_usd=Decimal(0.08),
+    ))
+    db_session.commit()
+    [out] = api.historico_ecom_de(db_session)
+    assert out.fecha == date(2026, 7, 1)
+    assert out.periodo == "2026-06-23_2026-07-22"
+    assert out.skus_vendidos == "SKU1,SKU2"
+    assert out.pm == "Cristian"
+    assert out.subcategoria == "Mouses"
+    assert out.categoria == "Perifericos"
+    assert out.responsable_de_ventas == "Ana"
+    assert _cerca(out.utilidad_venta, "15")
+    assert _cerca(out.facturacion_usd, "0.08")
+
+
+def test_historico_tactica_de_excluye_por_defecto_igual_que_agregar_tactica(db_session):
+    db_session.add_all([
+        VentaTactica(
+            periodo="P1", fecha=date(2026, 7, 1), empresa="A", codigo="ENVIOS-BSAS",
+            tipo_factura="FEA", nro_factura="1", cantidad=Decimal(1),
+            precio_venta=Decimal(100), tc=Decimal(1500), regimen=Regimen.CUENTA_1,
+            excluido=True, motivo_exclusion=MotivoExclusion.ENVIO,
+        ),
+        VentaTactica(
+            periodo="P1", fecha=date(2026, 7, 2), empresa="A", codigo="SKU1",
+            tipo_factura="FEA", nro_factura="2", cantidad=Decimal(1),
+            precio_venta=Decimal(100), tc=Decimal(1500), regimen=Regimen.CUENTA_1,
+        ),
+    ])
+    db_session.commit()
+    solo_activas = api.historico_tactica_de(db_session)
+    assert [o.codigo for o in solo_activas] == ["SKU1"]
+    con_excluidas = api.historico_tactica_de(db_session, incluir_excluidos=True)
+    assert {o.codigo for o in con_excluidas} == {"SKU1", "ENVIOS-BSAS"}
+
+
+def test_historico_tactica_de_ordena_por_fecha_y_no_filtra_periodo(db_session):
+    db_session.add_all([
+        VentaTactica(
+            periodo="P1", fecha=date(2026, 6, 1), empresa="A", codigo="SKU-JUN",
+            tipo_factura="FEA", nro_factura="1", cantidad=Decimal(1),
+            precio_venta=Decimal(100), tc=Decimal(1500), regimen=Regimen.CUENTA_1,
+        ),
+        VentaTactica(
+            periodo="P2", fecha=date(2026, 5, 1), empresa="A", codigo="SKU-MAY",
+            tipo_factura="FEA", nro_factura="2", cantidad=Decimal(1),
+            precio_venta=Decimal(100), tc=Decimal(1500), regimen=Regimen.CUENTA_1,
+        ),
+    ])
+    db_session.commit()
+    out = api.historico_tactica_de(db_session)
+    assert [o.codigo for o in out] == ["SKU-MAY", "SKU-JUN"]
