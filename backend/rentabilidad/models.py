@@ -90,7 +90,12 @@ class VentaTactica(Base):
     # H · Vendedor · DATO
     vendedor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # I · Tipo de Factura · DATO — determina el régimen (§6.1)
-    tipo_factura: Mapped[str] = mapped_column(String(10))
+    # Ancho real confirmado contra las 4 pestañas históricas TACTICA del
+    # Sheet (2026-08-19): el texto completo del comprobante llega acá (ej.
+    # "MLA - Multipropósito (Factura-Nota de Crédito-Nota de Débito) - Nota
+    # de Crédito", 79 caracteres), no el código corto de 3 letras -- 10 era
+    # insuficiente y sólo pasaba inadvertido en SQLite (no valida longitud).
+    tipo_factura: Mapped[str] = mapped_column(String(120))
     # J · Nº Factura · DATO — PREFIJO-NUMERO, el prefijo determina pérdida definitiva
     nro_factura: Mapped[str] = mapped_column(String(32))
     # K · Precio de Compra de Lista · INFORMATIVO
