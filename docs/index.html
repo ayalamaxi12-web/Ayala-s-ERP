@@ -334,6 +334,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </div>
   </div>
 </div>
+<div id="ventas-tabs-bar" style="display:none;gap:2px;margin:10px 20px 0">
+  <button class="btn" id="ventas-tab-btn-hist" onclick="goVentasTab('hist')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">📊 Histórico</button>
+  <button class="btn" id="ventas-tab-btn-vivo" onclick="goVentasTab('vivo')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">🔴 En Vivo</button>
+</div>
 <div id="dash-filters-bar" class="dash-filters">
   <div class="filter-group"><span class="filter-label p1">● Desde</span><input type="date" id="f-desde"></div>
   <div class="filter-group"><span class="filter-label p1">Hasta</span><input type="date" id="f-hasta"></div>
@@ -348,6 +352,28 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <button class="btn primary" onclick="applyFilters()">Aplicar</button>
   <button class="btn" onclick="resetFilters()">Limpiar</button>
 </div>
+<div id="vivo-filters-bar" class="dash-filters" style="display:none;">
+  <div class="filter-group"><span class="filter-label p1">● Desde</span><input type="date" id="f-desde-vivo"></div>
+  <div class="filter-group"><span class="filter-label p1">Hasta</span><input type="date" id="f-hasta-vivo"></div>
+  <div class="filters-sep"></div>
+  <div class="filter-group"><span class="filter-label">Comparar por</span>
+    <select class="fi" id="cmp-dim-vivo" onchange="onCmpDimChange()">
+      <option value="">Ninguno</option>
+      <option value="sistema">Sistema (Táctica vs Ecom)</option>
+      <option value="pm">PM</option>
+      <option value="sku">SKU</option>
+    </select>
+  </div>
+  <div class="filter-group" id="cmp-v1-wrap" style="display:none"><span class="filter-label p1">● Valor 1</span><span id="cmp-v1-holder"></span></div>
+  <div class="filter-group" id="cmp-v2-wrap" style="display:none"><span class="filter-label p2">Valor 2</span><span id="cmp-v2-holder"></span></div>
+  <div class="filters-sep"></div>
+  <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal-vivo"><div class="ms-trigger" onclick="toggleMS('ms-canal-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal-vivo')">Todos</button><button onclick="clearMS('ms-canal-vivo')">Ninguno</button></div></div></div></div>
+  <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria-vivo"><div class="ms-trigger" onclick="toggleMS('ms-categoria-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria-vivo')">Todos</button><button onclick="clearMS('ms-categoria-vivo')">Ninguno</button></div></div></div></div>
+  <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm-vivo"><div class="ms-trigger" onclick="toggleMS('ms-pm-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm-vivo')">Todos</button><button onclick="clearMS('ms-pm-vivo')">Ninguno</button></div></div></div></div>
+  <div class="filter-group"><span class="filter-label">SKU</span><input type="text" id="f-sku-vivo" placeholder="Buscar SKU..." style="width:120px;" onkeydown="if(event.key==='Enter')applyFilters('vivo')"></div>
+  <button class="btn primary" onclick="applyFilters('vivo')">Aplicar</button>
+  <button class="btn" onclick="resetFilters('vivo')">Limpiar</button>
+</div>
 <div id="brasil-filters-bar" class="dash-filters" style="display:none;">
   <div class="filter-group"><span class="filter-label p1">● Desde</span><input type="date" id="br-desde"></div>
   <div class="filter-group"><span class="filter-label p1">Hasta</span><input type="date" id="br-hasta"></div>
@@ -360,6 +386,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
 <!-- PAGES -->
 <div id="page-dashboard" class="page active"><div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div></div>
+<div id="page-dashboard-vivo" style="display:none;flex-direction:column;gap:18px;padding:20px;flex:1"><div class="loading-block"><span>Sin datos -- corré una consulta en la barra de arriba</span></div></div>
 
 <div id="page-historico" class="page">
   <div class="card" style="margin-bottom:0">
@@ -1140,6 +1167,12 @@ const SHEETS_BR=['Base Brasil'];
 const COMP={data:[],vendedores:[],selected:[],page:1,pageSize:50};
 const DISTRIB={distribuidores:[],skusByDist:{},auditByDist:{}};
 let allSalesData=[],canalColors={},activeFilters={},dashCharts={};
+// "En Vivo" (pestaña nueva 2026-08-19) -- estado propio, no pisa el histórico.
+// dashCharts/allSalesData de arriba quedan intactos (los usan también Brasil
+// e Histórico de Unidades con sus propias claves) -- todo lo de "vivo" es
+// aditivo, nunca reemplaza esos globales existentes.
+let vivoSalesData=[],vivoFilters={},vivoCompare={},dashChartsVivo={};
+let ventasTab='hist';
 let histSkus=[],histAllData={},histDataParsed={};
 let cobrData=[],brData=[];
 let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;
@@ -1177,9 +1210,12 @@ function goPage(page,el){
   document.getElementById('page-'+page).classList.add('active');
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
   if(el)el.classList.add('active');
-  qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil')?'flex':'none';
+  qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
   qs('rent-query-bar').style.display=page==='dashboard'?'block':'none';
+  qs('ventas-tabs-bar').style.display=page==='dashboard'?'flex':'none';
+  if(page==='dashboard')goVentasTab(ventasTab);
+  else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';}
   closeSidebar();
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded)loadDashboard();}
   if(page==='historico'&&!histLoaded)loadHistorico();
@@ -2347,7 +2383,7 @@ function mapVentaTacticaOut(v){
     pf=ivaPesos!=null?pv+ivaPesos:pv;
   }
   return{periodo:v.periodo||null,fecha:_fechaLocal(v.fecha),fechaStr:v.fecha||'',
-    canal:'Canal Tactica',skuRaw:v.codigo||'',skus:v.codigo?[v.codigo]:[],
+    canal:'Canal Tactica',sistema:'Tactica',skuRaw:v.codigo||'',skus:v.codigo?[v.codigo]:[],
     numOrden:v.nro_factura||'',precioFinal:pf,precioSinIva:pv,
     rentabilidad:Number(v.margen_real||0),utilidad:0,facturUSD:0,
     costo:Math.abs(Number(v.costo_total_pesos||0)),pm:v.pm||'',
@@ -2356,7 +2392,7 @@ function mapVentaTacticaOut(v){
 function mapVentaEcomOut(v){
   const skuRaw=v.skus_vendidos||'';const skus=skuRaw.split(',').map(s=>s.trim()).filter(Boolean);
   return{periodo:v.periodo||null,fecha:_fechaLocal(v.fecha),fechaStr:v.fecha||'',
-    canal:v.canal_de_venta||'Sin canal',skuRaw,skus,numOrden:v.numero_orden||'',
+    canal:v.canal_de_venta||'Sin canal',sistema:'Ecom',skuRaw,skus,numOrden:v.numero_orden||'',
     precioFinal:Number(v.precio_final||0),precioSinIva:Number(v.precio_sin_iva||0),
     rentabilidad:Number(v.rentabilidad||0),utilidad:Number(v.utilidad_venta||0),
     facturUSD:Number(v.facturacion_usd||0),costo:Number(v.costo_total||0),pm:v.pm||'',
@@ -2381,12 +2417,102 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
     return;
   }
   if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
-function applyFilters(){activeFilters={desde:qs('f-desde').value,hasta:qs('f-hasta').value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues('ms-canal'),categoria:getMSValues('ms-categoria'),pm:getMSValues('ms-pm'),sku:qs('f-sku').value.trim().toLowerCase()};renderDashboard();}
-function resetFilters(){['f-desde','f-hasta','f-desde2','f-hasta2','f-sku'].forEach(id=>qs(id).value='');['ms-canal','ms-categoria','ms-pm'].forEach(id=>clearMS(id));activeFilters={};renderDashboard();}
-function getFiltered(){const f=activeFilters;let data1=[...allSalesData];if(f.canal)data1=data1.filter(d=>f.canal.includes(d.canal));if(f.categoria)data1=data1.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data1=data1.filter(d=>f.pm.includes(d.pm));if(f.sku)data1=data1.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde)data1=data1.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data1=data1.filter(d=>d.fechaStr<=f.hasta);let data2=null;if(f.desde2||f.hasta2){data2=[...allSalesData];if(f.canal)data2=data2.filter(d=>f.canal.includes(d.canal));if(f.categoria)data2=data2.filter(d=>f.categoria.includes(d.categoria));if(f.pm)data2=data2.filter(d=>f.pm.includes(d.pm));if(f.sku)data2=data2.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(f.desde2)data2=data2.filter(d=>d.fechaStr>=f.desde2);if(f.hasta2)data2=data2.filter(d=>d.fechaStr<=f.hasta2);}return{data1,data2};}
+// ── "hist" (histórico, sin tocar) vs "vivo" (pestaña nueva 2026-08-19) --
+// accessors chicos en vez de duplicar cada función entera. ──
+function _dashData(inst){return inst==='vivo'?vivoSalesData:allSalesData;}
+function _dashFilters(inst){return inst==='vivo'?vivoFilters:activeFilters;}
+function _dashCharts(inst){return inst==='vivo'?dashChartsVivo:dashCharts;}
+function _dashIds(inst){
+  return inst==='vivo'
+    ?{pg:'page-dashboard-vivo',desde:'f-desde-vivo',hasta:'f-hasta-vivo',sku:'f-sku-vivo',canal:'ms-canal-vivo',categoria:'ms-categoria-vivo',pm:'ms-pm-vivo',diario:'chartDiario-vivo',canalChart:'chartCanal-vivo',donut:'chartDonut-vivo'}
+    :{pg:'page-dashboard',desde:'f-desde',hasta:'f-hasta',sku:'f-sku',canal:'ms-canal',categoria:'ms-categoria',pm:'ms-pm',diario:'chartDiario',canalChart:'chartCanal',donut:'chartDonut'};
+}
+function goVentasTab(tab){
+  ventasTab=tab;
+  const bh=qs('ventas-tab-btn-hist'),bv=qs('ventas-tab-btn-vivo');
+  bh.style.borderBottomColor=tab==='hist'?'var(--accent)':'transparent';bh.style.opacity=tab==='hist'?'1':'.6';
+  bv.style.borderBottomColor=tab==='vivo'?'var(--accent)':'transparent';bv.style.opacity=tab==='vivo'?'1':'.6';
+  qs('dash-filters-bar').style.display=tab==='hist'?'flex':'none';
+  qs('vivo-filters-bar').style.display=tab==='vivo'?'flex':'none';
+  qs('page-dashboard').style.display=tab==='hist'?'flex':'none';
+  qs('page-dashboard-vivo').style.display=tab==='vivo'?'flex':'none';
+}
+function onCmpDimChange(){
+  const dim=qs('cmp-dim-vivo').value;
+  const v1wrap=qs('cmp-v1-wrap'),v2wrap=qs('cmp-v2-wrap');
+  if(!dim||dim==='sistema'){v1wrap.style.display='none';v2wrap.style.display='none';return;}
+  v1wrap.style.display='flex';v2wrap.style.display='flex';
+  if(dim==='pm'){
+    const pms=[...new Set(vivoSalesData.map(d=>d.pm).filter(Boolean))].sort();
+    const opts='<option value="">--</option>'+pms.map(p=>`<option value="${p}">${p}</option>`).join('');
+    qs('cmp-v1-holder').innerHTML=`<select class="fi" id="cmp-v1-vivo">${opts}</select>`;
+    qs('cmp-v2-holder').innerHTML=`<select class="fi" id="cmp-v2-vivo">${opts}</select>`;
+  }else if(dim==='sku'){
+    qs('cmp-v1-holder').innerHTML='<input type="text" id="cmp-v1-vivo" placeholder="SKU 1" style="width:120px">';
+    qs('cmp-v2-holder').innerHTML='<input type="text" id="cmp-v2-vivo" placeholder="SKU 2" style="width:120px">';
+  }
+}
+function applyFilters(inst){
+  inst=inst||'hist';const ids=_dashIds(inst);
+  if(inst==='hist'){
+    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),sku:qs(ids.sku).value.trim().toLowerCase()};
+  }else{
+    vivoFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),sku:qs(ids.sku).value.trim().toLowerCase()};
+    const dim=qs('cmp-dim-vivo').value;
+    vivoCompare={dim,v1:(dim&&dim!=='sistema')?(qs('cmp-v1-vivo')?.value||''):'',v2:(dim&&dim!=='sistema')?(qs('cmp-v2-vivo')?.value||''):''};
+  }
+  renderDashboard(inst);
+}
+function resetFilters(inst){
+  inst=inst||'hist';const ids=_dashIds(inst);
+  [ids.desde,ids.hasta,ids.sku].forEach(id=>{const el=qs(id);if(el)el.value='';});
+  [ids.canal,ids.categoria,ids.pm].forEach(id=>clearMS(id));
+  if(inst==='hist'){qs('f-desde2').value='';qs('f-hasta2').value='';activeFilters={};}
+  else{const dsel=qs('cmp-dim-vivo');if(dsel)dsel.value='';onCmpDimChange();vivoFilters={};vivoCompare={};}
+  renderDashboard(inst);
+}
+function getFiltered(inst){
+  inst=inst||'hist';
+  const data=_dashData(inst);const f=_dashFilters(inst);
+  function base(arr){
+    let out=[...arr];
+    if(f.canal)out=out.filter(d=>f.canal.includes(d.canal));
+    if(f.categoria)out=out.filter(d=>f.categoria.includes(d.categoria));
+    if(f.pm)out=out.filter(d=>f.pm.includes(d.pm));
+    if(f.sku)out=out.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));
+    return out;
+  }
+  let data1=base(data);
+  if(f.desde)data1=data1.filter(d=>d.fechaStr>=f.desde);
+  if(f.hasta)data1=data1.filter(d=>d.fechaStr<=f.hasta);
+  let data2=null;
+  if(inst==='hist'){
+    if(f.desde2||f.hasta2){
+      data2=base(data);
+      if(f.desde2)data2=data2.filter(d=>d.fechaStr>=f.desde2);
+      if(f.hasta2)data2=data2.filter(d=>d.fechaStr<=f.hasta2);
+    }
+  }else{
+    const cmp=vivoCompare||{};
+    if(cmp.dim==='sistema'){
+      data1=base(data).filter(d=>d.sistema==='Tactica');
+      data2=base(data).filter(d=>d.sistema==='Ecom');
+    }else if(cmp.dim==='pm'&&cmp.v1&&cmp.v2){
+      data1=base(data).filter(d=>d.pm===cmp.v1);
+      data2=base(data).filter(d=>d.pm===cmp.v2);
+    }else if(cmp.dim==='sku'&&cmp.v1&&cmp.v2){
+      data1=base(data).filter(d=>d.skus.includes(cmp.v1));
+      data2=base(data).filter(d=>d.skus.includes(cmp.v2));
+    }
+    if(f.desde){data1=data1.filter(d=>d.fechaStr>=f.desde);if(data2)data2=data2.filter(d=>d.fechaStr>=f.desde);}
+    if(f.hasta){data1=data1.filter(d=>d.fechaStr<=f.hasta);if(data2)data2=data2.filter(d=>d.fechaStr<=f.hasta);}
+  }
+  return{data1,data2};
+}
 
 
-function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap){
+function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,inst){
+  inst=inst||'hist';
   if(!topCats.length)return'';
   let html='<div><div class="section-hdr">Top Categorías</div><div class="table-wrap"><table>';
   html+='<thead><tr><th style="width:22px"></th><th>Categoría</th><th>Facturación P1</th>';
@@ -2403,7 +2529,7 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap){
     const skuMap={};data.filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap[s]=(skuMap[s]||0)+d.precioFinal;}));
     const topSkus=Object.entries(skuMap).sort((a,b)=>b[1]-a[1]).slice(0,15);
     const skuMap2={};if(useComparison)(data2||[]).filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap2[s]=(skuMap2[s]||0)+d.precioFinal;}));
-    const catId='cat-'+cat.replace(/[^a-z0-9]/gi,'');
+    const catId='cat-'+inst+'-'+cat.replace(/[^a-z0-9]/gi,'');
     html+='<tr class="cat-row" onclick="toggleCatSkus(\''+catId+'\')" style="cursor:pointer">';
     html+='<td style="color:var(--text3);font-size:11px;text-align:center" id="arr-'+catId+'">▶</td>';
     html+='<td style="font-weight:600;font-size:11px">'+cat+'</td>';
@@ -2441,13 +2567,27 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap){
   return html;
 }
 
-function renderDashboard(){
-  const{data1,data2}=getFiltered();const data=data1;
-  const pg=qs('page-dashboard');if(!data.length){pg.innerHTML='<div class="loading-block"><span>Sin datos para los filtros seleccionados</span></div>';return;}
-  Object.values(dashCharts).forEach(c=>{try{c.destroy();}catch(e){}});dashCharts={};
-  const f=activeFilters;const useComparison=data2&&data2.length>0;
-  const label1=(f.desde||f.hasta)?`${f.desde||'inicio'} → ${f.hasta||'hoy'}`:'Período 1';
-  const label2=(f.desde2||f.hasta2)?`${f.desde2||'inicio'} → ${f.hasta2||'hoy'}`:'Período 2';
+function renderDashboard(inst){
+  inst=inst||'hist';
+  const{data1,data2}=getFiltered(inst);const data=data1;
+  const ids=_dashIds(inst);const charts=_dashCharts(inst);
+  const pg=qs(ids.pg);
+  if(!data.length){pg.innerHTML=`<div class="loading-block"><span>${inst==='vivo'?'Sin datos -- corré una consulta en la barra de arriba':'Sin datos para los filtros seleccionados'}</span></div>`;return;}
+  Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});
+  if(inst==='vivo')dashChartsVivo={};else dashCharts={};
+  const f=_dashFilters(inst);const useComparison=data2&&data2.length>0;
+  let label1,label2,compareTitle,compareNote;
+  if(inst==='hist'){
+    label1=(f.desde||f.hasta)?`${f.desde||'inicio'} → ${f.hasta||'hoy'}`:'Período 1';
+    label2=(f.desde2||f.hasta2)?`${f.desde2||'inicio'} → ${f.hasta2||'hoy'}`:'Período 2';
+    compareTitle='Comparación de Períodos';compareNote='Compara los dos períodos';
+  }else{
+    const cmp=vivoCompare||{};
+    const dimLabel={sistema:'Sistema',pm:'PM',sku:'SKU'}[cmp.dim]||'';
+    label1=cmp.dim==='sistema'?'Táctica':(cmp.v1||'Valor 1');
+    label2=cmp.dim==='sistema'?'Ecom':(cmp.v2||'Valor 2');
+    compareTitle=`Comparación por ${dimLabel}`;compareNote=`Compara ${dimLabel}: ${label1} vs ${label2}`;
+  }
   const k1={fact:data.reduce((s,d)=>s+d.precioFinal,0),rent:data.reduce((s,d)=>s+d.rentabilidad,0),costo:data.reduce((s,d)=>s+d.costo,0),usd:data.reduce((s,d)=>s+d.facturUSD,0)};
   const k2=useComparison?{fact:data2.reduce((s,d)=>s+d.precioFinal,0),rent:data2.reduce((s,d)=>s+d.rentabilidad,0),costo:data2.reduce((s,d)=>s+d.costo,0)}:null;
   const allP=[...data,...(data2||[])];const totalFact=allP.reduce((s,d)=>s+d.precioFinal,0);
@@ -2459,10 +2599,21 @@ function renderDashboard(){
   const chartDays=[...new Set([...Object.keys(byDay1),...Object.keys(byDay2)])].sort();
   const fmtDay=str=>{const[y,m,d]=str.split('-');return`${+d}/${+m}`;};
   const delta=(v1,v2)=>{if(!useComparison||!k2||!v2)return'';const pct=(v1-v2)/Math.abs(v2)*100;const up=pct>=0;return`<div style="font-size:9px;color:${up?'var(--green)':'var(--red)'};margin-top:3px;font-family:'DM Mono',monospace">${up?'↑':'↓'} ${Math.abs(pct).toFixed(1)}%</div>`;};
-  const periodos=[...new Set(allSalesData.map(d=>d.periodo).filter(Boolean))].sort();
-  const crossData=periodos.map(p=>{const rows=allSalesData.filter(d=>d.periodo===p);const fact=rows.reduce((s,d)=>s+d.precioFinal,0);const rent=rows.reduce((s,d)=>s+d.rentabilidad,0);return{label:_fmtPeriodoLabel(p),fact,rent,rentPct:fact>0?rent/fact*100:0};}).filter(d=>d.fact>0);
+  let crossSection='';
+  if(inst==='hist'){
+    const periodos=[...new Set(allSalesData.map(d=>d.periodo).filter(Boolean))].sort();
+    const crossData=periodos.map(p=>{const rows=allSalesData.filter(d=>d.periodo===p);const fact=rows.reduce((s,d)=>s+d.precioFinal,0);const rent=rows.reduce((s,d)=>s+d.rentabilidad,0);return{label:_fmtPeriodoLabel(p),fact,rent,rentPct:fact>0?rent/fact*100:0};}).filter(d=>d.fact>0);
+    crossSection=`<div><div class="section-hdr">Histórico por Período</div><div class="chart-card"><h3>Facturación · Rentabilidad · Rent. %</h3><p>Todos los períodos · línea amarilla = Rent %</p><div style="position:relative;height:220px"><canvas id="chartCross"></canvas></div></div></div>`;
+    requestAnimationFrame(()=>{
+      if(!qs('chartCross'))return;
+      dashCharts.cross=new Chart(qs('chartCross'),{type:'bar',data:{labels:crossData.map(d=>d.label),datasets:[{label:'Facturación',data:crossData.map(d=>d.fact),backgroundColor:'#3b82f633',borderColor:'#3b82f6',borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rentabilidad $',data:crossData.map(d=>d.rent),backgroundColor:'#00e5a033',borderColor:'#00e5a0',borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rent. %',data:crossData.map(d=>d.rentPct),type:'line',borderColor:'#ffe600',backgroundColor:'#ffe60010',borderWidth:2,pointRadius:4,pointBackgroundColor:'#ffe600',tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:10}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='Rent. %'?` Rent: ${ctx.raw.toFixed(1)}%`:` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:10}}},y:{position:'left',grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y2:{position:'right',grid:{display:false},ticks:{color:'#ffe600',font:{family:'DM Mono',size:9},callback:v=>v.toFixed(0)+'%'}}}}});
+    });
+  }
   const rentMap={},cntMap={};data.forEach(d=>{if(d.precioFinal>0){rentMap[d.categoria]=(rentMap[d.categoria]||0)+d.rentabilidad;cntMap[d.categoria]=(cntMap[d.categoria]||0)+1;}});
-  window._dashCtx=useComparison&&k2?{label1,label2,k1,k2,topCanal1:Object.entries(groupSum(data,'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5),topCanal2:Object.entries(groupSum(data2||[],'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5)}:null;
+  const dashCtx=useComparison&&k2?{label1,label2,compareNote,k1,k2,topCanal1:Object.entries(groupSum(data,'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5),topCanal2:Object.entries(groupSum(data2||[],'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5)}:null;
+  window._dashCtx=window._dashCtx||{};window._dashCtx[inst]=dashCtx;
+  const btnAnalisisId=inst==='hist'?'btn-analisis':'btn-analisis-vivo';
+  const aiAnalisisId=inst==='hist'?'ai-analisis':'ai-analisis-vivo';
   pg.innerHTML=`
     <div class="kpi-row">
       <div class="kpi-card c1"><div class="kpi-label">Facturación Total</div><div class="kpi-value">${fmt$(totalFact)}</div><div class="kpi-sub">${fmtUSD(k1.usd)}</div></div>
@@ -2472,19 +2623,21 @@ function renderDashboard(){
       <div class="kpi-card c4"><div class="kpi-label">Costo Total</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.costo,0))}</div><div class="kpi-sub">${totalFact?((allP.reduce((s,d)=>s+d.costo,0)/totalFact)*100).toFixed(1):0}%</div></div>
       <div class="kpi-card c5"><div class="kpi-label">Canal Principal</div><div class="kpi-value" style="font-size:13px;word-break:break-word">${topCanal[0]?.[0]||'—'}</div><div class="kpi-sub">${fmt$(topCanal[0]?.[1]||0)}</div></div>
     </div>
-    ${useComparison&&k2?`<div class="compare-box"><div class="section-hdr" style="margin-bottom:10px">Comparación de Períodos</div><div class="compare-row"><div class="compare-col"><h4 style="color:var(--accent2)">● ${label1}</h4><div class="cv">${fmt$(k1.fact)}</div><div class="cs">Rent: ${fmt$(k1.rent)} · ${k1.fact>0?(k1.rent/k1.fact*100).toFixed(1):0}%</div><div class="cs">Costo: ${fmt$(k1.costo)} · ${data.length} órdenes</div></div><div class="compare-col"><h4 style="color:var(--accent3)">● ${label2}</h4><div class="cv">${fmt$(k2.fact)} ${delta(k2.fact,k1.fact)}</div><div class="cs">Rent: ${fmt$(k2.rent)} · ${(k2.rent/k2.fact*100).toFixed(1)}% ${delta(k2.rent,k1.rent)}</div><div class="cs">Costo: ${fmt$(k2.costo)} · ${data2.length} órdenes</div></div></div><div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center"><button class="btn primary" onclick="pedirAnalisis()" id="btn-analisis" style="font-size:11px">✦ Analizar con IA</button><span style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">Compara los dos períodos</span></div><div id="ai-analisis" style="margin-top:10px"></div></div>`:''}
-    <div><div class="section-hdr">Evolución Diaria</div><div class="chart-card"><h3>Facturación por Día</h3><p>${useComparison?`<span style="color:var(--accent2)">●</span> ${label1} &nbsp; <span style="color:var(--accent3)">●</span> ${label2}`:`${Object.keys(byDay1).length} días con ventas`}</p><div style="position:relative;height:240px"><canvas id="chartDiario"></canvas></div></div></div>
-    <div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final en $</p><div style="position:relative;height:220px"><canvas id="chartCanal"></canvas></div></div><div class="chart-card"><h3>Mix de Canales</h3><p>Distribución %</p><div style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="chartDonut"></canvas></div></div></div>
-    <div><div class="section-hdr">Histórico por Período</div><div class="chart-card"><h3>Facturación · Rentabilidad · Rent. %</h3><p>Todos los períodos · línea amarilla = Rent %</p><div style="position:relative;height:220px"><canvas id="chartCross"></canvas></div></div></div>
-    ${buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap)}
+    ${useComparison&&k2?`<div class="compare-box"><div class="section-hdr" style="margin-bottom:10px">${compareTitle}</div><div class="compare-row"><div class="compare-col"><h4 style="color:var(--accent2)">● ${label1}</h4><div class="cv">${fmt$(k1.fact)}</div><div class="cs">Rent: ${fmt$(k1.rent)} · ${k1.fact>0?(k1.rent/k1.fact*100).toFixed(1):0}%</div><div class="cs">Costo: ${fmt$(k1.costo)} · ${data.length} órdenes</div></div><div class="compare-col"><h4 style="color:var(--accent3)">● ${label2}</h4><div class="cv">${fmt$(k2.fact)} ${delta(k2.fact,k1.fact)}</div><div class="cs">Rent: ${fmt$(k2.rent)} · ${(k2.rent/k2.fact*100).toFixed(1)}% ${delta(k2.rent,k1.rent)}</div><div class="cs">Costo: ${fmt$(k2.costo)} · ${data2.length} órdenes</div></div></div><div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center"><button class="btn primary" onclick="pedirAnalisis('${inst}')" id="${btnAnalisisId}" style="font-size:11px">✦ Analizar con IA</button><span style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">${compareNote}</span></div><div id="${aiAnalisisId}" style="margin-top:10px"></div></div>`:''}
+    <div><div class="section-hdr">Evolución Diaria</div><div class="chart-card"><h3>Facturación por Día</h3><p>${useComparison?`<span style="color:var(--accent2)">●</span> ${label1} &nbsp; <span style="color:var(--accent3)">●</span> ${label2}`:`${Object.keys(byDay1).length} días con ventas`}</p><div style="position:relative;height:240px"><canvas id="${ids.diario}"></canvas></div></div></div>
+    <div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final en $</p><div style="position:relative;height:220px"><canvas id="${ids.canalChart}"></canvas></div></div><div class="chart-card"><h3>Mix de Canales</h3><p>Distribución %</p><div style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="${ids.donut}"></canvas></div></div></div>
+    ${crossSection}
+    ${buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,inst)}
   `;
   const ds=[{label:label1,data:chartDays.map(d=>byDay1[d]??null),borderColor:'#3b82f6',backgroundColor:'#3b82f615',borderWidth:2,pointRadius:3,tension:0.1,fill:!useComparison,spanGaps:false}];
   if(useComparison)ds.push({label:label2,data:chartDays.map(d=>byDay2[d]??null),borderColor:'#f59e0b',backgroundColor:'#f59e0b15',borderWidth:2,pointRadius:3,tension:0.1,fill:false,spanGaps:false});
   const chartOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:useComparison,labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{title:ctx=>{const i=ctx[0].dataIndex;const[y,m,d]=chartDays[i].split('-');return`${+d}/${+m}/${y}`;},label:ctx=>ctx.raw!=null?` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`:null}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:20}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}}};
-  dashCharts.diario=new Chart(qs('chartDiario'),{type:'line',data:{labels:chartDays.map(fmtDay),datasets:ds},options:chartOpts});
-  dashCharts.canal=new Chart(qs('chartCanal'),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||'#666')+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||'#666'),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
-  const dE=topCanal.filter(([,v])=>v>0);dashCharts.donut=new Chart(qs('chartDonut'),{type:'doughnut',data:{labels:dE.map(([k])=>k),datasets:[{data:dE.map(([,v])=>v),backgroundColor:dE.map(([k])=>canalColors[k]||'#666'),borderColor:'#111318',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#5a6478',font:{family:'DM Mono',size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmt$(ctx.raw)} (${totalFact?(ctx.raw/totalFact*100).toFixed(1):0}%)`}}}}});
-  dashCharts.cross=new Chart(qs('chartCross'),{type:'bar',data:{labels:crossData.map(d=>d.label),datasets:[{label:'Facturación',data:crossData.map(d=>d.fact),backgroundColor:'#3b82f633',borderColor:'#3b82f6',borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rentabilidad $',data:crossData.map(d=>d.rent),backgroundColor:'#00e5a033',borderColor:'#00e5a0',borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rent. %',data:crossData.map(d=>d.rentPct),type:'line',borderColor:'#ffe600',backgroundColor:'#ffe60010',borderWidth:2,pointRadius:4,pointBackgroundColor:'#ffe600',tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:10}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='Rent. %'?` Rent: ${ctx.raw.toFixed(1)}%`:` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:10}}},y:{position:'left',grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y2:{position:'right',grid:{display:false},ticks:{color:'#ffe600',font:{family:'DM Mono',size:9},callback:v=>v.toFixed(0)+'%'}}}}});
+  const newDiario=new Chart(qs(ids.diario),{type:'line',data:{labels:chartDays.map(fmtDay),datasets:ds},options:chartOpts});
+  const newCanal=new Chart(qs(ids.canalChart),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||'#666')+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||'#666'),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
+  const dE=topCanal.filter(([,v])=>v>0);
+  const newDonut=new Chart(qs(ids.donut),{type:'doughnut',data:{labels:dE.map(([k])=>k),datasets:[{data:dE.map(([,v])=>v),backgroundColor:dE.map(([k])=>canalColors[k]||'#666'),borderColor:'#111318',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#5a6478',font:{family:'DM Mono',size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmt$(ctx.raw)} (${totalFact?(ctx.raw/totalFact*100).toFixed(1):0}%)`}}}}});
+  if(inst==='vivo'){dashChartsVivo.diario=newDiario;dashChartsVivo.canal=newCanal;dashChartsVivo.donut=newDonut;}
+  else{dashCharts.diario=newDiario;dashCharts.canal=newCanal;dashCharts.donut=newDonut;}
 }
 
 function toggleCatSkus(id){
@@ -2495,7 +2648,7 @@ function toggleCatSkus(id){
   row.style.display=isOpen?'none':'table-row';
   if(arr)arr.textContent=isOpen?'▶':'▼';
 }
-async function pedirAnalisis(){const ctx=window._dashCtx;if(!ctx)return;const btn=qs('btn-analisis');const box=qs('ai-analisis');if(!btn||!box)return;btn.textContent='● analizando...';btn.disabled=true;box.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);padding:6px">Procesando...</div>`;const prompt=`Sos analista de ventas de Global Electronics Argentina. Comparás dos períodos en español rioplatense.\n\nPERÍODO 1 (${ctx.label1}): Facturación $${Math.round(ctx.k1.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k1.rent).toLocaleString('es-AR')} (${(ctx.k1.rent/ctx.k1.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal1.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nPERÍODO 2 (${ctx.label2}): Facturación $${Math.round(ctx.k2.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k2.rent).toLocaleString('es-AR')} (${(ctx.k2.rent/ctx.k2.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal2.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nAnálisis de 4-5 oraciones: qué cambió, qué canal explica la diferencia, si la rentabilidad mejoró. Números concretos. Sin bullets.`;try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});const json=await res.json();const text=json.content?.[0]?.text||'No se pudo generar el análisis.';box.innerHTML=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;}catch(e){box.innerHTML=`<div style="font-size:10px;color:var(--red)">Error: ${e.message}</div>`;}btn.textContent='✦ Analizar con IA';btn.disabled=false;}
+async function pedirAnalisis(inst){inst=inst||'hist';const ctx=(window._dashCtx||{})[inst];if(!ctx)return;const btnId=inst==='hist'?'btn-analisis':'btn-analisis-vivo';const boxId=inst==='hist'?'ai-analisis':'ai-analisis-vivo';const btn=qs(btnId);const box=qs(boxId);if(!btn||!box)return;btn.textContent='● analizando...';btn.disabled=true;box.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);padding:6px">Procesando...</div>`;const prompt=`Sos analista de ventas de Global Electronics Argentina. ${ctx.compareNote||'Comparás dos períodos'} en español rioplatense.\n\n${ctx.label1.toUpperCase()}: Facturación $${Math.round(ctx.k1.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k1.rent).toLocaleString('es-AR')} (${(ctx.k1.rent/ctx.k1.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal1.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\n${ctx.label2.toUpperCase()}: Facturación $${Math.round(ctx.k2.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k2.rent).toLocaleString('es-AR')} (${(ctx.k2.rent/ctx.k2.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal2.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nAnálisis de 4-5 oraciones: qué cambió, qué canal explica la diferencia, si la rentabilidad mejoró. Números concretos. Sin bullets.`;try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});const json=await res.json();const text=json.content?.[0]?.text||'No se pudo generar el análisis.';box.innerHTML=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;}catch(e){box.innerHTML=`<div style="font-size:10px;color:var(--red)">Error: ${e.message}</div>`;}btn.textContent='✦ Analizar con IA';btn.disabled=false;}
 
 // ──────────────────────
 
@@ -4394,17 +4547,23 @@ function ofertasExport(){
     ]);
 
     if(tacResp||ecoResp){
-      allSalesData=nuevasFilas;
-      const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();
+      // Pedido de Maxx 2026-08-19: la consulta en vivo vive en su PROPIA
+      // pestaña ("En Vivo") con su propio estado -- nunca pisa vivoSalesData
+      // el histórico (allSalesData). Compara por Sistema/PM/SKU, no por
+      // período (no tiene sentido comparar 2 rangos de fecha acá: es un
+      // solo rango consultado).
+      vivoSalesData=nuevasFilas;
+      const canales=[...new Set(vivoSalesData.map(d=>d.canal))].sort();
       canales.forEach((c,i)=>{ if(!canalColors[c]) canalColors[c]=PALETTE[i%PALETTE.length]; });
-      initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));
-      initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));
-      initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));
-      document.getElementById('f-desde2').value=''; document.getElementById('f-hasta2').value='';
-      document.getElementById('f-desde').value=desde; document.getElementById('f-hasta').value=hasta;
-      activeFilters={desde,hasta,canal:getMSValues('ms-canal'),categoria:getMSValues('ms-categoria'),pm:getMSValues('ms-pm'),sku:''};
-      dashLoaded=true;
-      renderDashboard();
+      initMS('ms-canal-vivo',new Set(vivoSalesData.map(d=>d.canal)));
+      initMS('ms-categoria-vivo',new Set(vivoSalesData.map(d=>d.categoria)));
+      initMS('ms-pm-vivo',new Set(vivoSalesData.map(d=>d.pm).filter(Boolean)));
+      document.getElementById('f-desde-vivo').value='';document.getElementById('f-hasta-vivo').value='';
+      document.getElementById('f-sku-vivo').value='';
+      document.getElementById('cmp-dim-vivo').value='';onCmpDimChange();
+      vivoFilters={};vivoCompare={};
+      goVentasTab('vivo');
+      renderDashboard('vivo');
     }
 
     const partes=[];
@@ -4460,6 +4619,7 @@ function ofertasExport(){
     toast('Cierre guardado — recargando histórico...');
     if(document.getElementById('rent-historicos-panel').style.display!=='none') rentLoadHistoricos();
     dashLoaded=false;
+    goVentasTab('hist');
     await loadDashboard();
   };
   // ── HISTÓRICOS ──
