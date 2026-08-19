@@ -2332,10 +2332,23 @@ async function fetchSheet(sheetId,name){const url=`https://sheets.googleapis.com
 // que ya tenía el parseVentas viejo. ──
 function _fechaLocal(iso){return iso?new Date(iso+'T00:00:00'):null;}
 function mapVentaTacticaOut(v){
-  const pf=Number(v.precio_venta_iva??v.precio_venta??0);
+  const pv=Number(v.precio_venta||0);
+  let pf=v.precio_venta_iva!=null?Number(v.precio_venta_iva):null;
+  // Hallazgo real 2026-08-19: en "Base Abril - Mayo TACTICA" ~4.643/5.058
+  // filas tienen en la celda "Precio de Venta IVA" el FACTOR de IVA (1.21/
+  // 1.105) en vez del precio real -- error de carga en el Sheet histórico
+  // (confirmado contra las celdas crudas), no algo que calcule el motor acá.
+  // Un "Precio de Venta IVA" nunca puede ser menor que "Precio de Venta" (es
+  // ese mismo precio + IVA) -- cuando pasa, se reconstruye con la misma
+  // fórmula ya documentada del campo (P + IVA en pesos) y, si tampoco hay
+  // IVA en pesos, se usa el precio sin IVA como mejor estimación disponible.
+  if(pf===null||pf<pv){
+    const ivaPesos=v.iva!=null?Number(v.iva):null;
+    pf=ivaPesos!=null?pv+ivaPesos:pv;
+  }
   return{periodo:v.periodo||null,fecha:_fechaLocal(v.fecha),fechaStr:v.fecha||'',
     canal:'Canal Tactica',skuRaw:v.codigo||'',skus:v.codigo?[v.codigo]:[],
-    numOrden:v.nro_factura||'',precioFinal:pf,precioSinIva:Number(v.precio_venta||0),
+    numOrden:v.nro_factura||'',precioFinal:pf,precioSinIva:pv,
     rentabilidad:Number(v.margen_real||0),utilidad:0,facturUSD:0,
     costo:Math.abs(Number(v.costo_total_pesos||0)),pm:v.pm||'',
     vendedor:v.responsable||'',categoria:v.subcategoria||'Sin categoría'};
@@ -2996,7 +3009,6 @@ function init(){
   goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
   setTimeout(autoConnectML, 800);
 }
-init();
 
 // ============================================================
 // INTELIGENCIA COMPETITIVA
@@ -4518,6 +4530,13 @@ function ofertasExport(){
 
 })();
 // ── FIN RENTABILIDAD TÁCTICA v2 ─────────────────────────────────────────────
+// init() se llama recién acá (no donde se declara, más arriba): goPage('dashboard')
+// invoca rentQueryBarInit(), definida en el IIFE de arriba -- llamar init() antes
+// de que ese IIFE termine de ejecutarse tiraba "rentQueryBarInit is not defined"
+// y dejaba el spinner de "Cargando datos de ventas..." pegado para siempre
+// (hallazgo real, 2026-08-19: goPage tira la excepción sin capturarla, así que
+// nunca llega a loadDashboard()).
+init();
 </script>
 <div class="toast" id="toast"></div>
 </body>
