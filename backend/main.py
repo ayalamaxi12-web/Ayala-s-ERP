@@ -10,6 +10,7 @@ from google.oauth2.service_account import Credentials
 import json
 
 import ml_full
+import ml_reposicion
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
@@ -403,6 +404,23 @@ async def ml_full_conciliar_run(background_tasks: BackgroundTasks):
 @app.get("/ml-full/conciliar/status/{job_id}")
 async def ml_full_conciliar_status(job_id: str):
     return ml_full.estado_job(job_id) or {"status": "not_found"}
+
+# ══════════════════════════════════════════════════════
+# ML FULL — simulador de reposición (mismo doc, §5 y §10 puntos 5/12).
+# Sigue siendo de solo lectura: calcula y muestra cuánto convendría
+# enviar, no crea el envío real en Mercado Libre. Job propio en
+# ml_reposicion.py, no compartido con ml_full.py ni con main.py.
+# ══════════════════════════════════════════════════════
+
+@app.post("/ml-full/reposicion/run")
+async def ml_full_reposicion_run(background_tasks: BackgroundTasks, dias_ventas: int = 30, semanas_objetivo: float = 3):
+    job_id = f"mlrepo_{int(time.time())}"
+    background_tasks.add_task(ml_reposicion.iniciar_job, job_id, None, None, dias_ventas, semanas_objetivo)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-full/reposicion/status/{job_id}")
+async def ml_full_reposicion_status(job_id: str):
+    return ml_reposicion.estado_job(job_id) or {"status": "not_found"}
 
 # ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)

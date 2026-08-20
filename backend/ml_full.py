@@ -139,6 +139,47 @@ class MLFullClient:
             f"https://api.mercadolibre.com/inventories/{inventory_id}/stock/fulfillment", {}, headers
         )
 
+    def ventas_por_item(self, cuenta: str, desde_iso: str, hasta_iso: str) -> dict[str, dict]:
+        """Ventas confirmadas (`order.status=paid`) en el rango, agregadas
+        por `item_id` -- en UNIDADES DE PAQUETE tal como las vendió la
+        publicación, sin aplicar factor de pack todavía (eso lo hace el
+        llamador, igual que con el stock). Usa `order.date_closed`, no
+        `date_created`: es cuando la orden efectivamente descuenta stock
+        (confirmado contra `developers.mercadolibre.com.ar/es_ar/gestiona-ventas`,
+        2026-08-20 -- no había MCP disponible, se escaló al portal real)."""
+        seller_id = SELLERS[cuenta]
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        acumulado: dict[str, dict] = {}
+        offset = 0
+        while True:
+            d = self._get(
+                "https://api.mercadolibre.com/orders/search",
+                {"seller": seller_id, "order.status": "paid",
+                 "order.date_closed.from": desde_iso, "order.date_closed.to": hasta_iso,
+                 "offset": offset, "limit": 50},
+                headers,
+            )
+            resultados = d.get("results", [])
+            for orden in resultados:
+                cerrada = (orden.get("date_closed") or "")[:10]
+                for oi in orden.get("order_items") or []:
+                    item_id = (oi.get("item") or {}).get("id")
+                    cantidad = oi.get("quantity") or 0
+                    if not item_id:
+                        continue
+                    entrada = acumulado.setdefault(item_id, {"unidades": 0, "primera": cerrada, "ultima": cerrada})
+                    entrada["unidades"] += cantidad
+                    if cerrada and (not entrada["primera"] or cerrada < entrada["primera"]):
+                        entrada["primera"] = cerrada
+                    if cerrada and (not entrada["ultima"] or cerrada > entrada["ultima"]):
+                        entrada["ultima"] = cerrada
+            paging = d.get("paging") or {}
+            total = paging.get("total", 0)
+            offset += len(resultados)
+            if offset >= total or not resultados:
+                break
+        return acumulado
+
 
 def _sku_de_item(item: dict) -> str | None:
     """El SKU propio puede vivir en `seller_custom_field` o en el atributo
@@ -227,6 +268,8 @@ class EcomFullAdapter:
     def __init__(self, cliente: EcomApiClient):
         self._cliente = cliente
         self._warehouse_full_id: str | None = None
+        self._deposito_disponible_id: str | None = None
+        self._producto_cache: dict[str, dict | None] = {}
 
     def warehouse_full_id(self) -> str:
         """Nunca hardcodear el id del depósito Full — se resuelve en cada
@@ -245,22 +288,60 @@ class EcomFullAdapter:
         self._warehouse_full_id = candidatos[0]["id"]
         return self._warehouse_full_id
 
-    def stock_full_por_sku(self, sku: str) -> int | None:
-        """`None` = el SKU no existe en Ecom (incidencia para el
-        llamador, no un 0 silencioso). Suma todas las `variants` del
-        producto por si el SKU tuviera más de una variante — el caso
-        común es una sola."""
-        full_id = self.warehouse_full_id()
-        data = self._cliente.graphql(_QUERY_PRODUCT_STOCK, {"sku": sku})
-        producto = data.get("products", {}).get("readBySku")
+    def deposito_disponible_id(self) -> str:
+        """Depósito de Ecom con el stock realmente disponible para armar
+        un envío a Full -- confirmado con Maxx (2026-08-20): es **Pitec**
+        (antes se llamaba "Magaldi", mismo lugar, solo cambió de nombre).
+        NO es "todo lo que no es Full": los depósitos Gaona/Outlet/
+        Exposiciones/Showroom son marginales (exhibición, outlet) y no
+        cuentan como stock enviable. Se resuelve por título contra la
+        lista real de depósitos, igual que `warehouse_full_id`, nunca por
+        id fijo."""
+        if self._deposito_disponible_id is not None:
+            return self._deposito_disponible_id
+        data = self._cliente.graphql(_QUERY_WAREHOUSES)
+        candidatos = [w for w in data["productWarehouses"]["getAllWarehouses"] if w.get("title") == "Pitec"]
+        if len(candidatos) != 1:
+            raise EcomApiError(
+                f"Se esperaba exactamente un depósito 'Pitec', se encontraron {len(candidatos)}: {candidatos}"
+            )
+        self._deposito_disponible_id = candidatos[0]["id"]
+        return self._deposito_disponible_id
+
+    def _producto_por_sku(self, sku: str) -> dict | None:
+        """Cachea la respuesta cruda por SKU dentro de la instancia --
+        tanto `stock_full_por_sku` como `stock_disponible_por_sku` piden
+        el mismo producto (`variantWarehouses` trae todos los depósitos
+        en una sola llamada), así que el segundo pedido para el mismo SKU
+        no vuelve a golpear la red."""
+        if sku not in self._producto_cache:
+            data = self._cliente.graphql(_QUERY_PRODUCT_STOCK, {"sku": sku})
+            self._producto_cache[sku] = data.get("products", {}).get("readBySku")
+        return self._producto_cache[sku]
+
+    def _stock_en_deposito(self, sku: str, deposito_id: str) -> int | None:
+        producto = self._producto_por_sku(sku)
         if not producto:
             return None
         total = 0
         for variante in producto.get("variants") or []:
             for wh in variante.get("variantWarehouses") or []:
-                if wh.get("warehouse_id") == full_id:
+                if wh.get("warehouse_id") == deposito_id:
                     total += wh.get("warehouse_qty") or 0
         return total
+
+    def stock_full_por_sku(self, sku: str) -> int | None:
+        """`None` = el SKU no existe en Ecom (incidencia para el
+        llamador, no un 0 silencioso). Suma todas las `variants` del
+        producto por si el SKU tuviera más de una variante — el caso
+        común es una sola."""
+        return self._stock_en_deposito(sku, self.warehouse_full_id())
+
+    def stock_disponible_por_sku(self, sku: str) -> int | None:
+        """Stock en Pitec -- lo que hay para armar el próximo envío a
+        Full. `None` = el SKU no existe en Ecom, igual que
+        `stock_full_por_sku`."""
+        return self._stock_en_deposito(sku, self.deposito_disponible_id())
 
     def factor_pack(self, item_id: str) -> dict[str, int] | None:
         """Factor real de multiplicación por venta.

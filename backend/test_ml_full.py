@@ -181,6 +181,108 @@ def test_stock_full_por_sku_none_si_no_existe_en_ecom():
     assert adapter.stock_full_por_sku("NO-EXISTE") is None
 
 
+def test_stock_disponible_resuelve_por_titulo_pitec_no_por_ausencia_de_full():
+    # Confirmado con Maxx (2026-08-20): "disponible" es SOLO Pitec, no
+    # "todo lo que no es Full" -- Gaona/Outlet no deberían sumar.
+    cliente = _ClienteGraphQLFalso({
+        "getAllWarehouses": {"productWarehouses": {"getAllWarehouses": [
+            {"id": "297", "title": "Pitec", "typeFull": False},
+            {"id": "4023", "title": "ML Full", "typeFull": True},
+            {"id": "12748", "title": "Gaona", "typeFull": False},
+        ]}},
+        "readBySku": {"products": {"readBySku": {"id": "1", "variants": [
+            {"id": "v1", "variantWarehouses": [
+                {"warehouse_id": "297", "warehouse_title": "Pitec", "warehouse_qty": 15},
+                {"warehouse_id": "4023", "warehouse_title": "ML Full", "warehouse_qty": 78},
+                {"warehouse_id": "12748", "warehouse_title": "Gaona", "warehouse_qty": 999},
+            ]},
+        ]}}},
+    })
+    adapter = EcomFullAdapter(cliente)
+    assert adapter.stock_disponible_por_sku("CB435A-436A-CE285AUNIVCOMP") == 15
+
+
+def test_deposito_disponible_falla_si_no_hay_exactamente_un_pitec():
+    cliente = _ClienteGraphQLFalso({
+        "getAllWarehouses": {"productWarehouses": {"getAllWarehouses": [
+            {"id": "4023", "title": "ML Full", "typeFull": True},
+        ]}},
+    })
+    adapter = EcomFullAdapter(cliente)
+    with pytest.raises(Exception):
+        adapter.deposito_disponible_id()
+
+
+def test_producto_por_sku_se_cachea_entre_stock_full_y_stock_disponible():
+    llamadas_producto = []
+
+    def readbysku(variables):
+        llamadas_producto.append(variables["sku"])
+        return {"products": {"readBySku": {"id": "1", "variants": [
+            {"id": "v1", "variantWarehouses": [
+                {"warehouse_id": "297", "warehouse_title": "Pitec", "warehouse_qty": 15},
+                {"warehouse_id": "4023", "warehouse_title": "ML Full", "warehouse_qty": 78},
+            ]},
+        ]}}}
+
+    cliente = _ClienteGraphQLFalso({
+        "getAllWarehouses": {"productWarehouses": {"getAllWarehouses": [
+            {"id": "297", "title": "Pitec", "typeFull": False},
+            {"id": "4023", "title": "ML Full", "typeFull": True},
+        ]}},
+        "readBySku": readbysku,
+    })
+    adapter = EcomFullAdapter(cliente)
+    assert adapter.stock_full_por_sku("SKU-X") == 78
+    assert adapter.stock_disponible_por_sku("SKU-X") == 15
+    assert llamadas_producto == ["SKU-X"]  # una sola vez, no dos
+
+
+# ── MLFullClient.ventas_por_item ──
+
+def test_ventas_por_item_agrega_cantidad_y_rango_de_fechas():
+    def fake_get(url, params, headers):
+        assert "orders/search" in url
+        if params["offset"] == 0:
+            return {
+                "results": [
+                    {"date_closed": "2026-08-01T10:00:00.000-04:00", "order_items": [
+                        {"item": {"id": "MLA1"}, "quantity": 3},
+                    ]},
+                    {"date_closed": "2026-08-05T10:00:00.000-04:00", "order_items": [
+                        {"item": {"id": "MLA1"}, "quantity": 2},
+                        {"item": {"id": "MLA2"}, "quantity": 1},
+                    ]},
+                ],
+                "paging": {"total": 2, "offset": 0, "limit": 50},
+            }
+        raise AssertionError("no debería pedir más páginas")
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ventas = client.ventas_por_item("IT", "2026-08-01T00:00:00.000-00:00", "2026-08-19T23:00:00.000-00:00")
+    assert ventas["MLA1"] == {"unidades": 5, "primera": "2026-08-01", "ultima": "2026-08-05"}
+    assert ventas["MLA2"] == {"unidades": 1, "primera": "2026-08-05", "ultima": "2026-08-05"}
+
+
+def test_ventas_por_item_pagina_hasta_agotar_el_total():
+    paginas_pedidas = []
+
+    def fake_get(url, params, headers):
+        paginas_pedidas.append(params["offset"])
+        if params["offset"] == 0:
+            return {"results": [{"date_closed": "2026-08-01T10:00:00.000-04:00",
+                                  "order_items": [{"item": {"id": "MLA1"}, "quantity": 1}]}] * 50,
+                     "paging": {"total": 60, "offset": 0, "limit": 50}}
+        return {"results": [{"date_closed": "2026-08-02T10:00:00.000-04:00",
+                              "order_items": [{"item": {"id": "MLA1"}, "quantity": 1}]}] * 10,
+                "paging": {"total": 60, "offset": 50, "limit": 50}}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ventas = client.ventas_por_item("IT", "2026-08-01T00:00:00.000-00:00", "2026-08-19T23:00:00.000-00:00")
+    assert paginas_pedidas == [0, 50]
+    assert ventas["MLA1"]["unidades"] == 60
+
+
 def test_factor_pack_none_si_no_esta_vinculada():
     # Visto en la realidad (2026-08-20, dos ítems reales sin pack):
     # linked=false, productListings=[].
