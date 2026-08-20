@@ -203,6 +203,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="sidebar-section">
     <div class="sidebar-section-label">📦 Mercado Libre</div>
     <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
+    <div class="sidebar-item" data-page="full-ml" onclick="goPage('full-ml',this)"><span class="icon">🏭</span> Full ML</div>
     <div class="sidebar-item" data-page="ofertas-ml" onclick="goPage('ofertas-ml',this)"><span class="icon">🏷️</span> Ofertas ML</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
     <div class="sidebar-item" data-page="intel-competitiva" onclick="goPage('intel-competitiva',this)"><span class="icon">🎯</span> Intel. Competitiva</div>
@@ -935,6 +936,54 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+<!-- FULL ML -->
+<div id="page-full-ml" class="page">
+  <div class="section-hdr">🏭 Full ML — Conciliación y Reposición</div>
+  <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:12px">Solo lectura — no escribe en Mercado Libre ni en Ecom. Reemplaza la conciliación manual de FULL_TABLA_OPERATIVA.xlsx.</div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">🔎 Conciliación de stock (ML vs Ecom)</div>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (IT/MT), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn primary" onclick="runFullConciliar()" id="btn-full-conciliar">▶ Ejecutar conciliación</button>
+      <span id="full-conciliar-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Listo</span>
+    </div>
+    <div id="full-conciliar-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
+    <div id="full-conciliar-wrap" style="display:none;margin-top:12px">
+      <div id="full-conciliar-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>SKU</th><th>Stock ML</th><th>Stock Ecom</th><th>Diferencia</th><th>Publicaciones</th></tr></thead>
+          <tbody id="full-conciliar-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📤 Simulador de reposición</div>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Calcula cuánto convendría enviar por SKU — detecta venta censurada (cuando el producto quebró y el período subestima la demanda), y tapa lo sugerido por el stock realmente disponible en Pitec. No crea el envío real.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Días de ventas<input type="number" id="full-repo-dias" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Semanas objetivo<input type="number" step="0.5" id="full-repo-semanas" value="3" style="width:48px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn primary" onclick="runFullReposicion()" id="btn-full-reposicion">▶ Simular reposición</button>
+      <span id="full-reposicion-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Listo</span>
+    </div>
+    <div id="full-reposicion-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
+    <div id="full-reposicion-wrap" style="display:none;margin-top:12px">
+      <div id="full-reposicion-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>SKU</th><th>Stock Full</th><th>Ventas período</th><th>Ventas/día</th><th>Stock objetivo</th><th>Falta enviar</th><th>Disp. Pitec</th><th>Enviar posible</th><th>Alerta</th><th>Cobertura (días)</th><th>Quiebre est.</th></tr></thead>
+          <tbody id="full-reposicion-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- INTELIGENCIA COMPETITIVA -->
 <div id="page-intel-competitiva" class="page">
@@ -1215,7 +1264,7 @@ function goPage(page,el){
   qs('rent-query-bar').style.display=page==='dashboard'?'block':'none';
   qs('ventas-tabs-bar').style.display=page==='dashboard'?'flex':'none';
   if(page==='dashboard')goVentasTab(ventasTab);
-  else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';}
+  else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded)loadDashboard();}
   if(page==='historico'&&!histLoaded)loadHistorico();
@@ -2354,6 +2403,85 @@ function populateRuleFilter(){const sel=qs('ml-filter-regla');if(!sel)return;RUL
 async function runTracker(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-tracker');const status=qs('tracker-status');const logEl=qs('tracker-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/tracker/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'tracker');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
 async function runVendedor(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-vendedor');const status=qs('vendedor-status');const logEl=qs('vendedor-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/vendedor/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'vendedor');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
 function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInterval(async()=>{try{const res=await fetch(`${baseUrl}/ml/${type}/status/${job_id}`);const data=await res.json();if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}if(data.status==='done'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--green)">✅ Listo — ${data.ok||0} OK · ${data.errors||0} errores</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${data.message}</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else statusEl.textContent=`● corriendo... (${data.log?.length||0} líneas)`;}catch(e){console.warn(e);}},3000);}
+
+// ── FULL ML — conciliación de stock y simulador de reposición
+// (docs/business/COMERCIAL/canales/mercadolibre/03_MODULO_FULL.md).
+// Jobs propios (/ml-full/conciliar y /ml-full/reposicion), no comparten
+// la URL de status con pollJob (que asume /ml/{type}/status/{id}). ──
+function pollFullJob(statusUrl,logEl,statusEl,btn,btnLabel,onDone){
+  const interval=setInterval(async()=>{
+    try{
+      const res=await fetch(statusUrl);const data=await res.json();
+      if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}
+      if(data.status==='done'){clearInterval(interval);statusEl.innerHTML='<span style="color:var(--green)">✅ Listo</span>';btn.disabled=false;btn.textContent=btnLabel;onDone(data.result);}
+      else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${(data.log||[]).slice(-1)[0]||'Error'}</span>`;btn.disabled=false;btn.textContent=btnLabel;}
+      else statusEl.textContent=`● corriendo... (${data.log?.length||0} líneas)`;
+    }catch(e){console.warn(e);}
+  },4000);
+}
+async function runFullConciliar(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const btn=qs('btn-full-conciliar'),status=qs('full-conciliar-status'),logEl=qs('full-conciliar-log');
+  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
+  qs('full-conciliar-wrap').style.display='none';
+  try{
+    const res=await fetch(`${url}/ml-full/conciliar/run`,{method:'POST'});
+    const{job_id}=await res.json();
+    status.textContent='Job: '+job_id;
+    pollFullJob(`${url}/ml-full/conciliar/status/${job_id}`,logEl,status,btn,'▶ Ejecutar conciliación',renderFullConciliar);
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar conciliación';}
+}
+function renderFullConciliar(result){
+  qs('full-conciliar-wrap').style.display='block';
+  qs('full-conciliar-resumen').textContent=`${result.filas.length} SKUs · ${result.filas.filter(f=>f.diferencia).length} con diferencia · ${result.incidencias_sku.length} sin SKU · ${result.incidencias_sin_vincular.length} sin vincular · ${result.skus_no_en_ecom.length} sin match en Ecom`;
+  const filas=[...result.filas].sort((a,b)=>Math.abs(b.diferencia||0)-Math.abs(a.diferencia||0));
+  qs('full-conciliar-tbody').innerHTML=filas.map(f=>{
+    const dif=f.diferencia;
+    const difColor=!dif?'var(--text2)':(dif>0?'var(--green)':'var(--red)');
+    const pubs=(f.publicaciones||[]).map(p=>`${p.cuenta}:${p.item_id} (${p.disponible}${p.factor>1?'×'+p.factor:''}${p.vinculado?'':' ⚠no-vinc'})`).join('<br>');
+    return `<tr>
+      <td>${f.sku}</td>
+      <td style="text-align:right">${f.stock_ml}</td>
+      <td style="text-align:right">${f.stock_ecom===null?'—':f.stock_ecom}</td>
+      <td style="text-align:right;color:${difColor};font-weight:600">${dif===null?'—':(dif>0?'+':'')+dif}</td>
+      <td style="font-size:9px;color:var(--text3)">${pubs}</td>
+    </tr>`;
+  }).join('');
+}
+async function runFullReposicion(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const dias=qs('full-repo-dias').value||30,semanas=qs('full-repo-semanas').value||3;
+  const btn=qs('btn-full-reposicion'),status=qs('full-reposicion-status'),logEl=qs('full-reposicion-log');
+  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
+  qs('full-reposicion-wrap').style.display='none';
+  try{
+    const res=await fetch(`${url}/ml-full/reposicion/run?dias_ventas=${dias}&semanas_objetivo=${semanas}`,{method:'POST'});
+    const{job_id}=await res.json();
+    status.textContent='Job: '+job_id;
+    pollFullJob(`${url}/ml-full/reposicion/status/${job_id}`,logEl,status,btn,'▶ Simular reposición',renderFullReposicion);
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Simular reposición';}
+}
+function renderFullReposicion(result){
+  qs('full-reposicion-wrap').style.display='block';
+  qs('full-reposicion-resumen').textContent=`${result.filas.length} SKUs · ${result.filas.filter(f=>f.falta_enviar>0).length} con falta de envío · ${result.filas.filter(f=>f.alerta_revisar_tactica).length} alertas Táctica · ${result.filas.filter(f=>f.censurado).length} venta censurada`;
+  const filas=[...result.filas].sort((a,b)=>b.falta_enviar-a.falta_enviar);
+  qs('full-reposicion-tbody').innerHTML=filas.map(f=>{
+    const alerta=f.alerta_revisar_tactica?'<span style="color:var(--red)">⚠ Táctica</span>':'';
+    return `<tr>
+      <td>${f.sku}</td>
+      <td style="text-align:right">${f.stock_full}</td>
+      <td style="text-align:right">${f.ventas_periodo}${f.censurado?' <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">⚡</span>':''}</td>
+      <td style="text-align:right">${f.ventas_diarias}</td>
+      <td style="text-align:right">${f.stock_objetivo}</td>
+      <td style="text-align:right;font-weight:600;${f.falta_enviar>0?'color:var(--accent)':''}">${f.falta_enviar}</td>
+      <td style="text-align:right">${f.disponible_pitec===null?'—':f.disponible_pitec}</td>
+      <td style="text-align:right;font-weight:600">${f.enviar_posible}</td>
+      <td>${alerta}</td>
+      <td style="text-align:right">${f.cobertura_dias===null?'—':f.cobertura_dias}</td>
+      <td>${f.quiebre_estimado||'—'}</td>
+    </tr>`;
+  }).join('');
+}
 
 // ──────────────────────
 
