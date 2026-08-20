@@ -229,6 +229,27 @@ def test_cobertura_y_quiebre_estimado():
     assert fila.quiebre_estimado == "2026-08-29"
 
 
+def test_stock_negativo_en_pitec_no_vuelve_negativo_enviar_posible():
+    # Visto en producción (2026-08-20): Ecom puede tener stock negativo
+    # cargado en Pitec (dato real, anómalo). Si no hace falta enviar nada
+    # (falta_enviar=0), "enviar_posible" no puede quedar negativo, y no es
+    # una alerta de Táctica -- es un problema de datos de Ecom.
+    ml = _armar_ml(
+        items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
+        stock_por_inventory={"INV-1": {"available_quantity": 100}},
+        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 0, "primera": None, "ultima": None}}},
+    )
+    ecom = _ecom_simple(stock_full={"SKU-A": 100}, stock_pitec={"SKU-A": -2})
+
+    resultado = calcular_reposicion(ml, ecom, cuentas=["IT"], dias_ventas=30, hoy=date(2026, 8, 19))
+
+    fila = resultado.filas[0]
+    assert fila.falta_enviar == 0
+    assert fila.disponible_pitec == -2
+    assert fila.enviar_posible == 0
+    assert fila.alerta_revisar_tactica is False
+
+
 def test_sin_ventas_en_el_periodo_no_calcula_cobertura():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},

@@ -149,8 +149,15 @@ def calcular_reposicion(
         stock_objetivo = ventas_diarias * semanas_objetivo * 7
         falta_enviar = max(0, round(stock_objetivo - fila_stock.stock_ml))
         disponible = ecom.stock_disponible_por_sku(fila_stock.sku)
-        enviar_posible = min(falta_enviar, disponible) if disponible is not None else 0
-        alerta_tactica = disponible is not None and falta_enviar > disponible
+        # max(0, ...) -- visto en producción (2026-08-20): Pitec puede tener
+        # stock negativo cargado en Ecom (dato real, no de este módulo). Sin
+        # el máximo, "enviar_posible" salía negativo aunque no hiciera falta
+        # enviar nada (falta_enviar=0), lo cual no tiene sentido físico.
+        enviar_posible = max(0, min(falta_enviar, disponible)) if disponible is not None else 0
+        # La alerta es sobre una necesidad real -- si no falta enviar nada,
+        # que Pitec esté en negativo es un problema de datos de Ecom, no
+        # una alerta de "revisar Táctica".
+        alerta_tactica = falta_enviar > 0 and (disponible is None or disponible < falta_enviar)
 
         if ventas_diarias > 0:
             cobertura = fila_stock.stock_ml / ventas_diarias
