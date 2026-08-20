@@ -15,32 +15,44 @@ from ml_full import (
 _FAKE_TOKEN_FN = lambda cuenta: "FAKE-TOKEN"
 
 
-# ── MLFullClient.items_activos — paginación de 3 pasadas, dedup ──
+# ── MLFullClient.items_activos — paginación search_type=scan + scroll_id ──
 
-def test_items_activos_deduplica_entre_las_tres_pasadas():
+def test_items_activos_pagina_con_scroll_id_hasta_que_no_hay_mas_resultados():
     llamadas = []
 
     def fake_get(url, params, headers):
-        llamadas.append(params["sort"])
-        if params["offset"] == 0:
-            return {"results": ["MLA1", "MLA2"]}
+        llamadas.append(dict(params))
+        if "scroll_id" not in params:
+            return {"results": ["MLA1", "MLA2"], "scroll_id": "SCROLL-1"}
+        if params["scroll_id"] == "SCROLL-1":
+            return {"results": ["MLA3"], "scroll_id": "SCROLL-2"}
+        return {"results": [], "scroll_id": "SCROLL-3"}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ids = client.items_activos("IT")
+    assert ids == ["MLA1", "MLA2", "MLA3"]
+    assert llamadas[0]["search_type"] == "scan"
+    assert llamadas[0]["status"] == "active"
+    assert llamadas[1]["scroll_id"] == "SCROLL-1"
+    assert llamadas[2]["scroll_id"] == "SCROLL-2"
+    assert len(llamadas) == 3  # no pide una cuarta página tras results=[]
+
+
+def test_items_activos_corta_si_no_hay_scroll_id_en_la_respuesta():
+    def fake_get(url, params, headers):
+        return {"results": ["MLA1"]}  # sin scroll_id -- no hay más para pedir
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ids = client.items_activos("IT")
+    assert ids == ["MLA1"]
+
+
+def test_items_activos_sin_resultados_devuelve_vacio():
+    def fake_get(url, params, headers):
         return {"results": []}
 
     client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
-    ids = client.items_activos("IT")
-    assert ids == ["MLA1", "MLA2"]
-    assert llamadas == ["start_time_desc", "start_time_asc", "price_desc"]
-
-
-def test_items_activos_corta_en_la_primera_pagina_incompleta():
-    def fake_get(url, params, headers):
-        if params["offset"] == 0:
-            return {"results": ["MLA1"] * 50}  # < 100, corta acá
-        raise AssertionError("no debería pedir más offsets en esta pasada")
-
-    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
-    ids = client.items_activos("IT")
-    assert len(ids) == 1  # las 50 son el mismo id repetido, dedupe a 1
+    assert client.items_activos("IT") == []
 
 
 # ── MLFullClient.detalle_items — lotes de 20 ──
@@ -315,8 +327,8 @@ def test_conciliar_deduplica_por_inventory_id_y_aplica_factor_de_ecom():
     # -- no hay que sumarlas dos veces (§3.3).
     def fake_get(url, params, headers):
         if "items/search" in url:
-            if params["offset"] == 0 and params["sort"] == "start_time_desc":
-                return {"results": ["MLA1", "MLA2"]}
+            if "scroll_id" not in params:
+                return {"results": ["MLA1", "MLA2"], "scroll_id": "SCROLL-1"}
             return {"results": []}
         if url.endswith("/items"):
             return [
@@ -360,8 +372,8 @@ def test_conciliar_deduplica_por_inventory_id_y_aplica_factor_de_ecom():
 def test_conciliar_sin_vincular_cae_al_sku_de_ml_y_deja_incidencia():
     def fake_get(url, params, headers):
         if "items/search" in url:
-            if params["offset"] == 0 and params["sort"] == "start_time_desc":
-                return {"results": ["MLA1"]}
+            if "scroll_id" not in params:
+                return {"results": ["MLA1"], "scroll_id": "SCROLL-1"}
             return {"results": []}
         if url.endswith("/items"):
             return [{"body": {"id": "MLA1", "title": "Simple", "shipping": {"logistic_type": "fulfillment"},

@@ -83,36 +83,37 @@ class MLFullClient:
         self._token = token_fn or token_de
 
     def items_activos(self, cuenta: str) -> list[str]:
-        """Reproduce la paginación de tres pasadas de
-        `/ml-proxy/all-ids/{seller_id}` en `main.py` (ya probada en
-        producción) — el buscador de ML no entrega más de ~1000
-        resultados por combinación de sort, así que se pide en tres
-        órdenes distintos y se deduplica."""
+        """Pagina con `search_type=scan` + `scroll_id` -- confirmado
+        contra `01_MAPA_API.md` §2.1 ("Para más de 1000 resultados usar
+        `search_type=scan` con `scroll_id`") y contra la cuenta real
+        (2026-08-20).
+
+        **Reemplaza un bug real, no una limpieza cosmética**: la versión
+        anterior pedía tres pasadas con distintos `sort` (offset 0-1000
+        cada una) asumiendo que entre las tres se cubría todo. Se probó
+        en producción contra la cuenta IT (2043 ítems activos) y **perdió
+        un ítem real** -- `MLA1980317090` (SKU `KG002BKMINIPADWLS`,
+        inventory_id `KZLL71843`, 76 unidades) no apareció en ninguna de
+        las tres pasadas, y la conciliación reportó una diferencia falsa
+        de -75 contra Ecom que en realidad era ~1. `scan` es el mecanismo
+        que ML documenta para este caso exacto -- no una aproximación con
+        más pasadas."""
         seller_id = SELLERS[cuenta]
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         ids: list[str] = []
-        seen: set[str] = set()
-
-        def pasada(sort: str):
-            for offset in range(0, 1000, 100):
-                d = self._get(
-                    f"https://api.mercadolibre.com/users/{seller_id}/items/search",
-                    {"status": "active", "limit": 100, "offset": offset, "sort": sort},
-                    headers,
-                )
-                resultados = d.get("results", [])
-                if not resultados:
-                    break
-                for rid in resultados:
-                    if rid not in seen:
-                        seen.add(rid)
-                        ids.append(rid)
-                if len(resultados) < 100:
-                    break
-
-        pasada("start_time_desc")
-        pasada("start_time_asc")
-        pasada("price_desc")
+        params = {"search_type": "scan", "status": "active", "limit": 100}
+        while True:
+            d = self._get(
+                f"https://api.mercadolibre.com/users/{seller_id}/items/search", params, headers
+            )
+            resultados = d.get("results", [])
+            if not resultados:
+                break
+            ids.extend(resultados)
+            scroll_id = d.get("scroll_id")
+            if not scroll_id:
+                break
+            params = {"search_type": "scan", "limit": 100, "scroll_id": scroll_id}
         return ids
 
     def detalle_items(self, item_ids: list[str], cuenta: str) -> list[dict]:
