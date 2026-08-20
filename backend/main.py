@@ -9,6 +9,8 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 import json
 
+import ml_full
+from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 
@@ -46,59 +48,8 @@ def _rentabilidad_startup():
         print(f"Rentabilidad: no se pudo migrar/sembrar en el arranque: {e}")
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
-ML_TOKEN       = os.getenv('ML_TOKEN', '')
-REFRESH_TOKEN  = os.getenv('ML_REFRESH_TOKEN', '')
-APP_ID         = os.getenv('ML_APP_ID', '')
-CLIENT_SECRET  = os.getenv('ML_CLIENT_SECRET', '')
-ML_TOKEN_2     = os.getenv('ML_TOKEN_2', '')
-REFRESH_TOKEN_2= os.getenv('ML_REFRESH_TOKEN_2', '')
 
 job_status = {}
-_token_cache = {'token': ML_TOKEN, 'expiry': 0}
-_token_cache_2 = {'token': ML_TOKEN_2, 'expiry': 0}
-
-def get_ml_token():
-    if time.time() < _token_cache['expiry']:
-        return _token_cache['token']
-    try:
-        res = requests.post('https://api.mercadolibre.com/oauth/token', data={
-            'grant_type': 'refresh_token', 'client_id': APP_ID,
-            'client_secret': CLIENT_SECRET, 'refresh_token': os.getenv('ML_REFRESH_TOKEN', REFRESH_TOKEN),
-        }, timeout=10)
-        if res.status_code == 200:
-            d = res.json()
-            _token_cache['token'] = d['access_token']
-            _token_cache['expiry'] = time.time() + d.get('expires_in', 21600) - 300
-            if 'refresh_token' in d: os.environ['ML_REFRESH_TOKEN'] = d['refresh_token']
-            return _token_cache['token']
-        else:
-            print(f"Token refresh error: {res.status_code} {res.text}")
-    except Exception as e:
-        print(f"Token error: {e}")
-    return _token_cache['token']
-
-def get_ml_token_2():
-    if time.time() < _token_cache_2['expiry']:
-        return _token_cache_2['token']
-    try:
-        res = requests.post('https://api.mercadolibre.com/oauth/token', data={
-            'grant_type': 'refresh_token', 'client_id': APP_ID,
-            'client_secret': CLIENT_SECRET, 'refresh_token': os.getenv('ML_REFRESH_TOKEN_2', REFRESH_TOKEN_2),
-        }, timeout=10)
-        if res.status_code == 200:
-            d = res.json()
-            _token_cache_2['token'] = d['access_token']
-            _token_cache_2['expiry'] = time.time() + d.get('expires_in', 21600) - 300
-            if 'refresh_token' in d: os.environ['ML_REFRESH_TOKEN_2'] = d['refresh_token']
-            return _token_cache_2['token']
-        else:
-            print(f"Token2 refresh error: {res.status_code} {res.text}")
-    except Exception as e:
-        print(f"Token2 error: {e}")
-    return _token_cache_2['token']
-
-def ml_headers():
-    return {'Authorization': f'Bearer {get_ml_token()}', 'User-Agent': 'Mozilla/5.0'}
 
 def get_gs():
     creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
@@ -435,6 +386,23 @@ def tracker_job(job_id):
 @app.get("/ml/tracker/status/{job_id}")
 def tracker_status(job_id: str):
     return job_status.get(job_id, {"status": "not_found"})
+
+# ══════════════════════════════════════════════════════
+# ML FULL — conciliación de stock (docs/business/COMERCIAL/canales/
+# mercadolibre/03_MODULO_FULL.md). Solo lectura, ninguna escritura al
+# canal ni a Ecom. Job propio en ml_full.py (no comparte job_status con
+# el resto para no acoplar ese módulo a main.py).
+# ══════════════════════════════════════════════════════
+
+@app.post("/ml-full/conciliar/run")
+async def ml_full_conciliar_run(background_tasks: BackgroundTasks):
+    job_id = f"mlfull_{int(time.time())}"
+    background_tasks.add_task(ml_full.iniciar_job, job_id)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-full/conciliar/status/{job_id}")
+async def ml_full_conciliar_status(job_id: str):
+    return ml_full.estado_job(job_id) or {"status": "not_found"}
 
 # ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)
