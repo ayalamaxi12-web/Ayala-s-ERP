@@ -55,7 +55,22 @@ ningún número fijo) y calcula:
     días_hasta_llegada  = fecha_llegada − hoy (nunca negativo, se clampea a 0)
     stock_a_llegada     = stock_full_hoy − ventas_diaria_mla × días_hasta_llegada
     stock_objetivo      = ventas_diaria_mla × semanas_objetivo × 7
-    cantidad_enviar     = máx(0, stock_objetivo − stock_a_llegada)
+    cantidad_enviar     = máx(0, stock_objetivo − stock_a_llegada)   [unidades reales, sin convertir todavía]
+
+**`cantidad_enviar`/`sugerido` se muestran en PAQUETES, no en unidades
+reales del SKU.** Corregido 2026-08-26 -- Maxx encontró que para una
+publicación pack ("X2 EMERLIGHT-30LED", factor 2) el sistema sugería
+enviar la cantidad en unidades reales del SKU (ej. 205), pero lo que la
+persona prepara y carga es en paquetes, y Full cuenta el inventario de
+esa publicación también en paquetes -- si mandaba 205 PAQUETES, mandaba
+el doble de lo necesario (410 unidades reales). Todo el cálculo de
+arriba (`stock_objetivo`, `stock_a_llegada`, `cantidad_enviar`, y el
+reparto de `sugerido` contra Ecom+Táctica) se sigue haciendo en unidades
+reales -- tiene que ser así para comparar bien contra Ecom/Táctica (que
+llevan el stock real) y para repartir bien entre publicaciones que
+pueden tener factores distintos del mismo SKU. La conversión a paquetes
+(`_convertir_a_paquetes`, `cantidad_enviar ÷ factor`, redondeado para
+arriba) pasa recién al final, después del reparto -- ver su docstring.
 
 **El reparto cuando el disponible combinado (Ecom+Táctica) no alcanza para
 todas las publicaciones de un mismo SKU** -- confirmado con Maxx
@@ -92,6 +107,7 @@ huecos reales sin dato para llenarlos):
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -116,8 +132,9 @@ class FilaReposicionMLA:
     ventas_diarias: float
     stock_objetivo: float
     stock_a_llegada: float
-    cantidad_enviar: int
-    sugerido: int
+    factor: int
+    cantidad_enviar: int  # en PAQUETES (la unidad que vende esta publicación), no en unidades reales del SKU
+    sugerido: int          # ídem, en paquetes
     stock_ecom: int | None
     stock_tactica: int | None
 
@@ -131,11 +148,18 @@ class ResultadoReposicionMLA:
 
 
 def _repartir_sugerido(filas: list[FilaReposicionMLA]) -> None:
-    """Muta `sugerido` en cada fila. Agrupa por SKU cruzando las dos
-    cuentas (el depósito de Ecom/Táctica es uno solo por SKU) y reparte el
-    disponible combinado en orden de venta descendente -- "todo a la que
-    más vende antes que a la siguiente", nunca proporcional (confirmado con
-    Maxx, ver docstring del módulo)."""
+    """Muta `sugerido` en cada fila -- en UNIDADES REALES todavía (la
+    conversión a paquetes pasa después, ver `_convertir_a_paquetes`). Tiene
+    que ser en unidades reales acá: el pool de Ecom+Táctica es físico y
+    compartido entre publicaciones que pueden tener factores de pack
+    distintos para el mismo SKU (una publicación simple y una "X2" del
+    mismo producto) -- repartir en paquetes mezclaría unidades de medida
+    distintas entre publicaciones.
+
+    Agrupa por SKU cruzando las dos cuentas (el depósito de Ecom/Táctica es
+    uno solo por SKU) y reparte el disponible combinado en orden de venta
+    descendente -- "todo a la que más vende antes que a la siguiente",
+    nunca proporcional (confirmado con Maxx, ver docstring del módulo)."""
     por_sku: dict[str, list[FilaReposicionMLA]] = {}
     for f in filas:
         por_sku.setdefault(f.sku, []).append(f)
@@ -145,6 +169,28 @@ def _repartir_sugerido(filas: list[FilaReposicionMLA]) -> None:
             asignado = max(0, min(f.cantidad_enviar, disponible))
             f.sugerido = asignado
             disponible -= asignado
+
+
+def _convertir_a_paquetes(filas: list[FilaReposicionMLA]) -> None:
+    """`cantidad_enviar`/`sugerido` se calculan en unidades reales del SKU
+    (necesario para conciliar y repartir correctamente contra Ecom/
+    Táctica, que llevan el stock en unidades reales) -- pero lo que la
+    persona prepara y carga para ESTA publicación es en la unidad que la
+    publicación vende, y Full cuenta el inventario de esa publicación en
+    esa misma unidad (un pack "X2" descuenta 1 de a 1 en Full, no 2).
+
+    Confirmado con Maxx (2026-08-26), con un caso real: la publicación
+    `MLA1607512661` ("X2 EMERLIGHT-30LED", factor 2) mostraba "205" como
+    cantidad a enviar en unidades reales -- si la persona preparaba 205
+    PAQUETES (la unidad con la que arma el envío), mandaba el doble de lo
+    necesario (410 unidades reales). Se convierte a paquetes recién ACÁ,
+    después de `_repartir_sugerido` -- nunca antes, porque el reparto
+    necesita las unidades reales para comparar contra el disponible físico
+    compartido. Redondea para arriba (nunca manda de menos por
+    redondeo)."""
+    for f in filas:
+        f.cantidad_enviar = math.ceil(f.cantidad_enviar / f.factor)
+        f.sugerido = math.ceil(f.sugerido / f.factor)
 
 
 def calcular_reposicion_mla(
@@ -213,11 +259,13 @@ def calcular_reposicion_mla(
                 stock_full=stock_full_mla, ventas_periodo=ventas_total, dias_periodo=dias_ventas,
                 primera_venta=primera, ultima_venta=ultima, censurado=censurado,
                 ventas_diarias=round(ventas_diarias, 2), stock_objetivo=round(stock_objetivo, 1),
-                stock_a_llegada=round(stock_a_llegada, 1), cantidad_enviar=cantidad_enviar,
-                sugerido=0, stock_ecom=stock_ecom, stock_tactica=stock_tactica,
+                stock_a_llegada=round(stock_a_llegada, 1), factor=pub["factor"],
+                cantidad_enviar=cantidad_enviar, sugerido=0,
+                stock_ecom=stock_ecom, stock_tactica=stock_tactica,
             ))
 
     _repartir_sugerido(filas)
+    _convertir_a_paquetes(filas)
 
     return ResultadoReposicionMLA(
         filas=filas, incidencias_sku=resultado_conciliacion.incidencias_sku,

@@ -200,6 +200,53 @@ def test_aplica_el_factor_de_pack_a_las_ventas_y_al_stock():
     assert fila.ventas_periodo == 20  # 10 paquetes x factor 2, no 10
 
 
+def test_cantidad_enviar_y_sugerido_se_muestran_en_paquetes_no_en_unidades_reales():
+    # Caso real que motivó el fix (2026-08-26): una publicación "X2" con
+    # necesidad real de 205 unidades tiene que sugerir enviar en
+    # PAQUETES (103, redondeado para arriba), no 205 -- si la persona
+    # prepara 205 paquetes manda el doble de lo necesario.
+    def graphql_con_pack(query, variables=None):
+        if "getAllWarehouses" in query:
+            return {"productWarehouses": {"getAllWarehouses": [
+                {"id": "297", "title": "Pitec", "typeFull": False},
+                {"id": "4023", "title": "ML Full", "typeFull": True},
+            ]}}
+        if "mlListings" in query:
+            return {"mlListings": {"read": {"linked": True, "productListings": [
+                {"qty": 2, "productId": "P1", "product": {"sku": "SKU-COMPONENTE"}},
+            ]}}}
+        if "readBySku" in query:
+            return {"products": {"readBySku": {"id": "1", "variants": [{"id": "v1", "variantWarehouses": [
+                {"warehouse_id": "4023", "warehouse_title": "ML Full", "warehouse_qty": 0},
+                {"warehouse_id": "297", "warehouse_title": "Pitec", "warehouse_qty": 1000},
+            ]}]}}}
+        raise AssertionError(query[:60])
+
+    ecom = EcomFullAdapter(_ClienteGraphQLFalsoDirecto(graphql_con_pack))
+    tactica = _tactica_simple({"SKU-COMPONENTE": 0})
+    ml = _armar_ml(
+        items_por_cuenta={"IT": [_item_simple("MLA1", "PACK-SKU-ML", "INV-1")]},
+        stock_por_inventory={"INV-1": {"available_quantity": 0}},
+        # 32 "paquetes" vendidos x factor 2 = 64 unidades reales, igual que
+        # el caso real (COCF22823 / MLA1607512661).
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 32, "primera": "2026-07-26", "ultima": "2026-08-05"}}},
+    )
+
+    resultado = calcular_reposicion_mla(
+        ml, ecom, tactica, cuentas=["IT"], dias_ventas=30, semanas_objetivo=3,
+        fecha_llegada=date(2026, 8, 19), hoy=date(2026, 8, 19),
+    )
+
+    fila = resultado.filas[0]
+    assert fila.factor == 2
+    assert fila.ventas_periodo == 64
+    # 64 unidades reales en 10 días de ventana (censurado) -> 6.4/día ->
+    # objetivo 3 semanas = 134.4 -> round() = 134 unidades reales (stock
+    # full 0, nada que restar) -> 134/2 = 67 paquetes.
+    assert fila.cantidad_enviar == 67
+    assert fila.sugerido == 67  # Pitec tiene de sobra (1000), no lo topea
+
+
 def test_stock_a_llegada_resta_las_ventas_del_transito():
     # Creado hoy (2026-08-22), llega el 2026-09-03 -> 12 días de tránsito.
     # Vende 6/día -> en tránsito se consumen 72. Stock actual 40 -> a la

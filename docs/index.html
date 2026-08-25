@@ -982,7 +982,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th>Stock Full</th><th>Ventas 30d</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th>Cantidad a enviar</th><th>Sugerido</th><th>Envíos pendientes</th><th>Stock Ecom</th><th>Stock Táctica</th></tr></thead>
+          <thead><tr><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>Stock Full</th><th>Ventas 30d</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th></tr></thead>
           <tbody id="full-reposicion-tbody"></tbody>
         </table>
       </div>
@@ -2492,23 +2492,33 @@ function _fullRepoResumen(){
   qs('full-reposicion-resumen').textContent=`${r.filas.length} publicaciones · ${r.filas.filter(f=>f._sugerido>0).length} con envío sugerido · ${totalSugerido} unidades sugeridas en total · ${r.filas.filter(f=>f.censurado).length} venta censurada · ${r.incidencias_sin_vincular.length} sin vincular · ${r.skus_no_en_ecom.length} SKU sin match en Ecom`;
 }
 // Replica en el navegador el reparto de `ml_reposicion._repartir_sugerido`
-// -- se recalcula acá cuando la persona carga "Envíos pendientes" a mano,
-// sin volver a pegarle al backend (ese dato no existe todavía del lado
-// de ML, ver docstring de ml_reposicion.py).
+// + `_convertir_a_paquetes` -- se recalcula acá cuando la persona carga
+// "Envíos pendientes" a mano, sin volver a pegarle al backend (ese dato no
+// existe todavía del lado de ML, ver docstring de ml_reposicion.py).
+// El reparto tiene que hacerse en UNIDADES REALES (el disponible de
+// Ecom+Táctica es físico y compartido entre publicaciones que pueden
+// tener factores de pack distintos del mismo SKU) -- recién al final se
+// convierte a paquetes, que es lo que la persona prepara y carga, y lo
+// que Full cuenta para esta publicación puntual (confirmado por Maxx
+// 2026-08-26: mandar la cantidad en unidades reales como si fueran
+// paquetes manda el doble de lo necesario en una publicación "X2").
+// "Envíos pendientes" se carga en PAQUETES (la misma unidad que se manda),
+// se convierte a unidades reales acá adentro para descontarlo correcto.
 function _fullRepoRecalcular(){
   if(!fullRepoResult) return;
   const porSku={};
   fullRepoResult.filas.forEach(f=>{
-    const pendiente=fullRepoEnviosPend[f.item_id]||0;
-    f._cantidadEnviar=Math.max(0,Math.round(f.stock_objetivo-f.stock_a_llegada-pendiente));
+    const pendienteReal=(fullRepoEnviosPend[f.item_id]||0)*f.factor;
+    f._necesarioReal=Math.max(0,f.stock_objetivo-f.stock_a_llegada-pendienteReal);
     (porSku[f.sku]=porSku[f.sku]||[]).push(f);
   });
   Object.values(porSku).forEach(grupo=>{
     let disponible=(grupo[0].stock_ecom||0)+(grupo[0].stock_tactica||0);
     [...grupo].sort((a,b)=>b.ventas_diarias-a.ventas_diarias).forEach(f=>{
-      const asignado=Math.max(0,Math.min(f._cantidadEnviar,disponible));
-      f._sugerido=asignado;
-      disponible-=asignado;
+      const asignadoReal=Math.max(0,Math.min(f._necesarioReal,disponible));
+      disponible-=asignadoReal;
+      f._cantidadEnviar=Math.ceil(f._necesarioReal/f.factor);
+      f._sugerido=Math.ceil(asignadoReal/f.factor);
     });
   });
 }
@@ -2524,14 +2534,15 @@ function renderFullReposicionTabla(){
       <td style="font-size:9px;color:var(--text3)">${f.inventory_id||'—'}</td>
       <td>${f.sku}</td>
       <td style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
+      <td style="text-align:right">${f.factor>1?'×'+f.factor:'—'}</td>
       <td style="text-align:right">${f.stock_full}</td>
       <td style="text-align:right">${f.ventas_periodo}${f.censurado?' <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">⚡</span>':''}</td>
       <td style="text-align:right">${f.ventas_diarias}</td>
       <td style="text-align:right">${f.stock_objetivo}</td>
       <td style="text-align:right">${f.stock_a_llegada}</td>
-      <td style="text-align:right;font-weight:600">${f._cantidadEnviar}</td>
-      <td style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}">${f._sugerido}</td>
-      <td style="text-align:right"><input type="number" min="0" value="${pendiente}" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();"></td>
+      <td style="text-align:right;font-weight:600" title="En paquetes (lo que se prepara para esta publicación), no en unidades reales del SKU">${f._cantidadEnviar}</td>
+      <td style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}" title="En paquetes">${f._sugerido}</td>
+      <td style="text-align:right"><input type="number" min="0" value="${pendiente}" title="En paquetes" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();"></td>
       <td style="text-align:right">${f.stock_ecom===null?'—':f.stock_ecom}</td>
       <td style="text-align:right">${f.stock_tactica===null?'—':f.stock_tactica}</td>
     </tr>`;
@@ -2540,8 +2551,8 @@ function renderFullReposicionTabla(){
 function exportFullReposicion(){
   if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
   _fullRepoRecalcular();
-  const h='Cuenta,MLA,MLID,SKU,SKU_ML,Stock_Full,Ventas_30d,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar,Sugerido,Envios_Pendientes,Stock_Ecom,Stock_Tactica';
-  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.stock_full,f.ventas_periodo,f.ventas_diarias,f.stock_objetivo,f.stock_a_llegada,f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom??'',f.stock_tactica??''].join(','));
+  const h='Cuenta,MLA,MLID,SKU,SKU_ML,Factor,Stock_Full,Ventas_30d,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar_Paquetes,Sugerido_Paquetes,Envios_Pendientes_Paquetes,Stock_Ecom,Stock_Tactica';
+  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,f.stock_full,f.ventas_periodo,f.ventas_diarias,f.stock_objetivo,f.stock_a_llegada,f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom??'',f.stock_tactica??''].join(','));
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${new Date().toISOString().slice(0,10)}.csv`;a.click();
   toast('Exportado');
