@@ -247,11 +247,15 @@ def test_cantidad_enviar_y_sugerido_se_muestran_en_paquetes_no_en_unidades_reale
     assert fila.sugerido == 67  # Pitec tiene de sobra (1000), no lo topea
 
 
-def test_stock_a_llegada_resta_las_ventas_del_transito():
+def test_stock_a_llegada_resta_las_ventas_del_transito_pero_nunca_negativo():
     # Creado hoy (2026-08-22), llega el 2026-09-03 -> 12 días de tránsito.
-    # Vende 6/día -> en tránsito se consumen 72. Stock actual 40 -> a la
-    # llegada quedarían -32 (ya en cero antes de que llegue el envío).
-    # Objetivo 3 semanas = 6*21 = 126. Cantidad a enviar = 126 - (-32) = 158.
+    # Vende 6/día -> en tránsito "se consumirían" 72, pero el stock actual
+    # es 40 -- el MLA se agota ANTES de que llegue el envío y se queda en
+    # 0 el resto del tránsito, nunca en -32 (no hay ventas fantasma sobre
+    # un stock que ya no existe). Confirmado con Maxx (2026-08-26): sin
+    # este piso, "cantidad a enviar" se inflaba con ventas que nunca
+    # podían pasar y sugería mandar de más (cargo extra de Full).
+    # Objetivo 3 semanas = 6*21 = 126. Cantidad a enviar = 126 - 0 = 126.
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 40}},
@@ -267,9 +271,9 @@ def test_stock_a_llegada_resta_las_ventas_del_transito():
 
     fila = resultado.filas[0]
     assert fila.ventas_diarias == 6.0
-    assert fila.stock_a_llegada == -32.0
+    assert fila.stock_a_llegada == 0.0
     assert fila.stock_objetivo == 126.0
-    assert fila.cantidad_enviar == 158
+    assert fila.cantidad_enviar == 126
 
 
 def test_fecha_llegada_en_el_pasado_no_da_dias_negativos():

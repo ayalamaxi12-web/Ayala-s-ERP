@@ -250,7 +250,15 @@ def calcular_reposicion_mla(
                 ventas_diarias = ventas_total / dias_ventas
 
             stock_objetivo = ventas_diarias * semanas_objetivo * 7
-            stock_a_llegada = stock_full_mla - ventas_diarias * dias_hasta_llegada
+            # max(0, ...) -- confirmado con Maxx (2026-08-26) sobre un caso
+            # real: el stock físico no puede ser negativo. Si la resta da
+            # negativo es que el MLA se agota ANTES de que llegue el envío
+            # y se queda en 0 el resto del tránsito -- no sigue "vendiendo"
+            # a la tasa diaria en números negativos. Sin este piso,
+            # `cantidad_enviar` contaba ventas fantasma que nunca podían
+            # pasar (quebró, no hay stock que vender) y sugería mandar de
+            # más -- cargo extra de Full por sobre-stockear sin necesidad.
+            stock_a_llegada = max(0.0, stock_full_mla - ventas_diarias * dias_hasta_llegada)
             cantidad_enviar = max(0, round(stock_objetivo - stock_a_llegada))
 
             filas.append(FilaReposicionMLA(
