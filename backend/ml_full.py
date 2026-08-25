@@ -296,7 +296,7 @@ query($sku: String!) {
   products {
     readBySku(sku: $sku) {
       id
-      variants { id variantWarehouses { warehouse_id warehouse_title warehouse_qty } }
+      variants { id sku variantWarehouses { warehouse_id warehouse_title warehouse_qty } }
     }
   }
 }
@@ -726,7 +726,7 @@ def iniciar_job(job_id: str, ecom_email: str | None = None, ecom_password: str |
         _jobs[job_id]["result"] = {
             "filas": [
                 {"sku": f.sku, "stock_ml": f.stock_ml, "stock_ecom": f.stock_ecom,
-                 "diferencia": f.diferencia, "publicaciones": f.publicaciones}
+                 "diferencia": f.diferencia, "publicaciones": f.publicaciones, "parent_sku": f.parent_sku}
                 for f in resultado.filas
             ],
             "incidencias_sku": resultado.incidencias_sku,
