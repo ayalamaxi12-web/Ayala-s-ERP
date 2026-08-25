@@ -347,7 +347,39 @@ def test_factor_pack_resuelve_sku_y_factor_via_productlistings():
         }}},
     })
     adapter = EcomFullAdapter(cliente)
-    assert adapter.factor_pack("MLA2693713220") == {"CB435A-436A-CE285AUNIVCOMP": 2}
+    resultado = adapter.factor_pack("MLA2693713220")
+    assert resultado.item_sku == {"CB435A-436A-CE285AUNIVCOMP": 2}
+    assert resultado.variantes == []
+
+
+def test_factor_pack_resuelve_variantes_por_atributo():
+    # Réplica exacta de la respuesta real contra MLA1516769711 (vinilo
+    # termotransferible, 2 colores, 2026-08-26): el "SKU madre"
+    # (product.sku) es apenas el contenedor -- lo que hay que usar es
+    # `productVariantListings`, matcheado por atributo (Color).
+    cliente = _ClienteGraphQLFalso({
+        "mlListings": {"mlListings": {"read": {
+            "linked": True,
+            "productListings": [{
+                "qty": 1, "productId": "12014450", "product": {"id": "12014450", "sku": "HTV-PVC-G-50X1MT"},
+                "productVariantListings": [
+                    {"productVariantId": "14549842", "variant": {
+                        "sku": "HTV-PVC-WHITE-G-50X1MT",
+                        "variantAttributes": [{"name": "Color", "options": "Blanco"}],
+                    }},
+                    {"productVariantId": "14549846", "variant": {
+                        "sku": "HTV-PVC-BLACK-G-50X1MT",
+                        "variantAttributes": [{"name": "Color", "options": "Negro"}],
+                    }},
+                ],
+            }],
+        }}},
+    })
+    adapter = EcomFullAdapter(cliente)
+    resultado = adapter.factor_pack("MLA1516769711")
+    assert resultado.item_sku == {"HTV-PVC-G-50X1MT": 1}
+    assert {"atributos": {"Color": "Blanco"}, "sku": "HTV-PVC-WHITE-G-50X1MT", "qty": 1, "parent_sku": "HTV-PVC-G-50X1MT"} in resultado.variantes
+    assert {"atributos": {"Color": "Negro"}, "sku": "HTV-PVC-BLACK-G-50X1MT", "qty": 1, "parent_sku": "HTV-PVC-G-50X1MT"} in resultado.variantes
 
 
 # ── conciliar() end-to-end con fakes ──
@@ -430,4 +462,126 @@ def test_conciliar_sin_vincular_cae_al_sku_de_ml_y_deja_incidencia():
     assert resultado.incidencias_sin_vincular == [{
         "item_id": "MLA1", "cuenta": "IT", "sku_ml": "SKU-ML-SOLO",
         "motivo": "SIN_VINCULAR_EN_ECOM_FACTOR_1_ASUMIDO",
+    }]
+
+
+def test_conciliar_resuelve_variante_real_no_el_sku_madre():
+    # Réplica del caso real (MLA1516769711, 2026-08-26): 2 variaciones de
+    # color en la misma publicación, cada una con su propio SKU/stock en
+    # Ecom -- usar solo el "SKU madre" las colapsa en un solo número.
+    def fake_get(url, params, headers):
+        if "items/search" in url:
+            if "scroll_id" not in params:
+                return {"results": ["MLA1"], "scroll_id": "SCROLL-1"}
+            return {"results": []}
+        if url.endswith("/items"):
+            return [{"body": {
+                "id": "MLA1", "title": "Vinilo 2 colores", "shipping": {"logistic_type": "fulfillment"},
+                "seller_custom_field": None, "variations": [
+                    {"id": "V-BLANCO", "inventory_id": "INV-BLANCO", "seller_custom_field": None, "attributes": [],
+                     "attribute_combinations": [{"id": "COLOR", "name": "Color", "value_name": "Blanco"}]},
+                    {"id": "V-NEGRO", "inventory_id": "INV-NEGRO", "seller_custom_field": None, "attributes": [],
+                     "attribute_combinations": [{"id": "COLOR", "name": "Color", "value_name": "Negro"}]},
+                ],
+            }}]
+        if "stock/fulfillment" in url:
+            inv = url.rsplit("/inventories/", 1)[1].split("/")[0]
+            return {"available_quantity": 0 if inv == "INV-BLANCO" else 3}
+        raise AssertionError(url)
+
+    ml = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    cliente = _ClienteGraphQLFalso({
+        "getAllWarehouses": {"productWarehouses": {"getAllWarehouses": [
+            {"id": "4023", "title": "ML Full", "typeFull": True},
+        ]}},
+        "mlListings": {"mlListings": {"read": {
+            "linked": True,
+            "productListings": [{
+                "qty": 1, "productId": "P1", "product": {"id": "P1", "sku": "HTV-PVC-G-50X1MT"},
+                "productVariantListings": [
+                    {"productVariantId": "V1", "variant": {
+                        "sku": "HTV-PVC-WHITE-G-50X1MT",
+                        "variantAttributes": [{"name": "Color", "options": "Blanco"}],
+                    }},
+                    {"productVariantId": "V2", "variant": {
+                        "sku": "HTV-PVC-BLACK-G-50X1MT",
+                        "variantAttributes": [{"name": "Color", "options": "Negro"}],
+                    }},
+                ],
+            }],
+        }}},
+        "readBySku": lambda variables: {"products": {"readBySku": {
+            "id": "P1",
+            "variants": [
+                {"id": "v1", "sku": "HTV-PVC-WHITE-G-50X1MT",
+                 "variantWarehouses": [{"warehouse_id": "4023", "warehouse_title": "ML Full", "warehouse_qty": 0}]},
+                {"id": "v2", "sku": "HTV-PVC-BLACK-G-50X1MT",
+                 "variantWarehouses": [{"warehouse_id": "4023", "warehouse_title": "ML Full", "warehouse_qty": 4}]},
+            ],
+        }}} if variables["sku"] == "HTV-PVC-G-50X1MT" else {"products": {"readBySku": None}},
+    })
+    ecom = EcomFullAdapter(cliente)
+
+    resultado = conciliar(ml, ecom, cuentas=["IT"])
+
+    por_sku = {f.sku: f for f in resultado.filas}
+    assert set(por_sku) == {"HTV-PVC-WHITE-G-50X1MT", "HTV-PVC-BLACK-G-50X1MT"}
+    assert por_sku["HTV-PVC-WHITE-G-50X1MT"].stock_ml == 0
+    assert por_sku["HTV-PVC-WHITE-G-50X1MT"].stock_ecom == 0
+    assert por_sku["HTV-PVC-WHITE-G-50X1MT"].parent_sku == "HTV-PVC-G-50X1MT"
+    assert por_sku["HTV-PVC-BLACK-G-50X1MT"].stock_ml == 3
+    assert por_sku["HTV-PVC-BLACK-G-50X1MT"].stock_ecom == 4
+    assert por_sku["HTV-PVC-BLACK-G-50X1MT"].diferencia == -1
+    assert resultado.incidencias_sin_vincular == []
+
+
+def test_conciliar_variante_sin_match_en_ecom_deja_incidencia_propia():
+    # Ecom vincula por variante, pero ninguna coincide con la variación
+    # real de ML (ej. "Talle" no cargado del lado Ecom) -- no hay que
+    # asumir cuál es, tiene que quedar como incidencia propia, distinta de
+    # "sin vincular".
+    def fake_get(url, params, headers):
+        if "items/search" in url:
+            if "scroll_id" not in params:
+                return {"results": ["MLA1"], "scroll_id": "SCROLL-1"}
+            return {"results": []}
+        if url.endswith("/items"):
+            return [{"body": {
+                "id": "MLA1", "title": "Item con variación no matcheada",
+                "shipping": {"logistic_type": "fulfillment"}, "seller_custom_field": None,
+                "variations": [{"id": "V1", "inventory_id": "INV-1", "seller_custom_field": "SKU-ML-VAR",
+                                "attributes": [],
+                                "attribute_combinations": [{"id": "COLOR", "name": "Color", "value_name": "Verde"}]}],
+            }}]
+        if "stock/fulfillment" in url:
+            return {"available_quantity": 5}
+        raise AssertionError(url)
+
+    ml = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    cliente = _ClienteGraphQLFalso({
+        "getAllWarehouses": {"productWarehouses": {"getAllWarehouses": [
+            {"id": "4023", "title": "ML Full", "typeFull": True},
+        ]}},
+        "mlListings": {"mlListings": {"read": {
+            "linked": True,
+            "productListings": [{
+                "qty": 1, "productId": "P1", "product": {"id": "P1", "sku": "SKU-MADRE"},
+                "productVariantListings": [
+                    {"productVariantId": "V1", "variant": {
+                        "sku": "SKU-ROJO", "variantAttributes": [{"name": "Color", "options": "Rojo"}],
+                    }},
+                ],
+            }],
+        }}},
+        "readBySku": {"products": {"readBySku": None}},
+    })
+    ecom = EcomFullAdapter(cliente)
+
+    resultado = conciliar(ml, ecom, cuentas=["IT"])
+
+    assert len(resultado.filas) == 1
+    assert resultado.filas[0].sku == "SKU-ML-VAR"  # cae al SKU de ML, no a "SKU-MADRE" ni a "SKU-ROJO"
+    assert resultado.incidencias_sin_vincular == [{
+        "item_id": "MLA1", "cuenta": "IT", "sku_ml": "SKU-ML-VAR",
+        "motivo": "VARIANTE_SIN_MATCH_EN_ECOM_FACTOR_1_ASUMIDO",
     }]

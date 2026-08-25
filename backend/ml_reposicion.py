@@ -186,7 +186,7 @@ def calcular_reposicion_mla(
 
     filas: list[FilaReposicionMLA] = []
     for fila_sku in resultado_conciliacion.filas:
-        stock_ecom = ecom.stock_disponible_por_sku(fila_sku.sku)
+        stock_ecom = ecom.stock_disponible_por_sku(fila_sku.sku, fila_sku.parent_sku)
         stock_tactica = tactica.stock_por_sku(fila_sku.sku)
         for pub in fila_sku.publicaciones:
             stock_full_mla = pub["disponible"] * pub["factor"]

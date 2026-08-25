@@ -73,6 +73,7 @@ class ItemFullML:
     sku: str | None
     inventory_id: str | None
     titulo: str
+    variacion_attrs: dict[str, str] | None = None  # {"Color": "Negro"} -- None si no es una variación
 
 
 class MLFullClient:
@@ -119,14 +120,24 @@ class MLFullClient:
 
     def detalle_items(self, item_ids: list[str], cuenta: str) -> list[dict]:
         """Máximo 20 ids por request — límite documentado
-        (`01_MAPA_API.md` §2.1, "Traer varios ítems de una vez")."""
+        (`01_MAPA_API.md` §2.1, "Traer varios ítems de una vez").
+
+        **Bug real corregido (2026-08-26)**: el filtro de campos no pedía
+        `attributes`, así que `item.attributes` volvía SIEMPRE vacío en este
+        endpoint batch -- `_sku_de_item()` ya tenía el fallback al atributo
+        `SELLER_SKU` escrito, pero nunca podía encontrarlo porque el dato ni
+        siquiera llegaba. Caso real que lo expuso: `MLA1607512661`
+        (inventory_id `COCF22823`) reportaba "sin SKU en ML" cuando en
+        realidad tiene `SELLER_SKU = "X2 EMERLIGHT-30LED"` -- confirmado
+        pidiendo el ítem sin ese filtro de campos."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         salida = []
         for i in range(0, len(item_ids), 20):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,inventory_id,seller_custom_field,variations,shipping"},
+                {"ids": ",".join(lote),
+                 "attributes": "id,title,inventory_id,seller_custom_field,variations,shipping,attributes"},
                 headers,
             )
             for entrada in d:
@@ -247,13 +258,22 @@ def extraer_items_full(items: list[dict], cuenta: str) -> tuple[list[ItemFullML]
         variaciones = item.get("variations") or []
         if variaciones:
             for var in variaciones:
-                sku = None
+                sku = var.get("seller_custom_field")
                 for attr in var.get("attributes") or []:
                     if attr.get("id") == "SELLER_SKU" and attr.get("value_name"):
-                        sku = attr["value_name"]
+                        sku = sku or attr["value_name"]
                 sku = sku or _sku_de_item(item)
+                # {"Color": "Negro", ...} -- identifica la variación para
+                # matchear contra la vinculación por variante de Ecom
+                # (`EcomFullAdapter.factor_pack`), ver su docstring.
+                attrs_variacion = {
+                    a["name"]: a["value_name"]
+                    for a in (var.get("attribute_combinations") or [])
+                    if a.get("name") and a.get("value_name")
+                } or None
                 fila = ItemFullML(item_id=item_id, cuenta=cuenta, sku=sku,
-                                   inventory_id=var.get("inventory_id"), titulo=titulo)
+                                   inventory_id=var.get("inventory_id"), titulo=titulo,
+                                   variacion_attrs=attrs_variacion)
                 filas.append(fila)
                 if not sku:
                     incidencias.append({"item_id": item_id, "cuenta": cuenta, "motivo": "SIN_SKU"})
@@ -353,31 +373,42 @@ class EcomFullAdapter:
             self._producto_cache[sku] = data.get("products", {}).get("readBySku")
         return self._producto_cache[sku]
 
-    def _stock_en_deposito(self, sku: str, deposito_id: str) -> int | None:
-        producto = self._producto_por_sku(sku)
+    def _stock_en_deposito(self, sku: str, deposito_id: str, parent_sku: str | None = None) -> int | None:
+        """`parent_sku` -- cuando `sku` es una variante puntual (color,
+        talle), `readBySku` no la resuelve directo (confirmado contra la
+        cuenta real: `readBySku("HTV-PVC-BLACK-G-50X1MT")` da `None`,
+        solo el SKU padre `"HTV-PVC-G-50X1MT"` es una entrada real de
+        `products`) -- hay que pedir el padre y quedarse con SU variante
+        puntual, nunca sumar todas (eso tapa el stock de una variante con
+        el de las demás, ver docstring de `factor_pack`)."""
+        producto = self._producto_por_sku(parent_sku or sku)
         if not producto:
             return None
+        variantes = producto.get("variants") or []
+        if parent_sku and parent_sku != sku:
+            variantes = [v for v in variantes if v.get("sku") == sku]
+            if not variantes:
+                return None
         total = 0
-        for variante in producto.get("variants") or []:
+        for variante in variantes:
             for wh in variante.get("variantWarehouses") or []:
                 if wh.get("warehouse_id") == deposito_id:
                     total += wh.get("warehouse_qty") or 0
         return total
 
-    def stock_full_por_sku(self, sku: str) -> int | None:
+    def stock_full_por_sku(self, sku: str, parent_sku: str | None = None) -> int | None:
         """`None` = el SKU no existe en Ecom (incidencia para el
-        llamador, no un 0 silencioso). Suma todas las `variants` del
-        producto por si el SKU tuviera más de una variante — el caso
-        común es una sola."""
-        return self._stock_en_deposito(sku, self.warehouse_full_id())
+        llamador, no un 0 silencioso). Si `sku` es una variante puntual
+        (color/talle), pasar `parent_sku` -- ver `_stock_en_deposito`."""
+        return self._stock_en_deposito(sku, self.warehouse_full_id(), parent_sku)
 
-    def stock_disponible_por_sku(self, sku: str) -> int | None:
+    def stock_disponible_por_sku(self, sku: str, parent_sku: str | None = None) -> int | None:
         """Stock en Pitec -- lo que hay para armar el próximo envío a
         Full. `None` = el SKU no existe en Ecom, igual que
         `stock_full_por_sku`."""
-        return self._stock_en_deposito(sku, self.deposito_disponible_id())
+        return self._stock_en_deposito(sku, self.deposito_disponible_id(), parent_sku)
 
-    def factor_pack(self, item_id: str) -> dict[str, int] | None:
+    def factor_pack(self, item_id: str) -> "FactorPack | None":
         """Factor real de multiplicación por venta.
 
         **Corregido 2026-08-20 contra un ítem real** (Maxx dio
@@ -394,6 +425,30 @@ class EcomFullAdapter:
         sobre su propio SKU (no se probó contra un caso real todavía,
         pero se infiere de la semántica del campo).
 
+        **Extendido 2026-08-26 para variaciones reales de ML** (Maxx
+        reportó "me mostrás el stock del SKU madre, necesito la
+        variante") -- confirmado contra un caso real (`MLA1516769711`,
+        vinilo termotransferible con 2 colores activos en Full): a nivel
+        ítem `product.sku` da un solo SKU "madre" (`HTV-PVC-G-50X1MT`)
+        que en Ecom es apenas el contenedor de 18 variantes de color,
+        cada una con su propio SKU y su propio stock -- confirmado por
+        introspección directa del schema real de Ecom (no de memoria):
+        `ProductListing.productVariantListings[].variant.{sku,
+        variantAttributes}`. Usar solo `product.sku` para un ítem con
+        variaciones reales colapsa el stock de todos los colores en un
+        solo número, tapando el de la variante puntual que hay que
+        reponer -- confirmado con el caso real: Blanco tenía 0 en Full,
+        Negro tenía 3, pero las dos publicaciones de ML mostraban el
+        mismo "SKU madre" sin distinguir cuál era cuál.
+
+        `variantAttributes` (ej. `{"name": "Color", "options": "Negro"}`)
+        es lo único que permite matchear cada variante de Ecom contra la
+        variación real de ML (`ItemFullML.variacion_attrs`, extraído de
+        `attribute_combinations`) -- no hay ningún id compartido entre
+        los dos sistemas (`Variant.simIds` existe en el schema de Ecom
+        para justamente esto, pero vino vacío en el caso real probado,
+        así que no es una fuente confiable hoy).
+
         `None` = la publicación no está vinculada a ningún producto de
         Ecom (`linked: false`, `productListings` vacío — visto también
         en la realidad, en dos ítems sin pack). Es una incidencia de
@@ -404,13 +459,34 @@ class EcomFullAdapter:
         entradas = (listing or {}).get("productListings") or []
         if not entradas:
             return None
-        factores: dict[str, int] = {}
+        item_sku: dict[str, int] = {}
+        variantes: list[dict] = []
         for pl in entradas:
             producto = pl.get("product")
-            sku = producto.get("sku") if producto else None
-            if sku:
-                factores[sku] = factores.get(sku, 0) + (pl.get("qty") or 0)
-        return factores or None
+            sku_padre = producto.get("sku") if producto else None
+            if sku_padre:
+                item_sku[sku_padre] = item_sku.get(sku_padre, 0) + (pl.get("qty") or 0)
+            for pvl in pl.get("productVariantListings") or []:
+                variante = pvl.get("variant") or {}
+                sku_variante = variante.get("sku")
+                atributos = {
+                    a["name"]: a["options"] for a in (variante.get("variantAttributes") or [])
+                    if a.get("name") and a.get("options")
+                }
+                if sku_variante and atributos:
+                    variantes.append({
+                        "atributos": atributos, "sku": sku_variante,
+                        "qty": pl.get("qty") or 0, "parent_sku": sku_padre,
+                    })
+        if not item_sku and not variantes:
+            return None
+        return FactorPack(item_sku=item_sku, variantes=variantes)
+
+
+@dataclass
+class FactorPack:
+    item_sku: dict[str, int]              # sku "madre" -> qty, resolución a nivel ítem (packs, publicaciones simples)
+    variantes: list[dict] = field(default_factory=list)  # [{"atributos", "sku", "qty", "parent_sku"}]
 
 
 # ── Táctica — stock, sin fuente SQL/API todavía ──
@@ -478,6 +554,7 @@ class FilaConciliacion:
     stock_ecom: int | None
     diferencia: int | None
     publicaciones: list[dict] = field(default_factory=list)  # [{item_id, cuenta, inventory_id, cantidad_en_full}]
+    parent_sku: str | None = None  # si `sku` es una variante puntual, el SKU "madre" para consultar Ecom (ver factor_pack)
 
 
 @dataclass
@@ -494,7 +571,9 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
     `inventory_id` (§3.3 — dos publicaciones de la misma variación
     comparten inventario y sumarlas lo duplicaría), resolver el factor real
     contra la vinculación de Ecom (`EcomFullAdapter.factor_pack`, cubre
-    tanto packs como publicaciones simples vinculadas), sumar por SKU, y
+    packs, publicaciones simples vinculadas, Y variaciones reales de ML
+    vinculadas por variante -- ver `_resolver_vinculacion`), sumar por SKU
+    (el SKU real de la variante cuando aplica, nunca el "SKU madre"), y
     comparar contra el depósito Full de Ecom."""
     cuentas = cuentas or list(SELLERS.keys())
 
@@ -526,17 +605,21 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
 
     # Factor real por item_id único (una llamada por publicación única) --
     # `factor_pack` ya cubre packs Y publicaciones simples vinculadas, con
-    # el mismo mecanismo (`mlListings.read(id).productListings`).
-    factor_por_item: dict[str, dict[str, int] | None] = {}
+    # el mismo mecanismo (`mlListings.read(id).productListings`), y ahora
+    # también variaciones reales de ML (`productVariantListings`).
+    factor_por_item: dict[str, FactorPack | None] = {}
     for fila in filas_dedup:
         if fila.item_id not in factor_por_item:
             factor_por_item[fila.item_id] = ecom.factor_pack(fila.item_id)
 
-    # Sumar por SKU. Si Ecom confirma vinculación, se usa SU sku+factor
-    # (autoritativo). Si no está vinculada, se cae al SKU que ya trajo ML
-    # con factor 1 -- pero eso es una ASUNCIÓN sin confirmar, se registra
-    # como incidencia aparte (nunca en silencio).
+    # Sumar por SKU. Si Ecom confirma vinculación (a nivel ítem o a nivel
+    # variante), se usa SU sku+factor (autoritativo). Si no está vinculada
+    # -- o si la variación real de ML no matchea contra ninguna variante
+    # vinculada -- se cae al SKU que ya trajo ML con factor 1, pero eso es
+    # una ASUNCIÓN sin confirmar y se registra como incidencia aparte
+    # (nunca en silencio, ver `_resolver_vinculacion`).
     acumulado: dict[str, int] = {}
+    parent_sku_por_sku: dict[str, str | None] = {}
     publicaciones_por_sku: dict[str, list[dict]] = {}
     incidencias_sin_vincular: list[dict] = []
     for fila in filas_dedup:
@@ -544,42 +627,85 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
             continue
         disponible = (stock_por_inventory.get(fila.inventory_id) or {}).get("available_quantity", 0) or 0
         factor_ecom = factor_por_item.get(fila.item_id)
-        if factor_ecom:
-            for sku_vinculado, cantidad in factor_ecom.items():
-                acumulado[sku_vinculado] = acumulado.get(sku_vinculado, 0) + disponible * cantidad
-                publicaciones_por_sku.setdefault(sku_vinculado, []).append({
-                    "item_id": fila.item_id, "cuenta": fila.cuenta, "inventory_id": fila.inventory_id,
-                    "disponible": disponible, "factor": cantidad, "vinculado": True,
-                    "titulo": fila.titulo, "sku_ml": fila.sku,
-                })
-        elif fila.sku:
-            acumulado[fila.sku] = acumulado.get(fila.sku, 0) + disponible
-            publicaciones_por_sku.setdefault(fila.sku, []).append({
+        pares, vinculado, incidencia = _resolver_vinculacion(fila, factor_ecom)
+        if incidencia:
+            incidencias_sin_vincular.append(incidencia)
+        for sku_resuelto, cantidad, parent_sku in pares:
+            acumulado[sku_resuelto] = acumulado.get(sku_resuelto, 0) + disponible * cantidad
+            parent_sku_por_sku[sku_resuelto] = parent_sku
+            publicaciones_por_sku.setdefault(sku_resuelto, []).append({
                 "item_id": fila.item_id, "cuenta": fila.cuenta, "inventory_id": fila.inventory_id,
-                "disponible": disponible, "factor": 1, "vinculado": False,
+                "disponible": disponible, "factor": cantidad, "vinculado": vinculado,
                 "titulo": fila.titulo, "sku_ml": fila.sku,
-            })
-            incidencias_sin_vincular.append({
-                "item_id": fila.item_id, "cuenta": fila.cuenta, "sku_ml": fila.sku,
-                "motivo": "SIN_VINCULAR_EN_ECOM_FACTOR_1_ASUMIDO",
             })
 
     filas_resultado: list[FilaConciliacion] = []
     skus_no_en_ecom: list[str] = []
     for sku, total_ml in acumulado.items():
-        stock_ecom = ecom.stock_full_por_sku(sku)
+        parent_sku = parent_sku_por_sku.get(sku)
+        stock_ecom = ecom.stock_full_por_sku(sku, parent_sku)
         if stock_ecom is None:
             skus_no_en_ecom.append(sku)
         diferencia = None if stock_ecom is None else total_ml - stock_ecom
         filas_resultado.append(FilaConciliacion(
             sku=sku, stock_ml=total_ml, stock_ecom=stock_ecom, diferencia=diferencia,
-            publicaciones=publicaciones_por_sku.get(sku, []),
+            publicaciones=publicaciones_por_sku.get(sku, []), parent_sku=parent_sku,
         ))
 
     return ResultadoConciliacion(
         filas=filas_resultado, incidencias_sku=incidencias_sku,
         incidencias_sin_vincular=incidencias_sin_vincular, skus_no_en_ecom=skus_no_en_ecom,
     )
+
+
+def _resolver_vinculacion(
+    fila: ItemFullML, factor_ecom: "FactorPack | None",
+) -> tuple[list[tuple[str, int, str | None]], bool, dict | None]:
+    """Resuelve UNA publicación/variación a `[(sku, factor, parent_sku), ...]`
+    -- nunca cae en silencio al SKU madre cuando ML trae una variación real
+    y Ecom no la vincula a ese nivel (ver docstring de `factor_pack`).
+
+    Orden de resolución:
+    1. Es una variación de ML (`variacion_attrs`) y Ecom vinculó por
+       variante (`factor_ecom.variantes`) -- matchea por atributos
+       (Color/Talle/etc). Si matchea, autoritativo. Si NO matchea
+       ninguna, es una incidencia propia (`VARIANTE_SIN_MATCH_EN_ECOM`) --
+       nunca se asume la variante que sea, cae al SKU de ML con factor 1.
+    2. Vinculación a nivel ítem (`factor_ecom.item_sku`, caso de siempre:
+       packs y publicaciones simples). Si la fila SÍ es una variación de
+       ML pero acá no hay desglose por variante, se usa igual (mejor que
+       nada) pero se deja una incidencia visible
+       (`VARIANTE_VINCULADA_SOLO_A_NIVEL_ITEM`) en vez de tapar el hueco.
+    3. Sin vinculación en Ecom -- cae al SKU de ML, factor 1, incidencia
+       (comportamiento de siempre)."""
+    if factor_ecom and fila.variacion_attrs and factor_ecom.variantes:
+        for v in factor_ecom.variantes:
+            if all(v["atributos"].get(k) == val for k, val in fila.variacion_attrs.items()):
+                return [(v["sku"], v["qty"], v["parent_sku"])], True, None
+        incidencia = {
+            "item_id": fila.item_id, "cuenta": fila.cuenta, "sku_ml": fila.sku,
+            "motivo": "VARIANTE_SIN_MATCH_EN_ECOM_FACTOR_1_ASUMIDO",
+        }
+        return ([(fila.sku, 1, None)] if fila.sku else []), False, incidencia
+
+    if factor_ecom and factor_ecom.item_sku:
+        pares = [(sku, cantidad, None) for sku, cantidad in factor_ecom.item_sku.items()]
+        incidencia = None
+        if fila.variacion_attrs:
+            incidencia = {
+                "item_id": fila.item_id, "cuenta": fila.cuenta, "sku_ml": fila.sku,
+                "motivo": "VARIANTE_VINCULADA_SOLO_A_NIVEL_ITEM",
+            }
+        return pares, True, incidencia
+
+    if fila.sku:
+        incidencia = {
+            "item_id": fila.item_id, "cuenta": fila.cuenta, "sku_ml": fila.sku,
+            "motivo": "SIN_VINCULAR_EN_ECOM_FACTOR_1_ASUMIDO",
+        }
+        return [(fila.sku, 1, None)], False, incidencia
+
+    return [], False, None
 
 
 # ── Job en background — mismo patrón que /ml/tracker/run y /ml/vendedor/run
