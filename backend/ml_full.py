@@ -307,7 +307,10 @@ query($id: ID!) {
   mlListings {
     read(id: $id) {
       linked
-      productListings { qty productId product { sku } }
+      productListings {
+        qty productId product { sku }
+        productVariantListings { variant { sku variantAttributes { name options } } }
+      }
     }
   }
 }
