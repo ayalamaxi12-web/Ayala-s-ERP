@@ -5,7 +5,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
-from datetime import datetime
+from datetime import date, datetime
 from google.oauth2.service_account import Credentials
 import json
 
@@ -413,9 +413,13 @@ async def ml_full_conciliar_status(job_id: str):
 # ══════════════════════════════════════════════════════
 
 @app.post("/ml-full/reposicion/run")
-async def ml_full_reposicion_run(background_tasks: BackgroundTasks, dias_ventas: int = 30, semanas_objetivo: float = 3):
+async def ml_full_reposicion_run(
+    background_tasks: BackgroundTasks, fecha_llegada: date, dias_ventas: int = 30, semanas_objetivo: float = 3,
+):
     job_id = f"mlrepo_{int(time.time())}"
-    background_tasks.add_task(ml_reposicion.iniciar_job, job_id, None, None, dias_ventas, semanas_objetivo)
+    background_tasks.add_task(
+        ml_reposicion.iniciar_job, job_id, None, None, dias_ventas, semanas_objetivo, fecha_llegada,
+    )
     return {"job_id": job_id, "status": "started"}
 
 @app.get("/ml-full/reposicion/status/{job_id}")

@@ -1,47 +1,81 @@
-"""
-Simulador de reposición Full — cuánto conviene enviar, por SKU.
+"""Simulador de reposición Full — cuánto conviene enviar, por PUBLICACIÓN
+(MLA), no por SKU.
 
-Continuación de `ml_full.py` (misma doc, `03_MODULO_FULL.md` §5 y §10
-puntos 5 y 12). Sigue siendo de **solo lectura y de simulación**: calcula
-y muestra cuánto convendría enviar a Full, pero no crea el envío real en
-Mercado Libre. Confirmado con Maxx (2026-08-20): "eso lo llevamos al ERP
-después de verificar que el cálculo da bien" — la creación real del envío
-queda para después, y de cualquier forma sigue detrás de la puerta de
-escritura de `docs/business/COMERCIAL/00_LEEME.md` §5.
+Rediseñado 2026-08-25 a pedido de Maxx: la reposición real de Full se arma
+publicación por publicación, no por SKU agregado -- "el stock se reparte de
+acuerdo a cuánto vendió ese MLA, no ese SKU". Cada fila de este módulo es
+una publicación (una cuenta, un `item_id`), con su propia venta, su propio
+stock y su propio objetivo. La conciliación SKU-agregada de `ml_full.py`
+(`conciliar()`) sigue existiendo tal cual -- este módulo la REUSA (mismos
+datos de stock/factor de pack ya resueltos, sin pegarle de nuevo a ML) pero
+ya no colapsa el resultado a un total por SKU antes de mostrarlo.
+
+Sigue siendo de **solo lectura y de simulación**: calcula y muestra cuánto
+convendría enviar a Full, pero no crea el envío real en Mercado Libre.
+Confirmado con Maxx (2026-08-20): "eso lo llevamos al ERP después de
+verificar que el cálculo da bien" -- la creación real del envío queda para
+después, y de cualquier forma sigue detrás de la puerta de escritura de
+`docs/business/COMERCIAL/00_LEEME.md` §5.
 
 Fuente de ventas, confirmada contra el portal real de Mercado Libre
-(`developers.mercadolibre.com.ar/es_ar/gestiona-ventas`, 2026-08-20 — no
-había MCP disponible en la sesión, así que se escaló al siguiente paso de
-la escalera doc → MCP → web real): `MLFullClient.ventas_por_item`, que usa
-`/orders/search?seller=...&order.status=paid&order.date_closed.from=...&order.date_closed.to=...`.
+(`developers.mercadolibre.com.ar/es_ar/gestiona-ventas`, 2026-08-20):
+`MLFullClient.ventas_por_item`, ya por `item_id` -- no hace falta agregarla
+por SKU para este módulo, se usa directo.
 
-Fuente de "disponible para enviar", confirmada con Maxx (2026-08-20): el
-depósito **Pitec** de Ecom (`EcomFullAdapter.stock_disponible_por_sku`) —
-no la suma de todos los depósitos que no son Full.
+Fuente de "disponible para enviar" (Ecom): el depósito **Pitec**
+(`EcomFullAdapter.stock_disponible_por_sku`, confirmado con Maxx
+2026-08-20) -- no la suma de todos los depósitos que no son Full.
 
-**Táctica no tiene una fuente de stock consultable hoy** (ni Sheet, ni
-API, ni tabla en `rentabilidad/` — se revisó y no existe). Confirmado con
-Maxx: cuando Pitec llega a 0, la reposición es un traspaso MANUAL de
-mercadería de Táctica a Ecom, no un número que este módulo pueda sumar
-solo. Por eso el simulador NO agrega un "stock Táctica" al disponible:
-cuando falta stock en Pitec, marca `alerta_revisar_tactica` para que una
-persona lo revise, en vez de inventar un número.
+Fuente de "disponible para enviar" (Táctica): confirmado con Maxx
+(2026-08-25) -- hoy NO hay SQL ni API de stock de Táctica (se revisó
+`rentabilidad/ingesta_tactica.py`, solo trae ventas). Se lee del Sheet
+"Stock e Importaciones" vía `ml_full.TacticaStockSheetAdapter` -- ver ese
+docstring para el detalle de por qué es una fuente transitoria.
+
+**La fecha de llegada del envío importa, no solo "hoy".** Confirmado con
+Maxx (2026-08-25) con un ejemplo real: un envío creado el 22/08 para llegar
+el 03/09 sigue vendiendo durante esos 12 días de tránsito -- si al momento
+de llegar el envío el MLA ya tocó cero, había que haberle mandado las 3
+semanas objetivo completas A PARTIR de la llegada, no de hoy. Por eso
+`calcular_reposicion_mla` pide `fecha_llegada` (nunca asume "una semana" ni
+ningún número fijo) y calcula:
+
+    días_hasta_llegada  = fecha_llegada − hoy (nunca negativo, se clampea a 0)
+    stock_a_llegada     = stock_full_hoy − ventas_diaria_mla × días_hasta_llegada
+    stock_objetivo      = ventas_diaria_mla × semanas_objetivo × 7
+    cantidad_enviar     = máx(0, stock_objetivo − stock_a_llegada)
+
+**El reparto cuando el disponible combinado (Ecom+Táctica) no alcanza para
+todas las publicaciones de un mismo SKU** -- confirmado con Maxx
+(2026-08-25), nunca proporcional: la publicación que más vende (mayor
+`ventas_diarias`, ya corregida por censura) se abastece POR COMPLETO
+primero; lo que sobra va a la siguiente en orden descendente, hasta agotar
+el disponible. Eso da el campo `sugerido`, que solo difiere de
+`cantidad_enviar` cuando hay escasez real a nivel SKU -- si alcanza para
+todas, son el mismo número. El reparto se calcula sobre el TOTAL del SKU
+cruzando las dos cuentas (el depósito es uno solo, compartido) aunque la
+pantalla lo muestre en pestañas separadas por cuenta.
+
+**"Envíos pendientes" es un campo manual, cargado por la persona en el
+ERP** (confirmado con Maxx 2026-08-25) -- no hay hoy ningún endpoint de ML
+confirmado para esto (candidato encontrado: "Fulfillment Stock Operations"
+por `inventory_id` con `operation_type=inbound_reception`, pendiente de
+confirmar el contrato exacto con el MCP de documentación o contra la
+cuenta real). Este módulo no lo calcula ni lo resta -- queda en manos del
+frontend, que sí lo resta de `cantidad_enviar`/`sugerido` al recalcular
+localmente cuando la persona lo carga.
 
 GAPS documentados, no resueltos todavía (no son reglas inventadas, son
 huecos reales sin dato para llenarlos):
 - La "ventana con stock" (para detectar venta censurada) se estima por
   primera/última venta del período, igual que ya hace la planilla
-  (`03_MODULO_FULL.md` §5) — el log de movimientos exacto (§4.1) sigue
-  sin confirmar si existe por API.
-- La segunda condición de censura del doc ("rotación ≥ 3 y unidades ≥
-  10") **no está implementada**: necesita stock PROMEDIO del período, que
+  (`03_MODULO_FULL.md` §5) -- el log de movimientos exacto (§4.1) sigue sin
+  confirmar si existe por API.
+- La segunda condición de censura del doc ("rotación ≥ 3 y unidades ≥ 10")
+  **no está implementada**: necesita stock PROMEDIO del período, que
   requiere fotos diarias de stock (§4.2) que todavía no existen. Solo se
   implementa la primera condición (stock actual en 0 + ventas ≥ 5 + días
-  sin vender ≥ 3).
-- "Envíos pendientes" no se resta de `falta_enviar` — no hay tracking de
-  envíos en tránsito en este sistema todavía (punto 11 del orden de
-  construcción del doc, depende de que el envío real exista para poder
-  guardar el pronóstico al momento de crearlo).
+  sin vender ≥ 3), igual que antes de este rediseño.
 """
 from __future__ import annotations
 
@@ -49,12 +83,17 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from ml_auth import SELLERS
-from ml_full import EcomFullAdapter, MLFullClient, conciliar
+from ml_full import EcomFullAdapter, MLFullClient, TacticaStockSheetAdapter, conciliar
 
 
 @dataclass
-class FilaReposicion:
+class FilaReposicionMLA:
+    item_id: str
+    inventory_id: str | None
+    cuenta: str
     sku: str
+    sku_ml: str | None
+    titulo: str
     stock_full: int
     ventas_periodo: int
     dias_periodo: int
@@ -63,59 +102,56 @@ class FilaReposicion:
     censurado: bool
     ventas_diarias: float
     stock_objetivo: float
-    falta_enviar: int
-    disponible_pitec: int | None
-    enviar_posible: int
-    alerta_revisar_tactica: bool
-    cobertura_dias: float | None
-    quiebre_estimado: str | None
+    stock_a_llegada: float
+    cantidad_enviar: int
+    sugerido: int
+    stock_ecom: int | None
+    stock_tactica: int | None
 
 
 @dataclass
-class ResultadoReposicion:
-    filas: list[FilaReposicion]
+class ResultadoReposicionMLA:
+    filas: list[FilaReposicionMLA]  # las dos cuentas juntas -- el llamador agrupa por `cuenta` al mostrar
     incidencias_sku: list[dict]
     incidencias_sin_vincular: list[dict]
     skus_no_en_ecom: list[str]
 
 
-def _factores_por_item(resultado) -> dict[str, list[tuple[str, int]]]:
-    """`item_id` -> [(sku, factor), ...], leído de las `publicaciones` que
-    ya resolvió `conciliar()` -- no se vuelve a golpear la vinculación de
-    Ecom."""
-    mapa: dict[str, list[tuple[str, int]]] = {}
-    for fila in resultado.filas:
-        for pub in fila.publicaciones:
-            mapa.setdefault(pub["item_id"], []).append((fila.sku, pub["factor"]))
-    return mapa
+def _repartir_sugerido(filas: list[FilaReposicionMLA]) -> None:
+    """Muta `sugerido` en cada fila. Agrupa por SKU cruzando las dos
+    cuentas (el depósito de Ecom/Táctica es uno solo por SKU) y reparte el
+    disponible combinado en orden de venta descendente -- "todo a la que
+    más vende antes que a la siguiente", nunca proporcional (confirmado con
+    Maxx, ver docstring del módulo)."""
+    por_sku: dict[str, list[FilaReposicionMLA]] = {}
+    for f in filas:
+        por_sku.setdefault(f.sku, []).append(f)
+    for grupo in por_sku.values():
+        disponible = (grupo[0].stock_ecom or 0) + (grupo[0].stock_tactica or 0)
+        for f in sorted(grupo, key=lambda x: x.ventas_diarias, reverse=True):
+            asignado = max(0, min(f.cantidad_enviar, disponible))
+            f.sugerido = asignado
+            disponible -= asignado
 
 
-def calcular_reposicion(
-    ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None = None,
-    dias_ventas: int = 30, semanas_objetivo: float = 3, hoy: date | None = None,
-) -> ResultadoReposicion:
-    """Orquesta el simulador completo (§5 y §10 puntos 5/12 de
-    `03_MODULO_FULL.md`): reutiliza `conciliar()` para el stock Full por
-    SKU y la vinculación/factor de pack ya resuelta, le suma las ventas
-    confirmadas del período (mismas dos cuentas, en unidades reales
-    aplicando el mismo factor) y el stock disponible en Pitec, y aplica
-    las fórmulas de la planilla:
-
-        Ventas diarias corregida = unidades / ventana con stock (si
-                                    censurado) o / días del período (si no)
-        Stock objetivo           = ventas diarias × semanas objetivo × 7
-        Falta enviar             = máx(0, stock objetivo − stock en Full)
-        Enviar posible           = mín(falta enviar, disponible en Pitec)
-        Cobertura en días        = stock en Full / ventas diarias
-        Quiebre estimado         = hoy + cobertura
-    """
+def calcular_reposicion_mla(
+    ml: MLFullClient, ecom: EcomFullAdapter, tactica: TacticaStockSheetAdapter,
+    cuentas: list[str] | None = None, dias_ventas: int = 30, semanas_objetivo: float = 3,
+    fecha_llegada: date | None = None, hoy: date | None = None,
+) -> ResultadoReposicionMLA:
+    """Orquesta el simulador por publicación: reutiliza `conciliar()` para
+    el stock/factor de pack ya resuelto de las dos cuentas (sin volver a
+    pegarle a ML ni a la vinculación de Ecom), y en vez de sumar por SKU
+    calcula cada publicación por separado -- ver el docstring del módulo
+    para las fórmulas exactas."""
     cuentas = cuentas or list(SELLERS.keys())
     hoy = hoy or date.today()
+    fecha_llegada = fecha_llegada or hoy
+    dias_hasta_llegada = max(0, (fecha_llegada - hoy).days)
     desde_iso = f"{(hoy - timedelta(days=dias_ventas)).isoformat()}T00:00:00.000-00:00"
     hasta_iso = f"{hoy.isoformat()}T23:00:00.000-00:00"
 
     resultado_conciliacion = conciliar(ml, ecom, cuentas)
-    factores_por_item = _factores_por_item(resultado_conciliacion)
 
     ventas_por_item: dict[str, dict] = {}
     for cuenta in cuentas:
@@ -123,61 +159,42 @@ def calcular_reposicion(
         # las dos cuentas al combinar los diccionarios.
         ventas_por_item.update(ml.ventas_por_item(cuenta, desde_iso, hasta_iso))
 
-    filas: list[FilaReposicion] = []
-    for fila_stock in resultado_conciliacion.filas:
-        ventas_total = 0
-        primera = None
-        ultima = None
-        for pub in fila_stock.publicaciones:
+    filas: list[FilaReposicionMLA] = []
+    for fila_sku in resultado_conciliacion.filas:
+        stock_ecom = ecom.stock_disponible_por_sku(fila_sku.sku)
+        stock_tactica = tactica.stock_por_sku(fila_sku.sku)
+        for pub in fila_sku.publicaciones:
+            stock_full_mla = pub["disponible"] * pub["factor"]
             venta_item = ventas_por_item.get(pub["item_id"])
-            if not venta_item:
-                continue
-            ventas_total += venta_item["unidades"] * pub["factor"]
-            if venta_item["primera"] and (primera is None or venta_item["primera"] < primera):
-                primera = venta_item["primera"]
-            if venta_item["ultima"] and (ultima is None or venta_item["ultima"] > ultima):
-                ultima = venta_item["ultima"]
+            ventas_total = (venta_item["unidades"] * pub["factor"]) if venta_item else 0
+            primera = venta_item["primera"] if venta_item else None
+            ultima = venta_item["ultima"] if venta_item else None
 
-        dias_sin_vender = (hoy - date.fromisoformat(ultima)).days if ultima else dias_ventas
-        censurado = fila_stock.stock_ml == 0 and ventas_total >= 5 and dias_sin_vender >= 3
-        if censurado and primera and ultima:
-            ventana = max((date.fromisoformat(ultima) - date.fromisoformat(primera)).days, 1)
-            ventas_diarias = ventas_total / ventana
-        else:
-            ventas_diarias = ventas_total / dias_ventas
+            dias_sin_vender = (hoy - date.fromisoformat(ultima)).days if ultima else dias_ventas
+            censurado = stock_full_mla == 0 and ventas_total >= 5 and dias_sin_vender >= 3
+            if censurado and primera and ultima:
+                ventana = max((date.fromisoformat(ultima) - date.fromisoformat(primera)).days, 1)
+                ventas_diarias = ventas_total / ventana
+            else:
+                ventas_diarias = ventas_total / dias_ventas
 
-        stock_objetivo = ventas_diarias * semanas_objetivo * 7
-        falta_enviar = max(0, round(stock_objetivo - fila_stock.stock_ml))
-        disponible = ecom.stock_disponible_por_sku(fila_stock.sku)
-        # max(0, ...) -- visto en producción (2026-08-20): Pitec puede tener
-        # stock negativo cargado en Ecom (dato real, no de este módulo). Sin
-        # el máximo, "enviar_posible" salía negativo aunque no hiciera falta
-        # enviar nada (falta_enviar=0), lo cual no tiene sentido físico.
-        enviar_posible = max(0, min(falta_enviar, disponible)) if disponible is not None else 0
-        # La alerta es sobre una necesidad real -- si no falta enviar nada,
-        # que Pitec esté en negativo es un problema de datos de Ecom, no
-        # una alerta de "revisar Táctica".
-        alerta_tactica = falta_enviar > 0 and (disponible is None or disponible < falta_enviar)
+            stock_objetivo = ventas_diarias * semanas_objetivo * 7
+            stock_a_llegada = stock_full_mla - ventas_diarias * dias_hasta_llegada
+            cantidad_enviar = max(0, round(stock_objetivo - stock_a_llegada))
 
-        if ventas_diarias > 0:
-            cobertura = fila_stock.stock_ml / ventas_diarias
-            quiebre = (hoy + timedelta(days=cobertura)).isoformat()
-        else:
-            cobertura = None
-            quiebre = None
+            filas.append(FilaReposicionMLA(
+                item_id=pub["item_id"], inventory_id=pub["inventory_id"], cuenta=pub["cuenta"],
+                sku=fila_sku.sku, sku_ml=pub.get("sku_ml"), titulo=pub.get("titulo", ""),
+                stock_full=stock_full_mla, ventas_periodo=ventas_total, dias_periodo=dias_ventas,
+                primera_venta=primera, ultima_venta=ultima, censurado=censurado,
+                ventas_diarias=round(ventas_diarias, 2), stock_objetivo=round(stock_objetivo, 1),
+                stock_a_llegada=round(stock_a_llegada, 1), cantidad_enviar=cantidad_enviar,
+                sugerido=0, stock_ecom=stock_ecom, stock_tactica=stock_tactica,
+            ))
 
-        filas.append(FilaReposicion(
-            sku=fila_stock.sku, stock_full=fila_stock.stock_ml, ventas_periodo=ventas_total,
-            dias_periodo=dias_ventas, primera_venta=primera, ultima_venta=ultima,
-            censurado=censurado, ventas_diarias=round(ventas_diarias, 2),
-            stock_objetivo=round(stock_objetivo, 1), falta_enviar=falta_enviar,
-            disponible_pitec=disponible, enviar_posible=enviar_posible,
-            alerta_revisar_tactica=alerta_tactica,
-            cobertura_dias=round(cobertura, 1) if cobertura is not None else None,
-            quiebre_estimado=quiebre,
-        ))
+    _repartir_sugerido(filas)
 
-    return ResultadoReposicion(
+    return ResultadoReposicionMLA(
         filas=filas, incidencias_sku=resultado_conciliacion.incidencias_sku,
         incidencias_sin_vincular=resultado_conciliacion.incidencias_sin_vincular,
         skus_no_en_ecom=resultado_conciliacion.skus_no_en_ecom,
@@ -192,7 +209,7 @@ _jobs: dict[str, dict] = {}
 
 def iniciar_job(
     job_id: str, ecom_email: str | None = None, ecom_password: str | None = None,
-    dias_ventas: int = 30, semanas_objetivo: float = 3,
+    dias_ventas: int = 30, semanas_objetivo: float = 3, fecha_llegada: date | None = None,
 ) -> None:
     from rentabilidad.ingesta_ecom_api import EcomApiClient
 
@@ -200,7 +217,11 @@ def iniciar_job(
     try:
         ml = MLFullClient()
         ecom = EcomFullAdapter(EcomApiClient(email=ecom_email, password=ecom_password))
-        resultado = calcular_reposicion(ml, ecom, dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo)
+        tactica = TacticaStockSheetAdapter()
+        resultado = calcular_reposicion_mla(
+            ml, ecom, tactica, dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo,
+            fecha_llegada=fecha_llegada,
+        )
         _jobs[job_id]["result"] = {
             "filas": [f.__dict__ for f in resultado.filas],
             "incidencias_sku": resultado.incidencias_sku,
@@ -208,7 +229,7 @@ def iniciar_job(
             "skus_no_en_ecom": resultado.skus_no_en_ecom,
         }
         _jobs[job_id]["status"] = "done"
-        _jobs[job_id]["log"].append(f"Listo: {len(resultado.filas)} SKUs calculados.")
+        _jobs[job_id]["log"].append(f"Listo: {len(resultado.filas)} publicaciones calculadas.")
     except Exception as e:
         _jobs[job_id]["status"] = "error"
         _jobs[job_id]["log"].append(f"Error: {e}")

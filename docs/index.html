@@ -961,9 +961,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 
   <div class="card">
-    <div class="card-title">📤 Simulador de reposición</div>
-    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Calcula cuánto convendría enviar por SKU — detecta venta censurada (cuando el producto quebró y el período subestima la demanda), y tapa lo sugerido por el stock realmente disponible en Pitec. No crea el envío real.</p>
+    <div class="card-title">📤 Simulador de reposición por publicación (MLA)</div>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Calcula cuánto conviene enviarle a CADA publicación (no al SKU agregado) según su propia venta, su propio stock, y la fecha en que va a llegar el envío. Cuando el disponible combinado de Ecom+Táctica no alcanza para todas las publicaciones de un mismo SKU, prioriza a la que más vende. Detecta venta censurada. No crea el envío real.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Fecha estimada de llegada<input type="date" id="full-repo-fecha-llegada" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px"></label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Días de ventas<input type="number" id="full-repo-dias" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Semanas objetivo<input type="number" step="0.5" id="full-repo-semanas" value="3" style="width:48px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
     </div>
@@ -974,9 +975,14 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div id="full-reposicion-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-reposicion-wrap" style="display:none;margin-top:12px">
       <div id="full-reposicion-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
+      <div style="display:flex;align-items:center;gap:0">
+        <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
+        <button class="btn" id="full-repo-tab-btn-MT" onclick="goFullRepoTab('MT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Arg</button>
+        <button class="btn" style="margin-left:auto" onclick="exportFullReposicion()">⬇ Exportar CSV</button>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>SKU</th><th>Stock Full</th><th>Ventas período</th><th>Ventas/día</th><th>Stock objetivo</th><th>Falta enviar</th><th>Disp. Pitec</th><th>Enviar posible</th><th>Alerta</th><th>Cobertura (días)</th><th>Quiebre est.</th></tr></thead>
+          <thead><tr><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th>Stock Full</th><th>Ventas 30d</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th>Cantidad a enviar</th><th>Sugerido</th><th>Envíos pendientes</th><th>Stock Ecom</th><th>Stock Táctica</th></tr></thead>
           <tbody id="full-reposicion-tbody"></tbody>
         </table>
       </div>
@@ -2448,39 +2454,97 @@ function renderFullConciliar(result){
     </tr>`;
   }).join('');
 }
+let fullRepoResult=null, fullRepoTab='IT', fullRepoEnviosPend={};
 async function runFullReposicion(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const fecha=qs('full-repo-fecha-llegada').value;
+  if(!fecha){alert('Ingresá la fecha estimada de llegada del envío');return;}
   const dias=qs('full-repo-dias').value||30,semanas=qs('full-repo-semanas').value||3;
   const btn=qs('btn-full-reposicion'),status=qs('full-reposicion-status'),logEl=qs('full-reposicion-log');
   btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
   qs('full-reposicion-wrap').style.display='none';
+  fullRepoEnviosPend={};
   try{
-    const res=await fetch(`${url}/ml-full/reposicion/run?dias_ventas=${dias}&semanas_objetivo=${semanas}`,{method:'POST'});
+    const res=await fetch(`${url}/ml-full/reposicion/run?fecha_llegada=${fecha}&dias_ventas=${dias}&semanas_objetivo=${semanas}`,{method:'POST'});
     const{job_id}=await res.json();
     status.textContent='Job: '+job_id;
     pollFullJob(`${url}/ml-full/reposicion/status/${job_id}`,logEl,status,btn,'▶ Simular reposición',renderFullReposicion);
   }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Simular reposición';}
 }
+function goFullRepoTab(cuenta){
+  fullRepoTab=cuenta;
+  const bIT=qs('full-repo-tab-btn-IT'),bMT=qs('full-repo-tab-btn-MT');
+  bIT.style.borderBottomColor=cuenta==='IT'?'var(--accent)':'transparent';bIT.style.opacity=cuenta==='IT'?'1':'.6';
+  bMT.style.borderBottomColor=cuenta==='MT'?'var(--accent)':'transparent';bMT.style.opacity=cuenta==='MT'?'1':'.6';
+  renderFullReposicionTabla();
+}
 function renderFullReposicion(result){
+  fullRepoResult=result;
   qs('full-reposicion-wrap').style.display='block';
-  qs('full-reposicion-resumen').textContent=`${result.filas.length} SKUs · ${result.filas.filter(f=>f.falta_enviar>0).length} con falta de envío · ${result.filas.filter(f=>f.alerta_revisar_tactica).length} alertas Táctica · ${result.filas.filter(f=>f.censurado).length} venta censurada`;
-  const filas=[...result.filas].sort((a,b)=>b.falta_enviar-a.falta_enviar);
+  goFullRepoTab(fullRepoTab);
+}
+// Arma el resumen a partir de los valores YA recalculados (`_sugerido`) --
+// se llama de nuevo cada vez que se re-renderiza la tabla (tab, edición de
+// "Envíos pendientes") para que el total no quede desactualizado.
+function _fullRepoResumen(){
+  const r=fullRepoResult;
+  const totalSugerido=r.filas.reduce((s,f)=>s+(f._sugerido||0),0);
+  qs('full-reposicion-resumen').textContent=`${r.filas.length} publicaciones · ${r.filas.filter(f=>f._sugerido>0).length} con envío sugerido · ${totalSugerido} unidades sugeridas en total · ${r.filas.filter(f=>f.censurado).length} venta censurada · ${r.incidencias_sin_vincular.length} sin vincular · ${r.skus_no_en_ecom.length} SKU sin match en Ecom`;
+}
+// Replica en el navegador el reparto de `ml_reposicion._repartir_sugerido`
+// -- se recalcula acá cuando la persona carga "Envíos pendientes" a mano,
+// sin volver a pegarle al backend (ese dato no existe todavía del lado
+// de ML, ver docstring de ml_reposicion.py).
+function _fullRepoRecalcular(){
+  if(!fullRepoResult) return;
+  const porSku={};
+  fullRepoResult.filas.forEach(f=>{
+    const pendiente=fullRepoEnviosPend[f.item_id]||0;
+    f._cantidadEnviar=Math.max(0,Math.round(f.stock_objetivo-f.stock_a_llegada-pendiente));
+    (porSku[f.sku]=porSku[f.sku]||[]).push(f);
+  });
+  Object.values(porSku).forEach(grupo=>{
+    let disponible=(grupo[0].stock_ecom||0)+(grupo[0].stock_tactica||0);
+    [...grupo].sort((a,b)=>b.ventas_diarias-a.ventas_diarias).forEach(f=>{
+      const asignado=Math.max(0,Math.min(f._cantidadEnviar,disponible));
+      f._sugerido=asignado;
+      disponible-=asignado;
+    });
+  });
+}
+function renderFullReposicionTabla(){
+  if(!fullRepoResult) return;
+  _fullRepoRecalcular();
+  _fullRepoResumen();
+  const filas=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab).sort((a,b)=>b._sugerido-a._sugerido);
   qs('full-reposicion-tbody').innerHTML=filas.map(f=>{
-    const alerta=f.alerta_revisar_tactica?'<span style="color:var(--red)">⚠ Táctica</span>':'';
+    const pendiente=fullRepoEnviosPend[f.item_id]||0;
     return `<tr>
+      <td>${f.item_id}</td>
+      <td style="font-size:9px;color:var(--text3)">${f.inventory_id||'—'}</td>
       <td>${f.sku}</td>
+      <td style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
       <td style="text-align:right">${f.stock_full}</td>
       <td style="text-align:right">${f.ventas_periodo}${f.censurado?' <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">⚡</span>':''}</td>
       <td style="text-align:right">${f.ventas_diarias}</td>
       <td style="text-align:right">${f.stock_objetivo}</td>
-      <td style="text-align:right;font-weight:600;${f.falta_enviar>0?'color:var(--accent)':''}">${f.falta_enviar}</td>
-      <td style="text-align:right">${f.disponible_pitec===null?'—':f.disponible_pitec}</td>
-      <td style="text-align:right;font-weight:600">${f.enviar_posible}</td>
-      <td>${alerta}</td>
-      <td style="text-align:right">${f.cobertura_dias===null?'—':f.cobertura_dias}</td>
-      <td>${f.quiebre_estimado||'—'}</td>
+      <td style="text-align:right">${f.stock_a_llegada}</td>
+      <td style="text-align:right;font-weight:600">${f._cantidadEnviar}</td>
+      <td style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}">${f._sugerido}</td>
+      <td style="text-align:right"><input type="number" min="0" value="${pendiente}" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();"></td>
+      <td style="text-align:right">${f.stock_ecom===null?'—':f.stock_ecom}</td>
+      <td style="text-align:right">${f.stock_tactica===null?'—':f.stock_tactica}</td>
     </tr>`;
   }).join('');
+}
+function exportFullReposicion(){
+  if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
+  _fullRepoRecalcular();
+  const h='Cuenta,MLA,MLID,SKU,SKU_ML,Stock_Full,Ventas_30d,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar,Sugerido,Envios_Pendientes,Stock_Ecom,Stock_Tactica';
+  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.stock_full,f.ventas_periodo,f.ventas_diarias,f.stock_objetivo,f.stock_a_llegada,f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom??'',f.stock_tactica??''].join(','));
+  const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  toast('Exportado');
 }
 
 // ──────────────────────

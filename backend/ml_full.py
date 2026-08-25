@@ -50,6 +50,7 @@ from typing import Callable
 import requests
 
 from ml_auth import SELLERS, token_de
+from rentabilidad import gsheets
 from rentabilidad.ingesta_ecom_api import EcomApiClient, EcomApiError
 
 # ── Transporte ML — inyectable para tests, sin red real ──
@@ -380,6 +381,62 @@ class EcomFullAdapter:
         return factores or None
 
 
+# ── Táctica — stock, sin fuente SQL/API todavía ──
+
+# Sheet externo "Stock e Importaciones" (cuenta personal, no de este repo),
+# pestaña "Global". Confirmado con Maxx (2026-08-25): columna A=SKU,
+# columna E=Stock Táctica -- se actualiza todas las mañanas, no es en vivo.
+# Es la misma situación que ya resolvió `rentabilidad/` para costo/IVA de
+# Táctica (ver memoria `project_rentabilidad-architecture`): un Sheet es
+# solo la fuente ACTUAL porque no hay SQL/API para stock todavía, no una
+# fuente permanente -- reemplazar cuando Táctica exponga esto directo.
+_SHEET_STOCK_IMPORTACIONES = "1xtD_C07rN9Oesn277mD8x-ERPgsZxup3WqF_c_qXJp8"
+_TAB_STOCK_TACTICA = "Global"
+
+LeerValoresFn = Callable[[str, str], list]
+
+
+class TacticaStockSheetAdapter:
+    """Lee el Sheet una sola vez por instancia (una corrida de job) y cachea
+    en memoria -- el mismo patrón de cache-por-instancia que
+    `EcomFullAdapter._producto_cache`. `leer_fn` inyectable para tests, sin
+    red real (mismo patrón que `GetFn` de `MLFullClient`)."""
+
+    def __init__(self, leer_fn: LeerValoresFn | None = None):
+        self._leer = leer_fn or gsheets.leer_valores
+        self._stock_por_sku: dict[str, int] | None = None
+
+    def _cargar(self) -> dict[str, int]:
+        if self._stock_por_sku is not None:
+            return self._stock_por_sku
+        filas = self._leer(_SHEET_STOCK_IMPORTACIONES, _TAB_STOCK_TACTICA)
+        idx_header = gsheets.encontrar_fila_headers(filas, ["SKU"])
+        mapa = gsheets.mapa_columnas(filas[idx_header])
+        idx_sku = gsheets.indice_columna(mapa, ["sku"])
+        idx_stock = gsheets.indice_columna(mapa, ["stock tactica"])
+        resultado: dict[str, int] = {}
+        if idx_sku is not None and idx_stock is not None:
+            for fila in filas[idx_header + 1:]:
+                sku = gsheets.valor(fila, idx_sku)
+                if not sku:
+                    continue
+                crudo = gsheets.valor(fila, idx_stock).replace(",", "").replace("$", "")
+                if crudo in ("", "-"):
+                    resultado[sku] = 0
+                    continue
+                try:
+                    resultado[sku] = int(float(crudo))
+                except ValueError:
+                    continue
+        self._stock_por_sku = resultado
+        return resultado
+
+    def stock_por_sku(self, sku: str) -> int | None:
+        """`None` = el SKU no aparece en el Sheet -- igual criterio que
+        `EcomFullAdapter.stock_full_por_sku` (incidencia, no 0 silencioso)."""
+        return self._cargar().get(sku)
+
+
 # ── Conciliación ──
 
 @dataclass
@@ -461,12 +518,14 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
                 publicaciones_por_sku.setdefault(sku_vinculado, []).append({
                     "item_id": fila.item_id, "cuenta": fila.cuenta, "inventory_id": fila.inventory_id,
                     "disponible": disponible, "factor": cantidad, "vinculado": True,
+                    "titulo": fila.titulo, "sku_ml": fila.sku,
                 })
         elif fila.sku:
             acumulado[fila.sku] = acumulado.get(fila.sku, 0) + disponible
             publicaciones_por_sku.setdefault(fila.sku, []).append({
                 "item_id": fila.item_id, "cuenta": fila.cuenta, "inventory_id": fila.inventory_id,
                 "disponible": disponible, "factor": 1, "vinculado": False,
+                "titulo": fila.titulo, "sku_ml": fila.sku,
             })
             incidencias_sin_vincular.append({
                 "item_id": fila.item_id, "cuenta": fila.cuenta, "sku_ml": fila.sku,
