@@ -250,49 +250,79 @@ def test_producto_por_sku_se_cachea_entre_stock_full_y_stock_disponible():
     assert llamadas_producto == ["SKU-X"]  # una sola vez, no dos
 
 
-# ── MLFullClient.ventas_por_item ──
+# ── MLFullClient.ventas_full_por_inventory ──
 
-def test_ventas_por_item_agrega_cantidad_y_rango_de_fechas():
+def test_ventas_full_por_inventory_agrega_cantidad_y_rango_de_fechas():
     def fake_get(url, params, headers):
-        assert "orders/search" in url
-        if params["offset"] == 0:
-            return {
-                "results": [
-                    {"date_closed": "2026-08-01T10:00:00.000-04:00", "order_items": [
-                        {"item": {"id": "MLA1"}, "quantity": 3},
-                    ]},
-                    {"date_closed": "2026-08-05T10:00:00.000-04:00", "order_items": [
-                        {"item": {"id": "MLA1"}, "quantity": 2},
-                        {"item": {"id": "MLA2"}, "quantity": 1},
-                    ]},
-                ],
-                "paging": {"total": 2, "offset": 0, "limit": 50},
-            }
-        raise AssertionError("no debería pedir más páginas")
+        assert "stock/fulfillment/operations/search" in url
+        assert params["type"] == "SALE_CONFIRMATION"
+        assert "scroll" not in params
+        return {
+            "results": [
+                {"inventory_id": "INV-1", "date_created": "2026-08-01T10:00:00Z",
+                 "detail": {"available_quantity": -3}},
+                {"inventory_id": "INV-1", "date_created": "2026-08-05T10:00:00Z",
+                 "detail": {"available_quantity": -2}},
+                {"inventory_id": "INV-2", "date_created": "2026-08-05T10:00:00Z",
+                 "detail": {"available_quantity": -1}},
+            ],
+            "paging": {"total": 3, "scroll": None},
+        }
 
     client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
-    ventas = client.ventas_por_item("IT", "2026-08-01T00:00:00.000-00:00", "2026-08-19T23:00:00.000-00:00")
-    assert ventas["MLA1"] == {"unidades": 5, "primera": "2026-08-01", "ultima": "2026-08-05"}
-    assert ventas["MLA2"] == {"unidades": 1, "primera": "2026-08-05", "ultima": "2026-08-05"}
+    ventas = client.ventas_full_por_inventory("IT", ["INV-1", "INV-2"], "2026-08-01", "2026-08-19")
+    assert ventas["INV-1"] == {"unidades": 5, "primera": "2026-08-01", "ultima": "2026-08-05"}
+    assert ventas["INV-2"] == {"unidades": 1, "primera": "2026-08-05", "ultima": "2026-08-05"}
 
 
-def test_ventas_por_item_pagina_hasta_agotar_el_total():
-    paginas_pedidas = []
-
+def test_ventas_full_por_inventory_ignora_ventas_self_service():
+    # El caso real que motivó el cambio (2026-08-25): una publicación con
+    # coexistencia Full/Flex tiene ventas pagadas que NO salieron de Full.
+    # Este endpoint está scopeado al depósito Full por diseño -- acá se
+    # verifica que el cliente simplemente confía en lo que devuelve
+    # (vacío para ese inventory_id), sin inventar un fallback a otra fuente.
     def fake_get(url, params, headers):
-        paginas_pedidas.append(params["offset"])
-        if params["offset"] == 0:
-            return {"results": [{"date_closed": "2026-08-01T10:00:00.000-04:00",
-                                  "order_items": [{"item": {"id": "MLA1"}, "quantity": 1}]}] * 50,
-                     "paging": {"total": 60, "offset": 0, "limit": 50}}
-        return {"results": [{"date_closed": "2026-08-02T10:00:00.000-04:00",
-                              "order_items": [{"item": {"id": "MLA1"}, "quantity": 1}]}] * 10,
-                "paging": {"total": 60, "offset": 50, "limit": 50}}
+        return {"results": [], "paging": {"total": 0, "scroll": None}}
 
     client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
-    ventas = client.ventas_por_item("IT", "2026-08-01T00:00:00.000-00:00", "2026-08-19T23:00:00.000-00:00")
-    assert paginas_pedidas == [0, 50]
-    assert ventas["MLA1"]["unidades"] == 60
+    ventas = client.ventas_full_por_inventory("IT", ["FZBZ18741"], "2026-08-01", "2026-08-25")
+    assert ventas == {}
+
+
+def test_ventas_full_por_inventory_pagina_con_scroll():
+    paginas = []
+
+    def fake_get(url, params, headers):
+        paginas.append(params.get("scroll"))
+        if "scroll" not in params:
+            return {"results": [{"inventory_id": "INV-1", "date_created": "2026-08-10T10:00:00Z",
+                                  "detail": {"available_quantity": -1}}],
+                    "paging": {"total": 2, "scroll": "TOKEN-1"}}
+        if params["scroll"] == "TOKEN-1":
+            return {"results": [{"inventory_id": "INV-1", "date_created": "2026-08-11T10:00:00Z",
+                                  "detail": {"available_quantity": -1}}],
+                    "paging": {"total": 2, "scroll": "TOKEN-2"}}
+        return {"results": [], "paging": {"total": 2, "scroll": None}}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ventas = client.ventas_full_por_inventory("IT", ["INV-1"], "2026-08-01", "2026-08-19")
+    assert paginas == [None, "TOKEN-1", "TOKEN-2"]
+    assert ventas["INV-1"]["unidades"] == 2
+
+
+def test_ventas_full_por_inventory_batchea_de_a_20_inventory_ids():
+    lotes_pedidos = []
+
+    def fake_get(url, params, headers):
+        lotes_pedidos.append(params["inventory_id"].split(","))
+        return {"results": [], "paging": {"total": 0, "scroll": None}}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    inventory_ids = [f"INV-{i}" for i in range(25)]
+    client.ventas_full_por_inventory("IT", inventory_ids, "2026-08-01", "2026-08-19")
+    assert len(lotes_pedidos) == 2
+    assert len(lotes_pedidos[0]) == 20
+    assert len(lotes_pedidos[1]) == 5
 
 
 def test_factor_pack_none_si_no_esta_vinculada():

@@ -141,45 +141,77 @@ class MLFullClient:
             f"https://api.mercadolibre.com/inventories/{inventory_id}/stock/fulfillment", {}, headers
         )
 
-    def ventas_por_item(self, cuenta: str, desde_iso: str, hasta_iso: str) -> dict[str, dict]:
-        """Ventas confirmadas (`order.status=paid`) en el rango, agregadas
-        por `item_id` -- en UNIDADES DE PAQUETE tal como las vendió la
-        publicación, sin aplicar factor de pack todavía (eso lo hace el
-        llamador, igual que con el stock). Usa `order.date_closed`, no
-        `date_created`: es cuando la orden efectivamente descuenta stock
-        (confirmado contra `developers.mercadolibre.com.ar/es_ar/gestiona-ventas`,
-        2026-08-20 -- no había MCP disponible, se escaló al portal real)."""
+    def ventas_full_por_inventory(
+        self, cuenta: str, inventory_ids: list[str], desde: str, hasta: str,
+    ) -> dict[str, dict]:
+        """Ventas realmente despachadas DESDE FULL, agregadas por
+        `inventory_id` -- en UNIDADES DE PAQUETE (mismo criterio que el
+        stock: el llamador aplica el factor de pack, acá no).
+
+        **Reemplaza un bug real de sobreconteo, no `/orders/search`+filtro
+        de estado** (encontrado en producción 2026-08-25): una publicación
+        `fulfillment` puede tener coexistencia Full/Flex (tag
+        `self_service_in`) y despachar ALGUNAS ventas desde el depósito
+        propio del vendedor, no desde Full. `/orders/search?order.status=
+        paid` cuenta esas ventas igual que las de Full -- verificado con un
+        caso real: la publicación `MLA1876051914` (inventory_id
+        `FZBZ18741`) tiene 6 unidades vendidas y pagadas el 17/08 según
+        `/orders/search`, pero el envío de esa orden específica
+        (`/shipments/{id}`) da `"logistic_type": "self_service"`, no
+        `"fulfillment"` -- esa venta nunca salió de Full y no debería
+        contar para decidir cuánto reponerle a Full.
+
+        La fuente correcta es `stock/fulfillment/operations/search`
+        (confirmado contra la cuenta real, no de memoria):
+        - Filtrado a `type=SALE_CONFIRMATION` está scopeado por diseño a
+          movimientos del depósito Full -- no puede traer una venta
+          self-service aunque quisiera. Confirmado con el mismo caso: para
+          `inventory_id=FZBZ18741` en agosto completo devuelve `total: 0`.
+        - `date_from`/`date_to` son fechas simples (`YYYY-MM-DD`), NO
+          timestamps ISO como `/orders/search` -- y el rango tiene un tope
+          real de 60 días (pedir más tira 400 "Date range can't be greater
+          than 60 days"), lo clampea el llamador.
+        - `inventory_id` acepta una lista separada por comas -- confirmado
+          batcheando de a 20 (mismo tope que `detalle_items`).
+        - Cada resultado trae `detail.available_quantity` (negativo = las
+          unidades que descontó ESA operación puntual) y `date_created`
+          (`YYYY-MM-DDTHH:MM:SSZ`).
+        - Pagina con el token `scroll` de `paging.scroll` de la respuesta
+          anterior -- confirmado que el nombre real es `scroll`, no
+          `scroll_id` (se probó `scroll_id` primero: el servidor lo
+          ignoraba en silencio y devolvía siempre la primera página)."""
         seller_id = SELLERS[cuenta]
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         acumulado: dict[str, dict] = {}
-        offset = 0
-        while True:
-            d = self._get(
-                "https://api.mercadolibre.com/orders/search",
-                {"seller": seller_id, "order.status": "paid",
-                 "order.date_closed.from": desde_iso, "order.date_closed.to": hasta_iso,
-                 "offset": offset, "limit": 50},
-                headers,
-            )
-            resultados = d.get("results", [])
-            for orden in resultados:
-                cerrada = (orden.get("date_closed") or "")[:10]
-                for oi in orden.get("order_items") or []:
-                    item_id = (oi.get("item") or {}).get("id")
-                    cantidad = oi.get("quantity") or 0
-                    if not item_id:
+        for i in range(0, len(inventory_ids), 20):
+            lote = inventory_ids[i:i + 20]
+            params = {
+                "seller_id": seller_id, "inventory_id": ",".join(lote),
+                "date_from": desde, "date_to": hasta, "type": "SALE_CONFIRMATION",
+            }
+            paginas = 0
+            while paginas < 50:  # tope de seguridad -- nunca debería hacer falta en un lote de 20
+                paginas += 1
+                d = self._get(
+                    "https://api.mercadolibre.com/stock/fulfillment/operations/search", params, headers
+                )
+                resultados = d.get("results", [])
+                for op in resultados:
+                    inv = op.get("inventory_id")
+                    if not inv:
                         continue
-                    entrada = acumulado.setdefault(item_id, {"unidades": 0, "primera": cerrada, "ultima": cerrada})
+                    cantidad = abs((op.get("detail") or {}).get("available_quantity") or 0)
+                    fecha = (op.get("date_created") or "")[:10]
+                    entrada = acumulado.setdefault(inv, {"unidades": 0, "primera": fecha, "ultima": fecha})
                     entrada["unidades"] += cantidad
-                    if cerrada and (not entrada["primera"] or cerrada < entrada["primera"]):
-                        entrada["primera"] = cerrada
-                    if cerrada and (not entrada["ultima"] or cerrada > entrada["ultima"]):
-                        entrada["ultima"] = cerrada
-            paging = d.get("paging") or {}
-            total = paging.get("total", 0)
-            offset += len(resultados)
-            if offset >= total or not resultados:
-                break
+                    if fecha and (not entrada["primera"] or fecha < entrada["primera"]):
+                        entrada["primera"] = fecha
+                    if fecha and (not entrada["ultima"] or fecha > entrada["ultima"]):
+                        entrada["ultima"] = fecha
+                scroll = (d.get("paging") or {}).get("scroll")
+                if not scroll or not resultados:
+                    break
+                params = {**params, "scroll": scroll}
         return acumulado
 
 

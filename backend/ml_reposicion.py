@@ -17,10 +17,22 @@ verificar que el cálculo da bien" -- la creación real del envío queda para
 después, y de cualquier forma sigue detrás de la puerta de escritura de
 `docs/business/COMERCIAL/00_LEEME.md` §5.
 
-Fuente de ventas, confirmada contra el portal real de Mercado Libre
-(`developers.mercadolibre.com.ar/es_ar/gestiona-ventas`, 2026-08-20):
-`MLFullClient.ventas_por_item`, ya por `item_id` -- no hace falta agregarla
-por SKU para este módulo, se usa directo.
+**Fuente de ventas: solo las que salieron de Full, no cualquier venta
+pagada de la publicación.** Corregido 2026-08-25 -- la versión anterior
+usaba `/orders/search?order.status=paid`, que cuenta CUALQUIER venta
+pagada del ítem sin mirar de qué depósito salió. Una publicación
+`fulfillment` puede tener coexistencia Full/Flex y despachar algunas
+ventas desde el depósito propio del vendedor (self-service), no desde
+Full -- confirmado con un caso real en producción (Maxx lo detectó
+comparando contra el consolidado real de una publicación): 6 unidades
+pagadas el mismo día contaban como venta de Full, pero el envío de esa
+orden específica tenía `logistic_type=self_service`. Ahora se usa
+`MLFullClient.ventas_full_por_inventory` (`stock/fulfillment/operations/
+search`, `type=SALE_CONFIRMATION`, por `inventory_id`) -- scopeado al
+depósito Full por diseño, no puede traer una venta self-service aunque
+quisiera. Ver el docstring de ese método para el detalle del contrato
+confirmado contra la cuenta real (formato de fecha, tope de 60 días,
+paginación por `scroll`).
 
 Fuente de "disponible para enviar" (Ecom): el depósito **Pitec**
 (`EcomFullAdapter.stock_disponible_por_sku`, confirmado con Maxx
@@ -56,14 +68,15 @@ todas, son el mismo número. El reparto se calcula sobre el TOTAL del SKU
 cruzando las dos cuentas (el depósito es uno solo, compartido) aunque la
 pantalla lo muestre en pestañas separadas por cuenta.
 
-**"Envíos pendientes" es un campo manual, cargado por la persona en el
-ERP** (confirmado con Maxx 2026-08-25) -- no hay hoy ningún endpoint de ML
-confirmado para esto (candidato encontrado: "Fulfillment Stock Operations"
-por `inventory_id` con `operation_type=inbound_reception`, pendiente de
-confirmar el contrato exacto con el MCP de documentación o contra la
-cuenta real). Este módulo no lo calcula ni lo resta -- queda en manos del
-frontend, que sí lo resta de `cantidad_enviar`/`sugerido` al recalcular
-localmente cuando la persona lo carga.
+**"Envíos pendientes" sigue siendo un campo manual, cargado por la persona
+en el ERP** (confirmado con Maxx 2026-08-25) -- este módulo no lo calcula
+ni lo resta, queda en manos del frontend, que sí lo resta de
+`cantidad_enviar`/`sugerido` al recalcular localmente cuando la persona lo
+carga. El mismo endpoint que ahora resuelve las ventas
+(`stock/fulfillment/operations/search`) también sirve para esto con
+`type=INBOUND_RECEPTION` -- contrato ya confirmado contra la cuenta real
+(mismo formato de fecha/paginación), pero conectarlo es trabajo aparte, no
+pedido todavía.
 
 GAPS documentados, no resueltos todavía (no son reglas inventadas, son
 huecos reales sin dato para llenarlos):
@@ -148,16 +161,28 @@ def calcular_reposicion_mla(
     hoy = hoy or date.today()
     fecha_llegada = fecha_llegada or hoy
     dias_hasta_llegada = max(0, (fecha_llegada - hoy).days)
-    desde_iso = f"{(hoy - timedelta(days=dias_ventas)).isoformat()}T00:00:00.000-00:00"
-    hasta_iso = f"{hoy.isoformat()}T23:00:00.000-00:00"
+    # Tope real de `stock/fulfillment/operations/search` (confirmado contra
+    # la cuenta real: pedir más de 60 días tira 400 "Date range can't be
+    # greater than 60 days") -- se clampea acá, no se deja fallar el job
+    # entero por un valor cargado a mano en el frontend.
+    dias_ventas = min(dias_ventas, 60)
+    desde = (hoy - timedelta(days=dias_ventas)).isoformat()
+    hasta = hoy.isoformat()
 
     resultado_conciliacion = conciliar(ml, ecom, cuentas)
 
-    ventas_por_item: dict[str, dict] = {}
+    ventas_por_inventory: dict[str, dict] = {}
     for cuenta in cuentas:
-        # Los item_id de ML son únicos por cuenta -- no hay colisión entre
-        # las dos cuentas al combinar los diccionarios.
-        ventas_por_item.update(ml.ventas_por_item(cuenta, desde_iso, hasta_iso))
+        # inventory_id es único globalmente (no solo por cuenta) -- no hay
+        # colisión al combinar los diccionarios de las dos cuentas.
+        inventory_ids = sorted({
+            pub["inventory_id"]
+            for fila in resultado_conciliacion.filas
+            for pub in fila.publicaciones
+            if pub["cuenta"] == cuenta and pub.get("inventory_id")
+        })
+        if inventory_ids:
+            ventas_por_inventory.update(ml.ventas_full_por_inventory(cuenta, inventory_ids, desde, hasta))
 
     filas: list[FilaReposicionMLA] = []
     for fila_sku in resultado_conciliacion.filas:
@@ -165,10 +190,10 @@ def calcular_reposicion_mla(
         stock_tactica = tactica.stock_por_sku(fila_sku.sku)
         for pub in fila_sku.publicaciones:
             stock_full_mla = pub["disponible"] * pub["factor"]
-            venta_item = ventas_por_item.get(pub["item_id"])
-            ventas_total = (venta_item["unidades"] * pub["factor"]) if venta_item else 0
-            primera = venta_item["primera"] if venta_item else None
-            ultima = venta_item["ultima"] if venta_item else None
+            venta_inv = ventas_por_inventory.get(pub["inventory_id"]) if pub.get("inventory_id") else None
+            ventas_total = (venta_inv["unidades"] * pub["factor"]) if venta_inv else 0
+            primera = venta_inv["primera"] if venta_inv else None
+            ultima = venta_inv["ultima"] if venta_inv else None
 
             dias_sin_vender = (hoy - date.fromisoformat(ultima)).days if ultima else dias_ventas
             censurado = stock_full_mla == 0 and ventas_total >= 5 and dias_sin_vender >= 3

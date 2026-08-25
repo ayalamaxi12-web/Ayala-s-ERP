@@ -35,7 +35,9 @@ def _item_simple(item_id, sku, inventory_id):
 
 def _armar_ml(items_por_cuenta: dict, stock_por_inventory: dict, ventas_por_cuenta: dict):
     """`items_por_cuenta`: {cuenta: [item, ...]}. `ventas_por_cuenta`:
-    {cuenta: {item_id: {"unidades": N, "primera": "YYYY-MM-DD", "ultima": "YYYY-MM-DD"}}}."""
+    {cuenta: {inventory_id: {"unidades": N, "primera": "YYYY-MM-DD", "ultima": "YYYY-MM-DD"}}}
+    -- por `inventory_id`, no por `item_id` (ver `ventas_full_por_inventory`,
+    scopeada a ventas realmente despachadas desde Full)."""
     cuenta_actual = {}
 
     def get_fn(url, params, headers):
@@ -55,8 +57,8 @@ def _armar_ml(items_por_cuenta: dict, stock_por_inventory: dict, ventas_por_cuen
         def stock_fulfillment(self, inventory_id, cuenta):
             return stock_por_inventory.get(inventory_id, {"available_quantity": 0})
 
-        def ventas_por_item(self, cuenta, desde_iso, hasta_iso):
-            return ventas_por_cuenta.get(cuenta, {})
+        def ventas_full_por_inventory(self, cuenta, inventory_ids, desde, hasta):
+            return {k: v for k, v in ventas_por_cuenta.get(cuenta, {}).items() if k in inventory_ids}
 
     return _MLConCuentaActual(get_fn=get_fn, token_fn=_FAKE_TOKEN_FN)
 
@@ -96,7 +98,7 @@ def test_replica_el_ejemplo_de_la_planilla_sin_censura():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 1}},
-        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}}},
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 1}, stock_pitec={"SKU-A": 100})
     tactica = _tactica_simple({"SKU-A": 0})
@@ -128,7 +130,7 @@ def test_detecta_censura_y_corrige_la_tasa_diaria():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 0}},
-        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 30, "primera": "2026-08-01", "ultima": "2026-08-06"}}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 30, "primera": "2026-08-01", "ultima": "2026-08-06"}}},
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 0}, stock_pitec={"SKU-A": 200})
     tactica = _tactica_simple({})
@@ -148,7 +150,7 @@ def test_no_censura_si_el_stock_actual_no_esta_en_cero():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 50}},
-        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 30, "primera": "2026-08-01", "ultima": "2026-08-06"}}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 30, "primera": "2026-08-01", "ultima": "2026-08-06"}}},
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 50}, stock_pitec={"SKU-A": 200})
     tactica = _tactica_simple({})
@@ -186,7 +188,7 @@ def test_aplica_el_factor_de_pack_a_las_ventas_y_al_stock():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "PACK-SKU-ML", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 2}},
-        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 10, "primera": "2026-08-01", "ultima": "2026-08-15"}}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 10, "primera": "2026-08-01", "ultima": "2026-08-15"}}},
     )
 
     resultado = calcular_reposicion_mla(ml, ecom, tactica, cuentas=["IT"], dias_ventas=30, hoy=date(2026, 8, 19))
@@ -206,7 +208,7 @@ def test_stock_a_llegada_resta_las_ventas_del_transito():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 40}},
-        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 180, "primera": "2026-07-24", "ultima": "2026-08-22"}}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 180, "primera": "2026-07-24", "ultima": "2026-08-22"}}},
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 40}, stock_pitec={"SKU-A": 1000})
     tactica = _tactica_simple({"SKU-A": 0})
@@ -227,7 +229,7 @@ def test_fecha_llegada_en_el_pasado_no_da_dias_negativos():
     ml = _armar_ml(
         items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
         stock_por_inventory={"INV-1": {"available_quantity": 10}},
-        ventas_por_cuenta={"IT": {"MLA1": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}}},
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 10}, stock_pitec={"SKU-A": 100})
     tactica = _tactica_simple({})
@@ -256,8 +258,8 @@ def test_reparto_sugerido_prioriza_la_publicacion_que_mas_vende():
             "INV-2": {"available_quantity": 0},
         },
         ventas_por_cuenta={
-            "IT": {"MLA1": {"unidades": 90, "primera": "2026-07-20", "ultima": "2026-08-18"}},
-            "MT": {"MLA2": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}},
+            "IT": {"INV-1": {"unidades": 90, "primera": "2026-07-20", "ultima": "2026-08-18"}},
+            "MT": {"INV-2": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}},
         },
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 0}, stock_pitec={"SKU-A": 30})
@@ -291,8 +293,8 @@ def test_reparto_sugerido_no_cambia_si_alcanza_para_todas():
             "INV-2": {"available_quantity": 0},
         },
         ventas_por_cuenta={
-            "IT": {"MLA1": {"unidades": 90, "primera": "2026-07-20", "ultima": "2026-08-18"}},
-            "MT": {"MLA2": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}},
+            "IT": {"INV-1": {"unidades": 90, "primera": "2026-07-20", "ultima": "2026-08-18"}},
+            "MT": {"INV-2": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}},
         },
     )
     ecom = _ecom_simple(stock_full={"SKU-A": 0}, stock_pitec={"SKU-A": 1000})
