@@ -982,7 +982,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>Stock Full</th><th>Ventas 30d</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th></tr></thead>
+          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>Stock Full</th><th>Ventas 30d</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th></tr></thead>
           <tbody id="full-reposicion-tbody"></tbody>
         </table>
       </div>
@@ -1234,6 +1234,97 @@ let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;
 
 // ── UTILS ──
 function qs(id){return document.getElementById(id);}
+
+// ── Encabezados clickeables — genérico, para el RESTO de las tablas del
+// ERP. 4 tablas (ecom-table/ml-table/tactica-table/comp-table) ya tenían
+// su propio mecanismo (`setupSortHeaders`, ordena el array de datos antes
+// de renderizar) -- ese se deja tal cual, no se toca ni se duplica. Para
+// todas las demás, en vez de reescribir cada función de render con el
+// mismo patrón de switch-case por columna (~15 tablas, mucha superficie
+// para romper algo), esto ordena las filas YA RENDERIZADAS comparando el
+// texto de cada celda (o `data-sort` si la celda lo define, para cuando
+// el texto visible no alcanza). No conoce nada de cómo se armó cada tabla
+// en particular -- opera sobre el DOM, así que funciona igual para
+// cualquier tabla sin tocar su función de render. `makeSortable(table)` se
+// llama una sola vez por tabla (sobre el `<thead>`, que es estático); cada
+// click vuelve a leer el `<tbody>` en ese momento, así que sigue
+// funcionando después de que la tabla se vuelva a renderizar con datos
+// nuevos. Reusa las mismas clases CSS (`sort-asc`/`sort-desc`) que el
+// mecanismo de las 4 tablas de arriba, para que se vea igual en toda la
+// app. Limitación conocida: en las pocas tablas con paginación del lado
+// del cliente, solo ordena la página visible, no el dataset completo.
+function _sortCellValor(td){
+  if(!td) return '';
+  if(td.dataset && td.dataset.sort!==undefined) return td.dataset.sort;
+  return td.textContent.trim();
+}
+function _parseNumEsAR(raw){
+  let s=String(raw).replace(/[^0-9.,\-]/g,'').trim();
+  if(!s||s==='-') return null;
+  if(s.includes(',')){
+    s=s.replace(/\./g,'').replace(',','.');
+  }else if(/^-?\d{1,3}(\.\d{3})+$/.test(s)){
+    s=s.replace(/\./g,''); // "1.234" agrupado de a 3 -- separador de miles, no decimal
+  }
+  const n=Number(s);
+  return isNaN(n)?null:n;
+}
+function sortTableByColumn(table,idx){
+  const tbody=table.querySelector('tbody');
+  if(!tbody) return;
+  const filas=Array.from(tbody.querySelectorAll(':scope > tr')).filter(r=>r.children.length>idx);
+  if(!filas.length) return;
+  const dir=(table._sortCol===idx && table._sortDir===1)?-1:1;
+  table._sortCol=idx; table._sortDir=dir;
+  const parsed=filas.map(r=>{
+    const raw=_sortCellValor(r.children[idx]);
+    return {r, raw, num:_parseNumEsAR(raw)};
+  });
+  const conValor=parsed.filter(p=>p.raw!==''&&p.raw!=='—');
+  const esNumerica=conValor.length>0 && conValor.every(p=>p.num!==null);
+  parsed.sort((a,b)=>{
+    const aVacio=a.raw===''||a.raw==='—', bVacio=b.raw===''||b.raw==='—';
+    if(aVacio&&bVacio) return 0;
+    if(aVacio) return 1;
+    if(bVacio) return -1;
+    if(esNumerica) return (a.num-b.num)*dir;
+    return a.raw.localeCompare(b.raw,'es',{numeric:true,sensitivity:'base'})*dir;
+  });
+  parsed.forEach(p=>tbody.appendChild(p.r));
+  const ths=table.querySelectorAll(':scope > thead th');
+  ths.forEach(th=>th.classList.remove('sort-asc','sort-desc'));
+  if(ths[idx]) ths[idx].classList.add(dir===1?'sort-asc':'sort-desc');
+}
+// Tablas que ya tienen su propio mecanismo -- nunca pisarlo con el genérico.
+const _TABLAS_CON_SORT_PROPIO=new Set(['ecom-table','ml-table','tactica-table','comp-table']);
+function makeSortable(table){
+  if(!table||table._sortableInit||_TABLAS_CON_SORT_PROPIO.has(table.id)) return;
+  const thead=table.querySelector('thead');
+  if(!thead) return;
+  table._sortableInit=true;
+  thead.querySelectorAll('th').forEach((th,idx)=>{
+    if(!th.textContent.trim()) return; // columnas sin texto (ej. checkbox) -- no tiene sentido ordenar por ellas
+    th.classList.add('th-sortable');
+    th.style.cursor='pointer';
+    th.addEventListener('click',()=>sortTableByColumn(table,idx));
+  });
+}
+function makeAllTablesSortable(root){
+  (root||document).querySelectorAll('table').forEach(makeSortable);
+}
+// Varias páginas arman tablas nuevas por completo con innerHTML (no solo
+// el <tbody> de una tabla que ya existe) -- un pase único en init() no las
+// ve. En vez de cazar cada función de render para agregarle la llamada a
+// mano (~10 lugares repartidos en todo el archivo), un observer las agarra
+// solas apenas se insertan, vengan de donde vengan.
+new MutationObserver(muts=>{
+  muts.forEach(m=>m.addedNodes.forEach(node=>{
+    if(node.nodeType!==1) return;
+    if(node.tagName==='TABLE') makeSortable(node);
+    else if(node.querySelectorAll) node.querySelectorAll('table').forEach(makeSortable);
+  }));
+}).observe(document.body,{childList:true,subtree:true});
+
 function fmtN(n){return Number(n).toLocaleString('es-AR');}
 function fmt$(v){return'$'+Math.round(v).toLocaleString('es-AR');}
 function fmtUSD(v){return'USD '+Math.round(v).toLocaleString('es-AR');}
@@ -2454,7 +2545,7 @@ function renderFullConciliar(result){
     </tr>`;
   }).join('');
 }
-let fullRepoResult=null, fullRepoTab='IT', fullRepoEnviosPend={};
+let fullRepoResult=null, fullRepoTab='IT', fullRepoEnviosPend={}, fullRepoSeleccion={};
 async function runFullReposicion(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const fecha=qs('full-repo-fecha-llegada').value;
@@ -2463,7 +2554,7 @@ async function runFullReposicion(){
   const btn=qs('btn-full-reposicion'),status=qs('full-reposicion-status'),logEl=qs('full-reposicion-log');
   btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
   qs('full-reposicion-wrap').style.display='none';
-  fullRepoEnviosPend={};
+  fullRepoEnviosPend={};fullRepoSeleccion={};
   try{
     const res=await fetch(`${url}/ml-full/reposicion/run?fecha_llegada=${fecha}&dias_ventas=${dias}&semanas_objetivo=${semanas}`,{method:'POST'});
     const{job_id}=await res.json();
@@ -2478,8 +2569,16 @@ function goFullRepoTab(cuenta){
   bMT.style.borderBottomColor=cuenta==='MT'?'var(--accent)':'transparent';bMT.style.opacity=cuenta==='MT'?'1':'.6';
   renderFullReposicionTabla();
 }
+function fullRepoToggleAll(checked){
+  if(!fullRepoResult) return;
+  fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab).forEach(f=>{fullRepoSeleccion[f.item_id]=checked;});
+  renderFullReposicionTabla();
+}
 function renderFullReposicion(result){
   fullRepoResult=result;
+  // Arranca marcado lo que el sistema sugiere (sugerido>0) -- vos decidís
+  // qué se manda de verdad destildando lo que no, nunca al revés.
+  result.filas.forEach(f=>{fullRepoSeleccion[f.item_id]=f.sugerido>0;});
   qs('full-reposicion-wrap').style.display='block';
   goFullRepoTab(fullRepoTab);
 }
@@ -2489,7 +2588,9 @@ function renderFullReposicion(result){
 function _fullRepoResumen(){
   const r=fullRepoResult;
   const totalSugerido=r.filas.reduce((s,f)=>s+(f._sugerido||0),0);
-  qs('full-reposicion-resumen').textContent=`${r.filas.length} publicaciones · ${r.filas.filter(f=>f._sugerido>0).length} con envío sugerido · ${totalSugerido} unidades sugeridas en total · ${r.filas.filter(f=>f.censurado).length} venta censurada · ${r.incidencias_sin_vincular.length} sin vincular · ${r.skus_no_en_ecom.length} SKU sin match en Ecom`;
+  const seleccionadas=r.filas.filter(f=>fullRepoSeleccion[f.item_id]);
+  const totalSeleccionado=seleccionadas.reduce((s,f)=>s+(f._sugerido||0),0);
+  qs('full-reposicion-resumen').textContent=`${r.filas.length} publicaciones · ${r.filas.filter(f=>f._sugerido>0).length} con envío sugerido · ${totalSugerido} paquetes sugeridos en total · ${seleccionadas.length} seleccionadas para enviar (${totalSeleccionado} paquetes) · ${r.filas.filter(f=>f.censurado).length} venta censurada · ${r.incidencias_sin_vincular.length} sin vincular · ${r.skus_no_en_ecom.length} SKU sin match en Ecom`;
 }
 // Replica en el navegador el reparto de `ml_reposicion._repartir_sugerido`
 // + `_convertir_a_paquetes` -- se recalcula acá cuando la persona carga
@@ -2529,7 +2630,9 @@ function renderFullReposicionTabla(){
   const filas=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab).sort((a,b)=>b._sugerido-a._sugerido);
   qs('full-reposicion-tbody').innerHTML=filas.map(f=>{
     const pendiente=fullRepoEnviosPend[f.item_id]||0;
+    const marcado=fullRepoSeleccion[f.item_id]?'checked':'';
     return `<tr>
+      <td style="text-align:center"><input type="checkbox" ${marcado} onchange="fullRepoSeleccion['${f.item_id}']=this.checked;_fullRepoResumen();"></td>
       <td>${f.item_id}</td>
       <td style="font-size:9px;color:var(--text3)">${f.inventory_id||'—'}</td>
       <td>${f.sku}</td>
@@ -3350,6 +3453,7 @@ function init(){
   setupSortHeaders('tactica-table',S.tSort,renderTactica);
   // ms-tactica-pm is already wired via toggleMS onclick
   setupSortHeaders('comp-table',S.cSort,renderCompetidores);
+  makeAllTablesSortable(); // el resto de las tablas estáticas -- ver docstring de makeSortable
   ['of-search','of-filter-estado'].forEach(id=>{const el=qs(id);if(el){el.addEventListener('input',()=>{ofertasPage=1;ofertasRender();});el.addEventListener('change',()=>{ofertasPage=1;ofertasRender();});}});
   if(S.mlToken)qs('ml-token').value=S.mlToken;
   if(S.mlToken2)qs('ml-token2').value=S.mlToken2;
