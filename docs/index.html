@@ -978,7 +978,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div style="display:flex;align-items:center;gap:0">
         <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
         <button class="btn" id="full-repo-tab-btn-MT" onclick="goFullRepoTab('MT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Arg</button>
-        <button class="btn" style="margin-left:auto" onclick="exportFullReposicion()">⬇ Exportar CSV</button>
+        <button class="btn primary" style="margin-left:auto" onclick="exportFullReposicionParaML()">⬆ Exportar para subir a ML</button>
+        <button class="btn" onclick="exportFullReposicion()">⬇ Exportar CSV</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -2659,6 +2660,31 @@ function exportFullReposicion(){
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${new Date().toISOString().slice(0,10)}.csv`;a.click();
   toast('Exportado');
+}
+// Mismas 6 columnas que pide la planilla real de ML ("Selección de
+// productos para enviar al centro de almacenamiento", confirmada contra
+// el archivo que bajó Maxx 2026-08-26) y en el mismo orden -- así el
+// copiar/pegar de este archivo al de ML cae en las columnas correctas sin
+// tener que acomodar nada. Solo se completa "Código ML" (el `inventory_id`
+// -- el único de los 5 códigos que ML acepta que identifica la variante/
+// publicación exacta sin ambigüedad, justo lo que costó separar bien de
+// la SKU "madre") y "Cantidad de unidades" (`sugerido`, ya en paquetes,
+// ya topeado por el disponible real). Los otros 4 campos de código quedan
+// vacíos a propósito -- cargar más de uno por fila que no coincidan entre
+// sí sería peor que dejarlos en blanco. Solo exporta lo tildado en la
+// pestaña actual (la decisión de qué mandar es de la persona, no
+// automática) y con sugerido > 0 (nada para esa fila, no tiene sentido
+// que aparezca en la carga).
+function exportFullReposicionParaML(){
+  if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
+  _fullRepoRecalcular();
+  const seleccion=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab && fullRepoSeleccion[f.item_id] && f.inventory_id && f._sugerido>0);
+  if(!seleccion.length){toast('No hay publicaciones seleccionadas con cantidad a enviar en esta pestaña','error');return;}
+  const h='SKU,Codigo universal,Codigo ML,Numero de publicacion,Numero de producto,Cantidad de unidades';
+  const lines=seleccion.map(f=>['','',f.inventory_id,'','',f._sugerido].join(','));
+  const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-carga-ml-${fullRepoTab}-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  toast(`Exportado (${seleccion.length} publicaciones, cuenta ${fullRepoTab})`);
 }
 
 // ──────────────────────
