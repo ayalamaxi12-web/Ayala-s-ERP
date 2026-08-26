@@ -59,9 +59,26 @@ GetFn = Callable[[str, dict, dict], object]
 
 
 def _get_real(url: str, params: dict, headers: dict):
-    r = requests.get(url, params=params, headers=headers, timeout=20)
-    r.raise_for_status()
-    return r.json()
+    """Reintenta con backoff ante `429`/`503` -- visto en producción
+    (2026-08-26) que `stock/fulfillment/operations/search` tiene una cuota
+    bastante más ajustada que el resto de la API de ML (un puñado de
+    llamadas seguidas ya la agota, con el mensaje real
+    `"operation_kvs_ds_v2__fbm_seller_stock_operations is over quota"`), y
+    que ML devuelve `503` transitorios de vez en cuando en otros endpoints
+    (`/items`). Antes esto tumbaba el job entero -- respeta `Retry-After`
+    si ML lo manda, si no espera con backoff exponencial (2s, 4s, 8s)."""
+    ultimo_error = None
+    for intento in range(4):
+        r = requests.get(url, params=params, headers=headers, timeout=20)
+        if r.status_code in (429, 503):
+            ultimo_error = r
+            if intento < 3:
+                espera = float(r.headers.get("Retry-After", 2 ** (intento + 1)))
+                time.sleep(espera)
+                continue
+        r.raise_for_status()
+        return r.json()
+    ultimo_error.raise_for_status()
 
 
 @dataclass
@@ -194,6 +211,7 @@ class MLFullClient:
         seller_id = SELLERS[cuenta]
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         acumulado: dict[str, dict] = {}
+        primera_llamada = True
         for i in range(0, len(inventory_ids), 20):
             lote = inventory_ids[i:i + 20]
             params = {
@@ -203,6 +221,14 @@ class MLFullClient:
             paginas = 0
             while paginas < 50:  # tope de seguridad -- nunca debería hacer falta en un lote de 20
                 paginas += 1
+                if not primera_llamada:
+                    # Pausa chica entre llamadas -- este endpoint tiene una
+                    # cuota más ajustada que el resto de la API de ML (ver
+                    # docstring de `_get_real`), y un job real con ~250
+                    # publicaciones dispara suficientes llamadas seguidas
+                    # como para agotarla sin este respiro.
+                    time.sleep(0.4)
+                primera_llamada = False
                 d = self._get(
                     "https://api.mercadolibre.com/stock/fulfillment/operations/search", params, headers
                 )
