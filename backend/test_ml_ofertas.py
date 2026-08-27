@@ -593,7 +593,8 @@ def test_fijar_precio_base_has_bids_no_reintenta():
 
     assert r["ok"] is False
     assert "has_bids:true" in r["error"]
-    assert "No se detectó tag de precio mayorista" in r["error"]
+    assert "ninguna de las dos hipótesis" in r["error"]
+    assert "buying_mode=" in r["error"]  # diagnóstico crudo para no seguir adivinando a ciegas
 
 
 def test_fijar_precio_base_has_bids_con_tag_mayorista():

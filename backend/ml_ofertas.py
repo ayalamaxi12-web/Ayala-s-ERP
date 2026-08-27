@@ -442,33 +442,41 @@ def _post_real(url: str, headers: dict, body: dict):
     ultimo_error.raise_for_status()
 
 
-def _explicar_has_bids(mensaje_ml: str, tags: list | None = None) -> str:
+def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None) -> str:
     """`has_bids` no está documentado en developers.mercadolibre.com.ar
-    (buscado explícitamente 2026-08-28, ver docstring del módulo). Dos
-    hipótesis, ninguna confirmada oficialmente:
+    (buscado explícitamente 2026-08-28, ver docstring del módulo).
 
-    1. Precio mayorista/B2B (`standard_price_by_quantity` en `tags`) --
-       la más probable si el tag está presente: esos ítems tienen su
-       PROPIO endpoint de precio (`POST /items/{id}/prices/standard/
-       quantity`, developers.mercadolibre.com.ar/es_ar/precio-por-cantidad,
-       no implementado acá) y el PUT simple de `price`/`original_price`
-       simplemente no es el camino para ellos -- `has_bids` puede ser un
-       código de error reusado/genérico de ML para "el precio no se
-       maneja por acá", no necesariamente sobre pujas reales.
-    2. Ofertas de compradores pendientes -- hipótesis más débil: Maxx
-       hizo la observación correcta (2026-08-28) de que si fuera por eso,
-       ML tampoco debería dejar editar el precio a mano DENTRO de ML, y
-       no hay evidencia de que eso pase. Se deja como posibilidad menor,
-       no como explicación principal."""
-    if tags and "standard_price_by_quantity" in tags:
+    Caso 1 confirmado con datos reales (MLA852181648, 2026-08-28): precio
+    mayorista/B2B (`standard_price_by_quantity` en `tags`) -- esos ítems
+    tienen su PROPIO endpoint de precio (`POST /items/{id}/prices/
+    standard/quantity`, developers.mercadolibre.com.ar/es_ar/
+    precio-por-cantidad, no implementado acá), `has_bids` ahí es
+    probablemente un código reusado por ML para "el precio no se maneja
+    por acá".
+
+    Caso 2 (MLA627267951, 2026-08-28): mismo error, SIN ese tag -- la
+    hipótesis de "ofertas de compradores pendientes" quedó descartada por
+    Maxx en vivo (si fuera por eso, ML tampoco debería dejar editar el
+    precio a mano DENTRO de ML, y no hay evidencia de que pase). Causa
+    real todavía sin confirmar para este caso. En vez de seguir
+    adivinando, se manda `buying_mode`/`sub_status`/`status` crudos en el
+    mensaje -- son los campos más directos para diagnosticarlo (si
+    `buying_mode` fuera literal `auction`, confirmaría pujas reales; si
+    es `buy_it_now` como es lo normal en MLA hoy, descarta esa lectura
+    literal del nombre del campo)."""
+    estado_item = estado_item or {}
+    tags = estado_item.get("tags") or []
+    if "standard_price_by_quantity" in tags:
         return (f"ML rechaza el cambio de precio (mensaje real: \"{mensaje_ml}\"). Esta publicación tiene precio "
                 "mayorista/por cantidad (tag `standard_price_by_quantity`) -- ese tipo de publicación tiene su propio "
                 "endpoint de precio en la API de ML, distinto del que usa este módulo, y no está implementado acá. "
                 "No se puede activar una oferta con precio simple sobre esta publicación desde el ERP por ahora.")
+    diagnostico = (f"buying_mode={estado_item.get('buying_mode')!r}, sub_status={estado_item.get('sub_status')!r}, "
+                   f"status={estado_item.get('status')!r}, tags={tags!r}")
     return (f"ML no permite cambiar el precio de esta publicación ahora mismo (mensaje real: \"{mensaje_ml}\"). "
-            "No se detectó tag de precio mayorista, así que esa no parece ser la causa acá. Causa real no "
-            "confirmada -- revisá la publicación directo en ML antes de reintentar. No hay una combinación de "
-            "campos que lo evite desde acá.")
+            "No tiene precio mayorista ni tachado previo, así que ninguna de las dos hipótesis que ya probamos "
+            f"explica esto. Causa real no confirmada -- estado crudo del ítem para diagnosticar: {diagnostico}. "
+            "Revisá la publicación directo en ML antes de reintentar.")
 
 
 class MLOfertasEscritura(MLOfertasClient):
@@ -559,9 +567,9 @@ class MLOfertasEscritura(MLOfertasClient):
         else:
             mensaje_bids = None
 
-        estado = self._get(url, {"attributes": "id,price,original_price,tags"}, headers) or {}
+        estado = self._get(url, {"attributes": "id,price,original_price,tags,buying_mode,sub_status,status"}, headers) or {}
         if mensaje_bids:
-            aviso_ml = _explicar_has_bids(mensaje_bids, estado.get("tags")) + " Se reintentó fijar el precio base sin descuento."
+            aviso_ml = _explicar_has_bids(mensaje_bids, estado) + " Se reintentó fijar el precio base sin descuento."
         precio_real, tachado_real = estado.get("price"), estado.get("original_price")
         precio_pedido = precio_tachado if aviso_ml else precio  # en el fallback se pidió el precio base = tachado
         precio_ok = precio_real is not None and abs(float(precio_real) - float(precio_pedido)) < 1
@@ -642,8 +650,8 @@ class MLOfertasEscritura(MLOfertasClient):
                 # hay una combinación distinta que probar. Se pide `tags`
                 # para poder distinguir "es precio mayorista" de "causa
                 # desconocida" en el mensaje -- ver `_explicar_has_bids`.
-                estado_tags = self._get(url, {"attributes": "id,tags"}, headers) or {}
-                return {"ok": False, "error": _explicar_has_bids(mensaje_ml, estado_tags.get("tags"))}
+                estado_tags = self._get(url, {"attributes": "id,tags,buying_mode,sub_status,status"}, headers) or {}
+                return {"ok": False, "error": _explicar_has_bids(mensaje_ml, estado_tags)}
             return {"ok": False, "error": mensaje_ml}
         estado = self._get(url, {"attributes": "id,price"}, headers) or {}
         precio_real = estado.get("price")
