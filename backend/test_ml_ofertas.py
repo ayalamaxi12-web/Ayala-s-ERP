@@ -420,31 +420,44 @@ def _fake_delete(url, params, headers):
 _fake_delete.calls = []
 
 
+def _fake_get_verificacion(url, params, headers):
+    _fake_get_verificacion.calls.append((url, params, headers))
+    return _fake_get_verificacion.responder(url, params, headers)
+_fake_get_verificacion.calls = []
+
+
 def test_activar_oferta_propia_ok_con_tachado():
+    """El PUT ya no alcanza como prueba de éxito (ver docstring del
+    método: ML puede devolver 200 e ignorar el cambio) -- hace falta que
+    el GET de verificación aparte confirme el precio y el tachado reales."""
     _fake_put.calls = []
     _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"], "original_price": body["original_price"]}
-    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+    _fake_get_verificacion.calls = []
+    _fake_get_verificacion.responder = lambda url, params, headers: {"id": "MLA1", "price": 9000.0, "original_price": 12000.0}
+    ml = MLOfertasEscritura(get_fn=_fake_get_verificacion, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
 
     r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
 
     assert r == {"ok": True, "modo": "con_tachado"}
     assert _fake_put.calls[0][0] == "https://api.mercadolibre.com/items/MLA1"
     assert _fake_put.calls[0][2] == {"price": 9000.0, "original_price": 12000.0}
+    assert len(_fake_get_verificacion.calls) == 1  # se verificó con un GET aparte, no se confió en el PUT
 
 
 def test_activar_oferta_propia_ml_acepta_pero_no_aplica_tachado():
-    """Caso real 2026-08-27: ML devuelve 200 con `id` (aceptó el PUT) pero
-    NO refleja el tachado pedido -- antes esto se reportaba como éxito
-    completo sin avisar nada."""
+    """Caso real 2026-08-27 (MLA875537547): ML devuelve 200 con `id`
+    (aceptó el PUT) pero el GET de verificación no refleja el tachado
+    pedido -- antes esto se reportaba como éxito completo sin avisar nada."""
     _fake_put.calls = []
-    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"], "original_price": None}
-    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"], "original_price": body["original_price"]}
+    _fake_get_verificacion.responder = lambda url, params, headers: {"id": "MLA1", "price": 9000.0, "original_price": None}
+    ml = MLOfertasEscritura(get_fn=_fake_get_verificacion, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
 
     r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
 
     assert r["ok"] is True
     assert r["modo"] == "sin_tachado_ml"
-    assert "NO aplicó el tachado" in r["aviso"]
+    assert "Precio real confirmado" in r["aviso"]
 
 
 def test_activar_oferta_propia_fallback_has_bids():
@@ -454,7 +467,8 @@ def test_activar_oferta_propia_fallback_has_bids():
         {"id": "MLA1", "price": 12000.0},
     ]
     _fake_put.responder = lambda url, headers, body: respuestas.pop(0)
-    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+    _fake_get_verificacion.responder = lambda url, params, headers: {"id": "MLA1", "price": 12000.0, "original_price": None}
+    ml = MLOfertasEscritura(get_fn=_fake_get_verificacion, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
 
     r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
 
@@ -467,21 +481,22 @@ def test_activar_oferta_propia_fallback_has_bids():
 
 def test_activar_oferta_propia_fallback_has_bids_pero_tampoco_se_aplica():
     """Caso real 2026-08-27 (MLA852181648, publicación con precio
-    mayorista): ML devolvió el mismo error "has_bids", pero el reintento
-    sin tachado TAMPOCO se vio reflejado -- antes esto se reportaba como
-    éxito solo por tener `id` en la respuesta, sin chequear el price real."""
+    mayorista): ML devolvió el mismo error "has_bids", pero el GET de
+    verificación muestra que el precio TAMPOCO se aplicó -- antes esto se
+    reportaba como éxito solo por tener `id` en la respuesta del PUT."""
     _fake_put.calls = []
     respuestas = [
         {"error": "validation_error", "message": "has_bids"},
-        {"id": "MLA1", "price": 9000.0},  # no cambió -- sigue en el precio viejo, no en el tachado pedido
+        {"id": "MLA1", "price": 12000.0},  # el PUT hace eco del valor pedido, pero no significa que se aplicó de verdad
     ]
     _fake_put.responder = lambda url, headers, body: respuestas.pop(0)
-    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+    _fake_get_verificacion.responder = lambda url, params, headers: {"id": "MLA1", "price": 9000.0, "original_price": None}  # sigue en el precio viejo
+    ml = MLOfertasEscritura(get_fn=_fake_get_verificacion, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
 
     r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
 
     assert r["ok"] is False
-    assert "tampoco se vio reflejado" in r["error"]
+    assert "tampoco confirma el precio base" in r["error"]
 
 
 def test_activar_oferta_propia_error_no_recuperable():

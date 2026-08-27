@@ -3113,7 +3113,17 @@ function ofmSimularActivar(itemId){
   const tachado=parseFloat(qs('ofm-act-tachado-'+itemId)?.value)||0;
   if(!f||!out)return;
   const avisoOrden=(tachado&&precio&&tachado<=precio)?`<div style="color:var(--yellow);margin-bottom:3px">⚠ El tachado (${fmtN(tachado)}) debería ser MAYOR que el precio de venta (${fmtN(precio)}) -- así como está, no se ve como un descuento real.</div>`:'';
-  if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
+  // Regla real de ML confirmada en developers.mercadolibre.com.ar/es_ar/
+  // descuento-individual (2026-08-28): el descuento tiene que estar entre
+  // 5% y <80% para que el tachado se aplique -- avisar ANTES de mandar el
+  // pedido, no solo después de que ML lo rechace.
+  let avisoDescuento='';
+  if(tachado&&precio&&tachado>precio){
+    const descPct=(tachado-precio)/tachado*100;
+    if(descPct<5)avisoDescuento=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige mínimo 5% para aplicar el tachado (si no, "the price is not credible").</div>`;
+    else if(descPct>=80)avisoDescuento=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige menos de 80%, así como está probablemente lo rechace.</div>`;
+  }
+  if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
   const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
   const costoARS=f._costoUnitSinIva*tc;
   const m=ofmMargenAt(precio,f._ivaFactor,costoARS,f.domain_id,null);
@@ -3131,7 +3141,7 @@ function ofmSimularActivar(itemId){
     <span style="color:${color}">= Margen: $${fmtN(Math.round(m.margen))}</span>
   </div>
   <div style="margin-top:2px;font-size:8px;color:var(--text3)">Costo producto = costo USD (Táctica, SKU ${f.sku||'sin SKU'}) × TC. USD: ${f._costoUnitSinIva.toFixed(2)} × TC: ${fmtN(tc)} = $${fmtN(Math.round(costoARS))} -- si no coincide con Táctica, comparar el SKU exacto.</div>`;
-  out.innerHTML=avisoOrden+resumen+desglose;
+  out.innerHTML=avisoOrden+avisoDescuento+resumen+desglose;
 }
 async function ofmConfirmarActivar(itemId){
   const operador=ofmRequireOperador();if(!operador)return;
@@ -3149,6 +3159,10 @@ async function ofmConfirmarActivar(itemId){
   const margenTxt=margenPct!==null?(margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)';
   let msg=`¿Activar descuento en ${itemId}?\nPrecio $${fmtN(precio)} / tachado $${fmtN(tachado)}\nMargen resultante: ${margenTxt}`;
   if(bajoUmbral)msg+=`\n\n⚠ ESTE MARGEN QUEDA BAJO EL UMBRAL (${OFM.umbral}%). Confirmá solo si es intencional.`;
+  if(tachado>precio){
+    const descPct=(tachado-precio)/tachado*100;
+    if(descPct<5||descPct>=80)msg+=`\n\n⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige entre 5% y 80% para aplicar el tachado (developers.mercadolibre.com.ar). Es probable que ML lo rechace o lo ignore.`;
+  }
   if(!confirm(msg))return;
   try{
     const res=await fetch(`${url}/ml-ofertas/item/${itemId}/activar`,{method:'POST',headers:{'Content-Type':'application/json'},

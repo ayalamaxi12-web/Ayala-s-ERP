@@ -89,6 +89,35 @@ oferta) -- cubrir esto para las ~6.200 publicaciones activas de las dos
 cuentas es un escaneo caro (una llamada por ítem), separado a propósito de
 la lectura de campañas para no bloquearla ni compartir su presupuesto de
 llamadas.
+
+**Escritura de precio (`activar_oferta_propia`) -- hallazgo crítico
+confirmado navegando developers.mercadolibre.com.ar en vivo (2026-08-28):**
+el `PUT /items/{id}` con `price`/`original_price` puede devolver 200 OK
+e IGNORAR el cambio en silencio -- documentado como comportamiento oficial
+desde el 18/03/2026 (`api-de-precios`, act. 2026-02-26): "las solicitudes
+que incluyan `price` junto con otros atributos serán procesadas con un
+200 OK, sin embargo, el valor enviado en `price` será ignorado y la
+respuesta devolverá un warning". Esos campos están en proceso de
+deprecación, y una publicación puede tener automatización de precios
+activa que también ignore el PUT. Por eso `activar_oferta_propia` hace un
+GET aparte después de escribir para confirmar el estado real -- nunca
+confía en el eco de la respuesta del PUT. Ítems con precio mayorista/B2B
+tienen su propio endpoint (`POST /items/{id}/prices/standard/quantity`,
+`developers.mercadolibre.com.ar/es_ar/precio-por-cantidad`), no
+implementado acá -- si un ítem lo tiene, este módulo no es el camino
+correcto para tocarle el precio.
+
+Reglas reales de elegibilidad del tachado (`descuento-individual`, act.
+2026-06-09): reputación verde, ítem activo, condición nuevo, exposición
+no gratuita (no aplica a libros en MLA), descuento entre 5% y <80%,
+precio "creíble" (si no, `error_credibility_price`), y si el ítem está en
+un DEAL activo el descuento individual no se aplica hasta que ese DEAL
+termine.
+
+`has_bids`: buscado explícitamente en la documentación pública
+(2026-08-28) -- NO está documentado en ninguna página de Precios,
+Promociones ni Validaciones. Se mantiene el manejo empírico sin asumir
+que sea exclusivo de pujas de subasta.
 """
 from __future__ import annotations
 
@@ -412,59 +441,108 @@ class MLOfertasEscritura(MLOfertasClient):
         self._delete = delete_fn or _delete_real
 
     def activar_oferta_propia(self, item_id: str, cuenta: str, precio: Decimal, precio_tachado: Decimal) -> dict:
-        """`PUT items/{id}` con `price`+`original_price` -- mismo contrato
-        ya probado en producción por `ofertasUpdatePrice()` en
-        `docs/index.html`, no uno nuevo. Si el ítem tiene pujas activas
-        (`has_bids`), ML rechaza bajar `price` con tachado en un solo paso
-        -- fallback ya conocido: subir `price` solo al valor del tachado
-        (sin descuento mostrado todavía). No es un bug de acá, es una
-        restricción real de ML sobre ítems con pujas.
+        """`PUT items/{id}` con `price`+`original_price`.
 
-        Caso real 2026-08-27 (Maxx, MLA875537547): ML devolvió 200 con
-        `id` (aceptó el PUT) pero el precio tachado NO quedó aplicado en
-        la publicación real -- causa exacta no confirmada (¿elegibilidad
-        del vendedor para mostrar tachado, alguna otra condición de ML no
-        documentada acá?), no se inventa la explicación. Lo que sí se
-        puede hacer sin adivinar: comparar el `original_price` que
-        devuelve la respuesta contra el que se pidió, y avisar en vez de
-        reportar éxito completo si no coinciden -- para no ocultarlo como
-        pasaba antes."""
+        **No confiar en lo que devuelve el PUT -- verificado contra la
+        documentación oficial 2026-08-28
+        (developers.mercadolibre.com.ar/es_ar/api-de-precios, act.
+        2026-02-26): "A partir del 18 de marzo de 2026, las solicitudes
+        que actualicen únicamente el campo `price` serán rechazadas con
+        un 400 Bad Request. Las solicitudes que incluyan `price` junto
+        con otros atributos serán procesadas con un 200 OK, sin embargo,
+        el valor enviado en `price` será ignorado y la respuesta
+        devolverá un warning informando que el precio no fue
+        actualizado." Además `price`/`base_price`/`original_price` de
+        `/items` están en proceso de deprecación, y una publicación puede
+        tener automatización de precios activa que ignore este PUT por
+        completo. Esto explica los dos casos reales de esta sesión
+        (MLA875537547: tachado no aplicado con 200 OK; MLA852181648,
+        precio mayorista: ni el precio se aplicó) -- el PUT puede devolver
+        éxito y hacer eco del valor que vos mandaste SIN haberlo aplicado,
+        así que la respuesta del PUT no sirve para confirmar nada. Por
+        eso acá se hace un GET aparte después de escribir, para chequear
+        el estado real.
+
+        Reglas reales de elegibilidad para que el tachado (`PRICE_DISCOUNT`)
+        se aplique, confirmadas en developers.mercadolibre.com.ar/es_ar/
+        descuento-individual (act. 2026-06-09): reputación verde, ítem
+        activo, condición nuevo, exposición no gratuita (no aplica a
+        libros en MLA), descuento entre 5% y <80%, precio "creíble" (si
+        no, `error_credibility_price`), y si el ítem está en un DEAL
+        activo el descuento individual no se aplica hasta que termine ese
+        DEAL. Subir el precio del ítem saca los descuentos solo. Hay
+        estados asíncronos (`sync_requested`/`restore_requested`) -- el
+        GET de verificación puede no reflejar el cambio al instante.
+
+        Precio mayorista/B2B tiene su PROPIO endpoint, no este:
+        `POST /items/{id}/prices/standard/quantity` (o la variante % B2B,
+        developers.mercadolibre.com.ar/es_ar/precio-por-cantidad) -- no
+        implementado acá, si un ítem tiene precio mayorista este método
+        no es el camino correcto para tocarle el precio.
+
+        `has_bids`: buscado en la documentación pública 2026-08-28 (API
+        de Precios, Referencias de precios, Validaciones, Sincroniza y
+        modifica publicaciones) -- NO está documentado. No se sabe si es
+        exclusivo de pujas de subasta o cubre otras restricciones; se
+        mantiene el fallback empírico de abajo sin asumir la causa."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
         url = f"https://api.mercadolibre.com/items/{item_id}"
+        aviso_ml = None
+
         d = self._put(url, headers, {"price": float(precio), "original_price": float(precio_tachado)}) or {}
-        if d.get("id"):
-            original_devuelto = d.get("original_price")
-            if original_devuelto and abs(float(original_devuelto) - float(precio_tachado)) < 1:
-                return {"ok": True, "modo": "con_tachado"}
-            return {"ok": True, "modo": "sin_tachado_ml",
-                     "aviso": f"ML aceptó el precio pero NO aplicó el tachado (devolvió original_price={original_devuelto!r} en vez de {float(precio_tachado)}) -- "
-                              "causa no confirmada, puede requerir elegibilidad del vendedor u otra condición. Verificá la publicación real en ML."}
-        if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
-            # Caso real 2026-08-27 (Maxx, MLA852181648 -- publicación con
-            # precio mayorista): ML devolvió este mismo error "has_bids" y
-            # el fallback reportó éxito, pero el precio tampoco se vio
-            # reflejado en la publicación real. El mensaje de ML dice
-            # literalmente "has_bids" pero puede no significar "tiene
-            # pujas" para todos los casos (mayorista, por ejemplo) -- no
-            # se asume una única causa. Ahora se manda el mensaje REAL de
-            # ML en el aviso (no un texto fijo inventado) y se verifica
-            # que el `price` devuelto coincida con el pedido antes de
-            # reportar éxito.
-            mensaje_ml = d.get("message") or "has_bids"
-            d2 = self._put(url, headers, {"price": float(precio_tachado)}) or {}
-            precio_devuelto = d2.get("price")
-            if d2.get("id") and precio_devuelto is not None and abs(float(precio_devuelto) - float(precio_tachado)) < 1:
-                return {"ok": True, "modo": "sin_tachado_bids",
-                        "aviso": f"ML rechazó el tachado (mensaje real: \"{mensaje_ml}\") -- se subió el precio base a {float(precio_tachado)}, falta activar el descuento a mano en ML."}
+        if not d.get("id"):
+            if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
+                mensaje_ml = d.get("message") or "has_bids"
+                self._put(url, headers, {"price": float(precio_tachado)})
+                aviso_ml = f"ML rechazó el tachado (mensaje real: \"{mensaje_ml}\") -- se reintentó solo con el precio base."
+            else:
+                return {"ok": False, "error": d.get("message") or str(d)}
+
+        estado = self._get(url, {"attributes": "id,price,original_price"}, headers) or {}
+        precio_real, tachado_real = estado.get("price"), estado.get("original_price")
+        precio_pedido = precio_tachado if aviso_ml else precio  # en el fallback se pidió el precio base = tachado
+        precio_ok = precio_real is not None and abs(float(precio_real) - float(precio_pedido)) < 1
+
+        if aviso_ml:
+            # Vino del fallback has_bids: nunca se pidió tachado, así que
+            # "éxito" acá es solo que el precio base haya quedado en el
+            # valor pedido -- no hay un modo "con_tachado" posible.
+            if precio_ok:
+                return {"ok": True, "modo": "sin_tachado_bids", "aviso": aviso_ml}
             return {"ok": False,
-                    "error": f"ML rechazó el tachado (\"{mensaje_ml}\") y el reintento sin tachado tampoco se vio reflejado "
-                             f"(devolvió price={precio_devuelto!r} en vez de {float(precio_tachado)}) -- verificá la publicación real, puede ser una restricción de precio mayorista u otra no confirmada."}
-        return {"ok": False, "error": d.get("message") or str(d)}
+                    "error": f"{aviso_ml} Y el GET de verificación tampoco confirma el precio base "
+                             f"(real: {precio_real!r}, pedido: {float(precio_pedido)}) -- verificá la publicación real, "
+                             "puede ser precio mayorista con endpoint propio u otra restricción no confirmada."}
+
+        tachado_ok = tachado_real is not None and abs(float(tachado_real) - float(precio_tachado)) < 1
+        if precio_ok and tachado_ok:
+            return {"ok": True, "modo": "con_tachado"}
+        if precio_ok:
+            return {"ok": True, "modo": "sin_tachado_ml",
+                     "aviso": f"Precio real confirmado ${precio_real}, tachado real: {tachado_real!r} (pedido: {float(precio_tachado)}). "
+                              "Puede ser reputación no verde, ítem no nuevo, descuento fuera de 5%-80%, precio no creíble, o la publicación está en un DEAL activo -- ver docstring."}
+        return {"ok": False,
+                "error": f"ML respondió éxito pero el GET de verificación NO confirma el cambio "
+                         f"(precio real: {precio_real!r}, pedido: {float(precio)}) -- ML puede estar ignorando el PUT silenciosamente "
+                         "(deprecación de price/original_price, automatización de precios activa en la publicación, o precio mayorista con endpoint propio). Verificá la publicación real en ML."}
 
     def sacar_de_promocion(self, item_id: str, cuenta: str, promotion_type: str, promotion_id: str | None = None) -> dict:
         """Saca la publicación de UNA promoción puntual -- deja las demás
         intactas. `promotion_id` obligatorio para campañas (`SELLER_
-        CAMPAIGN` y variantes de ML), no aplica para `PRICE_DISCOUNT`."""
+        CAMPAIGN` y variantes de ML), no aplica para `PRICE_DISCOUNT`.
+
+        Contrato confirmado navegando la documentación oficial en vivo
+        2026-08-28 (antes solo por búsqueda, sin poder abrir la página
+        completa): `?promotion_type=PRICE_DISCOUNT&app_version=v2` está en
+        developers.mercadolibre.com.ar/es_ar/descuento-individual (act.
+        2026-06-09, sección "Eliminar descuento individual a un ítem");
+        `?promotion_type=SELLER_CAMPAIGN&promotion_id={id}` es la variante
+        homóloga para campañas, documentada en
+        developers.mercadolibre.com.ar/es_ar/central-de-promociones (act.
+        2026-06-09) -- esa misma página documenta el DELETE SIN parámetros
+        (baja-todo) que ya usaba `docs/index.html`. Errores documentados:
+        `423_ENTITY_LOCKED` (ítem bloqueado temporalmente, reintentable) y
+        `400_BAD_REQUEST` (formato inválido)."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         params = {"app_version": "v2", "promotion_type": promotion_type}
         if promotion_id:
