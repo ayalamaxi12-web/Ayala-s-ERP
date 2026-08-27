@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
 from datetime import date, datetime
 from decimal import Decimal
+from starlette.concurrency import run_in_threadpool
 from google.oauth2.service_account import Credentials
 import json
 
@@ -1990,13 +1991,27 @@ def _registrar_historial_oferta(fila: dict):
         ws.append_row(HIST_OFERTAS_HEADERS)
     ws.append_row([fila.get(h, "") for h in HIST_OFERTAS_HEADERS])
 
-@app.get("/ml-ofertas/item/{item_id}/promociones")
-async def ml_ofertas_item_promociones(item_id: str, cuenta: str):
+# Los 4 endpoints de acá abajo hacen red/SQL bloqueante de verdad (ML +
+# Táctica, esta última por el túnel Tailscale de `entrypoint.sh`, ya de por
+# sí más lento/frágil que una conexión directa). Uvicorn corre un solo
+# worker (ver `entrypoint.sh`) -- si el código bloqueante corre directo
+# adentro de un `async def`, congela el event loop ENTERO mientras dura,
+# así que ningún otro pedido concurrente se atiende (ni el polling de
+# `/ml-ofertas/status/{id}` de un job en curso, ni otro click del usuario).
+# Confirmado en producción 2026-08-27: mientras corría el escaneo de
+# ofertas propias, un buscador puntual tiró "Failed to fetch" -- exactamente
+# el síntoma de esto. `run_in_threadpool` saca el trabajo bloqueante del
+# hilo del event loop.
+
+def _promociones_item_sync(item_id: str, cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()
     return {"promociones": ml_ofertas.listar_promociones_item(ml, cuenta, item_id)}
 
-@app.get("/ml-ofertas/item/{item_id}/buscar")
-async def ml_ofertas_item_buscar(item_id: str, cuenta: str):
+@app.get("/ml-ofertas/item/{item_id}/promociones")
+async def ml_ofertas_item_promociones(item_id: str, cuenta: str):
+    return await run_in_threadpool(_promociones_item_sync, item_id, cuenta)
+
+def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
     """Buscador puntual -- para activar una oferta en un MLA que hoy NO
     tiene nada activo (no aparece en el escaneo de campañas de /ml-ofertas/
     run, que por diseño solo trae publicaciones que ya tienen algo)."""
@@ -2015,9 +2030,11 @@ async def ml_ofertas_item_buscar(item_id: str, cuenta: str):
     r["tc"] = float(r["tc"])
     return r
 
-@app.post("/ml-ofertas/item/{item_id}/activar")
-async def ml_ofertas_item_activar(item_id: str, request: Request):
-    body = await request.json()
+@app.get("/ml-ofertas/item/{item_id}/buscar")
+async def ml_ofertas_item_buscar(item_id: str, cuenta: str):
+    return await run_in_threadpool(_buscar_item_sync, item_id, cuenta)
+
+def _activar_item_sync(item_id: str, body: dict) -> dict:
     cuenta = body["cuenta"]
     precio = Decimal(str(body["precio"]))
     precio_tachado = Decimal(str(body["precio_tachado"]))
@@ -2033,9 +2050,12 @@ async def ml_ofertas_item_activar(item_id: str, request: Request):
         })
     return r
 
-@app.post("/ml-ofertas/item/{item_id}/sacar")
-async def ml_ofertas_item_sacar(item_id: str, request: Request):
+@app.post("/ml-ofertas/item/{item_id}/activar")
+async def ml_ofertas_item_activar(item_id: str, request: Request):
     body = await request.json()
+    return await run_in_threadpool(_activar_item_sync, item_id, body)
+
+def _sacar_item_sync(item_id: str, body: dict) -> dict:
     cuenta = body["cuenta"]
     promotion_type = body["promotion_type"]
     promotion_id = body.get("promotion_id")
@@ -2049,3 +2069,8 @@ async def ml_ofertas_item_sacar(item_id: str, request: Request):
             "Margen % Resultante": "", "Bajo Umbral": "", "Operador": body.get("operador", ""),
         })
     return r
+
+@app.post("/ml-ofertas/item/{item_id}/sacar")
+async def ml_ofertas_item_sacar(item_id: str, request: Request):
+    body = await request.json()
+    return await run_in_threadpool(_sacar_item_sync, item_id, body)
