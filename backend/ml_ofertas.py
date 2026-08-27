@@ -310,7 +310,7 @@ class MLOfertasClient(MLFullClient):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,seller_custom_field,domain_id,installments"},
+                {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,domain_id,installments"},
                 headers,
             )
             for entrada in (d or []):
@@ -332,7 +332,7 @@ class MLOfertasClient(MLFullClient):
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         return self._get(
             f"https://api.mercadolibre.com/items/{item_id}",
-            {"attributes": "id,title,price,seller_custom_field,domain_id,installments"}, headers,
+            {"attributes": "id,title,price,permalink,seller_custom_field,domain_id,installments"}, headers,
         )
 
 
@@ -497,6 +497,7 @@ class FilaOferta:
     sku: str | None
     sku_ml: str | None
     titulo: str
+    permalink: str | None
     domain_id: str | None
     tipo_oferta: str  # SELLER_CAMPAIGN / DEAL / SMART / PRICE_MATCHING / ... / PRICE_DISCOUNT
     nombre_campana: str | None
@@ -543,9 +544,10 @@ def _armar_fila(
 
     descuento_pct = ((precio_normal - precio_oferta) / precio_normal * 100) if precio_normal else Decimal(0)
     fila = FilaOferta(
-        item_id=item_id, cuenta=cuenta, sku=sku, sku_ml=sku_ml, titulo=titulo, domain_id=domain_id,
-        tipo_oferta=tipo, nombre_campana=nombre_campana, precio_normal=precio_normal, precio_oferta=precio_oferta,
-        descuento_pct=descuento_pct, cuotas_ofrecidas=cuotas_ofrecidas, margen=margen, incidencia=incidencia,
+        item_id=item_id, cuenta=cuenta, sku=sku, sku_ml=sku_ml, titulo=titulo, permalink=detalle.get("permalink"),
+        domain_id=domain_id, tipo_oferta=tipo, nombre_campana=nombre_campana, precio_normal=precio_normal,
+        precio_oferta=precio_oferta, descuento_pct=descuento_pct, cuotas_ofrecidas=cuotas_ofrecidas,
+        margen=margen, incidencia=incidencia,
     )
     incidencia_dict = {"item_id": item_id, "cuenta": cuenta, "sku": sku_ml, "motivo": incidencia} if incidencia else None
     return fila, incidencia_dict
@@ -575,7 +577,7 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
             incidencia = "SIN_IVA_TACTICA"
     return {
         "encontrado": True, "item_id": d["id"], "cuenta": cuenta, "sku": sku_ml, "titulo": d.get("title", ""),
-        "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
+        "permalink": d.get("permalink"), "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
         "costo_sin_iva": costo_usd, "iva_factor": iva_factor, "tc": tc, "incidencia": incidencia,
     }
 
@@ -741,6 +743,7 @@ class CandidatoOferta:
     cuenta: str
     sku: str | None
     titulo: str
+    permalink: str | None
     ventas_periodo: int
     stock: int
 
@@ -781,7 +784,7 @@ def detectar_skus_sin_oferta(
         lote = candidatos_ids[i:i + 20]
         d = ml._get(
             "https://api.mercadolibre.com/items",
-            {"ids": ",".join(lote), "attributes": "id,title,seller_custom_field,available_quantity"},
+            {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,available_quantity"},
             headers,
         )
         for entrada in (d or []):
@@ -793,7 +796,8 @@ def detectar_skus_sin_oferta(
                 continue
             resultado.append(CandidatoOferta(
                 item_id=cuerpo["id"], cuenta=cuenta, sku=cuerpo.get("seller_custom_field"),
-                titulo=cuerpo.get("title", ""), ventas_periodo=ventas.get(cuerpo["id"], 0), stock=stock,
+                titulo=cuerpo.get("title", ""), permalink=cuerpo.get("permalink"),
+                ventas_periodo=ventas.get(cuerpo["id"], 0), stock=stock,
             ))
     if progreso_cb:
         progreso_cb(total, total, "candidatos")
@@ -813,7 +817,7 @@ def _fila_a_dict(f: FilaOferta) -> dict:
     m = f.margen
     return {
         "item_id": f.item_id, "cuenta": f.cuenta, "sku": f.sku, "sku_ml": f.sku_ml, "titulo": f.titulo,
-        "domain_id": f.domain_id, "tipo_oferta": f.tipo_oferta, "nombre_campana": f.nombre_campana,
+        "permalink": f.permalink, "domain_id": f.domain_id, "tipo_oferta": f.tipo_oferta, "nombre_campana": f.nombre_campana,
         "precio_normal": _num(f.precio_normal), "precio_oferta": _num(f.precio_oferta),
         "descuento_pct": _num(f.descuento_pct), "cuotas_ofrecidas": f.cuotas_ofrecidas,
         "incidencia": f.incidencia,
@@ -901,7 +905,7 @@ def iniciar_job_alertas(job_id: str, cuenta: str, item_ids_con_oferta: list, dia
         _jobs[job_id]["progress"] = None
         _jobs[job_id]["result"] = {
             "candidatos": [
-                {"item_id": c.item_id, "cuenta": c.cuenta, "sku": c.sku, "titulo": c.titulo,
+                {"item_id": c.item_id, "cuenta": c.cuenta, "sku": c.sku, "titulo": c.titulo, "permalink": c.permalink,
                  "ventas_periodo": c.ventas_periodo, "stock": c.stock}
                 for c in candidatos
             ],

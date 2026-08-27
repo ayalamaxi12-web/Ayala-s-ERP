@@ -2948,7 +2948,7 @@ function ofmRender(){
   qs('ofm-tbody').innerHTML=filas.map(f=>{
     const m=f._margen;
     const margenColor=!m||m.margenPct===null?'var(--text2)':m.margenPct*100<OFM.umbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
-    const link=`https://articulo.mercadolibre.com.ar/${f.item_id}`;
+    const link=f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`;
     return`<tr data-item-id="${f.item_id}">
       <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f.titulo||'').replace(/"/g,'&quot;')}">${f.titulo||''}</td>
       <td><a href="${link}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
@@ -3138,7 +3138,7 @@ async function ofmBuscarMLA(){
     if(!res.ok){const e=await res.json().catch(()=>({}));cont.innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'No se encontró la publicación'}</span>`;return;}
     const d=await res.json();
     ofmFilaPorId[d.item_id]={
-      item_id:d.item_id, cuenta:d.cuenta, sku:d.sku, titulo:d.titulo, domain_id:d.domain_id,
+      item_id:d.item_id, cuenta:d.cuenta, sku:d.sku, titulo:d.titulo, permalink:d.permalink, domain_id:d.domain_id,
       precio_normal:d.precio_actual, precio_oferta:null, incidencia:d.incidencia,
       _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva,
     };
@@ -3171,7 +3171,7 @@ function ofmAlertasOnResult(result,cuenta){
   qs('ofm-alertas-wrap').style.display='block';
   qs('ofm-alertas-tbody').innerHTML=todos.map(c=>`<tr>
     <td>${c.cuenta}</td>
-    <td><a href="https://articulo.mercadolibre.com.ar/${c.item_id}" target="_blank" style="color:var(--accent)">${c.item_id}</a></td>
+    <td><a href="${c.permalink||`https://articulo.mercadolibre.com.ar/${c.item_id}`}" target="_blank" style="color:var(--accent)">${c.item_id}</a></td>
     <td>${c.sku||'<span style="color:var(--red)">sin SKU</span>'}</td>
     <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.titulo||''}</td>
     <td style="text-align:right;color:var(--green)">${c.ventas_periodo}</td>
