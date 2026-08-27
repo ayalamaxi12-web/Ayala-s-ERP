@@ -3094,14 +3094,24 @@ function ofmRenderGestionarPanel(itemId,promociones){
     :'Todavía no tiene descuento propio activo -- esto crea uno nuevo, independiente de las campañas de arriba (esas las gestiona ML, acá solo se puede sacar de ellas, no activarlas).';
 
   const campanaActiva=promociones.find(p=>p.promotion_type==='SELLER_CAMPAIGN');
-  const precioPmActual=campanaActiva?campanaActiva.precio:(f.precio_oferta||f.precio_normal||0);
+  // El precio del PM viene del Sheet ya conectado (mismo S.pmData que usan
+  // Verificar Ecom/ML/Táctica) -- pedido explícito de Maxx 2026-08-28: no
+  // hay que ir a mirar la planilla, el ERP ya tiene el dato. Si no está
+  // cargado (SKU sin match, o el Sheet del PM no se conectó todavía en
+  // Configuración) cae a lo que ya había antes, sin romper nada.
+  const pmRec=f.sku?S.pmData[normSku(f.sku)]:null;
+  const pmDisponible=pmRec&&pmRec.ml>0;
+  const precioPmActual=pmDisponible?pmRec.ml:(campanaActiva?campanaActiva.precio:(f.precio_oferta||f.precio_normal||0));
+  const fuentePm=pmDisponible?`<span style="color:var(--green)">precio del PM (${pmRec.pmName||pmRec.pm}): $${fmtN(pmRec.ml)}</span> -- editable si querés jugar con otro número.`
+    :`<span style="color:var(--yellow)">sin dato del PM para el SKU "${f.sku||'sin SKU'}"</span> -- conectá su Sheet en Configuración, o cargalo a mano.`;
 
   cont.innerHTML=`
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Promociones activas — ${f.titulo||itemId}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
     ${promosHtml}
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">🏷️ Oferta Tradicional (campaña propia mensual)</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Infla el precio del PM un % -- eso queda como tachado -- y mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla) con el precio del PM sin cambios. ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Infla el precio del PM un % -- eso queda como tachado -- y mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla) con el precio del PM sin cambios. ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${fuentePm}</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
       <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${Math.round(precioPmActual)}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <span>Inflación % <span style="color:var(--text3);font-size:8px">(tachado)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="25" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
