@@ -2893,7 +2893,11 @@ async function ofmRun(){
 }
 function ofmOnResult(result){
   ofmResult=result;
-  if(result.tc)OFM.tc=result.tc;
+  // Bug real 2026-08-27: esto pisaba SIEMPRE el TC manual que hubieras
+  // tipeado con el auto de BNA en cada "Cargar ofertas activas" -- el
+  // campo seguía mostrando lo que escribiste (nunca se tocó su .value),
+  // pero el cálculo real usaba el TC pisado sin que se notara.
+  if(result.tc)OFM.tc=OFM.tc||result.tc;
   const tcInput=qs('ofm-tc');if(tcInput)tcInput.placeholder=String(result.tc||'BNA auto');
   result.filas.forEach(f=>{
     if(f.margen){f._ivaFactor=f.precio_oferta/f.margen.base_sin_iva;f._costoUnitSinIva=result.tc>0?f.margen.costo_producto/result.tc:f.margen.costo_producto;}

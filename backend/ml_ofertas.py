@@ -436,11 +436,25 @@ class MLOfertasEscritura(MLOfertasClient):
                      "aviso": f"ML aceptó el precio pero NO aplicó el tachado (devolvió original_price={original_devuelto!r} en vez de {float(precio_tachado)}) -- "
                               "causa no confirmada, puede requerir elegibilidad del vendedor u otra condición. Verificá la publicación real en ML."}
         if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
+            # Caso real 2026-08-27 (Maxx, MLA852181648 -- publicación con
+            # precio mayorista): ML devolvió este mismo error "has_bids" y
+            # el fallback reportó éxito, pero el precio tampoco se vio
+            # reflejado en la publicación real. El mensaje de ML dice
+            # literalmente "has_bids" pero puede no significar "tiene
+            # pujas" para todos los casos (mayorista, por ejemplo) -- no
+            # se asume una única causa. Ahora se manda el mensaje REAL de
+            # ML en el aviso (no un texto fijo inventado) y se verifica
+            # que el `price` devuelto coincida con el pedido antes de
+            # reportar éxito.
+            mensaje_ml = d.get("message") or "has_bids"
             d2 = self._put(url, headers, {"price": float(precio_tachado)}) or {}
-            if d2.get("id"):
+            precio_devuelto = d2.get("price")
+            if d2.get("id") and precio_devuelto is not None and abs(float(precio_devuelto) - float(precio_tachado)) < 1:
                 return {"ok": True, "modo": "sin_tachado_bids",
-                        "aviso": "Ítem con pujas activas: se subió el precio base, falta activar el descuento a mano"}
-            return {"ok": False, "error": d2.get("message") or str(d2)}
+                        "aviso": f"ML rechazó el tachado (mensaje real: \"{mensaje_ml}\") -- se subió el precio base a {float(precio_tachado)}, falta activar el descuento a mano en ML."}
+            return {"ok": False,
+                    "error": f"ML rechazó el tachado (\"{mensaje_ml}\") y el reintento sin tachado tampoco se vio reflejado "
+                             f"(devolvió price={precio_devuelto!r} en vez de {float(precio_tachado)}) -- verificá la publicación real, puede ser una restricción de precio mayorista u otra no confirmada."}
         return {"ok": False, "error": d.get("message") or str(d)}
 
     def sacar_de_promocion(self, item_id: str, cuenta: str, promotion_type: str, promotion_id: str | None = None) -> dict:

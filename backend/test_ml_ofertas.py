@@ -459,8 +459,28 @@ def test_activar_oferta_propia_fallback_has_bids():
 
     assert r["ok"] is True
     assert r["modo"] == "sin_tachado_bids"
+    assert "Item has_bids, cannot update original_price" in r["aviso"]
     assert len(_fake_put.calls) == 2
     assert _fake_put.calls[1][2] == {"price": 12000.0}  # segundo intento, solo price
+
+
+def test_activar_oferta_propia_fallback_has_bids_pero_tampoco_se_aplica():
+    """Caso real 2026-08-27 (MLA852181648, publicación con precio
+    mayorista): ML devolvió el mismo error "has_bids", pero el reintento
+    sin tachado TAMPOCO se vio reflejado -- antes esto se reportaba como
+    éxito solo por tener `id` en la respuesta, sin chequear el price real."""
+    _fake_put.calls = []
+    respuestas = [
+        {"error": "validation_error", "message": "has_bids"},
+        {"id": "MLA1", "price": 9000.0},  # no cambió -- sigue en el precio viejo, no en el tachado pedido
+    ]
+    _fake_put.responder = lambda url, headers, body: respuestas.pop(0)
+    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+
+    r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
+
+    assert r["ok"] is False
+    assert "tampoco se vio reflejado" in r["error"]
 
 
 def test_activar_oferta_propia_error_no_recuperable():
