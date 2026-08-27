@@ -442,21 +442,33 @@ def _post_real(url: str, headers: dict, body: dict):
     ultimo_error.raise_for_status()
 
 
-def _explicar_has_bids(mensaje_ml: str) -> str:
+def _explicar_has_bids(mensaje_ml: str, tags: list | None = None) -> str:
     """`has_bids` no está documentado en developers.mercadolibre.com.ar
-    (buscado explícitamente 2026-08-28, ver docstring del módulo) -- esto
-    NO es la explicación oficial de ML, es la hipótesis más razonable
-    dado el nombre del campo y que el bloqueo persiste sin importar qué
-    combinación de atributos se mande en el PUT (confirmado con
-    MLA627267951, 2026-08-28): probablemente la publicación tiene ofertas
-    de compradores pendientes (el sistema de "acepta ofertas" de ML), y
-    ML bloquea cambiar el precio mientras esa negociación sigue abierta.
-    Se marca como hipótesis, no como hecho, para no hacer pasar una
-    suposición por un dato confirmado."""
+    (buscado explícitamente 2026-08-28, ver docstring del módulo). Dos
+    hipótesis, ninguna confirmada oficialmente:
+
+    1. Precio mayorista/B2B (`standard_price_by_quantity` en `tags`) --
+       la más probable si el tag está presente: esos ítems tienen su
+       PROPIO endpoint de precio (`POST /items/{id}/prices/standard/
+       quantity`, developers.mercadolibre.com.ar/es_ar/precio-por-cantidad,
+       no implementado acá) y el PUT simple de `price`/`original_price`
+       simplemente no es el camino para ellos -- `has_bids` puede ser un
+       código de error reusado/genérico de ML para "el precio no se
+       maneja por acá", no necesariamente sobre pujas reales.
+    2. Ofertas de compradores pendientes -- hipótesis más débil: Maxx
+       hizo la observación correcta (2026-08-28) de que si fuera por eso,
+       ML tampoco debería dejar editar el precio a mano DENTRO de ML, y
+       no hay evidencia de que eso pase. Se deja como posibilidad menor,
+       no como explicación principal."""
+    if tags and "standard_price_by_quantity" in tags:
+        return (f"ML rechaza el cambio de precio (mensaje real: \"{mensaje_ml}\"). Esta publicación tiene precio "
+                "mayorista/por cantidad (tag `standard_price_by_quantity`) -- ese tipo de publicación tiene su propio "
+                "endpoint de precio en la API de ML, distinto del que usa este módulo, y no está implementado acá. "
+                "No se puede activar una oferta con precio simple sobre esta publicación desde el ERP por ahora.")
     return (f"ML no permite cambiar el precio de esta publicación ahora mismo (mensaje real: \"{mensaje_ml}\"). "
-            "Hipótesis más probable (no confirmada en documentación pública): tiene ofertas de compradores "
-            "pendientes de aceptar/rechazar en ML -- revisá la publicación ahí antes de reintentar. "
-            "No hay una combinación de campos que lo evite desde acá.")
+            "No se detectó tag de precio mayorista, así que esa no parece ser la causa acá. Causa real no "
+            "confirmada -- revisá la publicación directo en ML antes de reintentar. No hay una combinación de "
+            "campos que lo evite desde acá.")
 
 
 class MLOfertasEscritura(MLOfertasClient):
@@ -537,11 +549,19 @@ class MLOfertasEscritura(MLOfertasClient):
                 # docstring del módulo) -- ese reintento estaba condenado
                 # a fallar en un paso distinto, sin relación con has_bids.
                 self._put(url, headers, {"price": float(precio_tachado), "original_price": float(precio_tachado)})
-                aviso_ml = _explicar_has_bids(mensaje_ml) + " Se reintentó fijar el precio base sin descuento."
+                # `tags` va en el mismo GET de verificación de abajo (no
+                # una llamada aparte) -- para distinguir "es precio
+                # mayorista" de "causa desconocida" en el aviso, ver
+                # `_explicar_has_bids`.
+                mensaje_bids = mensaje_ml
             else:
                 return {"ok": False, "error": d.get("message") or str(d)}
+        else:
+            mensaje_bids = None
 
-        estado = self._get(url, {"attributes": "id,price,original_price"}, headers) or {}
+        estado = self._get(url, {"attributes": "id,price,original_price,tags"}, headers) or {}
+        if mensaje_bids:
+            aviso_ml = _explicar_has_bids(mensaje_bids, estado.get("tags")) + " Se reintentó fijar el precio base sin descuento."
         precio_real, tachado_real = estado.get("price"), estado.get("original_price")
         precio_pedido = precio_tachado if aviso_ml else precio  # en el fallback se pidió el precio base = tachado
         precio_ok = precio_real is not None and abs(float(precio_real) - float(precio_pedido)) < 1
@@ -615,13 +635,15 @@ class MLOfertasEscritura(MLOfertasClient):
         if not d.get("id"):
             mensaje_ml = d.get("message") or str(d)
             if "has_bids" in mensaje_ml:
-                # Caso real 2026-08-28 (MLA627267951): mismo `has_bids`
-                # que en activar_oferta_propia, acá SIN fallback posible --
-                # ya se mandaron price+original_price juntos (dos
-                # atributos, no la regla de "solo price"), así que no hay
-                # una combinación distinta que probar. No se inventa un
-                # reintento que sabemos que no cambia nada.
-                return {"ok": False, "error": _explicar_has_bids(mensaje_ml)}
+                # Caso real 2026-08-28 (MLA627267951 y MLA852181648): mismo
+                # `has_bids` que en activar_oferta_propia, acá SIN fallback
+                # posible -- ya se mandaron price+original_price juntos
+                # (dos atributos, no la regla de "solo price"), así que no
+                # hay una combinación distinta que probar. Se pide `tags`
+                # para poder distinguir "es precio mayorista" de "causa
+                # desconocida" en el mensaje -- ver `_explicar_has_bids`.
+                estado_tags = self._get(url, {"attributes": "id,tags"}, headers) or {}
+                return {"ok": False, "error": _explicar_has_bids(mensaje_ml, estado_tags.get("tags"))}
             return {"ok": False, "error": mensaje_ml}
         estado = self._get(url, {"attributes": "id,price"}, headers) or {}
         precio_real = estado.get("price")

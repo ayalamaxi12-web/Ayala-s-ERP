@@ -579,18 +579,40 @@ def test_fijar_precio_base_has_bids_no_reintenta():
     igual que en activar_oferta_propia, pero acá no hay una combinación
     de campos distinta para reintentar (ya se mandaron price+
     original_price juntos) -- se devuelve un error claro, sin reintento
-    inútil ni texto crudo de ML sin explicar."""
+    inútil ni texto crudo de ML sin explicar. Sin tag de mayorista -> no
+    se afirma esa causa (Maxx marcó bien 2026-08-28 que la hipótesis de
+    "ofertas pendientes" no explica que ML sí deje editar a mano en ML)."""
     _fake_put.responder = lambda url, headers, body: {
         "error": "validation_error",
         "message": "Cannot update item MLA627267951 [status:active, has_bids:true]",
     }
-    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+    fake_get = lambda url, params, headers: {"id": "MLA627267951", "tags": ["good_quality_picture"]}
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
 
     r = ml.fijar_precio_base("MLA627267951", "IT", Decimal(15811))
 
     assert r["ok"] is False
     assert "has_bids:true" in r["error"]
-    assert "ofertas de compradores pendientes" in r["error"]
+    assert "No se detectó tag de precio mayorista" in r["error"]
+
+
+def test_fijar_precio_base_has_bids_con_tag_mayorista():
+    """Caso real 2026-08-28 (MLA852181648, la misma publicación con
+    precio mayorista de antes en la sesión): el tag `standard_price_by_
+    quantity` confirma que la causa más probable es esa, no pujas ni
+    ofertas pendientes."""
+    _fake_put.responder = lambda url, headers, body: {
+        "error": "validation_error",
+        "message": "Cannot update item MLA852181648 [status:active, has_bids:true]",
+    }
+    fake_get = lambda url, params, headers: {"id": "MLA852181648", "tags": ["standard_price_by_quantity"]}
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+
+    r = ml.fijar_precio_base("MLA852181648", "IT", Decimal(17819))
+
+    assert r["ok"] is False
+    assert "precio mayorista/por cantidad" in r["error"]
+    assert "standard_price_by_quantity" in r["error"]
 
 
 def test_meter_en_campana_ok():
