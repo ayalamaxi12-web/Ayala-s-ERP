@@ -90,8 +90,11 @@ def test_costo_fijo_por_tramo_de_precio():
 
 
 def test_envio_por_tramo_de_precio():
+    # Corregido 2026-08-27: por debajo de $33.000 no hay envío gratis
+    # obligado -- el costo es 0, no $9.800 (ver comentario de
+    # ENVIO_TRAMOS_DEFAULT en el módulo).
     params = ParametrosMargen()
-    casos = [(Decimal(10000), Decimal(9800)), (Decimal(33000), Decimal(7000)),
+    casos = [(Decimal(10000), Decimal(0)), (Decimal(33000), Decimal(7000)),
              (Decimal(49999), Decimal(7000)), (Decimal(50000), Decimal(7470))]
     for precio, esperado in casos:
         r = calcular_margen_oferta(precio, Decimal("1.21"), Decimal(0), None, None, params)

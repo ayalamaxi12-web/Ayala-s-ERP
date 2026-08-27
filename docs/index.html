@@ -2832,7 +2832,7 @@ const OFM={
   comisionGeneral:15.5,
   costoFijoTramos:[[16000,1255],[24000,2500],[33000,3030],[null,0]],
   cuotasPct:{3:8.40,6:12.30,9:15.70,12:19.20},
-  envioTramos:[[33000,9800],[50000,7000],[null,7470]],
+  envioTramos:[[33000,0],[50000,7000],[null,7470]],
   impChequePct:1.2, iibbPct:5,
   usarComision:true, usarCostoFijo:true, usarCuotas:true, usarEnvio:true, usarImpCheque:true, usarIibb:true,
   tc:0, umbral:10,
@@ -2877,6 +2877,7 @@ function ofmRenderPanel(){
     </div>`;
 }
 let ofmResult=null, ofmTabCuenta='IT', ofmJobIdOfertas=null, ofmFilaPorId={};
+let ofmItemAbierto=null, ofmPromocionesCache={};
 async function ofmRun(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const btn=qs('btn-ofm-run'),status=qs('ofm-status'),logEl=qs('ofm-log');
@@ -2908,7 +2909,7 @@ function ofmTab(cuenta){
 function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento propio';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'Campaña propia';return'Campaña de ML'+(f.nombre_campana?` (${f.nombre_campana})`:'');}
 function ofmTipoFiltro(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'PRICE_DISCOUNT';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'SELLER_CAMPAIGN';return'ML';}
 function ofmRender(){
-  if(!ofmResult)return;
+  if(!ofmResult){ofmReanclarPanelAbierto();return;}
   const tc=OFM.tc||ofmResult.tc||1;
   const search=(qs('ofm-search')?.value||'').toLowerCase();
   const filtroTipo=qs('ofm-filter-tipo')?.value||'';
@@ -2948,7 +2949,7 @@ function ofmRender(){
     const m=f._margen;
     const margenColor=!m||m.margenPct===null?'var(--text2)':m.margenPct*100<OFM.umbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
     const link=`https://articulo.mercadolibre.com.ar/${f.item_id}`;
-    return`<tr>
+    return`<tr data-item-id="${f.item_id}">
       <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f.titulo||'').replace(/"/g,'&quot;')}">${f.titulo||''}</td>
       <td><a href="${link}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
       <td>${f.sku||f.sku_ml||'<span style="color:var(--red)">sin SKU</span>'}</td>
@@ -2966,6 +2967,24 @@ function ofmRender(){
   }).join('');
   filas.forEach(f=>{ofmFilaPorId[f.item_id]=f;});
   document.querySelectorAll('.ofm-gestionar-row').forEach(row=>row.remove());
+  ofmReanclarPanelAbierto();
+}
+// Bug real 2026-08-27: cambiar TC/comisión/umbral (arriba) no refrescaba el
+// panel "⚙ Gestionar" que ya estaba abierto -- el de la tabla principal se
+// borraba sin más (reconstrucción de #ofm-tbody) y el del buscador puntual
+// directamente nunca se enteraba de nada porque vive fuera de esa tabla.
+// `ofmItemAbierto`/`ofmPromocionesCache` reconstruyen o refrescan el panel
+// después de cada `ofmRender()`, sin pedir de nuevo las promociones a ML.
+function ofmReanclarPanelAbierto(){
+  if(!ofmItemAbierto||!ofmPromocionesCache[ofmItemAbierto])return;
+  if(qs('ofm-gestionar-'+ofmItemAbierto)){ofmRenderGestionarPanel(ofmItemAbierto,ofmPromocionesCache[ofmItemAbierto]);return;}
+  const filaTr=document.querySelector(`#ofm-tbody tr[data-item-id="${ofmItemAbierto}"]`);
+  if(!filaTr){ofmItemAbierto=null;return;}
+  const row=document.createElement('tr');
+  row.className='ofm-gestionar-row';
+  row.innerHTML=`<td colspan="13" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${ofmItemAbierto}"></td>`;
+  filaTr.after(row);
+  ofmRenderGestionarPanel(ofmItemAbierto,ofmPromocionesCache[ofmItemAbierto]);
 }
 
 // ── Fase 3 — escritura: activar/sacar UNA oferta, UNA publicación por vez.
@@ -2975,8 +2994,9 @@ function ofmRender(){
 async function ofmToggleGestionar(btn,itemId){
   const tr=btn.closest('tr');
   const next=tr.nextElementSibling;
-  if(next&&next.classList.contains('ofm-gestionar-row')){next.remove();return;}
+  if(next&&next.classList.contains('ofm-gestionar-row')){next.remove();ofmItemAbierto=null;return;}
   document.querySelectorAll('.ofm-gestionar-row').forEach(x=>x.remove());
+  ofmItemAbierto=itemId;
   const row=document.createElement('tr');
   row.className='ofm-gestionar-row';
   row.innerHTML=`<td colspan="13" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${itemId}">Cargando promociones activas...</td>`;
@@ -2989,7 +3009,8 @@ async function ofmCargarPromociones(itemId){
   try{
     const res=await fetch(`${url}/ml-ofertas/item/${itemId}/promociones?cuenta=${f.cuenta}`);
     const data=await res.json();
-    ofmRenderGestionarPanel(itemId,data.promociones||[]);
+    ofmPromocionesCache[itemId]=data.promociones||[];
+    ofmRenderGestionarPanel(itemId,ofmPromocionesCache[itemId]);
   }catch(e){if(cont)cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
 function ofmRenderGestionarPanel(itemId,promociones){
@@ -3122,6 +3143,7 @@ async function ofmBuscarMLA(){
       _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva,
     };
     if(d.tc)OFM.tc=OFM.tc||d.tc;
+    ofmItemAbierto=d.item_id;
     cont.innerHTML=`<div id="ofm-gestionar-${d.item_id}">Cargando promociones activas...</div>`;
     await ofmCargarPromociones(d.item_id);
   }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}

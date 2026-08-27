@@ -141,8 +141,17 @@ CUOTAS_PCT_DEFAULT: dict[int, Decimal] = {
 }
 
 # Envío con descuento por reputación (MercadoLíder Platinum). (techo, monto).
+# Corregido 2026-08-27 (Maxx, en vivo -- "si no sale más de 33000 no tiene
+# envío, eso es fijo"): por debajo de $33.000 no hay envío gratis obligado,
+# así que el costo es 0 -- el vendedor "absorbe el envío" recién a partir
+# de ese umbral (REQ_MODULO_OFERTAS_ML.md §1.2, línea de contexto sobre el
+# umbral, y §2.0 "envio = regla_envio(precio_oferta) # 0 si <33k"). El
+# mismo REQ §1.2 tenía una tabla con "<$33.000 → $9.800" que se contradice
+# con esas dos líneas -- se trata como error de transcripción, no como
+# regla real: valores de $33.000-$49.999 y $50.000+ se mantienen tal cual
+# estaban (7000/7470), el techo de <33.000 pasa a valer 0.
 ENVIO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
-    (Decimal(33000), Decimal(9800)),
+    (Decimal(33000), Decimal(0)),
     (Decimal(50000), Decimal(7000)),
     (None, Decimal(7470)),
 ]
