@@ -477,7 +477,7 @@ def test_activar_oferta_propia_fallback_has_bids():
     assert r["modo"] == "sin_tachado_bids"
     assert "Item has_bids, cannot update original_price" in r["aviso"]
     assert len(_fake_put.calls) == 2
-    assert _fake_put.calls[1][2] == {"price": 12000.0}  # segundo intento, solo price
+    assert _fake_put.calls[1][2] == {"price": 12000.0, "original_price": 12000.0}  # segundo intento, sin descuento real (no "solo price": eso da 400 directo)
 
 
 def test_activar_oferta_propia_fallback_has_bids_pero_tampoco_se_aplica():
@@ -572,6 +572,25 @@ def test_fijar_precio_base_no_confirma_por_get():
 
     assert r["ok"] is False
     assert "no confirma el precio base" in r["error"]
+
+
+def test_fijar_precio_base_has_bids_no_reintenta():
+    """Caso real 2026-08-28 (MLA627267951): ML rechaza con `has_bids`
+    igual que en activar_oferta_propia, pero acá no hay una combinación
+    de campos distinta para reintentar (ya se mandaron price+
+    original_price juntos) -- se devuelve un error claro, sin reintento
+    inútil ni texto crudo de ML sin explicar."""
+    _fake_put.responder = lambda url, headers, body: {
+        "error": "validation_error",
+        "message": "Cannot update item MLA627267951 [status:active, has_bids:true]",
+    }
+    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+
+    r = ml.fijar_precio_base("MLA627267951", "IT", Decimal(15811))
+
+    assert r["ok"] is False
+    assert "has_bids:true" in r["error"]
+    assert "ofertas de compradores pendientes" in r["error"]
 
 
 def test_meter_en_campana_ok():

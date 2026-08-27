@@ -442,6 +442,23 @@ def _post_real(url: str, headers: dict, body: dict):
     ultimo_error.raise_for_status()
 
 
+def _explicar_has_bids(mensaje_ml: str) -> str:
+    """`has_bids` no está documentado en developers.mercadolibre.com.ar
+    (buscado explícitamente 2026-08-28, ver docstring del módulo) -- esto
+    NO es la explicación oficial de ML, es la hipótesis más razonable
+    dado el nombre del campo y que el bloqueo persiste sin importar qué
+    combinación de atributos se mande en el PUT (confirmado con
+    MLA627267951, 2026-08-28): probablemente la publicación tiene ofertas
+    de compradores pendientes (el sistema de "acepta ofertas" de ML), y
+    ML bloquea cambiar el precio mientras esa negociación sigue abierta.
+    Se marca como hipótesis, no como hecho, para no hacer pasar una
+    suposición por un dato confirmado."""
+    return (f"ML no permite cambiar el precio de esta publicación ahora mismo (mensaje real: \"{mensaje_ml}\"). "
+            "Hipótesis más probable (no confirmada en documentación pública): tiene ofertas de compradores "
+            "pendientes de aceptar/rechazar en ML -- revisá la publicación ahí antes de reintentar. "
+            "No hay una combinación de campos que lo evite desde acá.")
+
+
 class MLOfertasEscritura(MLOfertasClient):
     """Único punto de escritura del módulo. Separado de `MLOfertasClient`
     (que hereda `_get` de `MLFullClient`, documentado ahí como "solo
@@ -512,8 +529,15 @@ class MLOfertasEscritura(MLOfertasClient):
         if not d.get("id"):
             if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
                 mensaje_ml = d.get("message") or "has_bids"
-                self._put(url, headers, {"price": float(precio_tachado)})
-                aviso_ml = f"ML rechazó el tachado (mensaje real: \"{mensaje_ml}\") -- se reintentó solo con el precio base."
+                # Reintento con price=original_price=precio_tachado (dos
+                # atributos, no la regla de "solo price" -> 400) -- sin
+                # descuento real, solo para ver si al menos el precio base
+                # se puede tocar. Corregido 2026-08-28: antes mandaba SOLO
+                # `price`, que ahora siempre da 400 de por sí (ver
+                # docstring del módulo) -- ese reintento estaba condenado
+                # a fallar en un paso distinto, sin relación con has_bids.
+                self._put(url, headers, {"price": float(precio_tachado), "original_price": float(precio_tachado)})
+                aviso_ml = _explicar_has_bids(mensaje_ml) + " Se reintentó fijar el precio base sin descuento."
             else:
                 return {"ok": False, "error": d.get("message") or str(d)}
 
@@ -589,7 +613,16 @@ class MLOfertasEscritura(MLOfertasClient):
         url = f"https://api.mercadolibre.com/items/{item_id}"
         d = self._put(url, headers, {"price": float(precio_base), "original_price": float(precio_base)}) or {}
         if not d.get("id"):
-            return {"ok": False, "error": d.get("message") or str(d)}
+            mensaje_ml = d.get("message") or str(d)
+            if "has_bids" in mensaje_ml:
+                # Caso real 2026-08-28 (MLA627267951): mismo `has_bids`
+                # que en activar_oferta_propia, acá SIN fallback posible --
+                # ya se mandaron price+original_price juntos (dos
+                # atributos, no la regla de "solo price"), así que no hay
+                # una combinación distinta que probar. No se inventa un
+                # reintento que sabemos que no cambia nada.
+                return {"ok": False, "error": _explicar_has_bids(mensaje_ml)}
+            return {"ok": False, "error": mensaje_ml}
         estado = self._get(url, {"attributes": "id,price"}, headers) or {}
         precio_real = estado.get("price")
         if precio_real is not None and abs(float(precio_real) - float(precio_base)) < 1:
