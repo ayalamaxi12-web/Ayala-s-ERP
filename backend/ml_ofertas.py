@@ -617,8 +617,23 @@ def ofertas_propias_activas(
     detalles = {d["id"]: d for d in ml.detalle_items_ofertas(ids, cuenta)}
 
     for item_id in ids:
+        try:
+            promos_item = ml.promociones_item(item_id, cuenta)
+        except requests.exceptions.RequestException as e:
+            # Real 2026-08-27: `seller-promotions/items/{id}` devuelve 400
+            # para al menos un ítem real (MLA637963331) -- causa exacta no
+            # confirmada (¿publicación pausada/sin stock/no elegible para
+            # promos?), pero antes este `raise_for_status()` de `_get_real`
+            # tumbaba TODO el escaneo (~6.200 ítems) por un solo ítem
+            # problemático. Un ítem que no se puede consultar se salta y se
+            # deja registrado -- no se estima en silencio (00_LEEME §6),
+            # pero tampoco bloquea a los demás.
+            incidencias.append({"item_id": item_id, "cuenta": cuenta,
+                                 "sku": detalles.get(item_id, {}).get("seller_custom_field"),
+                                 "motivo": f"ERROR_ML_ITEM: {e}"})
+            continue
         propia = next(
-            (p for p in ml.promociones_item(item_id, cuenta)
+            (p for p in promos_item
              if p.get("type") == "PRICE_DISCOUNT" and p.get("status") == "started"),
             None,
         )

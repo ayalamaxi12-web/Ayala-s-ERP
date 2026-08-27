@@ -3,6 +3,8 @@ se verifica a mano contra un caso calculado con Decimal por fuera del código
 (ver el módulo para el porqué de cada base imponible)."""
 from decimal import Decimal
 
+import requests
+
 from ml_ofertas import (
     MLOfertasClient,
     MLOfertasEscritura,
@@ -294,6 +296,31 @@ def test_ofertas_propias_activas_filtra_price_discount_started():
     assert len(filas) == 1
     assert filas[0].item_id == "MLA1"
     assert filas[0].tipo_oferta == "PRICE_DISCOUNT"
+
+
+def test_ofertas_propias_activas_un_item_con_error_no_tumba_el_resto():
+    """Bug real 2026-08-27: `seller-promotions/items/{id}` devolvió 400
+    para un ítem real en medio de un escaneo de ~6.200 -- antes eso hacía
+    `raise_for_status()` y tumbaba TODO el job. Un ítem problemático se
+    salta (y queda registrado en incidencias), los demás se procesan."""
+    def fake_get(url, params, headers):
+        if url.endswith("/items"):
+            return [{"body": _item_ofertas("MLA1", "SKU-A", "MLA-TONERS")},
+                    {"body": _item_ofertas("MLA2", "SKU-B", "MLA-TONERS")}]
+        if url.endswith("/seller-promotions/items/MLA1"):
+            raise requests.exceptions.HTTPError("400 Client Error: Bad Request")
+        if url.endswith("/seller-promotions/items/MLA2"):
+            return [{"type": "PRICE_DISCOUNT", "status": "started", "price": 8000, "original_price": 10000}]
+        raise AssertionError(url)
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    costo = _CostoProviderFalso({"SKU-A": Decimal(5), "SKU-B": Decimal(5)})
+    iva = _IvaProviderFalso({"SKU-A": Decimal("1.21"), "SKU-B": Decimal("1.21")})
+
+    filas, incidencias = ofertas_propias_activas(ml, costo, iva, "IT", item_ids=["MLA1", "MLA2"])
+
+    assert len(filas) == 1 and filas[0].item_id == "MLA2"
+    assert any(i["item_id"] == "MLA1" and "ERROR_ML_ITEM" in i["motivo"] for i in incidencias)
 
 
 # ── Fase 2 — detección de SKUs sin oferta ──
