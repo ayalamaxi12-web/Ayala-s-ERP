@@ -638,19 +638,21 @@ def test_meter_en_campana_error():
 
 
 def test_activar_en_campana_tradicional_flujo_completo():
-    """Automatiza el flujo real de Maxx: infla precio_pm 25% -> tachado,
-    mete en la campaña propia activa con precio_pm como precio final."""
+    """Fórmula corregida 2026-08-28 (bug real, MLA627267951: 25% de
+    descuento sobre $16.865 en Promociones de ML dio $12.648,75, NO
+    precio*1.25): tachado = precio_pm / (1 - descuento_pct/100), no
+    precio_pm * (1 + descuento_pct/100) -- 10000/0.75 = 13333, no 12500."""
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
             return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional Agosto"}]}
         if url.endswith("/items/MLA1"):
-            return {"id": "MLA1", "price": 12500.0}
+            return {"id": "MLA1", "price": 13333.0}
         raise AssertionError(url)
 
     _fake_put.calls = []
     _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"]}
     _fake_post.calls = []
-    _fake_post.responder = lambda url, headers, body: {"price": 10000.0, "original_price": 12500.0}
+    _fake_post.responder = lambda url, headers, body: {"price": 10000.0, "original_price": 13333.0}
 
     ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
 
@@ -659,8 +661,8 @@ def test_activar_en_campana_tradicional_flujo_completo():
     assert r["ok"] is True
     assert r["promotion_id"] == "C-1"
     assert r["nombre_campana"] == "Oferta Tradicional Agosto"
-    assert r["precio_tachado_pedido"] == 12500.0  # 10000 * 1.25
-    assert _fake_put.calls[0][2] == {"price": 12500.0, "original_price": 12500.0}
+    assert r["precio_tachado_pedido"] == 13333.0  # 10000 / 0.75
+    assert _fake_put.calls[0][2] == {"price": 13333.0, "original_price": 13333.0}
     assert _fake_post.calls[0][2] == {"promotion_id": "C-1", "promotion_type": "SELLER_CAMPAIGN", "deal_price": 10000.0}
 
 

@@ -2083,24 +2083,26 @@ async def ml_ofertas_item_sacar(item_id: str, request: Request, background_tasks
         })
     return r
 
-def _activar_campana_sync(item_id: str, cuenta: str, precio_pm: Decimal, inflacion_pct: Decimal, promotion_id: str | None) -> dict:
+def _activar_campana_sync(item_id: str, cuenta: str, precio_pm: Decimal, descuento_pct: Decimal, promotion_id: str | None) -> dict:
     ml = ml_ofertas.MLOfertasEscritura()
-    return ml_ofertas.activar_en_campana_tradicional(ml, cuenta, item_id, precio_pm, inflacion_pct, promotion_id)
+    return ml_ofertas.activar_en_campana_tradicional(ml, cuenta, item_id, precio_pm, descuento_pct, promotion_id)
 
 @app.post("/ml-ofertas/item/{item_id}/activar-campana")
 async def ml_ofertas_item_activar_campana(item_id: str, request: Request, background_tasks: BackgroundTasks):
     """"Oferta Tradicional" -- flujo real de Maxx confirmado 2026-08-28
-    (80% de su uso): infla `precio_pm` un `inflacion_pct` (25% default)
-    como tachado, mete la publicación en su campaña propia mensual con
-    `precio_pm` como precio final. Dos escrituras reales de ML por dentro
-    (`fijar_precio_base` + `meter_en_campana`, ver sus docstrings) --
-    mismo motivo que /activar para diferir el historial."""
+    (80% de su uso): fija el tachado en el valor que, con `descuento_pct`
+    de descuento (25% default -- el mismo % que se aplica en la sección
+    de Promociones de ML), da `precio_pm` como precio final. Ver
+    `activar_en_campana_tradicional` por la fórmula corregida 2026-08-28
+    (no es "inflar el mismo %", ver su docstring). Dos escrituras reales
+    de ML por dentro (`fijar_precio_base` + `meter_en_campana`, ver sus
+    docstrings) -- mismo motivo que /activar para diferir el historial."""
     body = await request.json()
     cuenta = body["cuenta"]
     precio_pm = Decimal(str(body["precio_pm"]))
-    inflacion_pct = Decimal(str(body.get("inflacion_pct", 25)))
+    descuento_pct = Decimal(str(body.get("descuento_pct", 25)))
     promotion_id = body.get("promotion_id")
-    r = await run_in_threadpool(_activar_campana_sync, item_id, cuenta, precio_pm, inflacion_pct, promotion_id)
+    r = await run_in_threadpool(_activar_campana_sync, item_id, cuenta, precio_pm, descuento_pct, promotion_id)
     if r.get("ok"):
         background_tasks.add_task(_registrar_historial_oferta, {
             "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),

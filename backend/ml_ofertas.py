@@ -442,7 +442,7 @@ def _post_real(url: str, headers: dict, body: dict):
     ultimo_error.raise_for_status()
 
 
-def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None) -> str:
+def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None, respuesta_completa: dict | None = None) -> str:
     """`has_bids` no está documentado en developers.mercadolibre.com.ar
     (buscado explícitamente 2026-08-28, ver docstring del módulo).
 
@@ -458,12 +458,20 @@ def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None) -> str:
     hipótesis de "ofertas de compradores pendientes" quedó descartada por
     Maxx en vivo (si fuera por eso, ML tampoco debería dejar editar el
     precio a mano DENTRO de ML, y no hay evidencia de que pase). Causa
-    real todavía sin confirmar para este caso. En vez de seguir
-    adivinando, se manda `buying_mode`/`sub_status`/`status` crudos en el
-    mensaje -- son los campos más directos para diagnosticarlo (si
-    `buying_mode` fuera literal `auction`, confirmaría pujas reales; si
-    es `buy_it_now` como es lo normal en MLA hoy, descarta esa lectura
-    literal del nombre del campo)."""
+    real todavía sin confirmar para este caso.
+
+    Hallazgo 2026-08-28 (investigación web, no doc oficial): el sufijo
+    `[status:X, has_bids:Y]` parece ser un formato GENÉRICO que ML pega a
+    varios errores distintos de "cannot update item" -- se encontró un
+    ejemplo real con `has_bids:false` pegado a un error TOTALMENTE
+    distinto (`item.listing_type_id.not_modifiable`, sobre tipo de
+    publicación, no precio). Es decir: puede que `has_bids` no sea la
+    causa real en absoluto, solo un dato de contexto que ML siempre
+    agrega -- la causa real puede estar en otro campo de la respuesta
+    (`error`, `cause`) que antes no se mostraba, solo el `message`
+    recortado. Por eso ahora se manda la respuesta CRUDA completa del PUT
+    en el mensaje, no solo el string de `message` -- para no seguir
+    perdiendo esa información la próxima vez que pase."""
     estado_item = estado_item or {}
     tags = estado_item.get("tags") or []
     if "standard_price_by_quantity" in tags:
@@ -473,7 +481,8 @@ def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None) -> str:
                 "No se puede activar una oferta con precio simple sobre esta publicación desde el ERP por ahora.")
     diagnostico = (f"buying_mode={estado_item.get('buying_mode')!r}, sub_status={estado_item.get('sub_status')!r}, "
                    f"status={estado_item.get('status')!r}, tags={tags!r}")
-    return (f"ML no permite cambiar el precio de esta publicación ahora mismo (mensaje real: \"{mensaje_ml}\"). "
+    respuesta_txt = f" Respuesta completa del PUT: {respuesta_completa!r}." if respuesta_completa else ""
+    return (f"ML no permite cambiar el precio de esta publicación ahora mismo (mensaje real: \"{mensaje_ml}\").{respuesta_txt} "
             "No tiene precio mayorista ni tachado previo, así que ninguna de las dos hipótesis que ya probamos "
             f"explica esto. Causa real no confirmada -- estado crudo del ítem para diagnosticar: {diagnostico}. "
             "Revisá la publicación directo en ML antes de reintentar.")
@@ -569,7 +578,7 @@ class MLOfertasEscritura(MLOfertasClient):
 
         estado = self._get(url, {"attributes": "id,price,original_price,tags,buying_mode,sub_status,status"}, headers) or {}
         if mensaje_bids:
-            aviso_ml = _explicar_has_bids(mensaje_bids, estado) + " Se reintentó fijar el precio base sin descuento."
+            aviso_ml = _explicar_has_bids(mensaje_bids, estado, d) + " Se reintentó fijar el precio base sin descuento."
         precio_real, tachado_real = estado.get("price"), estado.get("original_price")
         precio_pedido = precio_tachado if aviso_ml else precio  # en el fallback se pidió el precio base = tachado
         precio_ok = precio_real is not None and abs(float(precio_real) - float(precio_pedido)) < 1
@@ -651,7 +660,7 @@ class MLOfertasEscritura(MLOfertasClient):
                 # para poder distinguir "es precio mayorista" de "causa
                 # desconocida" en el mensaje -- ver `_explicar_has_bids`.
                 estado_tags = self._get(url, {"attributes": "id,tags,buying_mode,sub_status,status"}, headers) or {}
-                return {"ok": False, "error": _explicar_has_bids(mensaje_ml, estado_tags)}
+                return {"ok": False, "error": _explicar_has_bids(mensaje_ml, estado_tags, d)}
             return {"ok": False, "error": mensaje_ml}
         estado = self._get(url, {"attributes": "id,price"}, headers) or {}
         precio_real = estado.get("price")
@@ -687,15 +696,29 @@ class MLOfertasEscritura(MLOfertasClient):
 
 def activar_en_campana_tradicional(
     ml: MLOfertasEscritura, cuenta: str, item_id: str, precio_pm: Decimal,
-    inflacion_pct: Decimal = Decimal(25), promotion_id: str | None = None,
+    descuento_pct: Decimal = Decimal(25), promotion_id: str | None = None,
 ) -> dict:
     """Automatiza el flujo real de Maxx (confirmado 2026-08-28, 80% de su
-    uso): infla `precio_pm` (el precio que definió el PM) un
-    `inflacion_pct` -- eso queda como tachado -- y mete la publicación en
-    su campaña mensual propia ("Oferta Tradicional <mes>") con
-    `precio_pm` sin cambios como precio final. Dos pasos reales de ML, no
-    uno: `fijar_precio_base` (tachado) y `meter_en_campana` (precio
-    final) -- si el primero falla no se intenta el segundo.
+    uso): fija el tachado en el valor que, aplicándole `descuento_pct` de
+    descuento, da exactamente `precio_pm` (el precio que definió el PM) --
+    y mete la publicación en su campaña mensual propia ("Oferta
+    Tradicional <mes>") con `precio_pm` sin cambios como precio final.
+    Dos pasos reales de ML, no uno: `fijar_precio_base` (tachado) y
+    `meter_en_campana` (precio final) -- si el primero falla no se
+    intenta el segundo.
+
+    **Fórmula corregida 2026-08-28** (bug real encontrado por Maxx en
+    vivo, MLA627267951: probó a mano en la sección de Promociones de ML
+    con 25% de descuento sobre $16.865 → dio $12.648,75, que es
+    exactamente el precio del PM). `tachado × (1 − descuento_pct/100) =
+    precio_pm`, así que `tachado = precio_pm / (1 − descuento_pct/100)`
+    -- NO `precio_pm × (1 + descuento_pct/100)`, que era lo que hacía
+    antes. Inflar un X% y después descontar ese mismo X% NO son
+    operaciones inversas (para X=25%: ×1,25 después ×0,75 = ×0,9375, un
+    6,25% por debajo del original) -- el campo siempre representó el %
+    de descuento que se aplica en la sección de Promociones de ML
+    (coincide con lo que ahí se ve como "%"), no un % de inflación
+    directa sobre el tachado.
 
     `promotion_id` opcional: si no se pasa, se resuelve solo con la
     primera `SELLER_CAMPAIGN` con `status` `started` o `pending` de
@@ -713,7 +736,9 @@ def activar_en_campana_tradicional(
     else:
         nombre_campana = None
 
-    precio_tachado = (precio_pm * (Decimal(100) + inflacion_pct) / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    if descuento_pct >= 100:
+        return {"ok": False, "error": f"Descuento de {descuento_pct}% inválido -- tiene que ser menor a 100%."}
+    precio_tachado = (precio_pm / (1 - descuento_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     r1 = ml.fijar_precio_base(item_id, cuenta, precio_tachado)
     if not r1.get("ok"):
