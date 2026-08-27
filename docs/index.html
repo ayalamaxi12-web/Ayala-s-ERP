@@ -2995,39 +2995,69 @@ async function ofmCargarPromociones(itemId){
 function ofmRenderGestionarPanel(itemId,promociones){
   const cont=qs('ofm-gestionar-'+itemId);if(!cont)return;
   const f=ofmFilaPorId[itemId];
-  const promosHtml=promociones.length?promociones.map(p=>`
-    <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:10px">
-      <span style="min-width:160px;color:var(--text)">${p.nombre||p.promotion_type}</span>
-      <span style="color:var(--text3);min-width:130px">${p.promotion_type}${p.status?' · '+p.status:''}</span>
+  const promosHtml=promociones.length?promociones.map(p=>{
+    const activa=p.status==='started';
+    const badge=activa
+      ?`<span style="color:var(--green);font-weight:700">● PARTICIPANDO</span>`
+      :`<span style="color:var(--text3)">○ ${(p.status||'candidata').toUpperCase()} (no participa)</span>`;
+    const sacarBtn=activa
+      ?`<button class="btn-xs" style="background:rgba(255,107,107,0.15);border-color:rgba(255,107,107,0.4);color:var(--red)" onclick="ofmConfirmarSacar('${itemId}','${p.promotion_type}',${p.promotion_id?`'${p.promotion_id}'`:'null'},'${(p.nombre||p.promotion_type).replace(/'/g,"\\'")}')">🗑 Sacar solo de esta</button>`
+      :`<span style="font-size:9px;color:var(--text3);font-style:italic">no se puede sacar -- no está activa</span>`;
+    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:10px;opacity:${activa?1:0.55}">
+      <span style="min-width:150px;color:var(--text)">${p.nombre||p.promotion_type}</span>
+      <span style="min-width:120px;color:var(--text3)">${p.promotion_type}</span>
+      <span style="min-width:180px">${badge}</span>
       <span style="color:var(--text3);min-width:150px">${p.fecha_desde||'—'} → ${p.fecha_hasta||'—'}</span>
-      <span style="color:var(--accent)">${p.precio?'$'+fmtN(Math.round(p.precio)):''}</span>
-      <button class="btn-xs" style="background:rgba(255,107,107,0.15);border-color:rgba(255,107,107,0.4);color:var(--red)" onclick="ofmConfirmarSacar('${itemId}','${p.promotion_type}',${p.promotion_id?`'${p.promotion_id}'`:'null'},'${(p.nombre||p.promotion_type).replace(/'/g,"\\'")}')">🗑 Sacar solo de esta</button>
-    </div>`).join(''):'<div style="font-size:10px;color:var(--text3)">Sin promociones activas ahora mismo.</div>';
-  const precioActual=f.precio_oferta||f.precio_normal||0;
-  const tachadoActual=f.precio_normal||precioActual;
-  cont.innerHTML=`
-    <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:4px">Promociones activas — ${f.titulo||itemId}</div>
-    ${promosHtml}
-    <div style="font-weight:700;color:var(--accent);font-size:11px;margin:10px 0 4px">Activar / editar descuento propio</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
-      <span>Precio de venta<input type="text" id="ofm-act-precio-${itemId}" value="${Math.round(precioActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <span>Precio tachado<input type="text" id="ofm-act-tachado-${itemId}" value="${Math.round(tachadoActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <span id="ofm-act-margen-${itemId}" style="font-weight:600"></span>
-      <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarActivar('${itemId}')">⚡ Activar</button>
+      <span style="color:var(--accent);min-width:70px">${p.precio?'$'+fmtN(Math.round(p.precio)):''}</span>
+      ${sacarBtn}
     </div>`;
+  }).join(''):'<div style="font-size:10px;color:var(--text3)">Sin promociones activas ahora mismo.</div>';
+
+  const descuentoActivo=promociones.find(p=>p.promotion_type==='PRICE_DISCOUNT'&&p.status==='started');
+  const precioActual=descuentoActivo?descuentoActivo.precio:(f.precio_oferta||f.precio_normal||0);
+  const tachadoActual=descuentoActivo?descuentoActivo.precio_tachado:(f.precio_normal||precioActual);
+  const accionTxt=descuentoActivo
+    ?'Ya tiene un descuento propio ACTIVO (fila "PRICE_DISCOUNT · ● PARTICIPANDO" arriba) -- esto lo edita.'
+    :'Todavía no tiene descuento propio activo -- esto crea uno nuevo, independiente de las campañas de arriba (esas las gestiona ML, acá solo se puede sacar de ellas, no activarlas).';
+
+  cont.innerHTML=`
+    <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Promociones activas — ${f.titulo||itemId}</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
+    ${promosHtml}
+    <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">Descuento propio (independiente de lo de arriba)</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${accionTxt}</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
+      <span>Precio tachado <span style="color:var(--text3);font-size:8px">(el "antes", más alto)</span><input type="text" id="ofm-act-tachado-${itemId}" value="${Math.round(tachadoActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
+      <span>Precio de venta <span style="color:var(--text3);font-size:8px">(el "ahora", el que cobrás)</span><input type="text" id="ofm-act-precio-${itemId}" value="${Math.round(precioActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
+      <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarActivar('${itemId}')">⚡ ${descuentoActivo?'Actualizar':'Activar'}</button>
+    </div>
+    <div id="ofm-act-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>`;
   ofmSimularActivar(itemId);
 }
 function ofmSimularActivar(itemId){
   const f=ofmFilaPorId[itemId];const out=qs('ofm-act-margen-'+itemId);
   const precio=parseFloat(qs('ofm-act-precio-'+itemId)?.value)||0;
+  const tachado=parseFloat(qs('ofm-act-tachado-'+itemId)?.value)||0;
   if(!f||!out)return;
-  if(f._costoUnitSinIva==null){out.innerHTML=`<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen</span>`;return;}
+  const avisoOrden=(tachado&&precio&&tachado<=precio)?`<div style="color:var(--yellow);margin-bottom:3px">⚠ El tachado (${fmtN(tachado)}) debería ser MAYOR que el precio de venta (${fmtN(precio)}) -- así como está, no se ve como un descuento real.</div>`:'';
+  if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
   const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
   const costoARS=f._costoUnitSinIva*tc;
   const m=ofmMargenAt(precio,f._ivaFactor,costoARS,f.domain_id,null);
   const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
   const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
-  out.innerHTML=`Margen simulado: <span style="color:${color}">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral':''}`;
+  const resumen=`Margen simulado: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
+  const desglose=`<div style="display:grid;grid-template-columns:repeat(4,auto);gap:2px 14px;margin-top:4px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
+    <span>Base sin IVA: $${fmtN(Math.round(m.baseSinIva))}</span>
+    <span>− Comisión: $${fmtN(Math.round(m.comision))}</span>
+    <span>− Costo fijo: $${fmtN(Math.round(m.costoFijo))}</span>
+    <span>− Envío: $${fmtN(Math.round(m.envio))}</span>
+    <span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>
+    <span>− IIBB: $${fmtN(Math.round(m.iibb))}</span>
+    <span>− Costo producto: $${fmtN(Math.round(costoARS))}</span>
+    <span style="color:${color}">= Margen: $${fmtN(Math.round(m.margen))}</span>
+  </div>`;
+  out.innerHTML=avisoOrden+resumen+desglose;
 }
 async function ofmConfirmarActivar(itemId){
   const operador=ofmRequireOperador();if(!operador)return;
