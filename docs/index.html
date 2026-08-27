@@ -3081,7 +3081,8 @@ async function ofmConfirmarActivar(itemId){
       body:JSON.stringify({cuenta:f.cuenta,precio,precio_tachado:tachado,sku:f.sku||'',precio_anterior:f.precio_oferta||f.precio_normal||'',
         margen_pct:margenPct!==null?(margenPct*100).toFixed(2):'',bajo_umbral:bajoUmbral,operador})});
     const d=await res.json();
-    if(d.ok){toast(`✅ ${itemId}: oferta activada${d.aviso?' — '+d.aviso:''}`);await ofmCargarPromociones(itemId);}
+    if(d.ok&&d.aviso){toast(`⚠ ${itemId}: activado con aviso`,'error');alert(`⚠ ${itemId}\n\n${d.aviso}`);await ofmCargarPromociones(itemId);}
+    else if(d.ok){toast(`✅ ${itemId}: oferta activada`);await ofmCargarPromociones(itemId);}
     else toast(`❌ ${itemId}: ${d.error||'error desconocido'}`,'error');
   }catch(e){toast('Error: '+e.message,'error');}
 }

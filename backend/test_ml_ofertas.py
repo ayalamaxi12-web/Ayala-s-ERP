@@ -418,7 +418,7 @@ _fake_delete.calls = []
 
 def test_activar_oferta_propia_ok_con_tachado():
     _fake_put.calls = []
-    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"]}
+    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"], "original_price": body["original_price"]}
     ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
 
     r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
@@ -426,6 +426,21 @@ def test_activar_oferta_propia_ok_con_tachado():
     assert r == {"ok": True, "modo": "con_tachado"}
     assert _fake_put.calls[0][0] == "https://api.mercadolibre.com/items/MLA1"
     assert _fake_put.calls[0][2] == {"price": 9000.0, "original_price": 12000.0}
+
+
+def test_activar_oferta_propia_ml_acepta_pero_no_aplica_tachado():
+    """Caso real 2026-08-27: ML devuelve 200 con `id` (aceptó el PUT) pero
+    NO refleja el tachado pedido -- antes esto se reportaba como éxito
+    completo sin avisar nada."""
+    _fake_put.calls = []
+    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"], "original_price": None}
+    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+
+    r = ml.activar_oferta_propia("MLA1", "IT", Decimal(9000), Decimal(12000))
+
+    assert r["ok"] is True
+    assert r["modo"] == "sin_tachado_ml"
+    assert "NO aplicó el tachado" in r["aviso"]
 
 
 def test_activar_oferta_propia_fallback_has_bids():

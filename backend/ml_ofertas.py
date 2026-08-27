@@ -405,12 +405,27 @@ class MLOfertasEscritura(MLOfertasClient):
         (`has_bids`), ML rechaza bajar `price` con tachado en un solo paso
         -- fallback ya conocido: subir `price` solo al valor del tachado
         (sin descuento mostrado todavía). No es un bug de acá, es una
-        restricción real de ML sobre ítems con pujas."""
+        restricción real de ML sobre ítems con pujas.
+
+        Caso real 2026-08-27 (Maxx, MLA875537547): ML devolvió 200 con
+        `id` (aceptó el PUT) pero el precio tachado NO quedó aplicado en
+        la publicación real -- causa exacta no confirmada (¿elegibilidad
+        del vendedor para mostrar tachado, alguna otra condición de ML no
+        documentada acá?), no se inventa la explicación. Lo que sí se
+        puede hacer sin adivinar: comparar el `original_price` que
+        devuelve la respuesta contra el que se pidió, y avisar en vez de
+        reportar éxito completo si no coinciden -- para no ocultarlo como
+        pasaba antes."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
         url = f"https://api.mercadolibre.com/items/{item_id}"
         d = self._put(url, headers, {"price": float(precio), "original_price": float(precio_tachado)}) or {}
         if d.get("id"):
-            return {"ok": True, "modo": "con_tachado"}
+            original_devuelto = d.get("original_price")
+            if original_devuelto and abs(float(original_devuelto) - float(precio_tachado)) < 1:
+                return {"ok": True, "modo": "con_tachado"}
+            return {"ok": True, "modo": "sin_tachado_ml",
+                     "aviso": f"ML aceptó el precio pero NO aplicó el tachado (devolvió original_price={original_devuelto!r} en vez de {float(precio_tachado)}) -- "
+                              "causa no confirmada, puede requerir elegibilidad del vendedor u otra condición. Verificá la publicación real en ML."}
         if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
             d2 = self._put(url, headers, {"price": float(precio_tachado)}) or {}
             if d2.get("id"):

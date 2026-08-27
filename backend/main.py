@@ -2034,14 +2034,26 @@ def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
 async def ml_ofertas_item_buscar(item_id: str, cuenta: str):
     return await run_in_threadpool(_buscar_item_sync, item_id, cuenta)
 
-def _activar_item_sync(item_id: str, body: dict) -> dict:
+def _activar_item_sync(item_id: str, cuenta: str, precio: Decimal, precio_tachado: Decimal) -> dict:
+    ml = ml_ofertas.MLOfertasEscritura()
+    return ml.activar_oferta_propia(item_id, cuenta, precio, precio_tachado)
+
+@app.post("/ml-ofertas/item/{item_id}/activar")
+async def ml_ofertas_item_activar(item_id: str, request: Request, background_tasks: BackgroundTasks):
+    """El registro en "Historial Ofertas ML" va por `background_tasks`, NO
+    antes de responder -- confirmado en real (2026-08-27) que la primera
+    escritura en una pestaña nueva del Sheet (crearla + header + fila) son
+    varias llamadas seguidas a la API de Sheets, lentas la primera vez, y
+    empujaban la respuesta más allá del timeout del navegador/Railway: la
+    oferta SÍ se sacaba en ML pero el frontend recibía "Failed to fetch"
+    igual, sin saber que había funcionado."""
+    body = await request.json()
     cuenta = body["cuenta"]
     precio = Decimal(str(body["precio"]))
     precio_tachado = Decimal(str(body["precio_tachado"]))
-    ml = ml_ofertas.MLOfertasEscritura()
-    r = ml.activar_oferta_propia(item_id, cuenta, precio, precio_tachado)
+    r = await run_in_threadpool(_activar_item_sync, item_id, cuenta, precio, precio_tachado)
     if r.get("ok"):
-        _registrar_historial_oferta({
+        background_tasks.add_task(_registrar_historial_oferta, {
             "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
             "Accion": "Activar", "Tipo/Promocion": "PRICE_DISCOUNT",
             "Precio Anterior": body.get("precio_anterior", ""), "Precio Nuevo": f"{precio} (tachado {precio_tachado})",
@@ -2050,27 +2062,23 @@ def _activar_item_sync(item_id: str, body: dict) -> dict:
         })
     return r
 
-@app.post("/ml-ofertas/item/{item_id}/activar")
-async def ml_ofertas_item_activar(item_id: str, request: Request):
-    body = await request.json()
-    return await run_in_threadpool(_activar_item_sync, item_id, body)
+def _sacar_item_sync(item_id: str, cuenta: str, promotion_type: str, promotion_id: str | None) -> dict:
+    ml = ml_ofertas.MLOfertasEscritura()
+    return ml.sacar_de_promocion(item_id, cuenta, promotion_type, promotion_id)
 
-def _sacar_item_sync(item_id: str, body: dict) -> dict:
+@app.post("/ml-ofertas/item/{item_id}/sacar")
+async def ml_ofertas_item_sacar(item_id: str, request: Request, background_tasks: BackgroundTasks):
+    """Mismo motivo que `/activar` para diferir el historial -- ver su docstring."""
+    body = await request.json()
     cuenta = body["cuenta"]
     promotion_type = body["promotion_type"]
     promotion_id = body.get("promotion_id")
-    ml = ml_ofertas.MLOfertasEscritura()
-    r = ml.sacar_de_promocion(item_id, cuenta, promotion_type, promotion_id)
+    r = await run_in_threadpool(_sacar_item_sync, item_id, cuenta, promotion_type, promotion_id)
     if r.get("ok"):
-        _registrar_historial_oferta({
+        background_tasks.add_task(_registrar_historial_oferta, {
             "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
             "Accion": "Sacar", "Tipo/Promocion": promotion_type + (f" ({promotion_id})" if promotion_id else ""),
             "Precio Anterior": body.get("precio_anterior", ""), "Precio Nuevo": "",
             "Margen % Resultante": "", "Bajo Umbral": "", "Operador": body.get("operador", ""),
         })
     return r
-
-@app.post("/ml-ofertas/item/{item_id}/sacar")
-async def ml_ofertas_item_sacar(item_id: str, request: Request):
-    body = await request.json()
-    return await run_in_threadpool(_sacar_item_sync, item_id, body)
