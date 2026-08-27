@@ -1,0 +1,818 @@
+"""
+Ofertas ML — margen real de cada promoción/campaña activa, en las dos cuentas.
+
+Fases 1 y 2 de `docs/business/COMERCIAL/canales/mercadolibre/REQ_MODULO_OFERTAS_ML.md`
+(lectura + alertas). **Solo lectura** — no crea, edita ni da de baja ninguna
+oferta en ML (Fase 3, gateada por `docs/business/COMERCIAL/00_LEEME.md` §5,
+no implementada acá).
+
+**Fórmula canónica (REQ §2.0) — se replica EXACTA, no se reinterpreta:**
+
+    base_sin_iva   = precio_oferta / (1 + iva_pct)
+    comision       = precio_oferta × comisión_por_dominio_ML  (o general si no está en la tabla)
+    costo_fijo     = tramo_por_precio(precio_oferta)          # 1255/2500/3030/0, solo <33k
+    cuotas         = precio_oferta × cuotas_pct                # 0 si no ofrece cuotas
+    envio          = tramo_por_precio(precio_oferta)           # con descuento MercadoLíder Platinum
+    imp_cheque     = precio_oferta × 1,2%
+    iibb           = precio_oferta × 5%
+    costo_producto = costo_sin_iva_desde_TACTICA × TC          # nunca del PM Sheet
+
+    margen_$  = base_sin_iva − comision − costo_fijo − cuotas − envio − imp_cheque − iibb − costo_producto
+    margen_%  = margen_$ / base_sin_iva
+
+Nota deliberada (no es un olvido): a diferencia del panel viejo de
+Competidores ML (`compMargenAt` en `docs/index.html`, que restaba IIBB
+sobre el neto), acá IIBB e Imp. Cheque se calculan sobre `precio_oferta`
+(bruto), tal como pide el REQ §1.2.c/§2.0 -- es una regla de negocio propia
+de Ofertas, distinta de `RENTABILIDAD_FUNCIONAL.md.md` §5.2 (que los pone
+sobre bases distintas) y distinta del panel viejo. No se "corrige" para
+que coincida con esas otras dos fuentes -- el REQ es explícito ("usar
+EXACTAMENTE esto") y esas dos fuentes resuelven preguntas distintas
+(reprocesar una orden ya cerrada, o el margen aproximado de un competidor).
+
+**Categoría → comisión, por `domain_id`, no por nombre de categoría.**
+`category_id` de una publicación no es estable como clave de negocio (dos
+categorías con nombres parecidos pueden tener ids distintos, y el nombre
+público de `/categories/{id}` no siempre coincide con el nombre de dominio
+"de negocio"). El campo correcto es `domain_id` -- ya viene directo en
+`/items/{id}` sin pedir nada aparte, y singular contra la cuenta real
+(2026-08-27) coincide EXACTO con las 15 categorías del REQ §6 vía
+`GET /sites/MLA/domain_discovery/search?q=<nombre>` (`domain_name` en la
+respuesta es literalmente el mismo texto que usó Maxx para relevar la
+tabla). Mapeo verificado uno por uno, no adivinado:
+
+| Categoría (REQ §6)                  | domain_id                              |
+|--------------------------------------|-----------------------------------------|
+| Tóners                               | MLA-TONERS                              |
+| Cartuchos de tinta                   | MLA-INK_CARTRIDGES                      |
+| Rollos y planchas de vinilo          | MLA-VINYL_ROLLS_AND_SHEETS              |
+| Tintas para impresoras               | MLA-PRINTER_INKS                        |
+| Papeles de librería y oficina        | MLA-SCHOOL_AND_OFFICE_PAPERS            |
+| Filamentos para impresora 3D         | MLA-3D_PRINTER_FILAMENTS                |
+| Fundas para notebooks y netbooks     | MLA-LAPTOP_CASES                        |
+| Auriculares                          | MLA-HEADPHONES                          |
+| Estampadoras                         | MLA-SCREEN_PRINTERS                     |
+| Sistemas de tinta continuos          | MLA-CONTINUOUS_INK_SYSTEMS              |
+| Cintas para impresora                | MLA-PRINTER_RIBBONS                     |
+| Calculadoras                         | MLA-CALCULATORS                         |
+| Gorros y sombreros                   | MLA-HATS_AND_CAPS                       |
+| Tapas para encuadernación            | MLA-BINDING_COVERS                      |
+| Anilladoras                          | MLA-COIL_BINDING_MACHINES               |
+
+Cualquier `domain_id` fuera de esta tabla usa `comision_general` (default
+15,5%, editable) -- nunca se asume una de las 15 tasas específicas para un
+dominio no confirmado.
+
+**Ofertas activas — dos mecanismos de ML, cubren "campañas mías" y
+"campañas de ML" de forma barata; "ofertas propias" (`PRICE_DISCOUNT`)
+queda para un pase aparte, ver `ofertas_propias_activas`.**
+
+Confirmado contra la cuenta real (2026-08-27), no de memoria ni del mapa
+(el mapa no tenía el endpoint):
+1. `GET /seller-promotions/users/{seller_id}?app_version=v2` -- lista TODAS
+   las promociones/campañas del vendedor (propias tipo `SELLER_CAMPAIGN`/
+   `SELLER_COUPON_CAMPAIGN`, y de ML tipo `DEAL`/`SMART`/`PRICE_MATCHING`/
+   `PRE_NEGOTIATED`/`UNHEALTHY_STOCK`/`LIGHTNING`/`MARKETPLACE_CAMPAIGN`),
+   con `status` (`started` = activa ahora, `pending` = todavía no arrancó,
+   etc.). ~20 promociones reales por cuenta -- barato, una sola llamada.
+2. `GET /seller-promotions/promotions/{id}/items?promotion_type=<tipo>&app_version=v2`
+   -- lista los ítems efectivamente enrolados en ESA promoción puntual, con
+   su precio activo. Se llama solo para las promociones con `status=started`
+   del paso 1 -- nunca para todo el catálogo.
+
+`PRICE_DISCOUNT` (descuento individual cargado por el vendedor) **no
+aparece en el listado del vendedor** -- no es una "campaña" con id propia,
+es un estado por publicación. La única forma confirmada de saberlo es
+`GET /seller-promotions/items/{item_id}?app_version=v2` por ítem (mismo
+endpoint que ya usaba `docs/index.html` para el DELETE al salir de una
+oferta) -- cubrir esto para las ~6.200 publicaciones activas de las dos
+cuentas es un escaneo caro (una llamada por ítem), separado a propósito de
+la lectura de campañas para no bloquearla ni compartir su presupuesto de
+llamadas.
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Callable
+
+import requests
+
+from ml_auth import SELLERS
+from ml_full import GetFn, MLFullClient
+
+# ── Parámetros de margen -- valores por defecto del REQ §1.2.b/§2.0/§6,
+# todos editables en runtime vía ParametrosMargen (nunca hardcodeados en la
+# fórmula misma). ──
+
+COMISION_POR_DOMINIO_DEFAULT: dict[str, Decimal] = {
+    "MLA-TONERS": Decimal("15.5"),
+    "MLA-INK_CARTRIDGES": Decimal("15.5"),
+    "MLA-VINYL_ROLLS_AND_SHEETS": Decimal("14.3"),
+    "MLA-PRINTER_INKS": Decimal("15.5"),
+    "MLA-SCHOOL_AND_OFFICE_PAPERS": Decimal("15.0"),
+    "MLA-3D_PRINTER_FILAMENTS": Decimal("15.5"),
+    "MLA-LAPTOP_CASES": Decimal("15.5"),
+    "MLA-HEADPHONES": Decimal("15.5"),
+    "MLA-SCREEN_PRINTERS": Decimal("14.5"),
+    "MLA-CONTINUOUS_INK_SYSTEMS": Decimal("15.5"),
+    "MLA-PRINTER_RIBBONS": Decimal("15.5"),
+    "MLA-CALCULATORS": Decimal("15.0"),
+    "MLA-HATS_AND_CAPS": Decimal("15.5"),
+    "MLA-BINDING_COVERS": Decimal("15.0"),
+    "MLA-COIL_BINDING_MACHINES": Decimal("15.0"),
+}
+COMISION_GENERAL_DEFAULT = Decimal("15.5")
+
+# Costo fijo por unidad vendida (logística Flex/acuerdo/retiro), solo <33k.
+# (techo_precio, monto) ascendente + catch-all final (techo=None).
+COSTO_FIJO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
+    (Decimal(16000), Decimal(1255)),
+    (Decimal(24000), Decimal(2500)),
+    (Decimal(33000), Decimal(3030)),
+    (None, Decimal(0)),
+]
+
+# % que se SUMA al cargo por vender cuando la oferta ofrece cuotas sin
+# interés. 18 cuotas no existe en ML Argentina hoy (REQ §1.2.b) -- no está.
+CUOTAS_PCT_DEFAULT: dict[int, Decimal] = {
+    3: Decimal("8.40"), 6: Decimal("12.30"), 9: Decimal("15.70"), 12: Decimal("19.20"),
+}
+
+# Envío con descuento por reputación (MercadoLíder Platinum). (techo, monto).
+ENVIO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
+    (Decimal(33000), Decimal(9800)),
+    (Decimal(50000), Decimal(7000)),
+    (None, Decimal(7470)),
+]
+
+IMP_CHEQUE_PCT_DEFAULT = Decimal("1.2")
+IIBB_PCT_DEFAULT = Decimal("5")
+
+
+def _por_tramo(precio: Decimal, tramos: list[tuple[Decimal | None, Decimal]]) -> Decimal:
+    """Primer tramo cuyo techo el precio no alcanza; `None` = catch-all."""
+    for techo, monto in tramos:
+        if techo is None or precio < techo:
+            return monto
+    return Decimal(0)
+
+
+@dataclass
+class ParametrosMargen:
+    """Todo lo que el REQ pide editable con on/off (§2.0), con los valores
+    confirmados como default. TC y el costo del producto NO viven acá --
+    se resuelven antes de llamar a `calcular_margen_oferta` (TC porque es
+    un valor, no un descuento; costo porque sale de Táctica por SKU)."""
+    comision_por_dominio: dict[str, Decimal] = field(default_factory=lambda: dict(COMISION_POR_DOMINIO_DEFAULT))
+    comision_general: Decimal = COMISION_GENERAL_DEFAULT
+    costo_fijo_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(COSTO_FIJO_TRAMOS_DEFAULT))
+    cuotas_pct: dict[int, Decimal] = field(default_factory=lambda: dict(CUOTAS_PCT_DEFAULT))
+    envio_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(ENVIO_TRAMOS_DEFAULT))
+    imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT
+    iibb_pct: Decimal = IIBB_PCT_DEFAULT
+    usar_comision: bool = True
+    usar_costo_fijo: bool = True
+    usar_cuotas: bool = True
+    usar_envio: bool = True
+    usar_imp_cheque: bool = True
+    usar_iibb: bool = True
+
+
+@dataclass
+class ResultadoMargenOferta:
+    base_sin_iva: Decimal
+    comision: Decimal
+    costo_fijo: Decimal
+    cuotas: Decimal
+    envio: Decimal
+    imp_cheque: Decimal
+    iibb: Decimal
+    costo_producto: Decimal
+    margen: Decimal
+    margen_pct: Decimal | None  # None si base_sin_iva es 0 -- no hay sobre qué medir
+
+
+def calcular_margen_oferta(
+    precio_oferta: Decimal, iva_factor: Decimal, costo_producto_ars: Decimal,
+    domain_id: str | None, cuotas_ofrecidas: int | None, params: ParametrosMargen,
+) -> ResultadoMargenOferta:
+    """Fórmula canónica REQ §2.0, literal -- ver docstring del módulo para
+    el porqué de cada base imponible. `iva_factor` y `costo_producto_ars`
+    vienen resueltos por el llamador (Táctica, nunca el PM Sheet)."""
+    base_sin_iva = precio_oferta / iva_factor
+
+    comision_pct = params.comision_por_dominio.get(domain_id, params.comision_general) if domain_id else params.comision_general
+    comision = (precio_oferta * comision_pct / 100) if params.usar_comision else Decimal(0)
+
+    costo_fijo = _por_tramo(precio_oferta, params.costo_fijo_tramos) if params.usar_costo_fijo else Decimal(0)
+
+    cuotas_pct = params.cuotas_pct.get(cuotas_ofrecidas, Decimal(0)) if cuotas_ofrecidas else Decimal(0)
+    cuotas = (precio_oferta * cuotas_pct / 100) if params.usar_cuotas else Decimal(0)
+
+    envio = _por_tramo(precio_oferta, params.envio_tramos) if params.usar_envio else Decimal(0)
+
+    imp_cheque = (precio_oferta * params.imp_cheque_pct / 100) if params.usar_imp_cheque else Decimal(0)
+    iibb = (precio_oferta * params.iibb_pct / 100) if params.usar_iibb else Decimal(0)
+
+    margen = base_sin_iva - comision - costo_fijo - cuotas - envio - imp_cheque - iibb - costo_producto_ars
+    margen_pct = (margen / base_sin_iva) if base_sin_iva else None
+
+    return ResultadoMargenOferta(
+        base_sin_iva=base_sin_iva, comision=comision, costo_fijo=costo_fijo, cuotas=cuotas,
+        envio=envio, imp_cheque=imp_cheque, iibb=iibb, costo_producto=costo_producto_ars,
+        margen=margen, margen_pct=margen_pct,
+    )
+
+
+# ── Cliente ML — extiende MLFullClient (mismo transporte con retry/backoff
+# ante 429/503, mismo items_activos) con lo específico de Ofertas. ──
+
+class MLOfertasClient(MLFullClient):
+    def promociones_seller(self, cuenta: str) -> list[dict]:
+        """Campañas del vendedor (propias y de ML) -- barato, una sola
+        llamada, ~20 resultados reales por cuenta (confirmado 2026-08-27).
+        NO incluye `PRICE_DISCOUNT` (ver docstring del módulo)."""
+        seller_id = SELLERS[cuenta]
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        d = self._get(
+            f"https://api.mercadolibre.com/seller-promotions/users/{seller_id}",
+            {"app_version": "v2"}, headers,
+        )
+        return d.get("results", [])
+
+    def items_de_promocion(self, promotion_id: str, promotion_type: str, cuenta: str) -> list[dict]:
+        """Ítems efectivamente enrolados (no candidatos) en una campaña
+        puntual, con su precio activo -- `status=started` server-side es
+        lo que evita traer los candidatos (pueden ser miles, confirmado:
+        una sola campaña real tenía 2283 candidatos contra 343
+        efectivamente activos). Pagina con el cursor `searchAfter` de la
+        respuesta -- confirmado que el parámetro para pedir la página
+        siguiente es `search_after` (snake_case), distinto del nombre de
+        campo de la respuesta."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        params = {"promotion_type": promotion_type, "app_version": "v2", "status": "started", "limit": 50}
+        salida: list[dict] = []
+        while True:
+            d = self._get(
+                f"https://api.mercadolibre.com/seller-promotions/promotions/{promotion_id}/items", params, headers,
+            )
+            resultados = d.get("results", [])
+            salida.extend(resultados)
+            cursor = (d.get("paging") or {}).get("searchAfter")
+            if not cursor or not resultados:
+                break
+            params = {**params, "search_after": cursor}
+        return salida
+
+    def promociones_item(self, item_id: str, cuenta: str) -> list[dict]:
+        """Todas las promociones (candidatas y activas, de cualquier tipo)
+        de UNA publicación puntual -- mismo endpoint que ya usaba
+        `docs/index.html` para el DELETE al salir de una oferta. Devuelve
+        una lista plana, no envuelta en `results` (confirmado 2026-08-27,
+        distinto de los otros dos endpoints de este cliente)."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        return self._get(
+            f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", {"app_version": "v2"}, headers,
+        )
+
+    def detalle_items_ofertas(self, item_ids: list[str], cuenta: str) -> list[dict]:
+        """SKU/categoría/título/cuotas por lote de 20 -- `domain_id` viene
+        directo acá, sin pedir nada aparte (ver docstring del módulo)."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        salida: list[dict] = []
+        for i in range(0, len(item_ids), 20):
+            lote = item_ids[i:i + 20]
+            d = self._get(
+                "https://api.mercadolibre.com/items",
+                {"ids": ",".join(lote), "attributes": "id,title,seller_custom_field,domain_id,installments"},
+                headers,
+            )
+            for entrada in d:
+                cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
+                if cuerpo:
+                    salida.append(cuerpo)
+        return salida
+
+    def detalle_item_completo(self, item_id: str, cuenta: str) -> dict:
+        """UN ítem, con `price` -- distinto de `detalle_items_ofertas`
+        (que es para lotes de hasta 20 y no pide `price`, porque cada
+        promoción ya trae el suyo). Para "buscar un MLA puntual, tenga o
+        no oferta activa, y armar la fila a mano" (pedido 2026-08-27:
+        activar una oferta nueva en una publicación que hoy no tiene
+        ninguna, no solo gestionar las que ya aparecen en el escaneo de
+        campañas)."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        return self._get(
+            f"https://api.mercadolibre.com/items/{item_id}",
+            {"attributes": "id,title,price,seller_custom_field,domain_id,installments"}, headers,
+        )
+
+
+# ── Fase 3 — escritura (activar / sacar de UNA promoción puntual) ──
+# Habilitada 2026-08-27 por decisión explícita de Maxx: el criterio
+# original del gate de `docs/business/COMERCIAL/00_LEEME.md` §5 (motor de
+# rentabilidad en vivo + suite de regresión al centavo) quedó obsoleto -- el
+# cierre real de Rentabilidad pasó por otro camino (rentabilidad histórica
+# vía snapshots de período, ver §5 actualizado del LEEME). La escritura
+# queda habilitada SOLO para este módulo, no para el resto de Comercial.
+#
+# El "sacar" tiene que ser selectivo por promoción (pedido explícito, no
+# el baja-todo que ya usa `docs/index.html`/`ofertasDeletePromo`). Contrato
+# verificado 2026-08-27 contra la documentación oficial de ML
+# (developers.mercadolibre.com.ar: Manage Promotions / Seller Campaigns /
+# Price Discount) -- MISMO endpoint que ya usa el código viejo
+# (`DELETE seller-promotions/items/{id}`), acotado con querystring:
+#   - Descuento propio:  ?promotion_type=PRICE_DISCOUNT&app_version=v2
+#   - Campaña puntual:   ?promotion_type=SELLER_CAMPAIGN&promotion_id={id}&app_version=v2
+# TODAVÍA NO verificado contra una llamada real (sin credenciales de ML en
+# el entorno local que armó este módulo) -- la primera ejecución real es,
+# a propósito, sobre una sola publicación de baja rotación elegida por
+# Maxx, antes de usarlo en volumen.
+
+def _put_real(url: str, headers: dict, body: dict):
+    """Mismo retry/backoff que `_get_real` de `ml_full.py` ante 429/503."""
+    ultimo_error = None
+    for intento in range(4):
+        r = requests.put(url, json=body, headers=headers, timeout=20)
+        if r.status_code in (429, 503):
+            ultimo_error = r
+            if intento < 3:
+                time.sleep(float(r.headers.get("Retry-After", 2 ** (intento + 1))))
+                continue
+        try:
+            return r.json()
+        except ValueError:
+            r.raise_for_status()
+            raise
+    ultimo_error.raise_for_status()
+
+
+def _delete_real(url: str, params: dict, headers: dict):
+    ultimo_error = None
+    for intento in range(4):
+        r = requests.delete(url, params=params, headers=headers, timeout=20)
+        if r.status_code in (429, 503):
+            ultimo_error = r
+            if intento < 3:
+                time.sleep(float(r.headers.get("Retry-After", 2 ** (intento + 1))))
+                continue
+        try:
+            return r.json()
+        except ValueError:
+            r.raise_for_status()
+            raise
+    ultimo_error.raise_for_status()
+
+
+class MLOfertasEscritura(MLOfertasClient):
+    """Único punto de escritura del módulo. Separado de `MLOfertasClient`
+    (que hereda `_get` de `MLFullClient`, documentado ahí como "solo
+    lectura del lado Mercado Libre") para no volver ambiguo ese contrato --
+    los jobs de lectura de Fase 1/2 siguen instanciando `MLOfertasClient`
+    a secas, nunca esta clase. `put_fn`/`delete_fn` inyectables, mismo
+    patrón `get_fn`/`token_fn` que el resto del módulo."""
+
+    def __init__(self, get_fn: GetFn | None = None, token_fn: Callable[[str], str] | None = None,
+                 put_fn: Callable[[str, dict, dict], object] | None = None,
+                 delete_fn: Callable[[str, dict, dict], object] | None = None):
+        super().__init__(get_fn=get_fn, token_fn=token_fn)
+        self._put = put_fn or _put_real
+        self._delete = delete_fn or _delete_real
+
+    def activar_oferta_propia(self, item_id: str, cuenta: str, precio: Decimal, precio_tachado: Decimal) -> dict:
+        """`PUT items/{id}` con `price`+`original_price` -- mismo contrato
+        ya probado en producción por `ofertasUpdatePrice()` en
+        `docs/index.html`, no uno nuevo. Si el ítem tiene pujas activas
+        (`has_bids`), ML rechaza bajar `price` con tachado en un solo paso
+        -- fallback ya conocido: subir `price` solo al valor del tachado
+        (sin descuento mostrado todavía). No es un bug de acá, es una
+        restricción real de ML sobre ítems con pujas."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
+        url = f"https://api.mercadolibre.com/items/{item_id}"
+        d = self._put(url, headers, {"price": float(precio), "original_price": float(precio_tachado)})
+        if d.get("id"):
+            return {"ok": True, "modo": "con_tachado"}
+        if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
+            d2 = self._put(url, headers, {"price": float(precio_tachado)})
+            if d2.get("id"):
+                return {"ok": True, "modo": "sin_tachado_bids",
+                        "aviso": "Ítem con pujas activas: se subió el precio base, falta activar el descuento a mano"}
+            return {"ok": False, "error": d2.get("message") or str(d2)}
+        return {"ok": False, "error": d.get("message") or str(d)}
+
+    def sacar_de_promocion(self, item_id: str, cuenta: str, promotion_type: str, promotion_id: str | None = None) -> dict:
+        """Saca la publicación de UNA promoción puntual -- deja las demás
+        intactas. `promotion_id` obligatorio para campañas (`SELLER_
+        CAMPAIGN` y variantes de ML), no aplica para `PRICE_DISCOUNT`."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        params = {"app_version": "v2", "promotion_type": promotion_type}
+        if promotion_id:
+            params["promotion_id"] = promotion_id
+        d = self._delete(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", params, headers)
+        exitosas = d.get("successful_ids") or []
+        if exitosas:
+            return {"ok": True, "successful_ids": exitosas}
+        errores = d.get("errors") or []
+        return {"ok": False, "error": errores[0].get("error") if errores else str(d)}
+
+
+def listar_promociones_item(ml: MLOfertasClient, cuenta: str, item_id: str) -> list[dict]:
+    """Promociones activas/candidatas de UNA publicación, con nombre y
+    vigencia cuando se puede resolver -- pedido explícito: "ver qué tiene
+    activo antes de sacar algo". `promociones_item` (por-ítem) no trae el
+    nombre de campaña -- se cruza con `promociones_seller` (por-cuenta),
+    que sí lo tiene. Los nombres exactos de los campos de fecha
+    (`date_from`/`start_date`/etc.) y del id de promoción dentro de
+    `promociones_item` son la parte de este módulo TODAVÍA no confirmada
+    contra una llamada real -- se leen con fallbacks defensivos a
+    propósito, para no romper si el nombre real es otro."""
+    campanas = {c.get("id"): c for c in ml.promociones_seller(cuenta) if c.get("id")}
+    salida = []
+    for p in ml.promociones_item(item_id, cuenta):
+        tipo = p.get("type")
+        promo_id = p.get("promotion_id") or p.get("id")
+        campana = campanas.get(promo_id) or {}
+        salida.append({
+            "promotion_type": tipo,
+            "promotion_id": promo_id,
+            "status": p.get("status"),
+            "nombre": campana.get("name") or ("Descuento propio" if tipo == "PRICE_DISCOUNT" else tipo),
+            "fecha_desde": campana.get("date_from") or campana.get("start_date") or p.get("date_from"),
+            "fecha_hasta": campana.get("date_to") or campana.get("finish_date") or campana.get("end_date") or p.get("date_to"),
+            "precio": p.get("price"),
+            "precio_tachado": p.get("original_price"),
+        })
+    return salida
+
+
+# ── Orquestación — Fase 1 (lectura + margen) ──
+
+@dataclass
+class FilaOferta:
+    item_id: str
+    cuenta: str
+    sku: str | None
+    sku_ml: str | None
+    titulo: str
+    domain_id: str | None
+    tipo_oferta: str  # SELLER_CAMPAIGN / DEAL / SMART / PRICE_MATCHING / ... / PRICE_DISCOUNT
+    nombre_campana: str | None
+    precio_normal: Decimal
+    precio_oferta: Decimal
+    descuento_pct: Decimal
+    cuotas_ofrecidas: int | None
+    margen: ResultadoMargenOferta | None  # None si hay incidencia (sin poder calcular)
+    incidencia: str | None
+
+
+def _cuotas_sin_interes(detalle: dict) -> int | None:
+    inst = detalle.get("installments") or {}
+    return inst.get("quantity") if inst.get("quantity", 0) > 1 and inst.get("rate") == 0 else None
+
+
+def _armar_fila(
+    item_id: str, cuenta: str, detalle: dict, tipo: str, nombre_campana: str | None,
+    precio_normal: Decimal, precio_oferta: Decimal,
+    costo_provider, iva_provider, params: ParametrosMargen, tc: Decimal,
+) -> tuple[FilaOferta, dict | None]:
+    """Resuelve costo/IVA desde Táctica (nunca del PM Sheet, REQ §2.0) y
+    arma la fila -- compartido entre `ofertas_activas` (campañas) y
+    `ofertas_propias_activas` (PRICE_DISCOUNT) para no repetir la
+    resolución de margen dos veces."""
+    sku_ml = detalle.get("seller_custom_field")
+    domain_id = detalle.get("domain_id")
+    titulo = detalle.get("title", "")
+    cuotas_ofrecidas = _cuotas_sin_interes(detalle)
+
+    sku, margen, incidencia = sku_ml, None, None
+    if not sku_ml:
+        incidencia = "SIN_SKU"
+    else:
+        costo_usd = costo_provider.obtener(sku_ml)
+        iva_factor = iva_provider.factor(sku_ml)
+        if costo_usd is None:
+            incidencia = "SIN_COSTO_TACTICA"
+        elif iva_factor is None:
+            incidencia = "SIN_IVA_TACTICA"
+        else:
+            costo_ars = costo_usd * tc
+            margen = calcular_margen_oferta(precio_oferta, iva_factor, costo_ars, domain_id, cuotas_ofrecidas, params)
+
+    descuento_pct = ((precio_normal - precio_oferta) / precio_normal * 100) if precio_normal else Decimal(0)
+    fila = FilaOferta(
+        item_id=item_id, cuenta=cuenta, sku=sku, sku_ml=sku_ml, titulo=titulo, domain_id=domain_id,
+        tipo_oferta=tipo, nombre_campana=nombre_campana, precio_normal=precio_normal, precio_oferta=precio_oferta,
+        descuento_pct=descuento_pct, cuotas_ofrecidas=cuotas_ofrecidas, margen=margen, incidencia=incidencia,
+    )
+    incidencia_dict = {"item_id": item_id, "cuenta": cuenta, "sku": sku_ml, "motivo": incidencia} if incidencia else None
+    return fila, incidencia_dict
+
+
+def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider, item_id: str, cuenta: str, tc: Decimal) -> dict:
+    """Trae UN ítem puntual y resuelve costo/IVA de Táctica -- para el
+    buscador de "MLA sin oferta activa" (armar la fila a mano en vez de
+    sacarla del escaneo de campañas). Misma resolución de incidencia que
+    `_armar_fila` (`SIN_SKU`/`SIN_COSTO_TACTICA`/`SIN_IVA_TACTICA`), sin
+    tocar esa función porque ahí `precio_oferta` es obligatorio y acá
+    todavía no existe ninguno."""
+    d = ml.detalle_item_completo(item_id, cuenta)
+    if not d.get("id"):
+        return {"encontrado": False}
+    sku_ml = d.get("seller_custom_field")
+    incidencia = None
+    costo_usd = iva_factor = None
+    if not sku_ml:
+        incidencia = "SIN_SKU"
+    else:
+        costo_usd = costo_provider.obtener(sku_ml)
+        iva_factor = iva_provider.factor(sku_ml)
+        if costo_usd is None:
+            incidencia = "SIN_COSTO_TACTICA"
+        elif iva_factor is None:
+            incidencia = "SIN_IVA_TACTICA"
+    return {
+        "encontrado": True, "item_id": d["id"], "cuenta": cuenta, "sku": sku_ml, "titulo": d.get("title", ""),
+        "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
+        "costo_sin_iva": costo_usd, "iva_factor": iva_factor, "tc": tc, "incidencia": incidencia,
+    }
+
+
+def ofertas_activas(
+    ml: MLOfertasClient, costo_provider, iva_provider,
+    cuentas: list[str] | None = None, params: ParametrosMargen | None = None, tc: Decimal = Decimal(1),
+) -> tuple[list[FilaOferta], list[dict]]:
+    """Campañas propias (`SELLER_CAMPAIGN`/`SELLER_COUPON_CAMPAIGN`) y de ML
+    (`DEAL`/`SMART`/`PRICE_MATCHING`/`PRE_NEGOTIATED`/`UNHEALTHY_STOCK`/
+    `LIGHTNING`/`MARKETPLACE_CAMPAIGN`) activas ahora mismo, de las cuentas
+    pedidas, con margen real. NO cubre `PRICE_DISCOUNT` ("ofertas propias")
+    -- ver `ofertas_propias_activas`, es un escaneo con costo distinto."""
+    cuentas = cuentas or list(SELLERS.keys())
+    params = params or ParametrosMargen()
+    filas: list[FilaOferta] = []
+    incidencias: list[dict] = []
+
+    for cuenta in cuentas:
+        promos = [p for p in ml.promociones_seller(cuenta) if p.get("status") == "started"]
+
+        # item_id -> mejor oferta encontrada (menor precio) si aparece en
+        # más de una campaña activa a la vez -- la que realmente rige.
+        por_item: dict[str, dict] = {}
+        for promo in promos:
+            tipo = promo.get("type")
+            for it in ml.items_de_promocion(promo["id"], tipo, cuenta):
+                if it.get("status") != "started":
+                    continue
+                item_id = it["id"]
+                precio = Decimal(str(it.get("price") or 0))
+                existente = por_item.get(item_id)
+                if existente is None or precio < existente["precio_oferta"]:
+                    por_item[item_id] = {
+                        "precio_oferta": precio,
+                        "precio_normal": Decimal(str(it.get("original_price") or 0)),
+                        "tipo": tipo, "nombre_campana": promo.get("name"),
+                    }
+
+        if not por_item:
+            continue
+        detalles = {d["id"]: d for d in ml.detalle_items_ofertas(list(por_item.keys()), cuenta)}
+
+        for item_id, info in por_item.items():
+            fila, incidencia = _armar_fila(
+                item_id, cuenta, detalles.get(item_id, {}), info["tipo"], info["nombre_campana"],
+                info["precio_normal"], info["precio_oferta"], costo_provider, iva_provider, params, tc,
+            )
+            filas.append(fila)
+            if incidencia:
+                incidencias.append(incidencia)
+
+    return filas, incidencias
+
+
+def ofertas_propias_activas(
+    ml: MLOfertasClient, costo_provider, iva_provider, cuenta: str,
+    params: ParametrosMargen | None = None, tc: Decimal = Decimal(1), item_ids: list[str] | None = None,
+) -> tuple[list[FilaOferta], list[dict]]:
+    """"Ofertas propias" (`PRICE_DISCOUNT`) -- no tiene un listado barato
+    como las campañas (ver docstring del módulo): hay que consultar
+    `seller-promotions/items/{id}` publicación por publicación. Con
+    `item_ids=None` escanea TODAS las publicaciones activas de la cuenta
+    (`ml.items_activos`) -- caro (una llamada por publicación, ~6.200
+    activas en las dos cuentas hoy), pensado para correr aparte de
+    `ofertas_activas`, no en cada carga del dashboard. Pasar una lista
+    acotada para un escaneo más barato."""
+    params = params or ParametrosMargen()
+    ids = item_ids if item_ids is not None else ml.items_activos(cuenta)
+    filas: list[FilaOferta] = []
+    incidencias: list[dict] = []
+
+    detalles = {d["id"]: d for d in ml.detalle_items_ofertas(ids, cuenta)}
+
+    for item_id in ids:
+        propia = next(
+            (p for p in ml.promociones_item(item_id, cuenta)
+             if p.get("type") == "PRICE_DISCOUNT" and p.get("status") == "started"),
+            None,
+        )
+        if not propia:
+            continue
+        fila, incidencia = _armar_fila(
+            item_id, cuenta, detalles.get(item_id, {}), "PRICE_DISCOUNT", propia.get("name") or None,
+            Decimal(str(propia.get("original_price") or 0)), Decimal(str(propia.get("price") or 0)),
+            costo_provider, iva_provider, params, tc,
+        )
+        filas.append(fila)
+        if incidencia:
+            incidencias.append(incidencia)
+
+    return filas, incidencias
+
+
+# ── Fase 2 — detección de SKUs candidatos a oferta que no la tienen ──
+# Ventas generales (no Full-específicas: acá interesa la venta real de la
+# publicación completa, salga de donde salga) vía /orders/search, mismo
+# endpoint y mismo criterio (`order.status=paid`, `order.date_closed`) que
+# ya usaba `ml_full.py` antes de migrar a `ventas_full_por_inventory` --
+# ese cambio fue para no confundir venta self-service con venta de Full en
+# el reabastecimiento de Full; acá no aplica esa distinción, así que
+# `/orders/search` es la fuente correcta, no un paso atrás.
+
+def ventas_por_item(ml: MLFullClient, cuenta: str, desde_iso: str, hasta_iso: str) -> dict[str, int]:
+    seller_id = SELLERS[cuenta]
+    headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
+    acumulado: dict[str, int] = {}
+    offset = 0
+    while True:
+        d = ml._get(
+            "https://api.mercadolibre.com/orders/search",
+            {"seller": seller_id, "order.status": "paid",
+             "order.date_closed.from": desde_iso, "order.date_closed.to": hasta_iso,
+             "offset": offset, "limit": 50},
+            headers,
+        )
+        resultados = d.get("results", [])
+        for orden in resultados:
+            for oi in orden.get("order_items") or []:
+                item_id = (oi.get("item") or {}).get("id")
+                if not item_id:
+                    continue
+                acumulado[item_id] = acumulado.get(item_id, 0) + (oi.get("quantity") or 0)
+        paging = d.get("paging") or {}
+        total = paging.get("total", 0)
+        offset += len(resultados)
+        if offset >= total or not resultados:
+            break
+    return acumulado
+
+
+@dataclass
+class CandidatoOferta:
+    item_id: str
+    cuenta: str
+    sku: str | None
+    titulo: str
+    ventas_periodo: int
+    stock: int
+
+
+def detectar_skus_sin_oferta(
+    ml: MLOfertasClient, cuenta: str, item_ids_con_oferta: set,
+    dias_ventas: int = 30, min_ventas: int = 5, hoy=None,
+) -> list:
+    """Alta rotación (>= `min_ventas` en `dias_ventas`) + stock > 0 + sin
+    ninguna oferta activa ahora mismo (`item_ids_con_oferta`, la unión de
+    lo que ya devolvieron `ofertas_activas`/`ofertas_propias_activas`).
+    Escanea TODAS las publicaciones activas de la cuenta -- mismo costo que
+    `ofertas_propias_activas`, pensado para correr aparte del dashboard
+    principal, no en cada carga."""
+    from datetime import date, timedelta
+    hoy = hoy or date.today()
+    desde_iso = f"{(hoy - timedelta(days=dias_ventas)).isoformat()}T00:00:00.000-00:00"
+    hasta_iso = f"{hoy.isoformat()}T23:00:00.000-00:00"
+
+    ids = ml.items_activos(cuenta)
+    ventas = ventas_por_item(ml, cuenta, desde_iso, hasta_iso)
+    candidatos_ids = [i for i in ids if i not in item_ids_con_oferta and ventas.get(i, 0) >= min_ventas]
+    if not candidatos_ids:
+        return []
+
+    headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
+    resultado = []
+    for i in range(0, len(candidatos_ids), 20):
+        lote = candidatos_ids[i:i + 20]
+        d = ml._get(
+            "https://api.mercadolibre.com/items",
+            {"ids": ",".join(lote), "attributes": "id,title,seller_custom_field,available_quantity"},
+            headers,
+        )
+        for entrada in d:
+            cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
+            if not cuerpo:
+                continue
+            stock = cuerpo.get("available_quantity") or 0
+            if stock <= 0:
+                continue
+            resultado.append(CandidatoOferta(
+                item_id=cuerpo["id"], cuenta=cuenta, sku=cuerpo.get("seller_custom_field"),
+                titulo=cuerpo.get("title", ""), ventas_periodo=ventas.get(cuerpo["id"], 0), stock=stock,
+            ))
+    return resultado
+
+
+# ── Job en background — mismo patrón que ml_full.py/ml_reposicion.py ──
+
+_jobs: dict = {}
+
+
+def _num(v):
+    return float(v) if v is not None else None
+
+
+def _fila_a_dict(f: FilaOferta) -> dict:
+    m = f.margen
+    return {
+        "item_id": f.item_id, "cuenta": f.cuenta, "sku": f.sku, "sku_ml": f.sku_ml, "titulo": f.titulo,
+        "domain_id": f.domain_id, "tipo_oferta": f.tipo_oferta, "nombre_campana": f.nombre_campana,
+        "precio_normal": _num(f.precio_normal), "precio_oferta": _num(f.precio_oferta),
+        "descuento_pct": _num(f.descuento_pct), "cuotas_ofrecidas": f.cuotas_ofrecidas,
+        "incidencia": f.incidencia,
+        "margen": None if m is None else {
+            "base_sin_iva": _num(m.base_sin_iva), "comision": _num(m.comision),
+            "costo_fijo": _num(m.costo_fijo), "cuotas": _num(m.cuotas),
+            "envio": _num(m.envio), "imp_cheque": _num(m.imp_cheque),
+            "iibb": _num(m.iibb), "costo_producto": _num(m.costo_producto),
+            "margen": _num(m.margen), "margen_pct": _num(m.margen_pct),
+        },
+    }
+
+
+def iniciar_job(job_id: str, cuentas: list = None, incluir_propias: bool = False, tc: float = 0) -> None:
+    """`tc` lo resuelve el llamador (`main.py`, vía `obtener_tc_bna()`) --
+    este módulo no scrapea BNA para no duplicar esa lógica ni crear un
+    import circular con `main.py`. `incluir_propias=True` suma el escaneo
+    caro de `PRICE_DISCOUNT` (ver su docstring) -- por eso es opt-in, no
+    el comportamiento por defecto."""
+    _jobs[job_id] = {"status": "running", "log": ["Iniciando lectura de ofertas activas..."], "result": None}
+    try:
+        from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+
+        ml = MLOfertasClient()
+        costo_provider = CostoVigenteProvider()
+        iva_provider = IvaProvider()
+        params = ParametrosMargen()
+        tc_decimal = Decimal(str(tc)) if tc else Decimal(1)
+
+        cuentas = cuentas or list(SELLERS.keys())
+        filas, incidencias = ofertas_activas(ml, costo_provider, iva_provider, cuentas=cuentas, params=params, tc=tc_decimal)
+        _jobs[job_id]["log"].append(f"{len(filas)} ofertas de campaña encontradas.")
+
+        if incluir_propias:
+            for cuenta in cuentas:
+                _jobs[job_id]["log"].append(f"Escaneando ofertas propias ({cuenta})... puede tardar.")
+                f, i = ofertas_propias_activas(ml, costo_provider, iva_provider, cuenta, params=params, tc=tc_decimal)
+                filas.extend(f)
+                incidencias.extend(i)
+
+        _jobs[job_id]["result"] = {
+            "filas": [_fila_a_dict(f) for f in filas],
+            "incidencias": incidencias,
+            "tc": float(tc_decimal),
+            "parametros": {
+                "comision_por_dominio": {k: float(v) for k, v in params.comision_por_dominio.items()},
+                "comision_general": float(params.comision_general),
+                "costo_fijo_tramos": [[float(t) if t is not None else None, float(m)] for t, m in params.costo_fijo_tramos],
+                "cuotas_pct": {str(k): float(v) for k, v in params.cuotas_pct.items()},
+                "envio_tramos": [[float(t) if t is not None else None, float(m)] for t, m in params.envio_tramos],
+                "imp_cheque_pct": float(params.imp_cheque_pct),
+                "iibb_pct": float(params.iibb_pct),
+            },
+        }
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["log"].append(f"Listo: {len(filas)} ofertas activas en total.")
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["log"].append(f"Error: {e}")
+
+
+def estado_job(job_id: str):
+    return _jobs.get(job_id)
+
+
+def iniciar_job_alertas(job_id: str, cuenta: str, item_ids_con_oferta: list, dias_ventas: int = 30, min_ventas: int = 5) -> None:
+    _jobs[job_id] = {"status": "running", "log": [f"Buscando SKUs candidatos a oferta ({cuenta})..."], "result": None}
+    try:
+        ml = MLOfertasClient()
+        candidatos = detectar_skus_sin_oferta(ml, cuenta, set(item_ids_con_oferta), dias_ventas=dias_ventas, min_ventas=min_ventas)
+        _jobs[job_id]["result"] = {
+            "candidatos": [
+                {"item_id": c.item_id, "cuenta": c.cuenta, "sku": c.sku, "titulo": c.titulo,
+                 "ventas_periodo": c.ventas_periodo, "stock": c.stock}
+                for c in candidatos
+            ],
+        }
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["log"].append(f"Listo: {len(candidatos)} candidatos encontrados.")
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["log"].append(f"Error: {e}")

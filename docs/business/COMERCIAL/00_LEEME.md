@@ -105,6 +105,38 @@ El motivo no es procedimental. Comercial escribe precios en canales reales; si e
 respalda esos precios no está validado, el sistema automatiza pérdidas a escala. La Fase 2 de
 Rentabilidad —el motor corriendo en modo sombra con el Reporte de Divergencia— es la puerta.
 
+### Excepción — escritura habilitada para el módulo de Ofertas ML (2026-08-27)
+
+El criterio original de este punto —motor de rentabilidad en vivo corriendo en modo sombra, con
+su suite de regresión pasando al centavo— **quedó obsoleto, no cumplido.** Ese motor en vivo no
+terminó de validarse (`RENTABILIDAD_FUNCIONAL.md.md` sigue con V-01/V-02/V-03 abiertas, y
+`RENTABILIDAD_IMPLEMENTACION.md.md` §7 sigue listando T-9 y E-4 como pendientes de esa
+verificación) y **dejó de ser el camino de cálculo que se usa.** No se lo marca acá como completo
+porque no lo está — simplemente dejó de ser la puerta. Esos dos documentos no se tocan por esto.
+
+El cierre real de Rentabilidad pasó por otro camino: la captura de los períodos ya calculados en
+el Sheet al cerrar cada mes ("fotos" de las pestañas), ingestada a la rentabilidad histórica vía
+`backend/rentabilidad/importar_historico.py`. Ese es el dashboard que está terminado y en uso hoy
+("Ventas & Rentabilidad") — no el motor en vivo, que quedó en el ERP como herramienta de consulta
+manual aparte, sin ser el criterio de esta puerta.
+
+La base de ese cálculo son las fórmulas y los descuentos que definió la dirección, y no todos
+tienen el mismo respaldo. **Los descuentos de plataforma** (comisión, envío, cuotas) sí están
+verificados contra la API real de Mercado Libre. **Los impuestos de la regla ECOM** (Imp. Cheque
+1,2% e IIBB 5%, sobre precio sin IVA) no salen de ninguna API — son un criterio que definió la
+dirección, no un dato verificado contra una fuente externa. Además, **nada de esto está
+contrastado contra libros contables** — queda fuera de alcance, no hay acceso a esa fuente desde
+acá. La fuente de verdad, para lo que no viene de la API, es el criterio autorizado por la
+dirección, no una auditoría contable independiente. Que quede explícito para que nadie lo lea
+como una verificación que no es.
+
+Con esa base, **la escritura queda habilitada para el módulo de Ofertas ML** (activar, pausar y
+dar de baja una oferta/descuento propio desde el ERP, ver
+`canales/mercadolibre/REQ_MODULO_OFERTAS_ML.md` Fase 3) — **y solo para ese módulo.** No habilita
+escritura en ningún otro punto de Comercial ni de ningún otro canal; cualquier otra escritura
+(Full, Táctica, Ecom, WooCommerce, etc.) sigue bloqueada por esta misma sección y requiere su
+propia evaluación — no hereda esta.
+
 ### Lectura, conciliación y diagnóstico — habilitadas
 
 Traer stock, ventas, visitas y estado de publicaciones. Comparar contra los sistemas propios.

@@ -6,11 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
 from datetime import date, datetime
+from decimal import Decimal
 from google.oauth2.service_account import Credentials
 import json
 
 import ml_full
 import ml_reposicion
+import ml_ofertas
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
@@ -926,9 +928,11 @@ def refresh_status(job_id: str):
 
 _tc_cache = {'value': 0, 'expiry': 0}
 
-@app.get("/tc/bna")
-async def get_tc_bna():
-    """Scrappea el tipo de cambio venta del Dólar del BNA"""
+def obtener_tc_bna() -> dict:
+    """Scrappea el tipo de cambio venta del Dólar del BNA -- extraído a
+    función propia (2026-08-27) para que `ml_ofertas.py` pueda pedir el TC
+    vigente sin duplicar el scraping ni importar de `main.py` (evita
+    import circular: `main.py` ya importa `ml_ofertas`)."""
     if time.time() < _tc_cache['expiry'] and _tc_cache['value'] > 0:
         return {"tc": _tc_cache['value'], "source": "cache"}
     try:
@@ -957,6 +961,11 @@ async def get_tc_bna():
         return {"tc": 0, "error": "No se pudo parsear el TC", "source": "error"}
     except Exception as e:
         return {"tc": 0, "error": str(e), "source": "error"}
+
+
+@app.get("/tc/bna")
+async def get_tc_bna():
+    return obtener_tc_bna()
 
 
 # ══════════════════════════════════════════════════════
@@ -1923,3 +1932,120 @@ async def mix_cargar(request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════
+# ML OFERTAS — dashboard de ofertas/promos activas (docs/business/
+# COMERCIAL/canales/mercadolibre/REQ_MODULO_OFERTAS_ML.md). Fases 1 y 2
+# (lectura + alertas) más Fase 3 (activar/sacar UNA oferta puntual,
+# habilitada 2026-08-27 -- ver 00_LEEME.md §5 "Excepción — módulo de
+# Ofertas ML"). Job propio en ml_ofertas.py para lectura, no comparte
+# job_status con el resto; las acciones de escritura son síncronas
+# (una publicación por vez, a propósito -- no hay endpoint masivo acá).
+# ══════════════════════════════════════════════════════
+
+@app.post("/ml-ofertas/run")
+async def ml_ofertas_run(background_tasks: BackgroundTasks, incluir_propias: bool = False):
+    job_id = f"mlofertas_{int(time.time())}"
+    tc = obtener_tc_bna().get("tc") or 0
+    background_tasks.add_task(ml_ofertas.iniciar_job, job_id, None, incluir_propias, tc)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-ofertas/status/{job_id}")
+async def ml_ofertas_status(job_id: str):
+    return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
+
+@app.post("/ml-ofertas/alertas/run")
+async def ml_ofertas_alertas_run(
+    background_tasks: BackgroundTasks, cuenta: str, item_ids_con_oferta: str,
+    dias_ventas: int = 30, min_ventas: int = 5,
+):
+    """`item_ids_con_oferta` viaja como string separado por comas (el
+    dashboard ya tiene esa lista en memoria tras `/ml-ofertas/run`, así
+    evitamos volver a pedirla acá)."""
+    job_id = f"mlofertasalertas_{int(time.time())}"
+    ids = [i for i in item_ids_con_oferta.split(",") if i]
+    background_tasks.add_task(ml_ofertas.iniciar_job_alertas, job_id, cuenta, ids, dias_ventas, min_ventas)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-ofertas/alertas/status/{job_id}")
+async def ml_ofertas_alertas_status(job_id: str):
+    return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
+
+# ── Fase 3 — escritura (activar/sacar UNA oferta, UNA publicación por
+# vez). Historial en la pestaña "Historial Ofertas ML" del mismo Sheet que
+# usa el resto del ERP (SPREADSHEET_ID) -- mismo patrón que "Historial
+# Competidores" más arriba: se crea sola la primera vez que hace falta. ──
+
+HIST_OFERTAS_SHEET_NAME = "Historial Ofertas ML"
+HIST_OFERTAS_HEADERS = ["Fecha", "Cuenta", "Item ID", "SKU", "Accion", "Tipo/Promocion",
+                         "Precio Anterior", "Precio Nuevo", "Margen % Resultante", "Bajo Umbral", "Operador"]
+
+def _registrar_historial_oferta(fila: dict):
+    gs = get_gs()
+    ss = gs.open_by_key(SPREADSHEET_ID)
+    try:
+        ws = ss.worksheet(HIST_OFERTAS_SHEET_NAME)
+    except Exception:
+        ws = ss.add_worksheet(title=HIST_OFERTAS_SHEET_NAME, rows=20000, cols=len(HIST_OFERTAS_HEADERS))
+        ws.append_row(HIST_OFERTAS_HEADERS)
+    ws.append_row([fila.get(h, "") for h in HIST_OFERTAS_HEADERS])
+
+@app.get("/ml-ofertas/item/{item_id}/promociones")
+async def ml_ofertas_item_promociones(item_id: str, cuenta: str):
+    ml = ml_ofertas.MLOfertasClient()
+    return {"promociones": ml_ofertas.listar_promociones_item(ml, cuenta, item_id)}
+
+@app.get("/ml-ofertas/item/{item_id}/buscar")
+async def ml_ofertas_item_buscar(item_id: str, cuenta: str):
+    """Buscador puntual -- para activar una oferta en un MLA que hoy NO
+    tiene nada activo (no aparece en el escaneo de campañas de /ml-ofertas/
+    run, que por diseño solo trae publicaciones que ya tienen algo)."""
+    from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+    ml = ml_ofertas.MLOfertasClient()
+    tc = Decimal(str(obtener_tc_bna().get("tc") or 1))
+    try:
+        r = ml_ofertas.resolver_item_para_gestion(ml, CostoVigenteProvider(), IvaProvider(), item_id, cuenta, tc)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"No se pudo consultar Mercado Libre: {e}")
+    if not r.get("encontrado"):
+        raise HTTPException(status_code=404, detail="Publicación no encontrada en esa cuenta")
+    r.pop("encontrado")
+    r["costo_sin_iva"] = float(r["costo_sin_iva"]) if r["costo_sin_iva"] is not None else None
+    r["iva_factor"] = float(r["iva_factor"]) if r["iva_factor"] is not None else None
+    r["tc"] = float(r["tc"])
+    return r
+
+@app.post("/ml-ofertas/item/{item_id}/activar")
+async def ml_ofertas_item_activar(item_id: str, request: Request):
+    body = await request.json()
+    cuenta = body["cuenta"]
+    precio = Decimal(str(body["precio"]))
+    precio_tachado = Decimal(str(body["precio_tachado"]))
+    ml = ml_ofertas.MLOfertasEscritura()
+    r = ml.activar_oferta_propia(item_id, cuenta, precio, precio_tachado)
+    if r.get("ok"):
+        _registrar_historial_oferta({
+            "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
+            "Accion": "Activar", "Tipo/Promocion": "PRICE_DISCOUNT",
+            "Precio Anterior": body.get("precio_anterior", ""), "Precio Nuevo": f"{precio} (tachado {precio_tachado})",
+            "Margen % Resultante": body.get("margen_pct", ""), "Bajo Umbral": "Sí" if body.get("bajo_umbral") else "No",
+            "Operador": body.get("operador", ""),
+        })
+    return r
+
+@app.post("/ml-ofertas/item/{item_id}/sacar")
+async def ml_ofertas_item_sacar(item_id: str, request: Request):
+    body = await request.json()
+    cuenta = body["cuenta"]
+    promotion_type = body["promotion_type"]
+    promotion_id = body.get("promotion_id")
+    ml = ml_ofertas.MLOfertasEscritura()
+    r = ml.sacar_de_promocion(item_id, cuenta, promotion_type, promotion_id)
+    if r.get("ok"):
+        _registrar_historial_oferta({
+            "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
+            "Accion": "Sacar", "Tipo/Promocion": promotion_type + (f" ({promotion_id})" if promotion_id else ""),
+            "Precio Anterior": body.get("precio_anterior", ""), "Precio Nuevo": "",
+            "Margen % Resultante": "", "Bajo Umbral": "", "Operador": body.get("operador", ""),
+        })
+    return r
