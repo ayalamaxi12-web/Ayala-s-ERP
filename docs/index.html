@@ -3093,10 +3093,22 @@ function ofmRenderGestionarPanel(itemId,promociones){
     ?'Ya tiene un descuento propio ACTIVO (fila "PRICE_DISCOUNT · ● PARTICIPANDO" arriba) -- esto lo edita.'
     :'Todavía no tiene descuento propio activo -- esto crea uno nuevo, independiente de las campañas de arriba (esas las gestiona ML, acá solo se puede sacar de ellas, no activarlas).';
 
+  const campanaActiva=promociones.find(p=>p.promotion_type==='SELLER_CAMPAIGN');
+  const precioPmActual=campanaActiva?campanaActiva.precio:(f.precio_oferta||f.precio_normal||0);
+
   cont.innerHTML=`
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Promociones activas — ${f.titulo||itemId}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
     ${promosHtml}
+    <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">🏷️ Oferta Tradicional (campaña propia mensual)</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Infla el precio del PM un % -- eso queda como tachado -- y mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla) con el precio del PM sin cambios. ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
+      <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${Math.round(precioPmActual)}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
+      <span>Inflación % <span style="color:var(--text3);font-size:8px">(tachado)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="25" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
+      <span id="ofm-camp-tachado-${itemId}" style="color:var(--text3);font-size:9px"></span>
+      <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarCampana('${itemId}')">📢 Meter en campaña</button>
+    </div>
+    <div id="ofm-camp-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">Descuento propio (independiente de lo de arriba)</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${accionTxt}</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
@@ -3106,6 +3118,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     </div>
     <div id="ofm-act-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>`;
   ofmSimularActivar(itemId);
+  ofmSimularCampana(itemId);
 }
 function ofmSimularActivar(itemId){
   const f=ofmFilaPorId[itemId];const out=qs('ofm-act-margen-'+itemId);
@@ -3171,6 +3184,59 @@ async function ofmConfirmarActivar(itemId){
     const d=await res.json();
     if(d.ok&&d.aviso){toast(`⚠ ${itemId}: activado con aviso`,'error');alert(`⚠ ${itemId}\n\n${d.aviso}`);await ofmCargarPromociones(itemId);}
     else if(d.ok){toast(`✅ ${itemId}: oferta activada`);await ofmCargarPromociones(itemId);}
+    else toast(`❌ ${itemId}: ${d.error||'error desconocido'}`,'error');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── "Oferta Tradicional" -- flujo real de Maxx (confirmado 2026-08-28,
+// 80% de su uso): infla el precio del PM un % (tachado) y mete la
+// publicación en su campaña propia mensual (SELLER_CAMPAIGN) con el
+// precio del PM como precio final. Margen se simula sobre el precio del
+// PM (es el que efectivamente cobra), no sobre el tachado inflado. ──
+function ofmSimularCampana(itemId){
+  const f=ofmFilaPorId[itemId];const out=qs('ofm-camp-margen-'+itemId);
+  const precio=parseFloat(qs('ofm-camp-precio-'+itemId)?.value)||0;
+  const inflacion=parseFloat(qs('ofm-camp-inflacion-'+itemId)?.value)||0;
+  if(!f||!out)return;
+  const tachado=Math.round(precio*(1+inflacion/100));
+  const tachadoEl=qs('ofm-camp-tachado-'+itemId);if(tachadoEl)tachadoEl.textContent=`= tachado $${fmtN(tachado)}`;
+  if(f._costoUnitSinIva==null){out.innerHTML=`<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
+  const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
+  const costoARS=f._costoUnitSinIva*tc;
+  const m=ofmMargenAt(precio,f._ivaFactor,costoARS,f.domain_id,null);
+  const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
+  const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
+  let avisoDesc='';
+  if(precio>0&&tachado>precio){
+    const descPct=(tachado-precio)/tachado*100;
+    if(descPct<10||descPct>=80)avisoDesc=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- las campañas propias exigen entre 10% y 80%.</div>`;
+  }
+  out.innerHTML=`${avisoDesc}Margen simulado: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
+}
+async function ofmConfirmarCampana(itemId){
+  const operador=ofmRequireOperador();if(!operador)return;
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const f=ofmFilaPorId[itemId];
+  const precioPm=parseFloat(qs('ofm-camp-precio-'+itemId)?.value)||0;
+  const inflacionPct=parseFloat(qs('ofm-camp-inflacion-'+itemId)?.value)||0;
+  if(!precioPm){toast('Cargá el precio del PM','error');return;}
+  const tachado=Math.round(precioPm*(1+inflacionPct/100));
+  let margenPct=null,bajoUmbral=false;
+  if(f._costoUnitSinIva!=null){
+    const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
+    const m=ofmMargenAt(precioPm,f._ivaFactor,f._costoUnitSinIva*tc,f.domain_id,null);
+    margenPct=m.margenPct;bajoUmbral=margenPct!==null&&margenPct*100<OFM.umbral;
+  }
+  const margenTxt=margenPct!==null?(margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)';
+  let msg=`¿Meter ${itemId} en tu campaña propia activa?\nPrecio PM (final) $${fmtN(precioPm)} / tachado $${fmtN(tachado)} (+${inflacionPct}%)\nMargen resultante: ${margenTxt}`;
+  if(bajoUmbral)msg+=`\n\n⚠ ESTE MARGEN QUEDA BAJO EL UMBRAL (${OFM.umbral}%). Confirmá solo si es intencional.`;
+  if(!confirm(msg))return;
+  try{
+    const res=await fetch(`${url}/ml-ofertas/item/${itemId}/activar-campana`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cuenta:f.cuenta,precio_pm:precioPm,inflacion_pct:inflacionPct,sku:f.sku||'',precio_anterior:f.precio_oferta||f.precio_normal||'',
+        margen_pct:margenPct!==null?(margenPct*100).toFixed(2):'',bajo_umbral:bajoUmbral,operador})});
+    const d=await res.json();
+    if(d.ok){toast(`✅ ${itemId}: metida en "${d.nombre_campana||d.promotion_id}"`);await ofmCargarPromociones(itemId);}
     else toast(`❌ ${itemId}: ${d.error||'error desconocido'}`,'error');
   }catch(e){toast('Error: '+e.message,'error');}
 }

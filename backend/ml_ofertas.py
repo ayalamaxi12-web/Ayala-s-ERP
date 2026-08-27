@@ -123,7 +123,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable
 
 import requests
@@ -425,20 +425,39 @@ def _delete_real(url: str, params: dict, headers: dict):
     ultimo_error.raise_for_status()
 
 
+def _post_real(url: str, headers: dict, body: dict):
+    ultimo_error = None
+    for intento in range(4):
+        r = requests.post(url, json=body, headers=headers, timeout=20)
+        if r.status_code in (429, 503):
+            ultimo_error = r
+            if intento < 3:
+                time.sleep(float(r.headers.get("Retry-After", 2 ** (intento + 1))))
+                continue
+        try:
+            return r.json()
+        except ValueError:
+            r.raise_for_status()
+            raise
+    ultimo_error.raise_for_status()
+
+
 class MLOfertasEscritura(MLOfertasClient):
     """Único punto de escritura del módulo. Separado de `MLOfertasClient`
     (que hereda `_get` de `MLFullClient`, documentado ahí como "solo
     lectura del lado Mercado Libre") para no volver ambiguo ese contrato --
     los jobs de lectura de Fase 1/2 siguen instanciando `MLOfertasClient`
-    a secas, nunca esta clase. `put_fn`/`delete_fn` inyectables, mismo
-    patrón `get_fn`/`token_fn` que el resto del módulo."""
+    a secas, nunca esta clase. `put_fn`/`delete_fn`/`post_fn` inyectables,
+    mismo patrón `get_fn`/`token_fn` que el resto del módulo."""
 
     def __init__(self, get_fn: GetFn | None = None, token_fn: Callable[[str], str] | None = None,
                  put_fn: Callable[[str, dict, dict], object] | None = None,
-                 delete_fn: Callable[[str, dict, dict], object] | None = None):
+                 delete_fn: Callable[[str, dict, dict], object] | None = None,
+                 post_fn: Callable[[str, dict, dict], object] | None = None):
         super().__init__(get_fn=get_fn, token_fn=token_fn)
         self._put = put_fn or _put_real
         self._delete = delete_fn or _delete_real
+        self._post = post_fn or _post_real
 
     def activar_oferta_propia(self, item_id: str, cuenta: str, precio: Decimal, precio_tachado: Decimal) -> dict:
         """`PUT items/{id}` con `price`+`original_price`.
@@ -553,6 +572,97 @@ class MLOfertasEscritura(MLOfertasClient):
             return {"ok": True, "successful_ids": exitosas}
         errores = d.get("errors") or []
         return {"ok": False, "error": errores[0].get("error") if errores else str(d)}
+
+    def fijar_precio_base(self, item_id: str, cuenta: str, precio_base: Decimal) -> dict:
+        """Fija el precio de lista del ítem, SIN descuento -- paso previo
+        obligatorio para `meter_en_campana`, que toma el tachado del
+        `price` vigente del ítem en el momento de enrolar, no de un campo
+        que se pueda mandar (confirmado developers.mercadolibre.com.ar/
+        es_ar/campanas-del-vendedor, 2026-08-28: "el original_price…te lo
+        devuelve la respuesta, no lo definís vos"). Mismo riesgo de "200
+        OK pero lo ignora" que `activar_oferta_propia` (ver su docstring)
+        -- se verifica con un GET aparte, nunca se confía en el PUT.
+        Manda `price` y `original_price` iguales (sin descuento real)
+        porque un PUT con SOLO `price` da 400 desde el 18/03/2026 -- hace
+        falta otro atributo en el body para que no lo rechace de una."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
+        url = f"https://api.mercadolibre.com/items/{item_id}"
+        d = self._put(url, headers, {"price": float(precio_base), "original_price": float(precio_base)}) or {}
+        if not d.get("id"):
+            return {"ok": False, "error": d.get("message") or str(d)}
+        estado = self._get(url, {"attributes": "id,price"}, headers) or {}
+        precio_real = estado.get("price")
+        if precio_real is not None and abs(float(precio_real) - float(precio_base)) < 1:
+            return {"ok": True}
+        return {"ok": False,
+                "error": f"ML respondió éxito pero el GET de verificación no confirma el precio base "
+                         f"(real: {precio_real!r}, pedido: {float(precio_base)})."}
+
+    def meter_en_campana(self, item_id: str, cuenta: str, promotion_id: str, deal_price: Decimal) -> dict:
+        """Enrola la publicación en una campaña `SELLER_CAMPAIGN` que ya
+        existe -- este método NO crea campañas, Maxx las crea a mano en
+        ML ("Promociones" → "Crear nueva"), esto solo mete publicaciones
+        adentro. Endpoint distinto de `/items/{id}` (no tiene el riesgo
+        del PUT deprecado), confirmado developers.mercadolibre.com.ar/
+        es_ar/campanas-del-vendedor (act. 2026-03-13):
+        `POST /seller-promotions/items/{item_id}?app_version=v2` con
+        `{promotion_id, promotion_type: SELLER_CAMPAIGN, deal_price}`.
+
+        El tachado sale del `price` vigente del ítem en ese momento --
+        llamar `fijar_precio_base` antes para un tachado específico.
+        Descuento debe quedar entre 10% y 80% (distinto del 5%-80% de
+        `PRICE_DISCOUNT`) -- no documentado si hay chequeo de "precio
+        creíble" para este tipo. Una vez `started`, el precio solo puede
+        MEJORAR (bajar) en un reintento, ML rechaza subirlo."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
+        body = {"promotion_id": promotion_id, "promotion_type": "SELLER_CAMPAIGN", "deal_price": float(deal_price)}
+        d = self._post(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", headers, body) or {}
+        if d.get("price") is not None:
+            return {"ok": True, "price": d.get("price"), "original_price": d.get("original_price")}
+        return {"ok": False, "error": d.get("message") or str(d)}
+
+
+def activar_en_campana_tradicional(
+    ml: MLOfertasEscritura, cuenta: str, item_id: str, precio_pm: Decimal,
+    inflacion_pct: Decimal = Decimal(25), promotion_id: str | None = None,
+) -> dict:
+    """Automatiza el flujo real de Maxx (confirmado 2026-08-28, 80% de su
+    uso): infla `precio_pm` (el precio que definió el PM) un
+    `inflacion_pct` -- eso queda como tachado -- y mete la publicación en
+    su campaña mensual propia ("Oferta Tradicional <mes>") con
+    `precio_pm` sin cambios como precio final. Dos pasos reales de ML, no
+    uno: `fijar_precio_base` (tachado) y `meter_en_campana` (precio
+    final) -- si el primero falla no se intenta el segundo.
+
+    `promotion_id` opcional: si no se pasa, se resuelve solo con la
+    primera `SELLER_CAMPAIGN` con `status` `started` o `pending` de
+    `promociones_seller` -- asume que Maxx tiene una sola campaña propia
+    viva a la vez (su descripción: crea una nueva cada mes). Si hay más
+    de una, se toma la primera que aparezca; pasar `promotion_id`
+    explícito para no depender de ese orden."""
+    if promotion_id is None:
+        campanas = [c for c in ml.promociones_seller(cuenta)
+                    if c.get("type") == "SELLER_CAMPAIGN" and c.get("status") in ("started", "pending")]
+        if not campanas:
+            return {"ok": False, "error": "No se encontró ninguna campaña propia (SELLER_CAMPAIGN) activa o pendiente en esta cuenta."}
+        promotion_id = campanas[0]["id"]
+        nombre_campana = campanas[0].get("name")
+    else:
+        nombre_campana = None
+
+    precio_tachado = (precio_pm * (Decimal(100) + inflacion_pct) / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    r1 = ml.fijar_precio_base(item_id, cuenta, precio_tachado)
+    if not r1.get("ok"):
+        return {"ok": False, "error": f"No se pudo fijar el precio base (tachado ${precio_tachado}): {r1.get('error')}"}
+
+    r2 = ml.meter_en_campana(item_id, cuenta, promotion_id, precio_pm)
+    if not r2.get("ok"):
+        return {"ok": False, "error": f"Precio base fijado en ${precio_tachado}, pero no se pudo enrolar en la campaña: {r2.get('error')}"}
+
+    return {"ok": True, "promotion_id": promotion_id, "nombre_campana": nombre_campana,
+            "precio": r2.get("price"), "original_price": r2.get("original_price"),
+            "precio_tachado_pedido": float(precio_tachado)}
 
 
 def listar_promociones_item(ml: MLOfertasClient, cuenta: str, item_id: str) -> list[dict]:

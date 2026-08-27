@@ -2082,3 +2082,32 @@ async def ml_ofertas_item_sacar(item_id: str, request: Request, background_tasks
             "Margen % Resultante": "", "Bajo Umbral": "", "Operador": body.get("operador", ""),
         })
     return r
+
+def _activar_campana_sync(item_id: str, cuenta: str, precio_pm: Decimal, inflacion_pct: Decimal, promotion_id: str | None) -> dict:
+    ml = ml_ofertas.MLOfertasEscritura()
+    return ml_ofertas.activar_en_campana_tradicional(ml, cuenta, item_id, precio_pm, inflacion_pct, promotion_id)
+
+@app.post("/ml-ofertas/item/{item_id}/activar-campana")
+async def ml_ofertas_item_activar_campana(item_id: str, request: Request, background_tasks: BackgroundTasks):
+    """"Oferta Tradicional" -- flujo real de Maxx confirmado 2026-08-28
+    (80% de su uso): infla `precio_pm` un `inflacion_pct` (25% default)
+    como tachado, mete la publicación en su campaña propia mensual con
+    `precio_pm` como precio final. Dos escrituras reales de ML por dentro
+    (`fijar_precio_base` + `meter_en_campana`, ver sus docstrings) --
+    mismo motivo que /activar para diferir el historial."""
+    body = await request.json()
+    cuenta = body["cuenta"]
+    precio_pm = Decimal(str(body["precio_pm"]))
+    inflacion_pct = Decimal(str(body.get("inflacion_pct", 25)))
+    promotion_id = body.get("promotion_id")
+    r = await run_in_threadpool(_activar_campana_sync, item_id, cuenta, precio_pm, inflacion_pct, promotion_id)
+    if r.get("ok"):
+        background_tasks.add_task(_registrar_historial_oferta, {
+            "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
+            "Accion": "Activar en campaña", "Tipo/Promocion": f"SELLER_CAMPAIGN ({r.get('nombre_campana') or r.get('promotion_id')})",
+            "Precio Anterior": body.get("precio_anterior", ""),
+            "Precio Nuevo": f"{r.get('precio')} (tachado {r.get('original_price') or r.get('precio_tachado_pedido')})",
+            "Margen % Resultante": body.get("margen_pct", ""), "Bajo Umbral": "Sí" if body.get("bajo_umbral") else "No",
+            "Operador": body.get("operador", ""),
+        })
+    return r

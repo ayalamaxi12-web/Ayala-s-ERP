@@ -9,6 +9,7 @@ from ml_ofertas import (
     MLOfertasClient,
     MLOfertasEscritura,
     ParametrosMargen,
+    activar_en_campana_tradicional,
     calcular_margen_oferta,
     detectar_skus_sin_oferta,
     estado_job,
@@ -542,6 +543,107 @@ def test_sacar_de_promocion_error():
     r = ml.sacar_de_promocion("MLA1", "IT", "SELLER_CAMPAIGN", promotion_id="C-999")
 
     assert r == {"ok": False, "error": "promotion_not_found"}
+
+
+def _fake_post(url, headers, body):
+    _fake_post.calls.append((url, headers, body))
+    return _fake_post.responder(url, headers, body)
+_fake_post.calls = []
+
+
+def test_fijar_precio_base_ok():
+    _fake_put.calls = []
+    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"]}
+    fake_get = lambda url, params, headers: {"id": "MLA1", "price": 12000.0}
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+
+    r = ml.fijar_precio_base("MLA1", "IT", Decimal(12000))
+
+    assert r == {"ok": True}
+    assert _fake_put.calls[0][2] == {"price": 12000.0, "original_price": 12000.0}  # sin descuento real
+
+
+def test_fijar_precio_base_no_confirma_por_get():
+    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"]}
+    fake_get = lambda url, params, headers: {"id": "MLA1", "price": 9000.0}  # no cambió
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put)
+
+    r = ml.fijar_precio_base("MLA1", "IT", Decimal(12000))
+
+    assert r["ok"] is False
+    assert "no confirma el precio base" in r["error"]
+
+
+def test_meter_en_campana_ok():
+    _fake_post.calls = []
+    _fake_post.responder = lambda url, headers, body: {"price": 9000.0, "original_price": 12000.0}
+    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, post_fn=_fake_post)
+
+    r = ml.meter_en_campana("MLA1", "IT", "C-1", Decimal(9000))
+
+    assert r == {"ok": True, "price": 9000.0, "original_price": 12000.0}
+    assert _fake_post.calls[0][0] == "https://api.mercadolibre.com/seller-promotions/items/MLA1"
+    assert _fake_post.calls[0][2] == {"promotion_id": "C-1", "promotion_type": "SELLER_CAMPAIGN", "deal_price": 9000.0}
+
+
+def test_meter_en_campana_error():
+    _fake_post.responder = lambda url, headers, body: {"message": "New deal_price must be lower than current deal_price"}
+    ml = MLOfertasEscritura(get_fn=None, token_fn=_FAKE_TOKEN_FN, post_fn=_fake_post)
+
+    r = ml.meter_en_campana("MLA1", "IT", "C-1", Decimal(9000))
+
+    assert r == {"ok": False, "error": "New deal_price must be lower than current deal_price"}
+
+
+def test_activar_en_campana_tradicional_flujo_completo():
+    """Automatiza el flujo real de Maxx: infla precio_pm 25% -> tachado,
+    mete en la campaña propia activa con precio_pm como precio final."""
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional Agosto"}]}
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": 12500.0}
+        raise AssertionError(url)
+
+    _fake_put.calls = []
+    _fake_put.responder = lambda url, headers, body: {"id": "MLA1", "price": body["price"]}
+    _fake_post.calls = []
+    _fake_post.responder = lambda url, headers, body: {"price": 10000.0, "original_price": 12500.0}
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is True
+    assert r["promotion_id"] == "C-1"
+    assert r["nombre_campana"] == "Oferta Tradicional Agosto"
+    assert r["precio_tachado_pedido"] == 12500.0  # 10000 * 1.25
+    assert _fake_put.calls[0][2] == {"price": 12500.0, "original_price": 12500.0}
+    assert _fake_post.calls[0][2] == {"promotion_id": "C-1", "promotion_type": "SELLER_CAMPAIGN", "deal_price": 10000.0}
+
+
+def test_activar_en_campana_tradicional_sin_campana_activa():
+    fake_get = lambda url, params, headers: {"results": []}
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is False
+    assert "ninguna campaña propia" in r["error"]
+
+
+def test_activar_en_campana_tradicional_no_sigue_si_falla_precio_base():
+    fake_get_campana = lambda url, params, headers: {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+    _fake_put.responder = lambda url, headers, body: {"error": "validation_error", "message": "invalid price"}
+    _fake_post.calls = []
+
+    ml = MLOfertasEscritura(get_fn=fake_get_campana, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is False
+    assert "No se pudo fijar el precio base" in r["error"]
+    assert _fake_post.calls == []  # no se intentó enrolar si el precio base falló
 
 
 def test_listar_promociones_item_cruza_nombre_de_campana():
