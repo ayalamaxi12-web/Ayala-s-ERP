@@ -323,6 +323,24 @@ def test_ofertas_propias_activas_un_item_con_error_no_tumba_el_resto():
     assert any(i["item_id"] == "MLA1" and "ERROR_ML_ITEM" in i["motivo"] for i in incidencias)
 
 
+def test_ofertas_propias_activas_reporta_progreso():
+    def fake_get(url, params, headers):
+        if url.endswith("/items"):
+            return [{"body": _item_ofertas("MLA1", "SKU-A", "MLA-TONERS")},
+                    {"body": _item_ofertas("MLA2", "SKU-B", "MLA-TONERS")}]
+        if url.startswith("https://api.mercadolibre.com/seller-promotions/items/"):
+            return []
+        raise AssertionError(url)
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    llamadas = []
+    ofertas_propias_activas(ml, _CostoProviderFalso({}), _IvaProviderFalso({}), "IT",
+                             item_ids=["MLA1", "MLA2"], progreso_cb=lambda a, t: llamadas.append((a, t)))
+
+    assert llamadas[0] == (0, 2)
+    assert llamadas[-1] == (2, 2)
+
+
 # ── Fase 2 — detección de SKUs sin oferta ──
 # El wrapper de job (`iniciar_job`/`iniciar_job_alertas`) no se testea acá,
 # igual que en ml_full.py/ml_reposicion.py: es pegamento fino que instancia

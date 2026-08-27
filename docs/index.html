@@ -2603,7 +2603,24 @@ function populateRuleFilter(){const sel=qs('ml-filter-regla');if(!sel)return;RUL
 // ── ML TOOLS ──
 async function runTracker(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-tracker');const status=qs('tracker-status');const logEl=qs('tracker-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/tracker/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'tracker');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
 async function runVendedor(){const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}const btn=qs('btn-vendedor');const status=qs('vendedor-status');const logEl=qs('vendedor-log');btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';try{const res=await fetch(`${url}/ml/vendedor/run`,{method:'POST'});const{job_id}=await res.json();status.textContent='Job: '+job_id;pollJob(job_id,url,logEl,status,btn,'vendedor');}catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar';}}
-function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInterval(async()=>{try{const res=await fetch(`${baseUrl}/ml/${type}/status/${job_id}`);const data=await res.json();if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}if(data.status==='done'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--green)">✅ Listo — ${data.ok||0} OK · ${data.errors||0} errores</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${data.message}</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else statusEl.textContent=`● corriendo... (${data.log?.length||0} líneas)`;}catch(e){console.warn(e);}},3000);}
+// Barra de % real cuando el job reporta `progress:{current,total,label}` --
+// pedido de Maxx 2026-08-27, reemplaza el "corriendo..." indeterminado
+// para cualquier job que lo reporte (hoy: Ofertas ML; otros jobs siguen
+// mostrando el texto viejo hasta que también reporten `progress`).
+function jobStatusHtml(data){
+  const p=data.progress;
+  if(p&&p.total>0){
+    const pct=Math.min(100,Math.round(p.current/p.total*100));
+    return `<div style="display:flex;align-items:center;gap:8px;max-width:420px">
+      <div style="flex:1;height:6px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--accent);transition:width .3s"></div>
+      </div>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);white-space:nowrap">${p.label||'Procesando'} ${p.current}/${p.total} (${pct}%)</span>
+    </div>`;
+  }
+  return `● corriendo... (${data.log?.length||0} líneas)`;
+}
+function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInterval(async()=>{try{const res=await fetch(`${baseUrl}/ml/${type}/status/${job_id}`);const data=await res.json();if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}if(data.status==='done'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--green)">✅ Listo — ${data.ok||0} OK · ${data.errors||0} errores</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${data.message}</span>`;btn.disabled=false;btn.textContent='▶ Ejecutar';}else statusEl.innerHTML=jobStatusHtml(data);}catch(e){console.warn(e);}},3000);}
 
 // ── FULL ML — conciliación de stock y simulador de reposición
 // (docs/business/COMERCIAL/canales/mercadolibre/03_MODULO_FULL.md).
@@ -2616,7 +2633,7 @@ function pollFullJob(statusUrl,logEl,statusEl,btn,btnLabel,onDone){
       if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}
       if(data.status==='done'){clearInterval(interval);statusEl.innerHTML='<span style="color:var(--green)">✅ Listo</span>';btn.disabled=false;btn.textContent=btnLabel;onDone(data.result);}
       else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${(data.log||[]).slice(-1)[0]||'Error'}</span>`;btn.disabled=false;btn.textContent=btnLabel;}
-      else statusEl.textContent=`● corriendo... (${data.log?.length||0} líneas)`;
+      else statusEl.innerHTML=jobStatusHtml(data);
     }catch(e){console.warn(e);}
   },4000);
 }

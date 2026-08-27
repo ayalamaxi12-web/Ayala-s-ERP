@@ -600,6 +600,7 @@ def ofertas_activas(
 def ofertas_propias_activas(
     ml: MLOfertasClient, costo_provider, iva_provider, cuenta: str,
     params: ParametrosMargen | None = None, tc: Decimal = Decimal(1), item_ids: list[str] | None = None,
+    progreso_cb: Callable[[int, int], None] | None = None,
 ) -> tuple[list[FilaOferta], list[dict]]:
     """"Ofertas propias" (`PRICE_DISCOUNT`) -- no tiene un listado barato
     como las campañas (ver docstring del módulo): hay que consultar
@@ -608,7 +609,9 @@ def ofertas_propias_activas(
     (`ml.items_activos`) -- caro (una llamada por publicación, ~6.200
     activas en las dos cuentas hoy), pensado para correr aparte de
     `ofertas_activas`, no en cada carga del dashboard. Pasar una lista
-    acotada para un escaneo más barato."""
+    acotada para un escaneo más barato. `progreso_cb(procesados, total)`
+    opcional -- pedido de Maxx 2026-08-27: reemplazar el "corriendo..."
+    indeterminado por una barra de % real en escaneos largos."""
     params = params or ParametrosMargen()
     ids = item_ids if item_ids is not None else ml.items_activos(cuenta)
     filas: list[FilaOferta] = []
@@ -616,7 +619,10 @@ def ofertas_propias_activas(
 
     detalles = {d["id"]: d for d in ml.detalle_items_ofertas(ids, cuenta)}
 
-    for item_id in ids:
+    total = len(ids)
+    for i, item_id in enumerate(ids):
+        if progreso_cb:
+            progreso_cb(i, total)
         try:
             promos_item = ml.promociones_item(item_id, cuenta)
         except requests.exceptions.RequestException as e:
@@ -648,6 +654,8 @@ def ofertas_propias_activas(
         if incidencia:
             incidencias.append(incidencia)
 
+    if progreso_cb:
+        progreso_cb(total, total)
     return filas, incidencias
 
 
@@ -701,27 +709,36 @@ class CandidatoOferta:
 def detectar_skus_sin_oferta(
     ml: MLOfertasClient, cuenta: str, item_ids_con_oferta: set,
     dias_ventas: int = 30, min_ventas: int = 5, hoy=None,
+    progreso_cb: Callable[[int, int], None] | None = None,
 ) -> list:
     """Alta rotación (>= `min_ventas` en `dias_ventas`) + stock > 0 + sin
     ninguna oferta activa ahora mismo (`item_ids_con_oferta`, la unión de
     lo que ya devolvieron `ofertas_activas`/`ofertas_propias_activas`).
     Escanea TODAS las publicaciones activas de la cuenta -- mismo costo que
     `ofertas_propias_activas`, pensado para correr aparte del dashboard
-    principal, no en cada carga."""
+    principal, no en cada carga. `progreso_cb` opcional, ver
+    `ofertas_propias_activas`."""
     from datetime import date, timedelta
     hoy = hoy or date.today()
     desde_iso = f"{(hoy - timedelta(days=dias_ventas)).isoformat()}T00:00:00.000-00:00"
     hasta_iso = f"{hoy.isoformat()}T23:00:00.000-00:00"
 
     ids = ml.items_activos(cuenta)
+    if progreso_cb:
+        progreso_cb(0, max(len(ids), 1))
     ventas = ventas_por_item(ml, cuenta, desde_iso, hasta_iso)
     candidatos_ids = [i for i in ids if i not in item_ids_con_oferta and ventas.get(i, 0) >= min_ventas]
     if not candidatos_ids:
+        if progreso_cb:
+            progreso_cb(1, 1)
         return []
 
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
     resultado = []
-    for i in range(0, len(candidatos_ids), 20):
+    total = len(candidatos_ids)
+    for i in range(0, total, 20):
+        if progreso_cb:
+            progreso_cb(i, total)
         lote = candidatos_ids[i:i + 20]
         d = ml._get(
             "https://api.mercadolibre.com/items",
@@ -739,6 +756,8 @@ def detectar_skus_sin_oferta(
                 item_id=cuerpo["id"], cuenta=cuenta, sku=cuerpo.get("seller_custom_field"),
                 titulo=cuerpo.get("title", ""), ventas_periodo=ventas.get(cuerpo["id"], 0), stock=stock,
             ))
+    if progreso_cb:
+        progreso_cb(total, total)
     return resultado
 
 
@@ -774,8 +793,11 @@ def iniciar_job(job_id: str, cuentas: list = None, incluir_propias: bool = False
     este módulo no scrapea BNA para no duplicar esa lógica ni crear un
     import circular con `main.py`. `incluir_propias=True` suma el escaneo
     caro de `PRICE_DISCOUNT` (ver su docstring) -- por eso es opt-in, no
-    el comportamiento por defecto."""
-    _jobs[job_id] = {"status": "running", "log": ["Iniciando lectura de ofertas activas..."], "result": None}
+    el comportamiento por defecto. Reporta `progress` (current/total/label)
+    en `_jobs[job_id]` durante el escaneo caro -- pedido de Maxx 2026-08-27,
+    para que el frontend muestre una barra de % real en vez de
+    "corriendo..." indeterminado."""
+    _jobs[job_id] = {"status": "running", "log": ["Iniciando lectura de ofertas activas..."], "result": None, "progress": None}
     try:
         from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
 
@@ -792,9 +814,14 @@ def iniciar_job(job_id: str, cuentas: list = None, incluir_propias: bool = False
         if incluir_propias:
             for cuenta in cuentas:
                 _jobs[job_id]["log"].append(f"Escaneando ofertas propias ({cuenta})... puede tardar.")
-                f, i = ofertas_propias_activas(ml, costo_provider, iva_provider, cuenta, params=params, tc=tc_decimal)
+
+                def _progreso(actual, total, cuenta=cuenta):
+                    _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": f"Ofertas propias ({cuenta})"}
+
+                f, i = ofertas_propias_activas(ml, costo_provider, iva_provider, cuenta, params=params, tc=tc_decimal, progreso_cb=_progreso)
                 filas.extend(f)
                 incidencias.extend(i)
+        _jobs[job_id]["progress"] = None
 
         _jobs[job_id]["result"] = {
             "filas": [_fila_a_dict(f) for f in filas],
@@ -822,10 +849,15 @@ def estado_job(job_id: str):
 
 
 def iniciar_job_alertas(job_id: str, cuenta: str, item_ids_con_oferta: list, dias_ventas: int = 30, min_ventas: int = 5) -> None:
-    _jobs[job_id] = {"status": "running", "log": [f"Buscando SKUs candidatos a oferta ({cuenta})..."], "result": None}
+    _jobs[job_id] = {"status": "running", "log": [f"Buscando SKUs candidatos a oferta ({cuenta})..."], "result": None, "progress": None}
     try:
         ml = MLOfertasClient()
-        candidatos = detectar_skus_sin_oferta(ml, cuenta, set(item_ids_con_oferta), dias_ventas=dias_ventas, min_ventas=min_ventas)
+
+        def _progreso(actual, total):
+            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": f"Candidatos a oferta ({cuenta})"}
+
+        candidatos = detectar_skus_sin_oferta(ml, cuenta, set(item_ids_con_oferta), dias_ventas=dias_ventas, min_ventas=min_ventas, progreso_cb=_progreso)
+        _jobs[job_id]["progress"] = None
         _jobs[job_id]["result"] = {
             "candidatos": [
                 {"item_id": c.item_id, "cuenta": c.cuenta, "sku": c.sku, "titulo": c.titulo,
