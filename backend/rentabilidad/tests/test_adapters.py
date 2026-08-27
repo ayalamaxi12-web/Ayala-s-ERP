@@ -77,6 +77,69 @@ def test_costo_vigente_sin_configurar_levanta_error_claro():
         prov.obtener("SKU1")
 
 
+# ── `_consultar_catalogo_tactica_real` — reintento ante corte de conexión.
+# Bug real 2026-08-27: el link a Táctica cortó a mitad de consulta durante
+# una corrida real de Ofertas ML ("DB-Lib error 20017: Unexpected EOF from
+# the server") y mató el job entero -- no había reintento. ──
+
+def test_consultar_catalogo_tactica_reintenta_ante_corte_de_conexion(monkeypatch):
+    import pymssql
+
+    from rentabilidad.adapters import _consultar_catalogo_tactica_real
+
+    monkeypatch.setenv("RENT_TACTICA_SQL_SERVER", "x")
+    monkeypatch.setenv("RENT_TACTICA_SQL_USER", "x")
+    monkeypatch.setenv("RENT_TACTICA_SQL_PASSWORD", "x")
+    monkeypatch.setenv("RENT_TACTICA_SQL_DATABASE", "x")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    class _FakeCursor:
+        def execute(self, query):
+            pass
+        def __iter__(self):
+            return iter([{"sku": "SKU1", "costo": "1.5", "iva_descripcion": "IVA Debito 21%"}])
+
+    class _FakeConn:
+        def cursor(self):
+            return _FakeCursor()
+        def close(self):
+            pass
+
+    intentos = {"n": 0}
+    def fake_connect(**kwargs):
+        intentos["n"] += 1
+        if intentos["n"] < 3:
+            raise pymssql.OperationalError((20017, b"DB-Lib error message 20017, severity 9:\nUnexpected EOF from the server\n"))
+        return _FakeConn()
+
+    monkeypatch.setattr(pymssql, "connect", fake_connect)
+
+    filas = _consultar_catalogo_tactica_real()
+
+    assert intentos["n"] == 3
+    assert filas == [{"sku": "SKU1", "costo": "1.5", "iva_descripcion": "IVA Debito 21%"}]
+
+
+def test_consultar_catalogo_tactica_agota_reintentos_y_relanza(monkeypatch):
+    import pymssql
+
+    from rentabilidad.adapters import _consultar_catalogo_tactica_real
+
+    monkeypatch.setenv("RENT_TACTICA_SQL_SERVER", "x")
+    monkeypatch.setenv("RENT_TACTICA_SQL_USER", "x")
+    monkeypatch.setenv("RENT_TACTICA_SQL_PASSWORD", "x")
+    monkeypatch.setenv("RENT_TACTICA_SQL_DATABASE", "x")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    def fake_connect(**kwargs):
+        raise pymssql.OperationalError((20017, b"Unexpected EOF from the server"))
+
+    monkeypatch.setattr(pymssql, "connect", fake_connect)
+
+    with pytest.raises(pymssql.OperationalError):
+        _consultar_catalogo_tactica_real()
+
+
 # ── IvaProvider (§5.4) — comparación exacta, sensible a mayúsculas ──
 
 def test_iva_factor_21_por_ciento():

@@ -22,6 +22,7 @@ supuestos de "qué columna/hoja exacta" que el relevamiento no precisó):
   especificadas con el detalle suficiente para replicarlas — queda como
   comportamiento pendiente de confirmar, no inventado.
 """
+import time
 from decimal import Decimal
 from typing import Callable, Sequence
 
@@ -91,23 +92,40 @@ WHERE p.Codigo IS NOT NULL AND p.Codigo <> ''
 def _consultar_catalogo_tactica_real() -> list[dict]:
     """Import perezoso de pymssql — mismo principio que
     `ingesta_tactica._ejecutar_query_real()`: el resto del módulo no
-    depende de este driver ni de conectividad real para correr sus tests."""
+    depende de este driver ni de conectividad real para correr sus tests.
+
+    Reintenta ante errores de conexión transitorios -- confirmado en
+    producción (2026-08-27) que el link a Táctica corta a veces a mitad de
+    consulta (`DB-Lib error 20017: Unexpected EOF from the server`, sin
+    reintento antes, mataba el job de Ofertas ML entero por un corte de
+    red). 3 intentos con backoff corto (2s/4s); solo cubre errores de
+    `pymssql` (conexión/protocolo) -- no reinterpreta ni oculta un error
+    real de la query."""
     import pymssql
 
-    conn = pymssql.connect(
-        server=requerido("RENT_TACTICA_SQL_SERVER"),
-        user=requerido("RENT_TACTICA_SQL_USER"),
-        password=requerido("RENT_TACTICA_SQL_PASSWORD"),
-        database=requerido("RENT_TACTICA_SQL_DATABASE"),
-        login_timeout=20,
-        as_dict=True,
-    )
-    try:
-        cur = conn.cursor()
-        cur.execute(_QUERY_CATALOGO_COSTO_IVA)
-        return list(cur)
-    finally:
-        conn.close()
+    ultimo_error: Exception | None = None
+    for intento in range(3):
+        try:
+            conn = pymssql.connect(
+                server=requerido("RENT_TACTICA_SQL_SERVER"),
+                user=requerido("RENT_TACTICA_SQL_USER"),
+                password=requerido("RENT_TACTICA_SQL_PASSWORD"),
+                database=requerido("RENT_TACTICA_SQL_DATABASE"),
+                login_timeout=20,
+                as_dict=True,
+            )
+            try:
+                cur = conn.cursor()
+                cur.execute(_QUERY_CATALOGO_COSTO_IVA)
+                return list(cur)
+            finally:
+                conn.close()
+        except pymssql.Error as e:
+            ultimo_error = e
+            if intento < 2:
+                time.sleep(2 ** (intento + 1))
+                continue
+    raise ultimo_error
 
 
 class CostoVigenteProvider:
