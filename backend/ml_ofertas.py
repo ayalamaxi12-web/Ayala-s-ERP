@@ -284,12 +284,20 @@ class MLOfertasClient(MLFullClient):
             f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", {"app_version": "v2"}, headers,
         ) or []
 
-    def detalle_items_ofertas(self, item_ids: list[str], cuenta: str) -> list[dict]:
+    def detalle_items_ofertas(self, item_ids: list[str], cuenta: str,
+                               progreso_cb: Callable[[int, int, str], None] | None = None) -> list[dict]:
         """SKU/categoría/título/cuotas por lote de 20 -- `domain_id` viene
-        directo acá, sin pedir nada aparte (ver docstring del módulo)."""
+        directo acá, sin pedir nada aparte (ver docstring del módulo).
+        `progreso_cb(procesados, total, "catalogo")` opcional -- este lote
+        de llamadas (hasta ~310 para un escaneo completo de ofertas
+        propias) es buena parte del tiempo "muerto" que veía Maxx antes de
+        que arrancara a reportar progreso el loop de promociones."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         salida: list[dict] = []
-        for i in range(0, len(item_ids), 20):
+        total = len(item_ids)
+        for i in range(0, total, 20):
+            if progreso_cb:
+                progreso_cb(i, total, "catalogo")
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
@@ -300,6 +308,8 @@ class MLOfertasClient(MLFullClient):
                 cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
                 if cuerpo:
                     salida.append(cuerpo)
+        if progreso_cb:
+            progreso_cb(total, total, "catalogo")
         return salida
 
     def detalle_item_completo(self, item_id: str, cuenta: str) -> dict:
@@ -600,7 +610,7 @@ def ofertas_activas(
 def ofertas_propias_activas(
     ml: MLOfertasClient, costo_provider, iva_provider, cuenta: str,
     params: ParametrosMargen | None = None, tc: Decimal = Decimal(1), item_ids: list[str] | None = None,
-    progreso_cb: Callable[[int, int], None] | None = None,
+    progreso_cb: Callable[[int, int, str], None] | None = None,
 ) -> tuple[list[FilaOferta], list[dict]]:
     """"Ofertas propias" (`PRICE_DISCOUNT`) -- no tiene un listado barato
     como las campañas (ver docstring del módulo): hay que consultar
@@ -609,20 +619,25 @@ def ofertas_propias_activas(
     (`ml.items_activos`) -- caro (una llamada por publicación, ~6.200
     activas en las dos cuentas hoy), pensado para correr aparte de
     `ofertas_activas`, no en cada carga del dashboard. Pasar una lista
-    acotada para un escaneo más barato. `progreso_cb(procesados, total)`
+    acotada para un escaneo más barato. `progreso_cb(procesados, total, fase)`
     opcional -- pedido de Maxx 2026-08-27: reemplazar el "corriendo..."
-    indeterminado por una barra de % real en escaneos largos."""
+    indeterminado por una barra de % real en escaneos largos. Dos fases,
+    NO una: `detalle_items_ofertas` (fase "catalogo", ~310 llamadas en
+    lotes de 20 para 6.200 ítems) corría entera SIN reportar nada antes de
+    que arrancara la fase "promociones" -- era la mayor parte del tiempo
+    "muerto" que se veía como `corriendo... (0 líneas)`."""
     params = params or ParametrosMargen()
     ids = item_ids if item_ids is not None else ml.items_activos(cuenta)
     filas: list[FilaOferta] = []
     incidencias: list[dict] = []
 
-    detalles = {d["id"]: d for d in ml.detalle_items_ofertas(ids, cuenta)}
+    detalle_cb = (lambda a, t, f: progreso_cb(a, t, f)) if progreso_cb else None
+    detalles = {d["id"]: d for d in ml.detalle_items_ofertas(ids, cuenta, progreso_cb=detalle_cb)}
 
     total = len(ids)
     for i, item_id in enumerate(ids):
         if progreso_cb:
-            progreso_cb(i, total)
+            progreso_cb(i, total, "promociones")
         try:
             promos_item = ml.promociones_item(item_id, cuenta)
         except requests.exceptions.RequestException as e:
@@ -655,7 +670,7 @@ def ofertas_propias_activas(
             incidencias.append(incidencia)
 
     if progreso_cb:
-        progreso_cb(total, total)
+        progreso_cb(total, total, "promociones")
     return filas, incidencias
 
 
@@ -709,15 +724,15 @@ class CandidatoOferta:
 def detectar_skus_sin_oferta(
     ml: MLOfertasClient, cuenta: str, item_ids_con_oferta: set,
     dias_ventas: int = 30, min_ventas: int = 5, hoy=None,
-    progreso_cb: Callable[[int, int], None] | None = None,
+    progreso_cb: Callable[[int, int, str], None] | None = None,
 ) -> list:
     """Alta rotación (>= `min_ventas` en `dias_ventas`) + stock > 0 + sin
     ninguna oferta activa ahora mismo (`item_ids_con_oferta`, la unión de
     lo que ya devolvieron `ofertas_activas`/`ofertas_propias_activas`).
     Escanea TODAS las publicaciones activas de la cuenta -- mismo costo que
     `ofertas_propias_activas`, pensado para correr aparte del dashboard
-    principal, no en cada carga. `progreso_cb` opcional, ver
-    `ofertas_propias_activas`."""
+    principal, no en cada carga. `progreso_cb(procesados, total, fase)`
+    opcional, ver `ofertas_propias_activas`."""
     from datetime import date, timedelta
     hoy = hoy or date.today()
     desde_iso = f"{(hoy - timedelta(days=dias_ventas)).isoformat()}T00:00:00.000-00:00"
@@ -725,12 +740,12 @@ def detectar_skus_sin_oferta(
 
     ids = ml.items_activos(cuenta)
     if progreso_cb:
-        progreso_cb(0, max(len(ids), 1))
+        progreso_cb(0, max(len(ids), 1), "ventas")
     ventas = ventas_por_item(ml, cuenta, desde_iso, hasta_iso)
     candidatos_ids = [i for i in ids if i not in item_ids_con_oferta and ventas.get(i, 0) >= min_ventas]
     if not candidatos_ids:
         if progreso_cb:
-            progreso_cb(1, 1)
+            progreso_cb(1, 1, "candidatos")
         return []
 
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
@@ -738,7 +753,7 @@ def detectar_skus_sin_oferta(
     total = len(candidatos_ids)
     for i in range(0, total, 20):
         if progreso_cb:
-            progreso_cb(i, total)
+            progreso_cb(i, total, "candidatos")
         lote = candidatos_ids[i:i + 20]
         d = ml._get(
             "https://api.mercadolibre.com/items",
@@ -757,7 +772,7 @@ def detectar_skus_sin_oferta(
                 titulo=cuerpo.get("title", ""), ventas_periodo=ventas.get(cuerpo["id"], 0), stock=stock,
             ))
     if progreso_cb:
-        progreso_cb(total, total)
+        progreso_cb(total, total, "candidatos")
     return resultado
 
 
@@ -815,8 +830,9 @@ def iniciar_job(job_id: str, cuentas: list = None, incluir_propias: bool = False
             for cuenta in cuentas:
                 _jobs[job_id]["log"].append(f"Escaneando ofertas propias ({cuenta})... puede tardar.")
 
-                def _progreso(actual, total, cuenta=cuenta):
-                    _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": f"Ofertas propias ({cuenta})"}
+                def _progreso(actual, total, fase, cuenta=cuenta):
+                    etiqueta = "Trayendo catálogo" if fase == "catalogo" else "Consultando promociones"
+                    _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": f"{etiqueta} — ofertas propias ({cuenta})"}
 
                 f, i = ofertas_propias_activas(ml, costo_provider, iva_provider, cuenta, params=params, tc=tc_decimal, progreso_cb=_progreso)
                 filas.extend(f)
@@ -853,8 +869,9 @@ def iniciar_job_alertas(job_id: str, cuenta: str, item_ids_con_oferta: list, dia
     try:
         ml = MLOfertasClient()
 
-        def _progreso(actual, total):
-            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": f"Candidatos a oferta ({cuenta})"}
+        def _progreso(actual, total, fase):
+            etiqueta = "Trayendo ventas" if fase == "ventas" else "Buscando candidatos"
+            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": f"{etiqueta} ({cuenta})"}
 
         candidatos = detectar_skus_sin_oferta(ml, cuenta, set(item_ids_con_oferta), dias_ventas=dias_ventas, min_ventas=min_ventas, progreso_cb=_progreso)
         _jobs[job_id]["progress"] = None

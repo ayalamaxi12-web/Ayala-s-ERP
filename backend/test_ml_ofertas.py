@@ -323,7 +323,11 @@ def test_ofertas_propias_activas_un_item_con_error_no_tumba_el_resto():
     assert any(i["item_id"] == "MLA1" and "ERROR_ML_ITEM" in i["motivo"] for i in incidencias)
 
 
-def test_ofertas_propias_activas_reporta_progreso():
+def test_ofertas_propias_activas_reporta_progreso_en_las_dos_fases():
+    """Bug real 2026-08-27: `detalle_items_ofertas` (la fase "catalogo",
+    hasta ~310 llamadas para un escaneo completo) corría entera SIN
+    reportar nada -- Maxx la veía como "corriendo... (0 líneas)" congelado
+    antes de que arrancara la fase "promociones", que sí reportaba."""
     def fake_get(url, params, headers):
         if url.endswith("/items"):
             return [{"body": _item_ofertas("MLA1", "SKU-A", "MLA-TONERS")},
@@ -335,10 +339,12 @@ def test_ofertas_propias_activas_reporta_progreso():
     ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
     llamadas = []
     ofertas_propias_activas(ml, _CostoProviderFalso({}), _IvaProviderFalso({}), "IT",
-                             item_ids=["MLA1", "MLA2"], progreso_cb=lambda a, t: llamadas.append((a, t)))
+                             item_ids=["MLA1", "MLA2"], progreso_cb=lambda a, t, f: llamadas.append((a, t, f)))
 
-    assert llamadas[0] == (0, 2)
-    assert llamadas[-1] == (2, 2)
+    fases = [f for (_, _, f) in llamadas]
+    assert "catalogo" in fases and "promociones" in fases
+    assert llamadas[0] == (0, 2, "catalogo")
+    assert llamadas[-1] == (2, 2, "promociones")
 
 
 # ── Fase 2 — detección de SKUs sin oferta ──
