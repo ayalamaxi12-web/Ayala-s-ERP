@@ -2854,7 +2854,7 @@ function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
   return{baseSinIva,comision,costoFijo,cuotas,envio,impCheque,iibb,margen,margenPct};
 }
 function ofmCfgSave(){try{localStorage.setItem('ofm_cfg',JSON.stringify(OFM));}catch(e){}}
-function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o)Object.assign(OFM,o);const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();}
+function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o)Object.assign(OFM,o);const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
 function ofmRequireOperador(){const op=qs('ofm-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
 function ofmRenderPanel(){
   const dominiosHtml=Object.keys(OFM.comisionPorDominio).map(d=>
@@ -2878,6 +2878,52 @@ function ofmRenderPanel(){
 }
 let ofmResult=null, ofmTabCuenta='IT', ofmJobIdOfertas=null, ofmFilaPorId={};
 let ofmItemAbierto=null, ofmPromocionesCache={};
+// Persistencia del job activo -- pedido de Maxx 2026-08-28: cerrar la
+// pestaña sin querer (o navegar a otra página) no debería obligar a
+// volver a correr un escaneo de ~1 hora desde cero. El job sigue vivo en
+// el backend aunque el navegador se desconecte -- solo hace falta que el
+// ERP se acuerde a cuál reconectarse. Límite real que esto NO resuelve:
+// si el backend se reinicia (redeploy, restart de Railway) mientras el
+// job corre, el estado en memoria (`_jobs` de ml_ofertas.py) se pierde
+// igual del lado del servidor -- ahí no hay nada que el frontend pueda
+// reconectar, hay que volver a correrlo.
+const OFM_JOB_KEY='ofm_job_activo', OFM_RESULT_KEY='ofm_ultimo_resultado';
+function ofmGuardarJobActivo(jobId,incluirPropias){
+  try{localStorage.setItem(OFM_JOB_KEY,JSON.stringify({jobId,incluirPropias,statusUrl:`${getBackendUrl()}/ml-ofertas/status/${jobId}`,inicio:Date.now()}));}catch(e){}
+}
+function ofmLimpiarJobActivo(){try{localStorage.removeItem(OFM_JOB_KEY);}catch(e){}}
+function ofmGuardarUltimoResultado(result){try{localStorage.setItem(OFM_RESULT_KEY,JSON.stringify({result,ts:Date.now()}));}catch(e){}}
+async function ofmReconectarJobActivo(){
+  let guardado=null;
+  try{guardado=JSON.parse(localStorage.getItem(OFM_JOB_KEY)||'null');}catch(e){}
+  if(guardado&&ofmJobIdOfertas===guardado.jobId)return;// ya nos reconectamos a este en esta misma carga de página
+  if(!guardado){
+    // Sin job corriendo -- restaurar el último resultado ya cargado, si hay.
+    try{
+      const cache=JSON.parse(localStorage.getItem(OFM_RESULT_KEY)||'null');
+      if(cache&&cache.result&&!ofmResult)ofmOnResult(cache.result);
+    }catch(e){}
+    return;
+  }
+  const btn=qs('btn-ofm-run'),status=qs('ofm-status'),logEl=qs('ofm-log');
+  try{
+    const res=await fetch(guardado.statusUrl);
+    const data=await res.json();
+    if(data.status==='not_found'){
+      ofmLimpiarJobActivo();
+      toast('El proceso que estaba corriendo se perdió (el backend se reinició) -- hay que volver a cargarlo','error');
+      return;
+    }
+    if(data.status==='done'){ofmLimpiarJobActivo();ofmOnResult(data.result);toast('✅ Se reconectó solo -- el proceso ya había terminado');return;}
+    if(data.status==='error'){ofmLimpiarJobActivo();toast('❌ El proceso que estaba corriendo terminó en error: '+((data.log||[]).slice(-1)[0]||'error'),'error');return;}
+    // Seguía corriendo -- reconectar el polling donde había quedado, sin volver a pedir nada.
+    ofmJobIdOfertas=guardado.jobId;
+    toast('🔄 Reconectado a un proceso que ya estaba corriendo...');
+    btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Reconectado: '+guardado.jobId;logEl.style.display='block';
+    qs('ofm-incluir-propias').checked=!!guardado.incluirPropias;
+    pollFullJob(guardado.statusUrl,logEl,status,btn,'🔄 Cargar ofertas activas',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
+  }catch(e){/* backend no disponible ahora -- no limpiar, reintentar en la próxima visita a la página */}
+}
 async function ofmRun(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const btn=qs('btn-ofm-run'),status=qs('ofm-status'),logEl=qs('ofm-log');
@@ -2888,11 +2934,13 @@ async function ofmRun(){
     const res=await fetch(`${url}/ml-ofertas/run?incluir_propias=${incluirPropias}`,{method:'POST'});
     const{job_id}=await res.json();
     ofmJobIdOfertas=job_id;status.textContent='Job: '+job_id;
-    pollFullJob(`${url}/ml-ofertas/status/${job_id}`,logEl,status,btn,'🔄 Cargar ofertas activas',ofmOnResult);
+    ofmGuardarJobActivo(job_id,incluirPropias);
+    pollFullJob(`${url}/ml-ofertas/status/${job_id}`,logEl,status,btn,'🔄 Cargar ofertas activas',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
   }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Cargar ofertas activas';}
 }
 function ofmOnResult(result){
   ofmResult=result;
+  ofmGuardarUltimoResultado(result);
   // Bug real 2026-08-27: esto pisaba SIEMPRE el TC manual que hubieras
   // tipeado con el auto de BNA en cada "Cargar ofertas activas" -- el
   // campo seguía mostrando lo que escribiste (nunca se tocó su .value),
