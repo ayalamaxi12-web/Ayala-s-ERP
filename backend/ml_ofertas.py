@@ -240,7 +240,14 @@ class MLOfertasClient(MLFullClient):
             f"https://api.mercadolibre.com/seller-promotions/users/{seller_id}",
             {"app_version": "v2"}, headers,
         )
-        return d.get("results", [])
+        # `.get("results", [])` no alcanza: el default de `.get` solo
+        # aplica si la clave FALTA, no si está presente con valor `None`.
+        # La primera corrida real (2026-08-27) tiró "'NoneType' object is
+        # not iterable" acá -- indica que para al menos una cuenta ML
+        # devolvió `"results": null` explícito en vez de `[]` u omitir la
+        # clave. No se pudo confirmar el caso exacto sin logs de esa
+        # corrida, pero el fix cubre cualquiera de las dos formas.
+        return (d or {}).get("results") or []
 
     def items_de_promocion(self, promotion_id: str, promotion_type: str, cuenta: str) -> list[dict]:
         """Ítems efectivamente enrolados (no candidatos) en una campaña
@@ -258,7 +265,7 @@ class MLOfertasClient(MLFullClient):
             d = self._get(
                 f"https://api.mercadolibre.com/seller-promotions/promotions/{promotion_id}/items", params, headers,
             )
-            resultados = d.get("results", [])
+            resultados = (d or {}).get("results") or []
             salida.extend(resultados)
             cursor = (d.get("paging") or {}).get("searchAfter")
             if not cursor or not resultados:
@@ -275,7 +282,7 @@ class MLOfertasClient(MLFullClient):
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         return self._get(
             f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", {"app_version": "v2"}, headers,
-        )
+        ) or []
 
     def detalle_items_ofertas(self, item_ids: list[str], cuenta: str) -> list[dict]:
         """SKU/categoría/título/cuotas por lote de 20 -- `domain_id` viene
@@ -289,7 +296,7 @@ class MLOfertasClient(MLFullClient):
                 {"ids": ",".join(lote), "attributes": "id,title,seller_custom_field,domain_id,installments"},
                 headers,
             )
-            for entrada in d:
+            for entrada in (d or []):
                 cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
                 if cuerpo:
                     salida.append(cuerpo)
@@ -391,11 +398,11 @@ class MLOfertasEscritura(MLOfertasClient):
         restricción real de ML sobre ítems con pujas."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
         url = f"https://api.mercadolibre.com/items/{item_id}"
-        d = self._put(url, headers, {"price": float(precio), "original_price": float(precio_tachado)})
+        d = self._put(url, headers, {"price": float(precio), "original_price": float(precio_tachado)}) or {}
         if d.get("id"):
             return {"ok": True, "modo": "con_tachado"}
         if d.get("error") == "validation_error" and "has_bids" in (d.get("message") or ""):
-            d2 = self._put(url, headers, {"price": float(precio_tachado)})
+            d2 = self._put(url, headers, {"price": float(precio_tachado)}) or {}
             if d2.get("id"):
                 return {"ok": True, "modo": "sin_tachado_bids",
                         "aviso": "Ítem con pujas activas: se subió el precio base, falta activar el descuento a mano"}
@@ -410,7 +417,7 @@ class MLOfertasEscritura(MLOfertasClient):
         params = {"app_version": "v2", "promotion_type": promotion_type}
         if promotion_id:
             params["promotion_id"] = promotion_id
-        d = self._delete(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", params, headers)
+        d = self._delete(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", params, headers) or {}
         exitosas = d.get("successful_ids") or []
         if exitosas:
             return {"ok": True, "successful_ids": exitosas}
@@ -517,7 +524,7 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
     `_armar_fila` (`SIN_SKU`/`SIN_COSTO_TACTICA`/`SIN_IVA_TACTICA`), sin
     tocar esa función porque ahí `precio_oferta` es obligatorio y acá
     todavía no existe ninguno."""
-    d = ml.detalle_item_completo(item_id, cuenta)
+    d = ml.detalle_item_completo(item_id, cuenta) or {}
     if not d.get("id"):
         return {"encontrado": False}
     sku_ml = d.get("seller_custom_field")
@@ -651,14 +658,14 @@ def ventas_por_item(ml: MLFullClient, cuenta: str, desde_iso: str, hasta_iso: st
              "offset": offset, "limit": 50},
             headers,
         )
-        resultados = d.get("results", [])
+        resultados = (d or {}).get("results") or []
         for orden in resultados:
             for oi in orden.get("order_items") or []:
                 item_id = (oi.get("item") or {}).get("id")
                 if not item_id:
                     continue
                 acumulado[item_id] = acumulado.get(item_id, 0) + (oi.get("quantity") or 0)
-        paging = d.get("paging") or {}
+        paging = (d or {}).get("paging") or {}
         total = paging.get("total", 0)
         offset += len(resultados)
         if offset >= total or not resultados:
@@ -706,7 +713,7 @@ def detectar_skus_sin_oferta(
             {"ids": ",".join(lote), "attributes": "id,title,seller_custom_field,available_quantity"},
             headers,
         )
-        for entrada in d:
+        for entrada in (d or []):
             cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
             if not cuerpo:
                 continue

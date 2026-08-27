@@ -253,6 +253,23 @@ def test_ofertas_activas_sin_promociones_activas_no_pide_items():
     assert incidencias == []
 
 
+def test_ofertas_activas_results_null_explicito_no_rompe():
+    """Bug real 2026-08-27: ML puede devolver `"results": null` (clave
+    presente, valor None) en vez de `[]` u omitir la clave -- `.get(key, [])`
+    NO cubre ese caso porque el default de `.get` solo aplica si la clave
+    falta. Reventaba con "'NoneType' object is not iterable" en la primera
+    corrida real contra el backend desplegado."""
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": None}
+        raise AssertionError(f"no debería llamar: {url}")
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    filas, incidencias = ofertas_activas(ml, _CostoProviderFalso({}), _IvaProviderFalso({}), cuentas=["IT"])
+    assert filas == []
+    assert incidencias == []
+
+
 def test_ofertas_propias_activas_filtra_price_discount_started():
     def fake_get(url, params, headers):
         if url.endswith("/items"):
@@ -443,6 +460,21 @@ def test_listar_promociones_item_cruza_nombre_de_campana():
     assert campana["fecha_desde"] == "2026-08-01" and campana["fecha_hasta"] == "2026-08-31"
     descuento = next(p for p in promos if p["promotion_type"] == "PRICE_DISCOUNT")
     assert descuento["nombre"] == "Descuento propio"
+
+
+def test_listar_promociones_item_sin_nada_activo_no_rompe():
+    """MLA sin ninguna promoción/candidata -- `promociones_item` puede
+    devolver `null` en vez de `[]` (mismo tipo de bug que `results: null`
+    en `promociones_seller`, ver test de arriba)."""
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": []}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return None
+        raise AssertionError(url)
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    assert listar_promociones_item(ml, "IT", "MLA1") == []
 
 
 # ── Buscador puntual (MLA sin oferta activa) ──
