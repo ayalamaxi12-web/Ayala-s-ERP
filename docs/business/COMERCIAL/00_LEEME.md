@@ -123,8 +123,9 @@ manual aparte, sin ser el criterio de esta puerta.
 La base de ese cálculo son las fórmulas y los descuentos que definió la dirección, y no todos
 tienen el mismo respaldo. **Los descuentos de plataforma** (comisión, envío, cuotas) sí están
 verificados contra la API real de Mercado Libre. **Los impuestos de la regla ECOM** (Imp. Cheque
-1,2% e IIBB 5%, sobre precio sin IVA) no salen de ninguna API — son un criterio que definió la
-dirección, no un dato verificado contra una fuente externa. Además, **nada de esto está
+1,2% sobre precio con IVA, IIBB 5% sobre precio sin IVA — corregido 2026-08-27, no es la misma
+base para los dos) no salen de ninguna API — son un criterio que definió la dirección, no un dato
+verificado contra una fuente externa. Además, **nada de esto está
 contrastado contra libros contables** — queda fuera de alcance, no hay acceso a esa fuente desde
 acá. La fuente de verdad, para lo que no viene de la API, es el criterio autorizado por la
 dirección, no una auditoría contable independiente. Que quede explícito para que nadie lo lea

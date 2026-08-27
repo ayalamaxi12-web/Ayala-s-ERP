@@ -2847,8 +2847,8 @@ function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
   const cuotasPct=cuotasOfrecidas?(p.cuotasPct[cuotasOfrecidas]||0):0;
   const cuotas=p.usarCuotas?precioOferta*cuotasPct/100:0;
   const envio=p.usarEnvio?ofmPorTramo(precioOferta,p.envioTramos):0;
-  const impCheque=p.usarImpCheque?precioOferta*p.impChequePct/100:0;
-  const iibb=p.usarIibb?precioOferta*p.iibbPct/100:0;
+  const impCheque=p.usarImpCheque?precioOferta*p.impChequePct/100:0;// sobre precio CON IVA (bruto)
+  const iibb=p.usarIibb?baseSinIva*p.iibbPct/100:0;// corregido 2026-08-27: sobre precio SIN IVA (neto), no precioOferta
   const margen=baseSinIva-comision-costoFijo-cuotas-envio-impCheque-iibb-costoARS;
   const margenPct=baseSinIva?margen/baseSinIva:null;
   return{baseSinIva,comision,costoFijo,cuotas,envio,impCheque,iibb,margen,margenPct};
@@ -3081,7 +3081,8 @@ function ofmSimularActivar(itemId){
     <span>− IIBB: $${fmtN(Math.round(m.iibb))}</span>
     <span>− Costo producto: $${fmtN(Math.round(costoARS))}</span>
     <span style="color:${color}">= Margen: $${fmtN(Math.round(m.margen))}</span>
-  </div>`;
+  </div>
+  <div style="margin-top:2px;font-size:8px;color:var(--text3)">Costo producto = costo USD (Táctica, SKU ${f.sku||'sin SKU'}) × TC. USD: ${f._costoUnitSinIva.toFixed(2)} × TC: ${fmtN(tc)} = $${fmtN(Math.round(costoARS))} -- si no coincide con Táctica, comparar el SKU exacto.</div>`;
   out.innerHTML=avisoOrden+resumen+desglose;
 }
 async function ofmConfirmarActivar(itemId){

@@ -85,9 +85,9 @@ base_sin_iva   = precio_oferta / (1 + iva_pct)          # IVA se quita primero; 
 comision       = precio_oferta × comision_categoria_pct  # editable por categoría
 costo_fijo     = tramo_por_precio(precio_oferta)         # 1255 / 2500 / 3030 / 0 (solo <33k, regla Flex)
 cuotas         = precio_oferta × cuotas_pct              # 0 si no ofrece cuotas; 8,4 / 12,3 / 15,7 / 19,2%
-envio          = regla_envio(precio_oferta)              # 0 si <33k opcional; si aplica, tabla con descuento reputación
-imp_cheque     = precio_oferta × 1,2%
-iibb           = precio_oferta × 5%
+envio          = regla_envio(precio_oferta)              # 0 si <33k; si aplica, tabla con descuento reputación
+imp_cheque     = precio_oferta × 1,2%                    # sobre el precio CON IVA (bruto)
+iibb           = base_sin_iva × 5%                       # corregido 2026-08-27: sobre el precio SIN IVA (neto), no sobre precio_oferta
 costo_producto = costo_sin_iva_desde_TACTICA × TC        # costo/IVA SIEMPRE desde Táctica (fuente oficial), NO del PM Sheet
 
 margen_$   = base_sin_iva − comision − costo_fijo − cuotas − envio − imp_cheque − iibb − costo_producto

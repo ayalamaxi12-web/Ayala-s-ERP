@@ -44,8 +44,9 @@ def test_formula_canonica_caso_toner():
     # Precio de oferta $40.000, categoría Tóners (15,5%), sin cuotas,
     # costo de producto ya en ARS $15.000. Verificado con Decimal aparte:
     # base_sin_iva=33057.85..., comisión=6200, envío=7000 (tramo 33k-50k),
-    # imp.cheque=480, iibb=2000, costo_fijo=0 (>=33k), margen=2377.85...,
-    # margen%=7,193%.
+    # imp.cheque=480 (sobre precio CON IVA), iibb=1652.89 (sobre precio
+    # SIN IVA -- corregido 2026-08-27, antes era 2000 sobre precio_oferta),
+    # costo_fijo=0 (>=33k), margen=2724.96..., margen%=8,243%.
     params = ParametrosMargen()
     r = calcular_margen_oferta(
         precio_oferta=Decimal(40000), iva_factor=Decimal("1.21"), costo_producto_ars=Decimal(15000),
@@ -57,9 +58,9 @@ def test_formula_canonica_caso_toner():
     assert r.cuotas == Decimal(0)
     assert r.envio == Decimal(7000)
     assert r.imp_cheque == Decimal("480.0")
-    assert r.iibb == Decimal(2000)
-    assert r.margen == Decimal("2377.85123966942148760330579")
-    assert r.margen_pct == Decimal("0.07193000000000000000000000014")
+    assert r.iibb == Decimal("1652.89256198347107438016529")
+    assert r.margen == Decimal("2724.95867768595041322314050")
+    assert r.margen_pct == Decimal("0.08243000000000000000000000011")
 
 
 def test_comision_general_si_el_dominio_no_esta_en_la_tabla():

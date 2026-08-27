@@ -6,29 +6,29 @@ Fases 1 y 2 de `docs/business/COMERCIAL/canales/mercadolibre/REQ_MODULO_OFERTAS_
 oferta en ML (Fase 3, gateada por `docs/business/COMERCIAL/00_LEEME.md` §5,
 no implementada acá).
 
-**Fórmula canónica (REQ §2.0) — se replica EXACTA, no se reinterpreta:**
+**Fórmula canónica (REQ §2.0), corregida 2026-08-27 por Maxx en vivo:**
 
     base_sin_iva   = precio_oferta / (1 + iva_pct)
     comision       = precio_oferta × comisión_por_dominio_ML  (o general si no está en la tabla)
     costo_fijo     = tramo_por_precio(precio_oferta)          # 1255/2500/3030/0, solo <33k
     cuotas         = precio_oferta × cuotas_pct                # 0 si no ofrece cuotas
-    envio          = tramo_por_precio(precio_oferta)           # con descuento MercadoLíder Platinum
-    imp_cheque     = precio_oferta × 1,2%
-    iibb           = precio_oferta × 5%
+    envio          = tramo_por_precio(precio_oferta)           # 0 si <33k, con descuento MercadoLíder Platinum si aplica
+    imp_cheque     = precio_oferta × 1,2%                      # sobre el precio CON IVA (bruto)
+    iibb           = base_sin_iva × 5%                         # sobre el precio SIN IVA (neto) -- NO sobre precio_oferta
     costo_producto = costo_sin_iva_desde_TACTICA × TC          # nunca del PM Sheet
 
     margen_$  = base_sin_iva − comision − costo_fijo − cuotas − envio − imp_cheque − iibb − costo_producto
     margen_%  = margen_$ / base_sin_iva
 
-Nota deliberada (no es un olvido): a diferencia del panel viejo de
-Competidores ML (`compMargenAt` en `docs/index.html`, que restaba IIBB
-sobre el neto), acá IIBB e Imp. Cheque se calculan sobre `precio_oferta`
-(bruto), tal como pide el REQ §1.2.c/§2.0 -- es una regla de negocio propia
-de Ofertas, distinta de `RENTABILIDAD_FUNCIONAL.md.md` §5.2 (que los pone
-sobre bases distintas) y distinta del panel viejo. No se "corrige" para
-que coincida con esas otras dos fuentes -- el REQ es explícito ("usar
-EXACTAMENTE esto") y esas dos fuentes resuelven preguntas distintas
-(reprocesar una orden ya cerrada, o el margen aproximado de un competidor).
+Nota histórica: la primera versión de este módulo ponía IIBB también sobre
+`precio_oferta` (bruto), documentado en ese momento como una divergencia
+deliberada del panel viejo de Competidores ML (`compMargenAt` en
+`docs/index.html`, que sí restaba IIBB sobre el neto) por una lectura
+literal del REQ §1.2.c/§2.0. Maxx corrigió esto en vivo el 2026-08-27:
+Imp. Cheque va sobre el bruto, IIBB va sobre el neto -- no son la misma
+base, y el panel viejo tenía razón en eso. El REQ y este módulo quedan
+actualizados a este criterio; no es una reinterpretación propia, es la
+corrección que dio la dirección.
 
 **Categoría → comisión, por `domain_id`, no por nombre de categoría.**
 `category_id` de una publicación no es estable como clave de negocio (dos
@@ -222,8 +222,12 @@ def calcular_margen_oferta(
 
     envio = _por_tramo(precio_oferta, params.envio_tramos) if params.usar_envio else Decimal(0)
 
+    # Corregido 2026-08-27 (Maxx, en vivo): Imp. Cheque va sobre el precio
+    # CON IVA (precio_oferta, bruto) -- IIBB va sobre el precio SIN IVA
+    # (base_sin_iva). No son la misma base. Esto corrige lo que decía el
+    # docstring del módulo (que asumía las dos sobre precio bruto).
     imp_cheque = (precio_oferta * params.imp_cheque_pct / 100) if params.usar_imp_cheque else Decimal(0)
-    iibb = (precio_oferta * params.iibb_pct / 100) if params.usar_iibb else Decimal(0)
+    iibb = (base_sin_iva * params.iibb_pct / 100) if params.usar_iibb else Decimal(0)
 
     margen = base_sin_iva - comision - costo_fijo - cuotas - envio - imp_cheque - iibb - costo_producto_ars
     margen_pct = (margen / base_sin_iva) if base_sin_iva else None
