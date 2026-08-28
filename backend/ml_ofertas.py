@@ -121,6 +121,7 @@ que sea exclusivo de pujas de subasta.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
@@ -446,34 +447,40 @@ def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None, respues
     """`has_bids` no está documentado en developers.mercadolibre.com.ar
     (buscado explícitamente 2026-08-28, ver docstring del módulo).
 
-    Caso 1 confirmado con datos reales (MLA852181648, 2026-08-28): precio
-    mayorista/B2B (`standard_price_by_quantity` en `tags`) -- esos ítems
-    tienen su PROPIO endpoint de precio (`POST /items/{id}/prices/
-    standard/quantity`, developers.mercadolibre.com.ar/es_ar/
-    precio-por-cantidad, no implementado acá), `has_bids` ahí es
-    probablemente un código reusado por ML para "el precio no se maneja
-    por acá".
+    **Causa real CONFIRMADA 2026-08-28 (MLA627267951, con la respuesta
+    completa del PUT, no solo el `message` recortado)**:
+    `has_bids:true` es ruido -- el `cause` real de la respuesta trae
+    `{"code": "field_not_updatable", "references": ["original_price"],
+    "message": "original_price is not modifiable."}`. Es decir: ML
+    rechaza el PUT porque `original_price` **no se puede modificar por
+    esta vía**, punto -- no tiene nada que ver con pujas ni con
+    negociaciones pendientes, esas dos hipótesis (probadas antes, ver
+    abajo) eran ruido también. `PUT /items/{id}` con `original_price`
+    está roto para el tachado -- hace falta un mecanismo distinto
+    (`/seller-promotions/` o la API de Precios nueva, en investigación).
 
-    Caso 2 (MLA627267951, 2026-08-28): mismo error, SIN ese tag -- la
-    hipótesis de "ofertas de compradores pendientes" quedó descartada por
-    Maxx en vivo (si fuera por eso, ML tampoco debería dejar editar el
-    precio a mano DENTRO de ML, y no hay evidencia de que pase). Causa
-    real todavía sin confirmar para este caso.
-
-    Hallazgo 2026-08-28 (investigación web, no doc oficial): el sufijo
-    `[status:X, has_bids:Y]` parece ser un formato GENÉRICO que ML pega a
-    varios errores distintos de "cannot update item" -- se encontró un
-    ejemplo real con `has_bids:false` pegado a un error TOTALMENTE
-    distinto (`item.listing_type_id.not_modifiable`, sobre tipo de
-    publicación, no precio). Es decir: puede que `has_bids` no sea la
-    causa real en absoluto, solo un dato de contexto que ML siempre
-    agrega -- la causa real puede estar en otro campo de la respuesta
-    (`error`, `cause`) que antes no se mostraba, solo el `message`
-    recortado. Por eso ahora se manda la respuesta CRUDA completa del PUT
-    en el mensaje, no solo el string de `message` -- para no seguir
-    perdiendo esa información la próxima vez que pase."""
+    Caso 1 (MLA852181648, 2026-08-28): precio mayorista/B2B
+    (`standard_price_by_quantity` en `tags`) -- esos ítems tienen su
+    PROPIO endpoint de precio (`POST /items/{id}/prices/standard/
+    quantity`, developers.mercadolibre.com.ar/es_ar/precio-por-cantidad,
+    no implementado acá) -- causa distinta a la de `field_not_updatable`,
+    se mantiene separada porque ahí el `cause` puede no traer esa
+    referencia."""
     estado_item = estado_item or {}
+    respuesta_completa = respuesta_completa or {}
     tags = estado_item.get("tags") or []
+
+    causas = respuesta_completa.get("cause") or []
+    original_price_bloqueado = any(
+        c.get("code") == "field_not_updatable" and "original_price" in (c.get("references") or [])
+        for c in causas
+    )
+    if original_price_bloqueado:
+        return (f"ML rechaza el cambio (mensaje real: \"{mensaje_ml}\"). La causa REAL, confirmada con la "
+                "respuesta completa: `original_price is not modifiable` -- el tachado no se puede fijar así en "
+                "esta publicación, `has_bids` en el mensaje es ruido, no la causa. `PUT /items/{id}` no es el "
+                "camino para el tachado acá -- hace falta otro mecanismo (en investigación, no implementado "
+                "todavía). No hay una forma de fijarlo desde el ERP por ahora.")
     if "standard_price_by_quantity" in tags:
         return (f"ML rechaza el cambio de precio (mensaje real: \"{mensaje_ml}\"). Esta publicación tiene precio "
                 "mayorista/por cantidad (tag `standard_price_by_quantity`) -- ese tipo de publicación tiene su propio "
@@ -483,8 +490,8 @@ def _explicar_has_bids(mensaje_ml: str, estado_item: dict | None = None, respues
                    f"status={estado_item.get('status')!r}, tags={tags!r}")
     respuesta_txt = f" Respuesta completa del PUT: {respuesta_completa!r}." if respuesta_completa else ""
     return (f"ML no permite cambiar el precio de esta publicación ahora mismo (mensaje real: \"{mensaje_ml}\").{respuesta_txt} "
-            "No tiene precio mayorista ni tachado previo, así que ninguna de las dos hipótesis que ya probamos "
-            f"explica esto. Causa real no confirmada -- estado crudo del ítem para diagnosticar: {diagnostico}. "
+            "No tiene precio mayorista y no coincide con el patrón confirmado de `original_price is not "
+            f"modifiable`, así que ninguna causa ya confirmada explica esto. Estado crudo del ítem: {diagnostico}. "
             "Revisá la publicación directo en ML antes de reintentar.")
 
 
@@ -694,6 +701,21 @@ class MLOfertasEscritura(MLOfertasClient):
         return {"ok": False, "error": d.get("message") or str(d)}
 
 
+_PCT_EN_MENSAJE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%|allowed is (\d+(?:[.,]\d+)?)")
+
+
+def _porcentaje_de_mensaje(mensaje: str) -> Decimal | None:
+    """Best-effort: si el mensaje de error de ML menciona un número de
+    porcentaje (ej. "the minimum percentage allowed is 26.000000" o
+    similar), lo extrae para mostrarlo limpio en el aviso. Si no aparece
+    ninguno, devuelve `None` y se muestra el mensaje crudo -- nunca se
+    inventa un número que ML no dijo."""
+    m = _PCT_EN_MENSAJE.search(mensaje or "")
+    if not m:
+        return None
+    return Decimal((m.group(1) or m.group(2)).replace(",", "."))
+
+
 def activar_en_campana_tradicional(
     ml: MLOfertasEscritura, cuenta: str, item_id: str, precio_pm: Decimal,
     descuento_pct: Decimal = Decimal(25), promotion_id: str | None = None,
@@ -720,6 +742,32 @@ def activar_en_campana_tradicional(
     (coincide con lo que ahí se ve como "%"), no un % de inflación
     directa sobre el tachado.
 
+    **% mínimo/forzado por la campaña -- chequeo reactivo, no preventivo
+    (confirmado 2026-08-29, developers.mercadolibre.com.ar/es_ar/
+    campanas-del-vendedor en vivo): el detalle de campaña y el listado de
+    ítems no traen ningún campo de mínimo/sugerido -- ML solo lo revela
+    al intentar escribir, como error si rechaza el valor, o aplicando un
+    resultado distinto al pedido. Por eso acá no se lee nada por
+    adelantado: se hace el enrolamiento real y se verifica el resultado
+    contra lo pedido.** Cada campaña puede exigir un % propio, variable
+    (NO 25%, NO ningún valor fijo -- eso lo decide ML por campaña, se lee
+    de la respuesta real cada vez). Regla firme (pedido explícito de
+    Maxx): nunca queda activo un % que no se pidió. Dos casos:
+    - ML rechaza `meter_en_campana` de plano (ej. fuera del piso/techo
+      genérico 10%-80%) → se revierte el tachado (paso 1) al precio que
+      tenía el ítem antes de esta operación, y se avisa con el mensaje de
+      ML (más el número que se haya podido extraer de ahí, ver
+      `_porcentaje_de_mensaje`).
+    - ML acepta pero el `price`/`original_price` reales no coinciden con
+      lo pedido (aplicó su propio mínimo en silencio) → se saca la
+      publicación de la campaña (`sacar_de_promocion`) Y se revierte el
+      tachado, dejando el ítem exactamente como estaba antes de llamar a
+      esta función. Nunca se reintenta solo con el % que impuso ML --
+      eso lo decide Maxx viendo el aviso.
+    Los reintentos ante 429/503 de la reversión los cubre el mismo
+    backoff que ya tienen `fijar_precio_base`/`sacar_de_promocion` (vía
+    `_put_real`/`_delete_real`) -- no hace falta duplicarlo acá.
+
     `promotion_id` opcional: si no se pasa, se resuelve solo con la
     primera `SELLER_CAMPAIGN` con `status` `started` o `pending` de
     `promociones_seller` -- asume que Maxx tiene una sola campaña propia
@@ -740,16 +788,57 @@ def activar_en_campana_tradicional(
         return {"ok": False, "error": f"Descuento de {descuento_pct}% inválido -- tiene que ser menor a 100%."}
     precio_tachado = (precio_pm / (1 - descuento_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
+    # Precio previo del ítem -- para poder restaurarlo tal cual estaba si
+    # el enrolamiento no da el % pedido (ver docstring). Se lee ANTES de
+    # tocar nada; si esta lectura falla, se sigue igual (mismo criterio
+    # que el resto del módulo: no bloquear por un GET que no es central),
+    # pero una reversión posterior quedaría sin poder restaurar el precio.
+    headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
+    previo = ml._get(f"https://api.mercadolibre.com/items/{item_id}", {"attributes": "id,price"}, headers) or {}
+    precio_previo = previo.get("price")
+
     r1 = ml.fijar_precio_base(item_id, cuenta, precio_tachado)
     if not r1.get("ok"):
         return {"ok": False, "error": f"No se pudo fijar el precio base (tachado ${precio_tachado}): {r1.get('error')}"}
 
+    def _revertir_precio(motivo: str) -> str:
+        if precio_previo is None:
+            return f"{motivo} No se pudo leer el precio anterior antes de empezar, así que no se lo puede restaurar solo -- revisá la publicación a mano."
+        rv = ml.fijar_precio_base(item_id, cuenta, Decimal(str(precio_previo)))
+        if rv.get("ok"):
+            return f"{motivo} Precio restaurado a ${precio_previo} (el que tenía antes de esta operación)."
+        return f"{motivo} Además, no se pudo restaurar el precio anterior (${precio_previo}): {rv.get('error')} -- revisá la publicación a mano."
+
     r2 = ml.meter_en_campana(item_id, cuenta, promotion_id, precio_pm)
     if not r2.get("ok"):
-        return {"ok": False, "error": f"Precio base fijado en ${precio_tachado}, pero no se pudo enrolar en la campaña: {r2.get('error')}"}
+        mensaje = r2.get("error") or ""
+        pct_ml = _porcentaje_de_mensaje(mensaje)
+        aviso = _revertir_precio(f"ML rechazó el enrolamiento en la campaña (pediste {descuento_pct}%): \"{mensaje}\".")
+        return {"ok": False, "error": aviso, "pedido_pct": float(descuento_pct),
+                "minimo_ml_pct": float(pct_ml) if pct_ml is not None else None}
+
+    # Verificación del resultado real -- nunca se confía en que ML aplicó
+    # exactamente lo pedido solo porque respondió sin error (ver docstring:
+    # puede aceptar con un % propio distinto, sin avisar).
+    precio_real, tachado_real = r2.get("price"), r2.get("original_price")
+    coincide = (
+        precio_real is not None and tachado_real is not None
+        and abs(float(precio_real) - float(precio_pm)) < 1
+        and abs(float(tachado_real) - float(precio_tachado)) < 1
+    )
+    if not coincide:
+        r3 = ml.sacar_de_promocion(item_id, cuenta, "SELLER_CAMPAIGN", promotion_id)
+        detalle_salida = "Se sacó de la campaña." if r3.get("ok") else f"Y no se pudo sacar de la campaña automáticamente: {r3.get('error')} -- revisá la publicación a mano."
+        aviso = _revertir_precio(
+            f"ML aplicó un resultado distinto al pedido -- pedido: precio ${precio_pm} con tachado ${precio_tachado} "
+            f"({descuento_pct}%), real: precio {precio_real!r}, tachado {tachado_real!r}. {detalle_salida}"
+        )
+        return {"ok": False, "error": aviso, "pedido_pct": float(descuento_pct),
+                "precio_pedido": float(precio_pm), "precio_real": precio_real,
+                "tachado_pedido": float(precio_tachado), "tachado_real": tachado_real}
 
     return {"ok": True, "promotion_id": promotion_id, "nombre_campana": nombre_campana,
-            "precio": r2.get("price"), "original_price": r2.get("original_price"),
+            "precio": precio_real, "original_price": tachado_real,
             "precio_tachado_pedido": float(precio_tachado)}
 
 
