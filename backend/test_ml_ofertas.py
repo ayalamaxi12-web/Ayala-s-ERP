@@ -560,7 +560,9 @@ def test_fijar_precio_base_ok():
     r = ml.fijar_precio_base("MLA1", "IT", Decimal(12000))
 
     assert r == {"ok": True}
-    assert _fake_put.calls[0][2] == {"price": 12000.0, "original_price": 12000.0}  # sin descuento real
+    # Corregido 2026-08-31: solo `price`, sin `original_price` -- mandar
+    # los dos juntos era la causa real del rechazo `field_not_updatable`.
+    assert _fake_put.calls[0][2] == {"price": 12000.0}
 
 
 def test_fijar_precio_base_no_confirma_por_get():
@@ -593,7 +595,13 @@ def test_fijar_precio_base_has_bids_no_reintenta():
 
     assert r["ok"] is False
     assert "has_bids:true" in r["error"]
-    assert "ninguna de las dos hipótesis" in r["error"]
+    # Sin `cause` en la respuesta (no se puede confirmar `field_not_updatable`)
+    # y sin tag de mayorista -> cae al fallback genérico, que no afirma
+    # ninguna causa ya confirmada (ver `_explicar_has_bids`). El texto
+    # exacto de este assert quedó desactualizado de un refactor anterior
+    # (afirmaba "ninguna de las dos hipótesis", frase que ya no existe en
+    # el código) -- corregido 2026-08-31 para reflejar el mensaje real.
+    assert "ninguna causa ya confirmada explica esto" in r["error"]
     assert "buying_mode=" in r["error"]  # diagnóstico crudo para no seguir adivinando a ciegas
 
 
@@ -645,6 +653,8 @@ def test_activar_en_campana_tradicional_flujo_completo():
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
             return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional Agosto"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return []  # sin candidato para C-1 -- sin rango, no hay ajuste que hacer
         if url.endswith("/items/MLA1"):
             return {"id": "MLA1", "price": 13333.0}
         raise AssertionError(url)
@@ -662,7 +672,8 @@ def test_activar_en_campana_tradicional_flujo_completo():
     assert r["promotion_id"] == "C-1"
     assert r["nombre_campana"] == "Oferta Tradicional Agosto"
     assert r["precio_tachado_pedido"] == 13333.0  # 10000 / 0.75
-    assert _fake_put.calls[0][2] == {"price": 13333.0, "original_price": 13333.0}
+    assert "aviso" not in r  # sin candidato en el rango, no hubo que ajustar el % estándar
+    assert _fake_put.calls[0][2] == {"price": 13333.0}  # sin original_price, ver fijar_precio_base
     assert _fake_post.calls[0][2] == {"promotion_id": "C-1", "promotion_type": "SELLER_CAMPAIGN", "deal_price": 10000.0}
 
 
@@ -688,6 +699,124 @@ def test_activar_en_campana_tradicional_no_sigue_si_falla_precio_base():
     assert r["ok"] is False
     assert "No se pudo fijar el precio base" in r["error"]
     assert _fake_post.calls == []  # no se intentó enrolar si el precio base falló
+
+
+def test_activar_en_campana_tradicional_infla_tachado_si_ml_exige_mas_descuento():
+    """El 25% estándar (tachado $13.333 para precio_pm=$10.000) no le
+    alcanza a ML para esta campaña sobre este ítem -- `max_discounted_price`
+    (leído DESPUÉS de fijar el tachado estándar) da $9.500, por debajo de
+    los $10.000 que precio_pm tiene que valer. Se recalcula el tachado
+    necesario ($14.035, ver cálculo exacto con Decimal) para que precio_pm
+    siga siendo el precio final -- nunca se toca precio_pm -- y se avisa
+    (no bloqueante) que quedó a ~28.7%, no al 25% de siempre."""
+    # Estado mutable: `fijar_precio_base` verifica con un GET aparte
+    # después de cada PUT (nunca confía en el eco) -- acá se llama DOS
+    # veces con precios distintos (13333, después 14035), así que el fake
+    # de items/MLA1 tiene que reflejar el último precio puesto, no un
+    # valor fijo, para que ambas verificaciones puedan pasar.
+    estado_item = {"price": 20000.0}  # precio previo, antes de esta operación
+
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional Agosto"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return [{"id": "C-1", "type": "SELLER_CAMPAIGN", "min_discounted_price": 2000.0, "max_discounted_price": 9500.0}]
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": estado_item["price"]}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        estado_item["price"] = body["price"]
+        return {"id": "MLA1", "price": body["price"]}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+    _fake_post.responder = lambda url, headers, body: {"price": 10000.0, "original_price": 14035.0}
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is True
+    assert r["precio_tachado_pedido"] == 14035.0  # no 13333 -- el 25% estándar no alcanzaba
+    assert "28.7%" in r["aviso"]
+    assert "no al 25%" in r["aviso"]
+    assert "$10000" in r["aviso"] or "10000" in r["aviso"]  # precio final, sin cambios
+    # dos PUT de precio: el estándar (13333) y el ajustado (14035) -- nunca uno solo.
+    assert [c[2]["price"] for c in _fake_put.calls] == [13333.0, 14035.0]
+    assert _fake_post.calls[0][2] == {"promotion_id": "C-1", "promotion_type": "SELLER_CAMPAIGN", "deal_price": 10000.0}
+
+
+def test_activar_en_campana_tradicional_revierte_si_precio_pm_bajo_el_piso():
+    """precio_pm ($10.000) queda por DEBAJO de `min_discounted_price`
+    ($15.000) -- inflar el tachado no mueve el piso, así que no hay ajuste
+    posible. Se revierte el precio al que tenía antes ($20.000) y se corta
+    sin intentar `meter_en_campana`."""
+    # Mismo motivo que en el test anterior: el fake de items/MLA1 tiene
+    # que reflejar el último precio puesto (13333 al fijar el tachado
+    # estándar, después 20000 al revertir), no un valor fijo.
+    estado_item = {"price": 20000.0}
+
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return [{"id": "C-1", "type": "SELLER_CAMPAIGN", "min_discounted_price": 15000.0, "max_discounted_price": 19000.0}]
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": estado_item["price"]}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        estado_item["price"] = body["price"]
+        return {"id": "MLA1", "price": body["price"]}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is False
+    assert "por DEBAJO del piso" in r["error"]
+    assert "Precio restaurado a $20000.0" in r["error"]
+    assert r["min_discounted_price"] == 15000.0
+    assert _fake_post.calls == []  # nunca se intentó enrolar
+    assert _fake_put.calls[-1][2] == {"price": 20000.0}  # reversión al precio previo
+
+
+def test_activar_en_campana_tradicional_corta_por_challenge_seguridad():
+    """Si ML devuelve un mensaje que huele a verificación de seguridad
+    (QR/facial, heurística no confirmada contra la API real -- ver
+    docstring de `_es_challenge_seguridad`), se revierte lo tocado y se
+    corta con `requiere_verificacion_manual` -- nunca se reintenta solo."""
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": 20000.0}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        if body["price"] == 20000.0:
+            return {"id": "MLA1", "price": 20000.0}  # la reversión sí anda
+        return {"error": "forbidden", "message": "Additional security challenge required: TOTP verification"}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is False
+    assert r["requiere_verificacion_manual"] is True
+    assert "verificación de seguridad" in r["error"]
+    assert "Precio restaurado a $20000.0" in r["error"]
+    assert _fake_post.calls == []  # nunca se intentó meter en campaña
 
 
 def test_listar_promociones_item_cruza_nombre_de_campana():
