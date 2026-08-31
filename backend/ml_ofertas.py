@@ -778,25 +778,38 @@ def activar_en_campana_tradicional(
     descontar ese mismo X% no son operaciones inversas: para X=25%,
     ×1,25 después ×0,75 = ×0,9375, un 6,25% por debajo del original).
 
-    **% mínimo/forzado por la campaña -- chequeo PREVENTIVO, corregido
-    2026-08-31 (la versión anterior, del 2026-08-29, decía que esto era
-    imposible -- estaba mal).** `promociones_item` (`GET /seller-
-    promotions/items/{id}`, el mismo endpoint que ya se usa para detectar
-    `PRICE_DISCOUNT`) trae, para CADA promoción candidata del ítem
-    -- campañas propias incluidas --, `min_discounted_price`/
-    `max_discounted_price`/`suggested_discounted_price`. Confirmado en
-    vivo (MLA852181648, 2026-08-31) que esos números son relativos al
-    `price` vigente del ítem EN EL MOMENTO de la lectura -- por eso el
-    orden acá es: (1) fijar el tachado estándar (`descuento_pct`), (2)
-    leer el rango real de la campaña con ese tachado ya puesto, (3) si
-    `precio_pm` no entra en `max_discounted_price`, no se toca
-    `precio_pm` -- se vuelve a inflar el tachado (proporcional al techo
-    real observado) hasta que sí entre, y se avisa (`aviso` en el
-    resultado, NO bloqueante -- el precio final no cambió, pedido
-    explícito de Maxx) que quedó a un % distinto del estándar. Si
-    `precio_pm` cae por DEBAJO de `min_discounted_price`, no hay ajuste
-    posible (inflar el tachado no mueve el piso) -- eso sí revierte todo
-    y corta, bloqueante.
+    **% mínimo/forzado por la campaña -- chequeo preventivo CUANDO SE
+    PUEDE, escalada reactiva de respaldo SIEMPRE (corregido 2026-08-31,
+    dos veces el mismo día -- ver abajo por qué el chequeo preventivo solo
+    no alcanza).** `promociones_item` (`GET /seller-promotions/items/{id}`,
+    el mismo endpoint que ya se usa para detectar `PRICE_DISCOUNT`) trae,
+    para una promoción candidata (`status: candidate`) del ítem, `min_
+    discounted_price`/`max_discounted_price`/`suggested_discounted_price`,
+    relativos al `price` vigente del ítem EN EL MOMENTO de la lectura. Por
+    eso el orden es: (1) fijar el tachado estándar (`descuento_pct`), (2)
+    leer el rango con ese tachado ya puesto, (3) si `precio_pm` no entra
+    en `max_discounted_price`, inflar el tachado (proporcional al techo
+    observado) para que SÍ entre, sin tocar `precio_pm`. Si `precio_pm`
+    cae por DEBAJO de `min_discounted_price`, no hay ajuste posible
+    (inflar el tachado no mueve el piso) -- revierte todo y corta,
+    bloqueante.
+
+    **Por qué el chequeo preventivo NO es una garantía (confirmado en
+    vivo 2026-08-31, mismo día, segunda ronda de pruebas sobre
+    MLA852181648):** el rango (`min/max/suggested_discounted_price`) solo
+    aparece cuando la campaña sigue en `status: candidate` para ese ítem
+    -- apenas el ítem fue enrolado una vez en ESA campaña puntual (aunque
+    después se lo haya sacado), pasa a `status: started` y el rango
+    desaparece de la respuesta, dejando solo `price`/`original_price`.
+    Por eso el paso 3 no confía ciegamente en que el chequeo preventivo
+    alcanzó: si `meter_en_campana` igual rechaza con un mensaje de
+    credibilidad (`ERROR_CREDIBILITY_DISCOUNTED_PRICE` / "not credible"),
+    se escala probando porcentajes fijos crecientes (30%, 35%, 40%... hasta
+    70%) -- cada uno vuelve a inflar el tachado y reintenta, SIEMPRE con
+    `precio_pm` fijo como precio final. No tiene costo real escalar más:
+    el tachado es puro teatro. Si ML rechaza por un motivo que NO es de
+    credibilidad (otra causa real), no se escala -- inflar más el tachado
+    no arregla eso, se revierte y corta.
 
     **Verificación de seguridad (QR/reconocimiento facial) -- SIEMPRE
     bloqueante, nunca se reintenta solo.** Confirmado en vivo 2026-08-31
@@ -914,15 +927,51 @@ def activar_en_campana_tradicional(
             "(el tachado es solo para posicionar, no es una rebaja real)."
         )
 
+    def _es_rechazo_por_credibilidad(mensaje: str) -> bool:
+        return "credib" in (mensaje or "").lower()  # cubre ERROR_CREDIBILITY_DISCOUNTED_PRICE y "not credible"
+
     # Paso 3: enrolar con el precio final SIEMPRE clavado en precio_pm.
+    pct_probado = (1 - precio_pm / tachado_aplicado) * 100  # % efectivo ya aplicado (estándar o ajustado en paso 2)
     r2 = ml.meter_en_campana(item_id, cuenta, promotion_id, precio_pm)
+
+    # Escalada de respaldo si ML rechaza por "no creíble" -- ver docstring
+    # (el chequeo preventivo del paso 2 no está disponible si el ítem ya
+    # tiene historial con esta campaña puntual). Sin costo real: el
+    # tachado es teatro, precio_pm nunca se toca acá.
+    if not r2.get("ok") and _es_rechazo_por_credibilidad(r2.get("error") or ""):
+        for pct_intento in (Decimal(30), Decimal(35), Decimal(40), Decimal(45), Decimal(50), Decimal(60), Decimal(70)):
+            if pct_intento <= pct_probado:
+                continue
+            pct_probado = pct_intento
+            tachado_intento = (precio_pm / (1 - pct_intento / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            r1c = ml.fijar_precio_base(item_id, cuenta, tachado_intento)
+            if not r1c.get("ok"):
+                challenge = _si_es_challenge(r1c.get("error") or "")
+                if challenge:
+                    return challenge
+                continue  # este escalón falló por otra razón -- probar el siguiente
+            tachado_aplicado = tachado_intento
+            r2 = ml.meter_en_campana(item_id, cuenta, promotion_id, precio_pm)
+            if r2.get("ok"):
+                pct_real = float((1 - precio_pm / tachado_aplicado) * 100)
+                aviso_pct = (
+                    f"Quedó al {pct_real:.1f}% de descuento visual, no al {float(descuento_pct):.0f}% de siempre -- "
+                    "ML no aceptaba menos para esta campaña sobre este ítem (se escaló hasta que entró). El precio "
+                    f"final NO cambió, sigue siendo ${precio_pm} (el tachado es solo para posicionar, no es una "
+                    "rebaja real)."
+                )
+                break
+            if not _es_rechazo_por_credibilidad(r2.get("error") or ""):
+                break  # rechazo de otro tipo -- escalar el % no lo va a arreglar
+
     if not r2.get("ok"):
         mensaje = r2.get("error") or ""
         challenge = _si_es_challenge(mensaje)
         if challenge:
             return challenge
         pct_ml = _porcentaje_de_mensaje(mensaje)
-        aviso = _revertir_precio(f"ML rechazó el enrolamiento en la campaña: \"{mensaje}\".")
+        sufijo_escalada = f", incluso escalando el tachado hasta {float(pct_probado):.0f}%" if pct_probado > descuento_pct else ""
+        aviso = _revertir_precio(f"ML rechazó el enrolamiento en la campaña{sufijo_escalada}: \"{mensaje}\".")
         return {"ok": False, "error": aviso, "pedido_pct": float(descuento_pct),
                 "minimo_ml_pct": float(pct_ml) if pct_ml is not None else None}
 

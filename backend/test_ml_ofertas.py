@@ -821,6 +821,88 @@ def test_activar_en_campana_tradicional_corta_por_challenge_seguridad():
     assert _fake_post.calls == []  # nunca se intentó meter en campaña
 
 
+def test_activar_en_campana_tradicional_escala_si_rechazo_por_credibilidad():
+    """Caso real 2026-08-31 (MLA852181648, segunda ronda de pruebas): el
+    ítem ya tenía historial con esta campaña puntual, así que
+    `promociones_item` no trae `min/max_discounted_price` (sin candidato,
+    ver docstring -- pasó a `status: started`) y el chequeo preventivo del
+    paso 2 no tiene nada para ajustar. El 25% estándar (tachado $13.333) y
+    el primer escalón (30%, $14.286) se rechazan por
+    `ERROR_CREDIBILITY_DISCOUNTED_PRICE` -- recién el segundo escalón
+    (35%, $15.385) entra. `precio_pm` nunca cambia en ningún intento."""
+    estado_item = {"price": 20000.0}
+    intentos_post = {"n": 0}
+
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return []  # sin candidato -- sin rango preventivo disponible
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": estado_item["price"]}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        estado_item["price"] = body["price"]
+        return {"id": "MLA1", "price": body["price"]}
+
+    def fake_post(url, headers, body):
+        intentos_post["n"] += 1
+        if intentos_post["n"] < 3:
+            return {"message": "Errors: ERROR_CREDIBILITY_DISCOUNTED_PRICE - The discounted price is not credible."}
+        return {"price": body["deal_price"], "original_price": estado_item["price"]}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+    _fake_post.responder = fake_post
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is True
+    assert r["precio"] == 10000.0
+    assert intentos_post["n"] == 3  # 25% rechazado, 30% rechazado, 35% aceptado
+    assert r["precio_tachado_pedido"] == 15385.0
+    assert [c[2]["price"] for c in _fake_put.calls] == [13333.0, 14286.0, 15385.0]
+    assert "no al 25%" in r["aviso"]
+    assert "escaló" in r["aviso"]
+
+
+def test_activar_en_campana_tradicional_no_escala_si_rechazo_no_es_credibilidad():
+    """Si ML rechaza `meter_en_campana` por otro motivo (no de
+    credibilidad), escalar el % no lo va a arreglar -- se revierte y
+    corta en el primer intento, sin probar 30/35/40..."""
+    estado_item = {"price": 20000.0}
+
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return []
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": estado_item["price"]}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        estado_item["price"] = body["price"]
+        return {"id": "MLA1", "price": body["price"]}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+    _fake_post.responder = lambda url, headers, body: {"message": "New deal_price must be lower than current deal_price"}
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is False
+    assert len(_fake_post.calls) == 1  # un solo intento -- no escaló
+    assert "incluso escalando" not in r["error"]  # no se llegó a escalar nada
+
+
 def test_listar_promociones_item_cruza_nombre_de_campana():
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
