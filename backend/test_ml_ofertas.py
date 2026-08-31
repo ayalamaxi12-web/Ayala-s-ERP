@@ -632,7 +632,9 @@ def test_meter_en_campana_ok():
     r = ml.meter_en_campana("MLA1", "IT", "C-1", Decimal(9000))
 
     assert r == {"ok": True, "price": 9000.0, "original_price": 12000.0}
-    assert _fake_post.calls[0][0] == "https://api.mercadolibre.com/seller-promotions/items/MLA1"
+    # Corregido 2026-08-31: faltaba `?app_version=v2` -- confirmado en vivo
+    # que sin este parámetro ML responde "Invalid app_version".
+    assert _fake_post.calls[0][0] == "https://api.mercadolibre.com/seller-promotions/items/MLA1?app_version=v2"
     assert _fake_post.calls[0][2] == {"promotion_id": "C-1", "promotion_type": "SELLER_CAMPAIGN", "deal_price": 9000.0}
 
 

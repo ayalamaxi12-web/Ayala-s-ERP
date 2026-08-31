@@ -702,10 +702,18 @@ class MLOfertasEscritura(MLOfertasClient):
         Descuento debe quedar entre 10% y 80% (distinto del 5%-80% de
         `PRICE_DISCOUNT`) -- no documentado si hay chequeo de "precio
         creíble" para este tipo. Una vez `started`, el precio solo puede
-        MEJORAR (bajar) en un reintento, ML rechaza subirlo."""
+        MEJORAR (bajar) en un reintento, ML rechaza subirlo.
+
+        **Bug corregido 2026-08-31**: la URL nunca llevaba `?app_version=v2`
+        pese a que el docstring de arriba siempre dijo que iba -- no se
+        había notado porque en todos los intentos reales anteriores
+        `fijar_precio_base` fallaba antes (por el `original_price` roto,
+        ver su docstring) y este método nunca llegaba a ejecutarse de
+        verdad. Confirmado en vivo (MLA852181648) que sin el parámetro ML
+        responde `"Invalid app_version"`."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
         body = {"promotion_id": promotion_id, "promotion_type": "SELLER_CAMPAIGN", "deal_price": float(deal_price)}
-        d = self._post(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", headers, body) or {}
+        d = self._post(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}?app_version=v2", headers, body) or {}
         if d.get("price") is not None:
             return {"ok": True, "price": d.get("price"), "original_price": d.get("original_price")}
         return {"ok": False, "error": d.get("message") or str(d)}
