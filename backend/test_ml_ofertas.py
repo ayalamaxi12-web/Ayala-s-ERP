@@ -821,15 +821,12 @@ def test_activar_en_campana_tradicional_corta_por_challenge_seguridad():
     assert _fake_post.calls == []  # nunca se intentó meter en campaña
 
 
-def test_activar_en_campana_tradicional_escala_si_rechazo_por_credibilidad():
-    """Caso real 2026-08-31 (MLA852181648, segunda ronda de pruebas): el
-    ítem ya tenía historial con esta campaña puntual, así que
-    `promociones_item` no trae `min/max_discounted_price` (sin candidato,
-    ver docstring -- pasó a `status: started`) y el chequeo preventivo del
-    paso 2 no tiene nada para ajustar. El 25% estándar (tachado $13.333) y
-    el primer escalón (30%, $14.286) se rechazan por
-    `ERROR_CREDIBILITY_DISCOUNTED_PRICE` -- recién el segundo escalón
-    (35%, $15.385) entra. `precio_pm` nunca cambia en ningún intento."""
+def test_activar_en_campana_tradicional_revierte_en_primer_rechazo_por_credibilidad():
+    """Caso real 2026-09-01 (MLA1625270713 y MLA751588750): la escalada de
+    tachado (30->70%, sacada este mismo día) nunca lograba nada -- ML
+    rechazaba por `ERROR_CREDIBILITY_DISCOUNTED_PRICE` en los dos ítems
+    reales pasara lo que pasara con el tachado. Ahora un solo rechazo por
+    credibilidad revierte de una, sin insistir con más intentos."""
     estado_item = {"price": 20000.0}
     intentos_post = {"n": 0}
 
@@ -837,7 +834,7 @@ def test_activar_en_campana_tradicional_escala_si_rechazo_por_credibilidad():
         if "seller-promotions/users" in url:
             return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
         if url.endswith("/seller-promotions/items/MLA1"):
-            return []  # sin candidato -- sin rango preventivo disponible
+            return []  # sin candidato en ninguna lectura -- sin techo para avisar
         if url.endswith("/items/MLA1"):
             return {"id": "MLA1", "price": estado_item["price"]}
         raise AssertionError(url)
@@ -848,9 +845,7 @@ def test_activar_en_campana_tradicional_escala_si_rechazo_por_credibilidad():
 
     def fake_post(url, headers, body):
         intentos_post["n"] += 1
-        if intentos_post["n"] < 3:
-            return {"message": "Errors: ERROR_CREDIBILITY_DISCOUNTED_PRICE - The discounted price is not credible."}
-        return {"price": body["deal_price"], "original_price": estado_item["price"]}
+        return {"message": "Errors: ERROR_CREDIBILITY_DISCOUNTED_PRICE - The discounted price is not credible."}
 
     _fake_put.calls = []
     _fake_put.responder = fake_put
@@ -861,13 +856,56 @@ def test_activar_en_campana_tradicional_escala_si_rechazo_por_credibilidad():
 
     r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
 
-    assert r["ok"] is True
-    assert r["precio"] == 10000.0
-    assert intentos_post["n"] == 3  # 25% rechazado, 30% rechazado, 35% aceptado
-    assert r["precio_tachado_pedido"] == 15385.0
-    assert [c[2]["price"] for c in _fake_put.calls] == [13333.0, 14286.0, 15385.0]
-    assert "no al 25%" in r["aviso"]
-    assert "escaló" in r["aviso"]
+    assert r["ok"] is False
+    assert intentos_post["n"] == 1  # un solo intento -- nada de escalar
+    assert "rechazo de credibilidad" in r["error"]
+    assert "escaló" not in r["error"] and "escalando" not in r["error"]
+    assert estado_item["price"] == 20000.0  # revertido al precio previo
+    assert r["precio_pm"] == 10000.0
+    assert r["techo_acreditado_ml"] is None  # sin candidato disponible, no hay techo que avisar
+
+
+def test_activar_en_campana_tradicional_credibilidad_informa_techo_real():
+    """Cuando SÍ se puede releer el rango después de revertir, el aviso
+    tiene que traer el techo real que acredita ML -- no un número
+    inventado. `promociones_item` se llama dos veces: la del paso 2
+    (antes de intentar, sin candidato -- no ajusta nada) y esta nueva,
+    después de la reversión, con el precio YA restaurado."""
+    estado_item = {"price": 20000.0}
+    llamadas_rango = {"n": 0}
+
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            llamadas_rango["n"] += 1
+            if llamadas_rango["n"] == 1:
+                return []  # paso 2: sin candidato, no ajusta el tachado estándar
+            return [{"id": "C-1", "max_discounted_price": 15000.0}]  # después de revertir
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": estado_item["price"]}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        estado_item["price"] = body["price"]
+        return {"id": "MLA1", "price": body["price"]}
+
+    def fake_post(url, headers, body):
+        return {"message": "Errors: ERROR_CREDIBILITY_DISCOUNTED_PRICE - The discounted price is not credible."}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+    _fake_post.responder = fake_post
+
+    ml = MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))
+
+    assert r["ok"] is False
+    assert r["techo_acreditado_ml"] == 15000.0
+    assert "$15000" in r["error"]
+    assert "25.0%" in r["error"]  # 1 - 15000/20000 = 25% de descuento real mínimo
 
 
 def test_activar_en_campana_tradicional_no_escala_si_rechazo_no_es_credibilidad():
