@@ -3242,32 +3242,57 @@ function ofmSimularCampana(itemId){
   }
   out.innerHTML=`${avisoDesc}Margen simulado: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
 }
-async function ofmConfirmarCampana(itemId){
+// Pedido explícito de Maxx 2026-09-01: cuando ML rechaza por credibilidad
+// y devuelve un techo real (`techo_acreditado_ml`), no es un error mudo --
+// es una decisión de negocio (bajar el precio final de verdad o no). Se
+// ofrece como confirm() con el margen a ese precio, igual que ya se hace
+// con el umbral de margen bajo. `opts.precio` fuerza el precio a probar
+// (el reintento contra el techo); `opts.skipConfirm` evita re-mostrar el
+// primer confirm cuando ya se confirmó explícitamente bajar al techo.
+async function ofmConfirmarCampana(itemId,opts){
+  opts=opts||{};
   const operador=ofmRequireOperador();if(!operador)return;
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const f=ofmFilaPorId[itemId];
-  const precioPm=parseFloat(qs('ofm-camp-precio-'+itemId)?.value)||0;
+  const precioPm=opts.precio!=null?opts.precio:(parseFloat(qs('ofm-camp-precio-'+itemId)?.value)||0);
   const descuentoPct=parseFloat(qs('ofm-camp-inflacion-'+itemId)?.value)||0;
   if(!precioPm){toast('Cargá el precio del PM','error');return;}
   if(descuentoPct>=100){toast('El descuento tiene que ser menor a 100%','error');return;}
   const tachado=Math.round(precioPm/(1-descuentoPct/100));
-  let margenPct=null,bajoUmbral=false;
-  if(f._costoUnitSinIva!=null){
+  const margenEn=(precio)=>{
+    if(f._costoUnitSinIva==null)return{pct:null,txt:'sin dato (falta costo/IVA de Táctica)'};
     const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
-    const m=ofmMargenAt(precioPm,f._ivaFactor,f._costoUnitSinIva*tc,f.domain_id,null);
-    margenPct=m.margenPct;bajoUmbral=margenPct!==null&&margenPct*100<OFM.umbral;
+    const m=ofmMargenAt(precio,f._ivaFactor,f._costoUnitSinIva*tc,f.domain_id,null);
+    return{pct:m.margenPct,txt:m.margenPct!==null?(m.margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)'};
+  };
+  const {pct:margenPct,txt:margenTxt}=margenEn(precioPm);
+  const bajoUmbral=margenPct!==null&&margenPct*100<OFM.umbral;
+  if(!opts.skipConfirm){
+    let msg=`¿Meter ${itemId} en tu campaña propia activa?\nPrecio PM (final) $${fmtN(precioPm)} / tachado $${fmtN(tachado)} (-${descuentoPct}%)\nMargen resultante: ${margenTxt}`;
+    if(bajoUmbral)msg+=`\n\n⚠ ESTE MARGEN QUEDA BAJO EL UMBRAL (${OFM.umbral}%). Confirmá solo si es intencional.`;
+    if(!confirm(msg))return;
   }
-  const margenTxt=margenPct!==null?(margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)';
-  let msg=`¿Meter ${itemId} en tu campaña propia activa?\nPrecio PM (final) $${fmtN(precioPm)} / tachado $${fmtN(tachado)} (-${descuentoPct}%)\nMargen resultante: ${margenTxt}`;
-  if(bajoUmbral)msg+=`\n\n⚠ ESTE MARGEN QUEDA BAJO EL UMBRAL (${OFM.umbral}%). Confirmá solo si es intencional.`;
-  if(!confirm(msg))return;
   try{
     const res=await fetch(`${url}/ml-ofertas/item/${itemId}/activar-campana`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({cuenta:f.cuenta,precio_pm:precioPm,descuento_pct:descuentoPct,sku:f.sku||'',precio_anterior:f.precio_oferta||f.precio_normal||'',
         margen_pct:margenPct!==null?(margenPct*100).toFixed(2):'',bajo_umbral:bajoUmbral,operador})});
     const d=await res.json();
-    if(d.ok){toast(`✅ ${itemId}: metida en "${d.nombre_campana||d.promotion_id}"`);await ofmCargarPromociones(itemId);}
-    else toast(`❌ ${itemId}: ${d.error||'error desconocido'}`,'error');
+    if(d.ok){toast(`✅ ${itemId}: metida en "${d.nombre_campana||d.promotion_id}"`);await ofmCargarPromociones(itemId);return;}
+    if(d.techo_acreditado_ml!=null){
+      const techo=Math.floor(d.techo_acreditado_ml);
+      const descRealPct=(1-techo/precioPm)*100;
+      const margenTecho=margenEn(techo);
+      const msg2=`ML no acepta $${fmtN(precioPm)} para esta campaña -- exige un descuento REAL de al menos ${descRealPct.toFixed(1)}%, o sea bajar el precio final a como máximo $${fmtN(techo)}.\nMargen a ese precio: ${margenTecho.txt}\n\n¿Bajar el precio final a $${fmtN(techo)} y meterla en la campaña a ese precio?`;
+      if(confirm(msg2)){
+        const inp=qs('ofm-camp-precio-'+itemId);if(inp)inp.value=techo;
+        ofmSimularCampana(itemId);
+        await ofmConfirmarCampana(itemId,{precio:techo,skipConfirm:true});
+      }else{
+        toast(`${itemId}: no se metió en la campaña -- mantiene $${fmtN(precioPm)}`,'error');
+      }
+      return;
+    }
+    toast(`❌ ${itemId}: ${d.error||'error desconocido'}`,'error');
   }catch(e){toast('Error: '+e.message,'error');}
 }
 async function ofmConfirmarSacar(itemId,promotionType,promotionId,nombre){
