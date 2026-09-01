@@ -352,7 +352,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal"><div class="ms-trigger" onclick="toggleMS('ms-canal')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal')">Todos</button><button onclick="clearMS('ms-canal')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria"><div class="ms-trigger" onclick="toggleMS('ms-categoria')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria')">Todos</button><button onclick="clearMS('ms-categoria')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm"><div class="ms-trigger" onclick="toggleMS('ms-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm')">Todos</button><button onclick="clearMS('ms-pm')">Ninguno</button></div></div></div></div>
-  <div class="filter-group"><span class="filter-label">SKU</span><input type="text" id="f-sku" placeholder="Buscar SKU..." style="width:120px;" onkeydown="if(event.key==='Enter')applyFilters()"></div>
+  <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('hist',this.value)" onkeydown="if(event.key==='Enter'){applyFilters();dashSkuAcHide('hist');}"><div id="dash-sku-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
   <button class="btn primary" onclick="applyFilters()">Aplicar</button>
   <button class="btn" onclick="resetFilters()">Limpiar</button>
 </div>
@@ -374,7 +374,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal-vivo"><div class="ms-trigger" onclick="toggleMS('ms-canal-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal-vivo')">Todos</button><button onclick="clearMS('ms-canal-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria-vivo"><div class="ms-trigger" onclick="toggleMS('ms-categoria-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria-vivo')">Todos</button><button onclick="clearMS('ms-categoria-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm-vivo"><div class="ms-trigger" onclick="toggleMS('ms-pm-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm-vivo')">Todos</button><button onclick="clearMS('ms-pm-vivo')">Ninguno</button></div></div></div></div>
-  <div class="filter-group"><span class="filter-label">SKU</span><input type="text" id="f-sku-vivo" placeholder="Buscar SKU..." style="width:120px;" onkeydown="if(event.key==='Enter')applyFilters('vivo')"></div>
+  <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku-vivo" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('vivo',this.value)" onkeydown="if(event.key==='Enter'){applyFilters('vivo');dashSkuAcHide('vivo');}"><div id="dash-sku-ac-dropdown-vivo" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
   <button class="btn primary" onclick="applyFilters('vivo')">Aplicar</button>
   <button class="btn" onclick="resetFilters('vivo')">Limpiar</button>
 </div>
@@ -3531,6 +3531,47 @@ function getFiltered(inst){
   }
   return{data1,data2};
 }
+
+// Predicción de SKU en el filtro de "Ventas & Rentabilidad" -- pedido de
+// Maxx 2026-09-01, mismo patrón que ya usa "Histórico de Unidades"
+// (histAcShow/histAcSelect/histAcHide), adaptado: acá no hay un
+// "título" en los datos de venta (mapVentaTacticaOut/mapVentaEcomOut no
+// lo traen), así que se muestra categoría como referencia en su lugar.
+// No autoaplica el filtro al elegir -- solo carga el campo, el usuario
+// sigue confirmando con "Aplicar" o Enter, igual que si lo hubiera
+// tipeado a mano.
+function _dashSkuMatches(val,arr){
+  if(!val||val.length<2||!arr)return[];
+  const q=val.toUpperCase();const seen=new Set();const out=[];
+  for(const d of arr){
+    for(const s of(d.skus||[])){
+      const su=s.toUpperCase();
+      if(su.includes(q)&&!seen.has(su)){
+        seen.add(su);out.push({sku:s,cat:d.categoria||''});
+        if(out.length>=12)return out;
+      }
+    }
+  }
+  return out;
+}
+function dashSkuAcShow(inst,val){
+  const ddId=inst==='vivo'?'dash-sku-ac-dropdown-vivo':'dash-sku-ac-dropdown';
+  const dd=qs(ddId);if(!dd)return;
+  const matches=_dashSkuMatches(val,_dashData(inst));
+  if(!matches.length){dd.style.display='none';return;}
+  const inputId=inst==='vivo'?'f-sku-vivo':'f-sku';
+  dd.innerHTML=matches.map(m=>`<div onclick="dashSkuAcSelect('${inputId}','${m.sku.replace(/'/g,"\\'")}');dashSkuAcHide('${inst}')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-family:'DM Mono',monospace" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
+    <div style="font-size:10px;font-weight:700;color:var(--accent)">${m.sku}</div>
+    ${m.cat?`<div style="font-size:9px;color:var(--text3)">${m.cat}</div>`:''}
+  </div>`).join('');
+  dd.style.display='block';
+}
+function dashSkuAcSelect(inputId,sku){const inp=qs(inputId);if(inp)inp.value=sku;}
+function dashSkuAcHide(inst){const dd=qs(inst==='vivo'?'dash-sku-ac-dropdown-vivo':'dash-sku-ac-dropdown');if(dd)dd.style.display='none';}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#f-sku')&&!e.target.closest('#dash-sku-ac-dropdown'))dashSkuAcHide('hist');
+  if(!e.target.closest('#f-sku-vivo')&&!e.target.closest('#dash-sku-ac-dropdown-vivo'))dashSkuAcHide('vivo');
+});
 
 
 // Corregido 2026-09-01 (pedido de Maxx -- "se ve raro/confuso" en la
