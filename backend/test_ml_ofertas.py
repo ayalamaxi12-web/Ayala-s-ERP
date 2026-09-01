@@ -690,7 +690,7 @@ def test_activar_en_campana_tradicional_sin_campana_activa():
 
 
 def test_activar_en_campana_tradicional_no_sigue_si_falla_precio_base():
-    fake_get_campana = lambda url, params, headers: {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+    fake_get_campana = lambda url, params, headers: {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
     _fake_put.responder = lambda url, headers, body: {"error": "validation_error", "message": "invalid price"}
     _fake_post.calls = []
 
@@ -762,7 +762,7 @@ def test_activar_en_campana_tradicional_revierte_si_precio_pm_bajo_el_piso():
 
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
-            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
         if url.endswith("/seller-promotions/items/MLA1"):
             return [{"id": "C-1", "type": "SELLER_CAMPAIGN", "min_discounted_price": 15000.0, "max_discounted_price": 19000.0}]
         if url.endswith("/items/MLA1"):
@@ -796,7 +796,7 @@ def test_activar_en_campana_tradicional_corta_por_challenge_seguridad():
     corta con `requiere_verificacion_manual` -- nunca se reintenta solo."""
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
-            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
         if url.endswith("/items/MLA1"):
             return {"id": "MLA1", "price": 20000.0}
         raise AssertionError(url)
@@ -835,7 +835,7 @@ def test_activar_en_campana_tradicional_escala_si_rechazo_por_credibilidad():
 
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
-            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
         if url.endswith("/seller-promotions/items/MLA1"):
             return []  # sin candidato -- sin rango preventivo disponible
         if url.endswith("/items/MLA1"):
@@ -878,7 +878,7 @@ def test_activar_en_campana_tradicional_no_escala_si_rechazo_no_es_credibilidad(
 
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
-            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
         if url.endswith("/seller-promotions/items/MLA1"):
             return []
         if url.endswith("/items/MLA1"):

@@ -825,17 +825,34 @@ def activar_en_campana_tradicional(
     que ya tienen `fijar_precio_base`/`sacar_de_promocion` (vía
     `_put_real`/`_delete_real`) -- no hace falta duplicarlo acá.
 
-    `promotion_id` opcional: si no se pasa, se resuelve solo con la
-    primera `SELLER_CAMPAIGN` con `status` `started` o `pending` de
-    `promociones_seller` -- asume que Maxx tiene una sola campaña propia
-    viva a la vez (su descripción: crea una nueva cada mes). Si hay más
-    de una, se toma la primera que aparezca; pasar `promotion_id`
-    explícito para no depender de ese orden."""
+    `promotion_id` opcional: si no se pasa, se resuelve solo filtrando
+    `promociones_seller` por `type == SELLER_CAMPAIGN`, `status` `started`
+    o `pending`, Y nombre que contenga "oferta tradicional" (case-
+    insensitive) -- el patrón real con el que Maxx nombra la campaña que
+    crea a mano cada mes ("Oferta Tradicional <mes>", confirmado en vivo
+    contra la cuenta real: "Oferta tradicional Sep").
+
+    **Corregido 2026-09-01 (bug real en vivo, MLA852181648, cuenta IT):**
+    la versión anterior tomaba la PRIMERA `SELLER_CAMPAIGN` sin filtrar
+    por nombre, asumiendo que Maxx tiene una sola campaña propia viva a
+    la vez -- FALSO: `promociones_seller` devuelve "campañas del vendedor
+    (propias y de ML)" (ver su docstring), y la cuenta real tenía TRES
+    `SELLER_CAMPAIGN` con status activo/pendiente al mismo tiempo para
+    este ítem ("Oferta tradicional Sep", "TVS-FIX-26-63 Agosto", "Toners
+    Septiembre %%") -- probablemente campañas de categoría/marca armadas
+    por ML en las que la cuenta quedó enrolada, no solo las que Maxx crea
+    él mismo. Sin el filtro por nombre, tomó "TVS-FIX-26-63 Agosto" (la
+    que apareció primera en la respuesta de ML) en vez de la campaña
+    mensual real -- confirmado por Maxx contra la publicación real y
+    contra la UI de ML. Si no aparece ninguna con ese nombre, corta con
+    error explícito en vez de adivinar -- pasar `promotion_id` a mano
+    para forzar otra campaña puntual."""
     if promotion_id is None:
         campanas = [c for c in ml.promociones_seller(cuenta)
-                    if c.get("type") == "SELLER_CAMPAIGN" and c.get("status") in ("started", "pending")]
+                    if c.get("type") == "SELLER_CAMPAIGN" and c.get("status") in ("started", "pending")
+                    and "oferta tradicional" in (c.get("name") or "").lower()]
         if not campanas:
-            return {"ok": False, "error": "No se encontró ninguna campaña propia (SELLER_CAMPAIGN) activa o pendiente en esta cuenta."}
+            return {"ok": False, "error": "No se encontró ninguna campaña propia con nombre \"Oferta Tradicional <mes>\" activa o pendiente en esta cuenta -- si la creaste con otro nombre, pasá promotion_id a mano."}
         promotion_id = campanas[0]["id"]
         nombre_campana = campanas[0].get("name")
     else:

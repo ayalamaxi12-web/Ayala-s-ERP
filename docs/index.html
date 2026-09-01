@@ -3093,7 +3093,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     ?'Ya tiene un descuento propio ACTIVO (fila "PRICE_DISCOUNT · ● PARTICIPANDO" arriba) -- esto lo edita.'
     :'Todavía no tiene descuento propio activo -- esto crea uno nuevo, independiente de las campañas de arriba (esas las gestiona ML, acá solo se puede sacar de ellas, no activarlas).';
 
-  const campanaActiva=promociones.find(p=>p.promotion_type==='SELLER_CAMPAIGN');
+  const campanaActiva=promociones.find(p=>p.promotion_type==='SELLER_CAMPAIGN'&&/oferta tradicional/i.test(p.nombre||''));
   // El precio del PM viene del Sheet ya conectado (mismo S.pmData que usan
   // Verificar Ecom/ML/Táctica) -- pedido explícito de Maxx 2026-08-28: no
   // hay que ir a mirar la planilla, el ERP ya tiene el dato. Si no está
