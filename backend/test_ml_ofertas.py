@@ -957,6 +957,24 @@ def test_resolver_item_para_gestion_ok():
     assert r["item_id"] == "MLA1" and r["sku"] == "SKU-1" and r["domain_id"] == "MLA-TONERS"
     assert r["precio_actual"] == 15000 and r["costo_sin_iva"] == Decimal(5) and r["iva_factor"] == Decimal("1.21")
     assert r["incidencia"] is None
+    assert r["cuotas_ofrecidas"] is None
+
+
+def test_resolver_item_para_gestion_trae_cuotas_ofrecidas():
+    """Caso real detectado por Maxx en vivo (2026-09-01, MLA en 12 cuotas):
+    el buscador puntual traía `installments` en el GET pero no lo usaba --
+    el panel de "Oferta Tradicional" quedaba ciego a que la publicación
+    estaba vendiéndose en cuotas."""
+    def fake_get(url, params, headers):
+        return {"id": "MLA1", "title": "T1", "price": 15000, "seller_custom_field": "SKU-1",
+                "domain_id": "MLA-TONERS", "installments": {"quantity": 12, "rate": 0}}
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    costo = _CostoProviderFalso({"SKU-1": Decimal(5)})
+    iva = _IvaProviderFalso({"SKU-1": Decimal("1.21")})
+
+    r = resolver_item_para_gestion(ml, costo, iva, "MLA1", "IT", Decimal(1000))
+
+    assert r["cuotas_ofrecidas"] == 12
 
 
 def test_resolver_item_para_gestion_no_encontrado():

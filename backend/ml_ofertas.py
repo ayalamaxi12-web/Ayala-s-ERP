@@ -1141,6 +1141,7 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
         "encontrado": True, "item_id": d["id"], "cuenta": cuenta, "sku": sku_ml, "titulo": d.get("title", ""),
         "permalink": d.get("permalink"), "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
         "costo_sin_iva": costo_usd, "iva_factor": iva_factor, "tc": tc, "incidencia": incidencia,
+        "cuotas_ofrecidas": _cuotas_sin_interes(d),
     }
 
 

@@ -1313,6 +1313,11 @@ const RULES=[
   {key:'Precios M',pct:1.00},{key:'Oferta Tradicional',pct:1.25},
   {key:'Precio Oferta Picante',pct:1.00}
 ];
+// % que ML cobra de verdad por vender en cuotas sin interés (no confundir
+// con RULES de arriba -- esas son el margen de seguridad propio que Maxx
+// carga en Ecom, más alto a propósito). Debe reflejar exactamente
+// CUOTAS_PCT_DEFAULT de backend/ml_ofertas.py -- si se corrige uno, corregir el otro.
+const CUOTAS_PCT_ML={3:8.40,6:12.30,9:15.70,12:19.20};
 const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#8b5cf6'];
 const API_KEY='AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
 const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
@@ -3105,6 +3110,16 @@ function ofmRenderGestionarPanel(itemId,promociones){
   const fuentePm=pmDisponible?`<span style="color:var(--green)">precio del PM (${pmRec.pmName||pmRec.pm}): $${fmtN(pmRec.ml)}</span> -- editable si querés jugar con otro número.`
     :`<span style="color:var(--yellow)">sin dato del PM para el SKU "${f.sku||'sin SKU'}"</span> -- conectá su Sheet en Configuración, o cargalo a mano.`;
 
+  // Solo informativo -- NO autocompleta "Precio PM (final)" (pedido
+  // explícito de Maxx 2026-09-01: quiere ver el número, decide él si lo
+  // usa). cuotas_ofrecidas viene en vivo de installments.quantity/rate de
+  // la publicación real (backend, _cuotas_sin_interes) -- no de ningún CSV.
+  const cuotasRecargoPct=f.cuotas_ofrecidas?CUOTAS_PCT_ML[f.cuotas_ofrecidas]:null;
+  const cuotasHtml=f.cuotas_ofrecidas?(cuotasRecargoPct!=null
+    ?`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en <b>${f.cuotas_ofrecidas} cuotas sin interés</b> -- ML te cobra ${cuotasRecargoPct}% por eso. PM pide $${fmtN(Math.round(precioPmActual))}; con ese recargo, el precio final debería quedar en <b>$${fmtN(Math.round(precioPmActual*(1+cuotasRecargoPct/100)))}</b> (no lo pisa el campo de abajo, es para que decidas vos).</div>`
+    :`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en ${f.cuotas_ofrecidas} cuotas sin interés, pero no tengo el % que cobra ML para esa cantidad -- revisalo a mano.</div>`
+  ):'';
+
   cont.innerHTML=`
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Promociones activas — ${f.titulo||itemId}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
@@ -3112,6 +3127,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">🏷️ Oferta Tradicional (campaña propia mensual)</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Calcula el tachado para que, con el % de descuento que pongas (el mismo que ves en Promociones de ML), el precio final quede exactamente en el del PM -- y mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla). ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${fuentePm}</div>
+    ${cuotasHtml}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
       <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${Math.round(precioPmActual)}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <span>Descuento % <span style="color:var(--text3);font-size:8px">(el mismo % que ves en Promociones de ML)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="25" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
@@ -3287,7 +3303,7 @@ async function ofmBuscarMLA(){
     ofmFilaPorId[d.item_id]={
       item_id:d.item_id, cuenta:d.cuenta, sku:d.sku, titulo:d.titulo, permalink:d.permalink, domain_id:d.domain_id,
       precio_normal:d.precio_actual, precio_oferta:null, incidencia:d.incidencia,
-      _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva,
+      _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva, cuotas_ofrecidas:d.cuotas_ofrecidas,
     };
     if(d.tc)OFM.tc=OFM.tc||d.tc;
     ofmItemAbierto=d.item_id;
@@ -4053,6 +4069,17 @@ async function compModEcom(sku, precio){
 }
 
 // ── INIT ──
+// Pedido de Maxx 2026-09-01: no quiere andar conectando los Sheets de PM
+// a mano cada vez que abre el ERP -- si ya guardó API key + id + pestaña
+// de un PM en Configuración (persistido en localStorage vía saveStor()),
+// se reconecta solo. No toca los que todavía no tienen id/tab cargados.
+function autoConnectPM(){
+  if(!S.sheetsKey)return;
+  ['pm1','pm2','pm3','pm4'].forEach(k=>{
+    const s=S.sheets[k];
+    if(s&&s.id&&s.tab)connectSheet(k);
+  });
+}
 async function autoConnectML(){
   const bu = getBackendUrl();
   if(!bu) return;
@@ -4133,6 +4160,7 @@ function init(){
   // Trigger initial page load
   goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
   setTimeout(autoConnectML, 800);
+  setTimeout(autoConnectPM, 800);
 }
 
 // ============================================================
