@@ -33,12 +33,16 @@ def _item_simple(item_id, sku, inventory_id):
             "seller_custom_field": sku, "inventory_id": inventory_id, "variations": []}
 
 
-def _armar_ml(items_por_cuenta: dict, stock_por_inventory: dict, ventas_por_cuenta: dict):
+def _armar_ml(items_por_cuenta: dict, stock_por_inventory: dict, ventas_por_cuenta: dict,
+              envios_pendientes_por_cuenta: dict | None = None):
     """`items_por_cuenta`: {cuenta: [item, ...]}. `ventas_por_cuenta`:
     {cuenta: {inventory_id: {"unidades": N, "primera": "YYYY-MM-DD", "ultima": "YYYY-MM-DD"}}}
     -- por `inventory_id`, no por `item_id` (ver `ventas_full_por_inventory`,
-    scopeada a ventas realmente despachadas desde Full)."""
+    scopeada a ventas realmente despachadas desde Full). `envios_pendientes_por_cuenta`
+    misma forma pero `{inventory_id: {"unidades": N, "inbound_ids": [...]}}` --
+    ver `envios_pendientes_por_inventory`."""
     cuenta_actual = {}
+    envios_pendientes_por_cuenta = envios_pendientes_por_cuenta or {}
 
     def get_fn(url, params, headers):
         if "items/search" in url:
@@ -59,6 +63,9 @@ def _armar_ml(items_por_cuenta: dict, stock_por_inventory: dict, ventas_por_cuen
 
         def ventas_full_por_inventory(self, cuenta, inventory_ids, desde, hasta):
             return {k: v for k, v in ventas_por_cuenta.get(cuenta, {}).items() if k in inventory_ids}
+
+        def envios_pendientes_por_inventory(self, cuenta, inventory_ids, desde, hasta):
+            return {k: v for k, v in envios_pendientes_por_cuenta.get(cuenta, {}).items() if k in inventory_ids}
 
     return _MLConCuentaActual(get_fn=get_fn, token_fn=_FAKE_TOKEN_FN)
 
@@ -122,6 +129,31 @@ def test_replica_el_ejemplo_de_la_planilla_sin_censura():
     assert fila.stock_ecom == 100
     assert fila.stock_tactica == 0
     assert fila.sugerido == 20  # alcanza con lo disponible (100)
+    assert fila.envio_pendiente == 0
+    assert fila.envio_pendiente_ids == []
+
+
+def test_envio_pendiente_real_llega_a_la_fila():
+    # Pedido de Maxx 2026-09-01: "Envíos pendientes" ya no es un campo que
+    # la persona tipea a mano -- viene resuelto en vivo por inventory_id,
+    # con el/los inbound_id reales para poder verificarlo a mano en ML.
+    ml = _armar_ml(
+        items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
+        stock_por_inventory={"INV-1": {"available_quantity": 1}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}}},
+        envios_pendientes_por_cuenta={"IT": {"INV-1": {"unidades": 8, "inbound_ids": ["80000001"]}}},
+    )
+    ecom = _ecom_simple(stock_full={"SKU-A": 1}, stock_pitec={"SKU-A": 100})
+    tactica = _tactica_simple({"SKU-A": 0})
+
+    resultado = calcular_reposicion_mla(
+        ml, ecom, tactica, cuentas=["IT"], dias_ventas=30, semanas_objetivo=3,
+        fecha_llegada=date(2026, 8, 19), hoy=date(2026, 8, 19),
+    )
+
+    fila = resultado.filas[0]
+    assert fila.envio_pendiente == 8
+    assert fila.envio_pendiente_ids == ["80000001"]
 
 
 def test_detecta_censura_y_corrige_la_tasa_diaria():

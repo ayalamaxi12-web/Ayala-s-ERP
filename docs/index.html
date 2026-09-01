@@ -2704,7 +2704,14 @@ function renderFullReposicion(result){
   fullRepoResult=result;
   // Arranca marcado lo que el sistema sugiere (sugerido>0) -- vos decidís
   // qué se manda de verdad destildando lo que no, nunca al revés.
-  result.filas.forEach(f=>{fullRepoSeleccion[f.item_id]=f.sugerido>0;});
+  result.filas.forEach(f=>{
+    fullRepoSeleccion[f.item_id]=f.sugerido>0;
+    // "Envíos pendientes" (paq.) -- pedido de Maxx 2026-09-01: arranca
+    // con el dato real de ML (backend, envio_pendiente), no en 0. Sigue
+    // editable por si el dato de ML todavía no reflejó un despacho
+    // recién hecho (ver ml_reposicion.py).
+    fullRepoEnviosPend[f.item_id]=f.envio_pendiente||0;
+  });
   qs('full-reposicion-wrap').style.display='block';
   goFullRepoTab(fullRepoTab);
 }
@@ -2771,7 +2778,10 @@ function renderFullReposicionTabla(){
       <td style="text-align:right">${f.stock_a_llegada}</td>
       <td style="text-align:right;font-weight:600" title="En paquetes (lo que se prepara para esta publicación), no en unidades reales del SKU">${f._cantidadEnviar}</td>
       <td style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}" title="En paquetes">${f._sugerido}</td>
-      <td style="text-align:right"><input type="number" min="0" value="${pendiente}" title="En paquetes" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();"></td>
+      <td style="text-align:right">
+        <input type="number" min="0" value="${pendiente}" title="En paquetes -- sugerido por ML, editable" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();">
+        ${f.envio_pendiente_ids&&f.envio_pendiente_ids.length?`<div style="font-size:8px;color:var(--text3)" title="Número${f.envio_pendiente_ids.length>1?'s':''} de envío real -- verificalo en el panel de Full de ML">#${f.envio_pendiente_ids.join(', #')}</div>`:''}
+      </td>
       <td style="text-align:right">${f.stock_ecom===null?'—':f.stock_ecom}</td>
       <td style="text-align:right">${f.stock_tactica===null?'—':f.stock_tactica}</td>
     </tr>`;
@@ -3523,54 +3533,79 @@ function getFiltered(inst){
 }
 
 
-function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,inst){
+// Corregido 2026-09-01 (pedido de Maxx -- "se ve raro/confuso" en la
+// comparación de períodos, ver Top Categorías): dos problemas reales, no
+// de cálculo sino de qué se muestra y cómo se etiqueta.
+// 1) "Rent. %" mostraba SOLO el margen de P1 (rentMap se armaba nada más
+//    que con `data`), sentado al lado de Facturación P1/P2 sin aclarar
+//    que no tenía nada que ver con P2 -- ahora muestra las dos, tituladas.
+// 2) El top 10 de categorías (y el top 15 de SKUs adentro de cada una)
+//    se armaba ordenando SOLO por P1 -- una categoría enorme en P2 pero
+//    chica en P1 ni aparecía, y las variaciones % quedaban comparando
+//    peras con manzanas. Ahora el ranking sale de la facturación
+//    COMBINADA (P1+P2), y la Participación también usa esa combinada
+//    (ya coincide con `totalFact`, que siempre fue P1+P2).
+function _rentBadgeClass(rp){return rp>0.6?'badge-green':rp>0.4?'badge-blue':rp>0.2?'badge-yellow':'badge-red';}
+function _rentInlineColor(pct){return pct>50?'var(--green)':pct>30?'var(--accent)':pct>15?'var(--yellow)':'var(--red)';}
+function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,rentMap2,inst){
   inst=inst||'hist';
   if(!topCats.length)return'';
   let html='<div><div class="section-hdr">Top Categorías</div><div class="table-wrap"><table>';
   html+='<thead><tr><th style="width:22px"></th><th>Categoría</th><th>Facturación P1</th>';
   if(useComparison)html+='<th>Facturación P2</th><th>Var.</th>';
-  html+='<th>Participación</th><th>Rent. %</th></tr></thead><tbody>';
+  html+='<th>Participación</th>';
+  html+=useComparison?'<th>Rent. % P1</th><th>Rent. % P2</th>':'<th>Rent. %</th>';
+  html+='</tr></thead><tbody>';
   topCats.forEach(([cat,fact])=>{
-    const pct=totalFact?(fact/totalFact*100).toFixed(1):0;
-    const rp=fact>0?(rentMap[cat]||0)/fact:0;
-    const rc=rp>0.6?'badge-green':rp>0.4?'badge-blue':rp>0.2?'badge-yellow':'badge-red';
     const fact2=useComparison?(groupSum(data2,'categoria','precioFinal')[cat]||0):0;
+    const factCombinado=fact+fact2;
+    const pct=totalFact?(factCombinado/totalFact*100).toFixed(1):0;
+    const rp1=fact>0?(rentMap[cat]||0)/fact:0;
+    const rp2=useComparison&&fact2>0?(rentMap2[cat]||0)/fact2:null;
     const varPct=useComparison&&fact2>0?((fact-fact2)/fact2*100).toFixed(1):null;
     const varStr=varPct!==null?'<span style="color:'+(+varPct>=0?'var(--green)':'var(--red)')+';font-size:9px;font-family:DM Mono,monospace">'+(+varPct>=0?'↑':'↓')+Math.abs(+varPct)+'%</span>':'';
-    // Top SKUs for this cat
+    // Top SKUs para esta categoría -- rankeados por P1+P2 combinado, mismo criterio que las categorías.
     const skuMap={};data.filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap[s]=(skuMap[s]||0)+d.precioFinal;}));
-    const topSkus=Object.entries(skuMap).sort((a,b)=>b[1]-a[1]).slice(0,15);
     const skuMap2={};if(useComparison)(data2||[]).filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap2[s]=(skuMap2[s]||0)+d.precioFinal;}));
+    const skuCombinado={};[...Object.keys(skuMap),...Object.keys(skuMap2)].forEach(s=>{skuCombinado[s]=(skuMap[s]||0)+(skuMap2[s]||0);});
+    const topSkus=Object.entries(skuCombinado).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([s])=>[s,skuMap[s]||0]);
     const catId='cat-'+inst+'-'+cat.replace(/[^a-z0-9]/gi,'');
     html+='<tr class="cat-row" onclick="toggleCatSkus(\''+catId+'\')" style="cursor:pointer">';
     html+='<td style="color:var(--text3);font-size:11px;text-align:center" id="arr-'+catId+'">▶</td>';
     html+='<td style="font-weight:600;font-size:11px">'+cat+'</td>';
-    html+='<td class="mono" style="font-size:10px">'+fmt$(fact)+'</td>';
+    html+='<td class="mono" style="font-size:10px">'+(fact?fmt$(fact):'-')+'</td>';
     if(useComparison){html+='<td class="mono" style="font-size:10px">'+(fact2?fmt$(fact2):'-')+'</td><td>'+varStr+'</td>';}
     html+='<td><div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-size:9px;font-family:DM Mono,monospace;color:var(--text2)">'+pct+'%</span></div></td>';
-    html+='<td><span class="badge '+rc+'">'+(rp*100).toFixed(1)+'%</span></td></tr>';
-    // Collapsible SKU rows
-    html+='<tr id="'+catId+'" style="display:none"><td colspan="'+(useComparison?6:4)+'" style="padding:0">';
+    html+='<td><span class="badge '+_rentBadgeClass(rp1)+'">'+(rp1*100).toFixed(1)+'%</span></td>';
+    if(useComparison)html+='<td>'+(rp2!==null?'<span class="badge '+_rentBadgeClass(rp2)+'">'+(rp2*100).toFixed(1)+'%</span>':'-')+'</td>';
+    html+='</tr>';
+    // Filas colapsables de SKU
+    html+='<tr id="'+catId+'" style="display:none"><td colspan="'+(useComparison?7:5)+'" style="padding:0">';
     html+='<table style="width:100%;background:var(--surface2)"><thead><tr style="background:rgba(0,157,188,0.08)">';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">SKU</th>';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P1</th>';
     if(useComparison){html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P2</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Var.</th>';}
-    html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. %</th>';
+    html+=useComparison?'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. % P1</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. % P2</th>':'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. %</th>';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">% cat</th></tr></thead><tbody>';
     topSkus.forEach(([sku,sv])=>{
       const sv2=skuMap2[sku]||0;
-      const sp=fact>0?(sv/fact*100).toFixed(1):0;
+      const svCombinado=sv+sv2;
+      const sp=factCombinado>0?(svCombinado/factCombinado*100).toFixed(1):0;
       const svar=useComparison&&sv2>0?((sv-sv2)/sv2*100).toFixed(1):null;
       const svarStr=svar!==null?'<span style="color:'+(+svar>=0?'var(--green)':'var(--red)')+';font-size:9px">'+(+svar>=0?'↑':'↓')+Math.abs(+svar)+'%</span>':'';
-      // Rent% for this SKU
-      const skuSales=data.filter(d=>d.skus&&d.skus.some(s=>s===sku));
-      const skuRent=skuSales.reduce((s,d)=>s+d.rentabilidad,0);
-      const skuRentPct=sv>0?(skuRent/sv*100):0;
-      const rentColor=skuRentPct>50?'var(--green)':skuRentPct>30?'var(--accent)':skuRentPct>15?'var(--yellow)':'var(--red)';
+      // Rent% de este SKU, por período -- mismo criterio que la fila de categoría de arriba.
+      const skuRent1=data.filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
+      const skuRentPct1=sv>0?(skuRent1/sv*100):0;
+      let skuRentPct2=null;
+      if(useComparison){
+        const skuRent2=(data2||[]).filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
+        skuRentPct2=sv2>0?(skuRent2/sv2*100):null;
+      }
       html+='<tr><td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent)">'+sku+'</td>';
-      html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+fmt$(sv)+'</td>';
+      html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+(sv?fmt$(sv):'-')+'</td>';
       if(useComparison){html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+(sv2?fmt$(sv2):'-')+'</td><td style="padding:4px 10px">'+svarStr+'</td>';}
-      html+='<td style="padding:4px 10px;font-size:9px;font-family:DM Mono,monospace;font-weight:700;color:'+rentColor+'">'+skuRentPct.toFixed(1)+'%</td>';
+      html+='<td style="padding:4px 10px;font-size:9px;font-family:DM Mono,monospace;font-weight:700;color:'+_rentInlineColor(skuRentPct1)+'">'+skuRentPct1.toFixed(1)+'%</td>';
+      if(useComparison)html+='<td style="padding:4px 10px;font-size:9px;font-family:DM Mono,monospace;font-weight:700;color:'+(skuRentPct2!==null?_rentInlineColor(skuRentPct2):'var(--text3)')+'">'+(skuRentPct2!==null?skuRentPct2.toFixed(1)+'%':'-')+'</td>';
       html+='<td style="padding:4px 10px;font-size:9px;color:var(--text3);font-family:DM Mono,monospace">'+sp+'%</td></tr>';
     });
     html+='</tbody></table></td></tr>';
@@ -3605,7 +3640,11 @@ function renderDashboard(inst){
   const allP=[...data,...(data2||[])];const totalFact=allP.reduce((s,d)=>s+d.precioFinal,0);
   const totalSinIva=allP.reduce((s,d)=>s+(d.precioSinIva||0),0);
   const byCanal=groupSum(allP,'canal','precioFinal');const topCanal=Object.entries(byCanal).sort((a,b)=>b[1]-a[1]);
-  const byCat=groupSum(data,'categoria','precioFinal');const topCats=Object.entries(byCat).filter(([k])=>k!=='Sin categoría').sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const byCat1=groupSum(data,'categoria','precioFinal');
+  const byCat2=useComparison?groupSum(data2,'categoria','precioFinal'):{};
+  const byCatCombinado={};[...Object.keys(byCat1),...Object.keys(byCat2)].forEach(k=>{byCatCombinado[k]=(byCat1[k]||0)+(byCat2[k]||0);});
+  // Rankeado por P1+P2 combinado, no solo P1 -- ver docstring de buildTopCatsHTML.
+  const topCats=Object.entries(byCatCombinado).filter(([k])=>k!=='Sin categoría').sort((a,b)=>b[1]-a[1]).slice(0,10).map(([cat])=>[cat,byCat1[cat]||0]);
   const byDay1={};data.forEach(d=>{if(d.fechaStr)byDay1[d.fechaStr]=(byDay1[d.fechaStr]||0)+d.precioFinal;});
   const byDay2={};if(data2)data2.forEach(d=>{if(d.fechaStr)byDay2[d.fechaStr]=(byDay2[d.fechaStr]||0)+d.precioFinal;});
   const chartDays=[...new Set([...Object.keys(byDay1),...Object.keys(byDay2)])].sort();
@@ -3622,6 +3661,7 @@ function renderDashboard(inst){
     });
   }
   const rentMap={},cntMap={};data.forEach(d=>{if(d.precioFinal>0){rentMap[d.categoria]=(rentMap[d.categoria]||0)+d.rentabilidad;cntMap[d.categoria]=(cntMap[d.categoria]||0)+1;}});
+  const rentMap2={};if(useComparison)(data2||[]).forEach(d=>{if(d.precioFinal>0)rentMap2[d.categoria]=(rentMap2[d.categoria]||0)+d.rentabilidad;});
   const dashCtx=useComparison&&k2?{label1,label2,compareNote,k1,k2,topCanal1:Object.entries(groupSum(data,'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5),topCanal2:Object.entries(groupSum(data2||[],'canal','precioFinal')).sort((a,b)=>b[1]-a[1]).slice(0,5)}:null;
   window._dashCtx=window._dashCtx||{};window._dashCtx[inst]=dashCtx;
   const btnAnalisisId=inst==='hist'?'btn-analisis':'btn-analisis-vivo';
@@ -3639,7 +3679,7 @@ function renderDashboard(inst){
     <div><div class="section-hdr">Evolución Diaria</div><div class="chart-card"><h3>Facturación por Día</h3><p>${useComparison?`<span style="color:var(--accent2)">●</span> ${label1} &nbsp; <span style="color:var(--accent3)">●</span> ${label2}`:`${Object.keys(byDay1).length} días con ventas`}</p><div style="position:relative;height:240px"><canvas id="${ids.diario}"></canvas></div></div></div>
     <div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final en $</p><div style="position:relative;height:220px"><canvas id="${ids.canalChart}"></canvas></div></div><div class="chart-card"><h3>Mix de Canales</h3><p>Distribución %</p><div style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="${ids.donut}"></canvas></div></div></div>
     ${crossSection}
-    ${buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,inst)}
+    ${buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,rentMap2,inst)}
   `;
   const ds=[{label:label1,data:chartDays.map(d=>byDay1[d]??null),borderColor:'#3b82f6',backgroundColor:'#3b82f615',borderWidth:2,pointRadius:3,tension:0.1,fill:!useComparison,spanGaps:false}];
   if(useComparison)ds.push({label:label2,data:chartDays.map(d=>byDay2[d]??null),borderColor:'#f59e0b',backgroundColor:'#f59e0b15',borderWidth:2,pointRadius:3,tension:0.1,fill:false,spanGaps:false});

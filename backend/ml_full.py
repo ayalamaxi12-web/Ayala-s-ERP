@@ -251,6 +251,91 @@ class MLFullClient:
                 params = {**params, "scroll": scroll}
         return acumulado
 
+    def envios_pendientes_por_inventory(
+        self, cuenta: str, inventory_ids: list[str], desde: str, hasta: str,
+    ) -> dict[str, dict]:
+        """Reposición pendiente REAL hacia Full, por `inventory_id` -- en
+        PAQUETES (mismo criterio que `ventas_full_por_inventory`: esta
+        endpoint ya reporta en la unidad propia de la publicación, no hay
+        que aplicar el factor de pack acá). Pedido de Maxx 2026-09-01: no
+        confiar solo en el número, mostrar también el `inbound_id` real
+        para que lo pueda verificar a mano contra el panel de Full de ML.
+
+        Mismo endpoint que `ventas_full_por_inventory`
+        (`stock/fulfillment/operations/search`), `type=INBOUND_RECEPTION`
+        en vez de `SALE_CONFIRMATION` -- confirmado en vivo contra la
+        cuenta real (2026-09-01, `inventory_id=SMBG96818`):
+
+            {"id": ..., "date_created": "2026-07-18T03:28:18Z",
+             "detail": {"available_quantity": 3, ...},
+             "result": {"total": 10, "available_quantity": 8,
+                        "not_available_quantity": 2, ...},
+             "external_references": [{"type": "inbound_id", "value": "71384203"}],
+             "inventory_id": "SMBG96818"}
+
+        `result` es una FOTO ACUMULADA del envío de reposición completo
+        (`inbound_id`, en `external_references`) al momento de ESE evento
+        -- NO un delta de esa fila puntual (eso es `detail`). Confirmado
+        con un caso real que tuvo dos eventos para el mismo `inbound_id`
+        el mismo día: el primero traía `not_available_quantity: 2`, el
+        segundo (unos minutos después) `0` -- o sea, ya había terminado
+        de acreditarse. Por eso acá se agrupa por `inbound_id` y se toma
+        SOLO el evento con `date_created` más reciente por grupo -- los
+        anteriores quedarían obsoletos y sumarían pendientes que en
+        realidad ya se resolvieron.
+
+        Devuelve, por `inventory_id`, `unidades` (suma de
+        `not_available_quantity` de los `inbound_id` que siguen con algo
+        pendiente -- los que ya llegaron a 0 no se cuentan) e
+        `inbound_ids` (los números reales de esos envíos, para que Maxx
+        los busque a mano en ML si quiere confirmar)."""
+        seller_id = SELLERS[cuenta]
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        # inventory_id -> {inbound_id -> (fecha_mas_reciente, pendiente_a_esa_fecha)}
+        ultimo_por_inbound: dict[str, dict[str, tuple[str, int]]] = {}
+        primera_llamada = True
+        for i in range(0, len(inventory_ids), 20):
+            lote = inventory_ids[i:i + 20]
+            params = {
+                "seller_id": seller_id, "inventory_id": ",".join(lote),
+                "date_from": desde, "date_to": hasta, "type": "INBOUND_RECEPTION",
+            }
+            paginas = 0
+            while paginas < 50:  # mismo tope de seguridad que ventas_full_por_inventory
+                paginas += 1
+                if not primera_llamada:
+                    time.sleep(0.4)  # misma cuota ajustada, ver docstring de arriba
+                primera_llamada = False
+                d = self._get(
+                    "https://api.mercadolibre.com/stock/fulfillment/operations/search", params, headers
+                )
+                resultados = d.get("results", [])
+                for op in resultados:
+                    inv = op.get("inventory_id")
+                    refs = op.get("external_references") or []
+                    inbound_id = next((r.get("value") for r in refs if r.get("type") == "inbound_id"), None)
+                    if not inv or not inbound_id:
+                        continue
+                    fecha = op.get("date_created") or ""
+                    resumen = op.get("result") or {}
+                    pendiente = resumen.get("not_available_quantity")
+                    if pendiente is None:
+                        pendiente = max(0, (resumen.get("total") or 0) - (resumen.get("available_quantity") or 0))
+                    mapa_inv = ultimo_por_inbound.setdefault(inv, {})
+                    previo = mapa_inv.get(inbound_id)
+                    if previo is None or fecha > previo[0]:
+                        mapa_inv[inbound_id] = (fecha, pendiente)
+                scroll = (d.get("paging") or {}).get("scroll")
+                if not scroll or not resultados:
+                    break
+                params = {**params, "scroll": scroll}
+        acumulado: dict[str, dict] = {}
+        for inv, mapa in ultimo_por_inbound.items():
+            pendientes = {inbound_id: cant for inbound_id, (_, cant) in mapa.items() if cant > 0}
+            if pendientes:
+                acumulado[inv] = {"unidades": sum(pendientes.values()), "inbound_ids": sorted(pendientes)}
+        return acumulado
+
 
 def _sku_de_item(item: dict) -> str | None:
     """El SKU propio puede vivir en `seller_custom_field` o en el atributo

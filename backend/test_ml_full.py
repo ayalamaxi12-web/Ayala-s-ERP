@@ -325,6 +325,58 @@ def test_ventas_full_por_inventory_batchea_de_a_20_inventory_ids():
     assert len(lotes_pedidos[1]) == 5
 
 
+# ── MLFullClient.envios_pendientes_por_inventory ──
+
+def test_envios_pendientes_se_queda_con_el_evento_mas_reciente_por_inbound_id():
+    # Caso real confirmado en vivo 2026-09-01 (inventory_id SMBG96818,
+    # inbound_id 71384203): dos eventos el mismo día, el primero con
+    # not_available_quantity=2, el segundo (más tarde) ya en 0 -- hay que
+    # quedarse con el segundo, no sumar los dos.
+    def fake_get(url, params, headers):
+        assert params["type"] == "INBOUND_RECEPTION"
+        return {"results": [
+            {"inventory_id": "SMBG96818", "date_created": "2026-07-18T03:28:18Z",
+             "result": {"total": 10, "available_quantity": 8, "not_available_quantity": 2},
+             "external_references": [{"type": "inbound_id", "value": "71384203"}]},
+            {"inventory_id": "SMBG96818", "date_created": "2026-07-18T03:35:56Z",
+             "result": {"total": 10, "available_quantity": 10, "not_available_quantity": 0},
+             "external_references": [{"type": "inbound_id", "value": "71384203"}]},
+        ], "paging": {"total": 2, "scroll": None}}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    pendientes = client.envios_pendientes_por_inventory("IT", ["SMBG96818"], "2026-07-15", "2026-09-01")
+    assert pendientes == {}  # ya se acreditó todo -- no queda nada pendiente
+
+
+def test_envios_pendientes_suma_solo_los_inbound_id_que_siguen_pendientes():
+    def fake_get(url, params, headers):
+        return {"results": [
+            {"inventory_id": "SMBG96818", "date_created": "2026-08-15T16:24:04Z",
+             "result": {"total": 15, "available_quantity": 15, "not_available_quantity": 0},
+             "external_references": [{"type": "inbound_id", "value": "73373134"}]},
+            {"inventory_id": "SMBG96818", "date_created": "2026-08-20T10:00:00Z",
+             "result": {"total": 20, "available_quantity": 12, "not_available_quantity": 8},
+             "external_references": [{"type": "inbound_id", "value": "80000001"}]},
+        ], "paging": {"total": 2, "scroll": None}}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    pendientes = client.envios_pendientes_por_inventory("IT", ["SMBG96818"], "2026-07-15", "2026-09-01")
+    assert pendientes == {"SMBG96818": {"unidades": 8, "inbound_ids": ["80000001"]}}
+
+
+def test_envios_pendientes_ignora_operaciones_sin_inbound_id():
+    def fake_get(url, params, headers):
+        return {"results": [
+            {"inventory_id": "SMBG96818", "date_created": "2026-08-20T10:00:00Z",
+             "result": {"total": 5, "available_quantity": 0, "not_available_quantity": 5},
+             "external_references": []},
+        ], "paging": {"total": 1, "scroll": None}}
+
+    client = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    pendientes = client.envios_pendientes_por_inventory("IT", ["SMBG96818"], "2026-07-15", "2026-09-01")
+    assert pendientes == {}
+
+
 def test_factor_pack_none_si_no_esta_vinculada():
     # Visto en la realidad (2026-08-20, dos ítems reales sin pack):
     # linked=false, productListings=[].

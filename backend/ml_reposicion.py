@@ -83,15 +83,18 @@ todas, son el mismo número. El reparto se calcula sobre el TOTAL del SKU
 cruzando las dos cuentas (el depósito es uno solo, compartido) aunque la
 pantalla lo muestre en pestañas separadas por cuenta.
 
-**"Envíos pendientes" sigue siendo un campo manual, cargado por la persona
-en el ERP** (confirmado con Maxx 2026-08-25) -- este módulo no lo calcula
-ni lo resta, queda en manos del frontend, que sí lo resta de
-`cantidad_enviar`/`sugerido` al recalcular localmente cuando la persona lo
-carga. El mismo endpoint que ahora resuelve las ventas
-(`stock/fulfillment/operations/search`) también sirve para esto con
-`type=INBOUND_RECEPTION` -- contrato ya confirmado contra la cuenta real
-(mismo formato de fecha/paginación), pero conectarlo es trabajo aparte, no
-pedido todavía.
+**"Envíos pendientes" -- conectado 2026-09-01 (pedido de Maxx), ya no es
+puramente manual.** `FilaReposicionMLA.envio_pendiente` (paquetes) y
+`.envio_pendiente_ids` (los `inbound_id` reales, para que Maxx los pueda
+buscar a mano en el panel de Full de ML) se resuelven en vivo vía
+`MLFullClient.envios_pendientes_por_inventory` (mismo endpoint que las
+ventas, `stock/fulfillment/operations/search`, `type=INBOUND_RECEPTION` --
+ver su docstring para el detalle de por qué hay que agrupar por
+`inbound_id` y quedarse con el evento más reciente). Este módulo SIGUE sin
+restarlo de `cantidad_enviar`/`sugerido` -- ese resto sigue pasando en el
+frontend (`_fullRepoRecalcular`), que ahora arranca con este valor real
+como default en vez de 0, pero lo deja editable por si el dato de ML
+todavía no reflejó un despacho recién hecho.
 
 GAPS documentados, no resueltos todavía (no son reglas inventadas, son
 huecos reales sin dato para llenarlos):
@@ -108,7 +111,7 @@ huecos reales sin dato para llenarlos):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from ml_auth import SELLERS
@@ -137,6 +140,8 @@ class FilaReposicionMLA:
     sugerido: int          # ídem, en paquetes
     stock_ecom: int | None
     stock_tactica: int | None
+    envio_pendiente: int = 0            # en paquetes -- ver ml_full.envios_pendientes_por_inventory
+    envio_pendiente_ids: list[str] = field(default_factory=list)  # inbound_id reales, para verificar a mano
 
 
 @dataclass
@@ -218,6 +223,7 @@ def calcular_reposicion_mla(
     resultado_conciliacion = conciliar(ml, ecom, cuentas)
 
     ventas_por_inventory: dict[str, dict] = {}
+    envios_pendientes_por_inventory: dict[str, dict] = {}
     for cuenta in cuentas:
         # inventory_id es único globalmente (no solo por cuenta) -- no hay
         # colisión al combinar los diccionarios de las dos cuentas.
@@ -229,6 +235,15 @@ def calcular_reposicion_mla(
         })
         if inventory_ids:
             ventas_por_inventory.update(ml.ventas_full_por_inventory(cuenta, inventory_ids, desde, hasta))
+            # "Envíos pendientes" real -- pedido de Maxx 2026-09-01, ver
+            # docstring de envios_pendientes_por_inventory. Antes esto era
+            # un campo que la persona cargaba a mano en el frontend; ahora
+            # se sugiere solo con el dato real de ML (el frontend lo sigue
+            # dejando editable, por si el dato de ML tarda en reflejar un
+            # despacho recién hecho).
+            envios_pendientes_por_inventory.update(
+                ml.envios_pendientes_por_inventory(cuenta, inventory_ids, desde, hasta)
+            )
 
     filas: list[FilaReposicionMLA] = []
     for fila_sku in resultado_conciliacion.filas:
@@ -261,6 +276,8 @@ def calcular_reposicion_mla(
             stock_a_llegada = max(0.0, stock_full_mla - ventas_diarias * dias_hasta_llegada)
             cantidad_enviar = max(0, round(stock_objetivo - stock_a_llegada))
 
+            envio_pend = envios_pendientes_por_inventory.get(pub["inventory_id"]) if pub.get("inventory_id") else None
+
             filas.append(FilaReposicionMLA(
                 item_id=pub["item_id"], inventory_id=pub["inventory_id"], cuenta=pub["cuenta"],
                 sku=fila_sku.sku, sku_ml=pub.get("sku_ml"), titulo=pub.get("titulo", ""),
@@ -270,6 +287,8 @@ def calcular_reposicion_mla(
                 stock_a_llegada=round(stock_a_llegada, 1), factor=pub["factor"],
                 cantidad_enviar=cantidad_enviar, sugerido=0,
                 stock_ecom=stock_ecom, stock_tactica=stock_tactica,
+                envio_pendiente=envio_pend["unidades"] if envio_pend else 0,
+                envio_pendiente_ids=envio_pend["inbound_ids"] if envio_pend else [],
             ))
 
     _repartir_sugerido(filas)
