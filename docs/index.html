@@ -3675,7 +3675,30 @@ function renderDashboard(inst){
       <div class="kpi-card c4"><div class="kpi-label">Costo Total</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.costo,0))}</div><div class="kpi-sub">${totalFact?((allP.reduce((s,d)=>s+d.costo,0)/totalFact)*100).toFixed(1):0}%</div></div>
       <div class="kpi-card c5"><div class="kpi-label">Canal Principal</div><div class="kpi-value" style="font-size:13px;word-break:break-word">${topCanal[0]?.[0]||'—'}</div><div class="kpi-sub">${fmt$(topCanal[0]?.[1]||0)}</div></div>
     </div>
-    ${useComparison&&k2?`<div class="compare-box"><div class="section-hdr" style="margin-bottom:10px">${compareTitle}</div><div class="compare-row"><div class="compare-col"><h4 style="color:var(--accent2)">● ${label1}</h4><div class="cv">${fmt$(k1.fact)}</div><div class="cs">Rent: ${fmt$(k1.rent)} · ${k1.fact>0?(k1.rent/k1.fact*100).toFixed(1):0}%</div><div class="cs">Costo: ${fmt$(k1.costo)} · ${data.length} órdenes</div></div><div class="compare-col"><h4 style="color:var(--accent3)">● ${label2}</h4><div class="cv">${fmt$(k2.fact)} ${delta(k2.fact,k1.fact)}</div><div class="cs">Rent: ${fmt$(k2.rent)} · ${(k2.rent/k2.fact*100).toFixed(1)}% ${delta(k2.rent,k1.rent)}</div><div class="cs">Costo: ${fmt$(k2.costo)} · ${data2.length} órdenes</div></div></div><div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center"><button class="btn primary" onclick="pedirAnalisis('${inst}')" id="${btnAnalisisId}" style="font-size:11px">✦ Analizar con IA</button><span style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">${compareNote}</span></div><div id="${aiAnalisisId}" style="margin-top:10px"></div></div>`:''}
+    ${(()=>{
+      if(!(useComparison&&k2))return'';
+      // Estilo "Vista general" de Métricas de ML (pedido de Maxx 2026-09-01):
+      // una tarjeta por métrica con el delta pegado al número, en vez de dos
+      // columnas separadas por período -- pero sin perder lo que ya
+      // teníamos y ML no muestra: el valor absoluto del período de
+      // comparación (acá va de subtítulo) y la cantidad de órdenes.
+      const rentPct1=k1.fact>0?(k1.rent/k1.fact*100):0,rentPct2=k2.fact>0?(k2.rent/k2.fact*100):0;
+      // Puntos porcentuales, no % relativo -- mismo criterio que usa ML
+      // ("Conversión +0,1 puntos"): un margen que pasa de 18,9% a 19,2%
+      // tiene que verse como "+0,3 puntos", no como un enorme "+1,6%"
+      // relativo, que confundiría más de lo que aclara.
+      const deltaPts=(v1,v2)=>{if(!useComparison||!k2)return'';const diff=v1-v2;const up=diff>=0;return`<div style="font-size:9px;color:${up?'var(--green)':'var(--red)'};margin-top:3px;font-family:'DM Mono',monospace">${up?'↑':'↓'} ${Math.abs(diff).toFixed(1)} pts</div>`;};
+      const kpi=(clase,label,v1,v2,fmt,deltaFn)=>`<div class="kpi-card ${clase}"><div class="kpi-label">${label}</div><div class="kpi-value">${fmt(v1)}</div>${(deltaFn||delta)(v1,v2)}<div class="kpi-sub">${label2}: ${fmt(v2)}</div></div>`;
+      return `<div><div class="section-hdr">${compareTitle}</div><div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px">📅 <span style="color:var(--accent2)">${label1}</span> vs <span style="color:var(--accent3)">${label2}</span></div>
+      <div class="kpi-row">
+        ${kpi('c1','Facturación',k1.fact,k2.fact,fmt$)}
+        ${kpi('c2','Rentabilidad $',k1.rent,k2.rent,fmt$)}
+        ${kpi('c3','Rent. %',rentPct1,rentPct2,v=>v.toFixed(1)+'%',deltaPts)}
+        ${kpi('c4','Costo Total',k1.costo,k2.costo,fmt$)}
+        ${kpi('c5','Órdenes',data.length,data2.length,v=>v.toLocaleString())}
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center"><button class="btn primary" onclick="pedirAnalisis('${inst}')" id="${btnAnalisisId}" style="font-size:11px">✦ Analizar con IA</button><span style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">${compareNote}</span></div><div id="${aiAnalisisId}" style="margin-top:10px"></div></div>`;
+    })()}
     <div><div class="section-hdr">Evolución Diaria</div><div class="chart-card"><h3>Facturación por Día</h3><p>${useComparison?`<span style="color:var(--accent2)">●</span> ${label1} &nbsp; <span style="color:var(--accent3)">●</span> ${label2}`:`${Object.keys(byDay1).length} días con ventas`}</p><div style="position:relative;height:240px"><canvas id="${ids.diario}"></canvas></div></div></div>
     <div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final en $</p><div style="position:relative;height:220px"><canvas id="${ids.canalChart}"></canvas></div></div><div class="chart-card"><h3>Mix de Canales</h3><p>Distribución %</p><div style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="${ids.donut}"></canvas></div></div></div>
     ${crossSection}
