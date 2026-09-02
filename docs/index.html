@@ -3138,24 +3138,30 @@ function ofmRenderGestionarPanel(itemId,promociones){
   const pmRec=f.sku?S.pmData[normSku(f.sku)]:null;
   const pmDisponible=pmRec&&pmRec.ml>0;
   const precioPmActual=pmDisponible?pmRec.ml:(campanaActiva?campanaActiva.precio:(f.precio_oferta||f.precio_normal||0));
-  const fuentePm=pmDisponible?`<span style="color:var(--green)">precio del PM (${pmRec.pmName||pmRec.pm}): $${fmtN(pmRec.ml)}</span> -- editable si querés jugar con otro número.`
+  const fuentePm=pmDisponible?`<span style="color:var(--green)">precio del PM (${pmRec.pmName||pmRec.pm}): $${fmtN(pmRec.ml)}</span> -- el campo de abajo puede mostrar otro número si tiene cuotas y/o envío real sumado (ver avisos), editable igual si querés forzar otro valor.`
     :`<span style="color:var(--yellow)">sin dato del PM para el SKU "${f.sku||'sin SKU'}"</span> -- conectá su Sheet en Configuración, o cargalo a mano.`;
 
-  // Solo informativo -- NO autocompleta "Precio PM (final)" (pedido
-  // explícito de Maxx 2026-09-01: quiere ver el número, decide él si lo
-  // usa). cuotas_ofrecidas viene en vivo de installments.quantity/rate de
-  // la publicación real (backend, _cuotas_sin_interes) -- no de ningún CSV.
+  // Pedido de Maxx 2026-09-02: ya NO se queda solo en el aviso -- el
+  // campo "Precio PM (final)" arranca directamente con el precio ya
+  // ajustado (mismo orden que el backend en activar_en_campana_
+  // tradicional: primero cuotas, después envío real), y el tachado se
+  // infla desde ahí. Sigue siendo editable por si Maxx quiere forzar
+  // otro número -- esto solo cambia el valor INICIAL, no lo bloquea.
+  // (Decisión anterior, 2026-09-01, era no autocompletar -- revertida
+  // explícitamente acá, después de probarlo en vivo.)
   const cuotasRecargoPct=f.cuotas_ofrecidas?CUOTAS_PCT_ML[f.cuotas_ofrecidas]:null;
+  const costoEnvio=f.costo_envio_real;
+  const costoEnvioAplicable=costoEnvio&&costoEnvio.cost_type==='free'?(Number(costoEnvio.costo_envio_real)||0):0;
+  let precioPmAjustado=precioPmActual;
+  if(cuotasRecargoPct)precioPmAjustado=precioPmAjustado*(1+cuotasRecargoPct/100);
+  precioPmAjustado=Math.round(precioPmAjustado+costoEnvioAplicable);
+
   const cuotasHtml=f.cuotas_ofrecidas?(cuotasRecargoPct!=null
-    ?`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en <b>${f.cuotas_ofrecidas} cuotas sin interés</b> -- ML te cobra ${cuotasRecargoPct}% por eso. PM pide $${fmtN(Math.round(precioPmActual))}; con ese recargo, el precio final debería quedar en <b>$${fmtN(Math.round(precioPmActual*(1+cuotasRecargoPct/100)))}</b> (no lo pisa el campo de abajo, es para que decidas vos).</div>`
+    ?`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en <b>${f.cuotas_ofrecidas} cuotas sin interés</b> -- ML te cobra ${cuotasRecargoPct}% por eso, ya sumado al precio de abajo.</div>`
     :`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en ${f.cuotas_ofrecidas} cuotas sin interés, pero no tengo el % que cobra ML para esa cantidad -- revisalo a mano.</div>`
   ):'';
 
-  // Costo real de envío -- pedido de Maxx 2026-09-01, ver
-  // ofmCostosEnvioRun/costo-envio endpoint. Puramente informativo por
-  // ahora (igual que cuotasHtml): el cálculo de abajo sigue usando el
-  // aproximado fijo, esto es referencia para decidir a mano.
-  const costoEnvio=f.costo_envio_real;
+  // Costo real de envío -- ver ofmCostosEnvioRun/costo-envio endpoint.
   let costoEnvioHtml='';
   if(costoEnvio===null){
     costoEnvioHtml=`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">📦 Sin dato de envío real todavía para este ítem -- corré "Actualizar costos de envío reales" (al final de la página) para congelarlo.</div>`;
@@ -3163,7 +3169,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     const fv=costoEnvio.fecha_venta||'';
     const fecha=fv.length>=10?`${fv.slice(8,10)}/${fv.slice(5,7)}`:'?';
     costoEnvioHtml=costoEnvio.cost_type==='free'
-      ?`<div style="font-size:9px;color:var(--text2);margin-bottom:6px">📦 Costo real de envío de la última venta (${fecha}): <b>$${fmtN(Math.round(costoEnvio.costo_envio_real))}</b> -- el cálculo de acá todavía usa el aproximado fijo ($8.500), esto es solo referencia.</div>`
+      ?`<div style="font-size:9px;color:var(--text2);margin-bottom:6px">📦 Costo real de envío de la última venta (${fecha}): <b>$${fmtN(Math.round(costoEnvio.costo_envio_real))}</b> -- ya sumado al precio de abajo.</div>`
       :`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">📦 La última venta (${fecha}) no tuvo envío gratis -- lo pagó el comprador, sin costo real que vos absorbas ahí.</div>`;
   }
 
@@ -3177,7 +3183,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     ${cuotasHtml}
     ${costoEnvioHtml}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
-      <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${Math.round(precioPmActual)}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
+      <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás -- ya con cuotas/envío sumado si aplica)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${precioPmAjustado}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <span>Descuento % <span style="color:var(--text3);font-size:8px">(el mismo % que ves en Promociones de ML)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="25" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <span id="ofm-camp-tachado-${itemId}" style="color:var(--text3);font-size:9px"></span>
       <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarCampana('${itemId}')">📢 Meter en campaña</button>
