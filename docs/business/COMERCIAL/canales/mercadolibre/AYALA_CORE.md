@@ -59,12 +59,39 @@ producto.
    tramos por peso de la planilla).
 7. **Renta objetivo (%) por condición de pago** → configurable a mano por SKU. Arranca con los
    valores de la planilla (ej. 32 / 32 / 30 / 28 / 26 / 24 para Contado / Reducida / 3 / 6 / 9 / 12
-   cuotas).
+   cuotas). **Confirmado leyendo la fórmula real 2026-09-02**: no son 6 números sueltos — es UN
+   valor (renta Contado) más UN diferencial fijo que se resta por escalón (default 2 puntos),
+   arrancando desde Reducida (que no cambia respecto a Contado): Reducida = Contado; 3c = Reducida
+   − 2; 6c = 3c − 2; 9c = 6c − 2; 12c = 9c − 2. Los dos valores (renta Contado + diferencial) son
+   los que hay que exponer editables, no una tabla de 6 celdas independientes.
+8. **Envío a Bodega (Full)** → 0,50% adicional sobre el precio, SOLO si el envío es a Bodega (Full)
+   en vez de a Casa central (dato de la planilla, `Calculadora!B7`). Componente real encontrado
+   leyendo la fórmula 2026-09-02, no estaba en esta lista antes — no es la misma cuenta que "costo
+   de envío real" (punto 6): ese es el flete de reposición al depósito propio/Full, este 0,50% es
+   un cargo aparte de ML que solo aplica en esa modalidad de despacho.
 
 **Por qué la renta baja en cuotas (concepto clave que no hay que "corregir"):** es intencional.
 La renta objetivo baja en las condiciones con más cuotas para que **la ganancia en PESOS quede
 pareja** entre todas las formas de pago, aunque el % de margen baje. NO es un error: es el diseño
 de Maxx. No lo "optimices" a un % fijo.
+
+**La fórmula exacta** (confirmada leyendo `Motor!B32:G32` de la planilla real, en modo solo-lectura,
+2026-09-02 — reproduce el ejemplo congelado de A.3.1 al peso exacto, ver `test_ayala_core.py`):
+
+```
+IVA_SERVICIOS_ML = 1,21   # fijo -- el servicio/comisión de ML factura IVA 21% siempre,
+                          # sin importar la alícuota del producto vendido
+numerador   = costo_sin_iva + envío_real / IVA_SERVICIOS_ML
+denominador = 1/(1+iva_producto)
+              − (comisión_ML / IVA_SERVICIOS_ML)
+              − (IIBB / (1+iva_producto))
+              − financiero_pct        # 0 / 5% / cuotas sin interés según condición
+              − renta_objetivo_pct    # según condición, ver punto 7
+              − (0,50% si envío a Bodega Full, si no 0)
+precio_final = ROUND(numerador / denominador; 0 decimales)
+```
+
+Implementada en `backend/ayala_core.py` (`calcular_precio_condicion`/`calcular_precios_todas_condiciones`).
 
 ## A.3.1 Ejemplo de referencia congelado (test estable — NO depende del Sheet en vivo)
 Fila real de **PLANCHA-SUB-26X26-PORT**, tomada de la planilla el 2026-09-02. Este ejemplo queda
@@ -113,9 +140,15 @@ precio fijo por SKU.
   Selenium (ya se confirmó en vivo que la API pública alcanza para todo el flujo).
 
 ## A.7 Qué se reutiliza tal cual (YA construido, no rehacer)
-- Job de costo de envío real: `iniciar_job_costos_envio` / `costo_envio_real_item`.
-- Detección de cuotas por tags: `_cuotas_sin_interes` (extender para reconocer Reducida
-  `pcj-co-funded`).
+- Job de costo de envío real: `iniciar_job_costos_envio` / `costo_envio_real_item` (`ml_ofertas.py`).
+- Detección de cuotas por tags: `_cuotas_sin_interes` (`ml_ofertas.py`) — ya extendida para Reducida
+  (`pcj-co-funded`) en `ayala_core.detectar_condicion_pago`, hecho 2026-09-02.
+- Costo/IVA desde Táctica: `CostoVigenteProvider`/`IvaProvider` (`rentabilidad/adapters.py`) — mismo
+  patrón que usa `resolver_item_para_gestion` en Ofertas ML.
+- Resolución de SKU real del ítem: `_sku_de_item` (`ml_full.py`) — `seller_custom_field` O el
+  atributo `SELLER_SKU`, nunca uno solo (bug real encontrado y corregido en Ofertas ML 2026-09-02,
+  ver [[project_ml-full-reposicion-fixes]] — reusar esta función siempre, no volver a leer
+  `seller_custom_field` directo en ningún código nuevo de Ayala Core).
 - Flujo de campaña/tachado: `activar_en_campana_tradicional` — reapuntado para usar el precio de
   Ayala Core en vez del precio del PM/reglas de Ecom.
 
@@ -148,18 +181,35 @@ precio fijo por SKU.
 ## Estado actual
 _(Fecha de última actualización: 2026-09-02)_
 
-- **Etapa en curso:** Etapa 1 (solo lectura) — definición / arranque.
-- **Escrito hasta ahora:** _(a completar por Code: qué archivos/funciones ya existen de Ayala Core)_
-- **Validación contra planilla:** ❌ pendiente — el motor todavía no se contrastó contra
-  "VENTAS POR CANALES MATIAS".
+- **Etapa en curso:** Etapa 1 (solo lectura) — motor construido y expuesto, falta la pantalla.
+- **Escrito hasta ahora:**
+  - `backend/ayala_core.py` — motor completo (`calcular_precio_condicion`/
+    `calcular_precios_todas_condiciones`, la fórmula exacta de A.3), detección de condición de pago
+    (`detectar_condicion_pago`, incluye Reducida), `SKUS_PILOTO`. 15 tests en `test_ayala_core.py`,
+    todos verdes.
+  - `GET /ayala-core/skus` y `GET /ayala-core/sku/{sku}/motor` en `backend/main.py` — el segundo
+    resuelve costo/IVA reales de Táctica + TC del BNA + (opcional) un `item_id` real para comparar
+    condición detectada/precio actual en vivo contra el precio calculado. Probado contra Táctica
+    real en local (SKU `PLANCHA-SUB-26X26-PORT`, dio precios coherentes con el ejemplo congelado,
+    diferencia esperada por costo/TC del día). El camino con `item_id` no se pudo probar en vivo
+    localmente (sin token de ML en el entorno de desarrollo) — pendiente de verificar en Railway.
+  - **NO existe todavía ninguna pantalla en `docs/index.html`** — el motor solo se puede probar por
+    API/curl hoy.
+- **Validación contra planilla:** ✅ el motor reproduce el ejemplo congelado de A.3.1 al peso exacto
+  (los 6 valores, ver `test_ayala_core.py`) — la fórmula se sacó leyendo `Motor!B32:G32` de la
+  planilla real, no se adivinó.
+- **PAUSADO 2026-09-02** — la sub-sección "Ofertas" (A.7/A.8 punto 4) espera un audio de "la
+  encargada de ofertas" con cómo quiere trabajarlo, que Maxx va a pasarle a Desk para armar un MD.
+  El resto de Ayala Core (motor + panel de lectura) sigue en curso, no está pausado.
 
 ## Research pendiente (no bloquea el diseño, se resuelve al implementar)
 - Cómo identificar desde la API/GraphQL de Ecom qué MLA está vinculado a **exactamente un SKU**
-  (vs. combos). Es research de implementación, no decisión de producto.
-- Confirmar que al cambiar de campaña en ML (de cuotas sin interés a Reducida) la publicación sale
-  automáticamente de la otra.
+  (vs. combos). Es research de implementación, no decisión de producto. Sigue sin resolver — el
+  endpoint de Etapa 1 hoy requiere pasar el `item_id` a mano, no descubre los MLA de un SKU solo.
+- **RESUELTO 2026-09-02**: la condición Reducida se detecta en vivo (`detectar_condicion_pago`,
+  tag `pcj-co-funded`) — ya no es research pendiente, ver A.7.
 - Definir el endpoint exacto para escribir precio directo a ML por condición (reutilizar el mismo
-  patrón PUT que ya existe en `fijar_precio_base`).
+  patrón PUT que ya existe en `fijar_precio_base`). Etapa 2, todavía no arrancó.
 - **RESUELTO 2026-09-02 — `CUOTAS_PCT_DEFAULT` estaba desactualizado, ya corregido en los DOS
   lugares.** Confirmado en vivo con Claude in Chrome (simulador de costos real, "Modificar
   publicación" de MLA3655836976): los valores reales subieron a 3→8,9% · 6→13,4% · 9→17,8% ·
@@ -181,8 +231,23 @@ _(Fecha de última actualización: 2026-09-02)_
   Ayala Core -- fue para que Code entendiera el motor de cálculo. Una vez construido el módulo en
   el ERP, las tasas (comisión, cuotas, envío) se gestionan y corrigen directo ahí, sin depender de
   mantener el Sheet actualizado a futuro.
+- **2026-09-02**: fórmula del motor confirmada leyendo `Motor!B32:G32` real (solo-lectura, API de
+  Sheets) en vez de reconstruirla a ojo desde los ejemplos -- reproduce el ejemplo congelado de
+  A.3.1 al peso exacto. De paso se encontró un componente real no documentado antes (0,50% extra si
+  el envío es a Bodega Full, punto A.3.8) y se confirmó que la renta objetivo es un valor + un
+  diferencial por escalón (-2 puntos), no 6 números sueltos -- ver A.3 punto 7.
+- **2026-09-02**: Maxx corrigió "NO, pausamos Ofertas ML, seguimos con Ayala Core" -- la pausa es
+  SOLO de la sub-sección Ofertas (esperando el audio/MD), no de todo el módulo. Se construyó la
+  Etapa 1 (motor + endpoint) en la misma sesión.
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
-- Cerrar Etapa 1: motor de cálculo en modo solo-lectura, validado contra la planilla real.
+- Falta la pantalla de Etapa 1 en `docs/index.html` (selector de SKU, panel de costo/renta editable,
+  tabla de 6 condiciones, comparación contra un MLA real) -- el motor y el endpoint ya existen, solo
+  falta el frontend.
+- Verificar en Railway (no se pudo en local, sin token de ML en el entorno de desarrollo) que
+  `GET /ayala-core/sku/{sku}/motor?item_id=...&cuenta=...` resuelve bien condición/precio actual
+  contra un MLA real.
+- Cerrar Etapa 1 del todo: una vez la pantalla exista, validar los 5 SKU piloto contra la planilla
+  real antes de pasar a Etapa 2 (escritura).
 - _(Code mantiene esta lista.)_
