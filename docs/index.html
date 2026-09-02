@@ -195,6 +195,11 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
+    <div class="sidebar-section-label">🚀 Ayala Core</div>
+    <div class="sidebar-item" data-page="ayala-core" onclick="goPage('ayala-core',this)"><span class="icon">⚙️</span> Motor de Precios</div>
+  </div>
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section">
     <div class="sidebar-section-label">🛠 Gestión de Precios</div>
     <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
     <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">✅</span> Verificar Táctica</div>
@@ -1296,6 +1301,50 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div id="ofm-costos-envio-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace"></div>
   </div>
 </div>
+
+<div id="page-ayala-core" class="page">
+  <div style="margin-bottom:4px">
+    <div class="section-hdr" style="margin-bottom:4px">🚀 Ayala Core — Motor de Precios</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Etapa 1 (solo lectura) -- motor propio de reverse-markup para los SKU piloto, reemplaza el precio de Ecom para estos SKU. Costo/IVA reales de Táctica, TC del BNA. No escribe nada a ML todavía.</div>
+  </div>
+
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:10px 0;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
+    <span style="display:flex;flex-direction:column;gap:3px">SKU
+      <select id="ac-sku" class="fi" style="min-width:200px"></select>
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Renta Contado %
+      <input type="text" id="ac-renta-contado" value="32" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Diferencial por cuota (pts)
+      <input type="text" id="ac-diferencial" value="2" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Envío real $ (opcional)
+      <input type="text" id="ac-envio-real" placeholder="auto si comparás un MLA" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;padding-bottom:6px"><input type="checkbox" id="ac-envio-full">Envío a Bodega (Full)</label>
+    <button class="btn primary" onclick="ayalaCoreCalcular()">🧮 Calcular</button>
+  </div>
+
+  <div id="ac-datos" style="display:none;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
+
+  <div class="table-wrap" id="ac-tabla-wrap" style="display:none;max-width:420px">
+    <table>
+      <thead><tr><th>Condición</th><th style="text-align:right">Precio</th></tr></thead>
+      <tbody id="ac-tabla-tbody"></tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:24px">
+    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 Comparar contra una publicación real</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Trae la condición de pago y el precio actual en vivo del MLA (y el envío real de su última venta, si ya lo corriste en Ofertas ML), y los compara contra el precio que el motor calcula para esa condición. No escribe nada a ML.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <input type="text" id="ac-mla" placeholder="MLA..." class="fi" style="width:140px">
+      <select id="ac-cuenta" class="fi"><option value="IT">IT</option><option value="MT">MT</option></select>
+      <button class="btn" onclick="ayalaCoreCompararMLA()">Comparar</button>
+    </div>
+    <div id="ac-mla-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"></div>
+  </div>
+</div>
 <script>
 const S={
   mlToken:'',mlToken2:'',mlSellerId:'',mlSellerId2:'',sheetsKey:'',ecomCookie:'',ecomEmail:'',
@@ -1495,6 +1544,7 @@ function goPage(page,el){
   if(page==='intel-referencias'&&!referenciasPageLoaded)loadReferenciasPage();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();}
+  if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
 }
 
 // ── MULTI-SELECT ──
@@ -3448,6 +3498,69 @@ function ofmAlertasOnResult(result,cuenta){
     <td style="text-align:right;color:var(--green)">${c.ventas_periodo}</td>
     <td style="text-align:right">${c.stock}</td>
   </tr>`).join('');
+}
+
+// ── Ayala Core — motor de precios propio (Etapa 1, solo lectura). Ver
+// docs/business/COMERCIAL/canales/mercadolibre/AYALA_CORE.md -- el cálculo
+// vive en backend/ayala_core.py, acá solo se pide/muestra. ──
+let ayalaCoreLoaded=false;
+const AC_COND_LABEL={contado:'Contado',reducida:'Reducida','3':'3 cuotas','6':'6 cuotas','9':'9 cuotas','12':'12 cuotas'};
+function ayalaCoreCondLabel(c){return AC_COND_LABEL[String(c)]||c;}
+function ayalaCoreFmt(n){return n==null?'—':'$'+Number(n).toLocaleString('es-AR',{maximumFractionDigits:0});}
+async function ayalaCoreLoad(){
+  const url=getBackendUrl();if(!url)return;
+  try{
+    const res=await fetch(`${url}/ayala-core/skus`);
+    const d=await res.json();
+    qs('ac-sku').innerHTML=(d.skus||[]).map(s=>`<option value="${s}">${s}</option>`).join('');
+    ayalaCoreLoaded=true;
+  }catch(e){}
+}
+const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
+function ayalaCoreRenderMotor(d){
+  qs('ac-datos').style.display='block';
+  qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}`;
+  // orden fijo -- Object.entries() reordena solo(!) las claves numéricas
+  // ("3","6","9","12") al frente por spec de JS, aunque el dict de Python
+  // las devuelva en el orden natural Contado/Reducida/3/6/9/12.
+  qs('ac-tabla-tbody').innerHTML=AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td></tr>`).join('');
+  qs('ac-tabla-wrap').style.display='block';
+}
+async function ayalaCoreCalcular(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const sku=qs('ac-sku').value;if(!sku){toast('Elegí un SKU','error');return;}
+  const rentaContado=qs('ac-renta-contado').value||32, diferencial=qs('ac-diferencial').value||2;
+  const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
+  let qparams=`renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}&envio_full=${envioFull}`;
+  if(envioReal)qparams+=`&envio_real=${envioReal}`;
+  qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
+  try{
+    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${qparams}`);
+    if(!res.ok){const e=await res.json().catch(()=>({}));qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
+    ayalaCoreRenderMotor(await res.json());
+  }catch(e){qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+async function ayalaCoreCompararMLA(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const sku=qs('ac-sku').value;if(!sku){toast('Elegí un SKU primero','error');return;}
+  const itemId=(qs('ac-mla').value||'').trim().toUpperCase();if(!itemId){toast('Ingresá un MLA','error');return;}
+  const cuenta=qs('ac-cuenta').value;
+  const rentaContado=qs('ac-renta-contado').value||32, diferencial=qs('ac-diferencial').value||2;
+  const envioFull=qs('ac-envio-full').checked;
+  const cont=qs('ac-mla-resultado');
+  cont.style.display='block';cont.textContent='Buscando...';
+  try{
+    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}`);
+    if(!res.ok){const e=await res.json().catch(()=>({}));cont.innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
+    const d=await res.json();
+    const it=d.item;
+    if(!it){cont.innerHTML='Sin datos de publicación';return;}
+    const diff=(it.precio_actual||0)-(it.precio_calculado||0);
+    const color=Math.abs(diff)<50?'var(--green)':'var(--red)';
+    cont.innerHTML=`<b>${it.titulo}</b><br>Condición detectada: <b>${ayalaCoreCondLabel(it.condicion_detectada)}</b> · Precio actual: <b>${ayalaCoreFmt(it.precio_actual)}</b> · Precio calculado: <b>${ayalaCoreFmt(it.precio_calculado)}</b> · Diferencia: <b style="color:${color}">${ayalaCoreFmt(diff)}</b>`;
+    qs('ac-envio-real').value=d.envio_real;
+    ayalaCoreRenderMotor(d);
+  }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
 
 // ──────────────────────
