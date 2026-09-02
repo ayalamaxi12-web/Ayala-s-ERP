@@ -3172,7 +3172,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
     ${promosHtml}
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">🏷️ Oferta Tradicional (campaña propia mensual)</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Calcula el tachado para que, con el % de descuento que pongas (el mismo que ves en Promociones de ML), el precio final quede exactamente en el del PM -- y mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla). ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Calcula el tachado para que, con el % de descuento que pongas (el mismo que ves en Promociones de ML), el precio final quede exactamente en el del PM que cargues acá abajo -- si la publicación está en cuotas y/o tiene envío real congelado, el backend le suma esos ajustes antes de armar el tachado (ver avisos arriba), y te confirma en el resultado el precio final que quedó de verdad. Mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla). ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${fuentePm}</div>
     ${cuotasHtml}
     ${costoEnvioHtml}
@@ -3325,7 +3325,17 @@ async function ofmConfirmarCampana(itemId,opts){
       body:JSON.stringify({cuenta:f.cuenta,precio_pm:precioPm,descuento_pct:descuentoPct,sku:f.sku||'',precio_anterior:f.precio_oferta||f.precio_normal||'',
         margen_pct:margenPct!==null?(margenPct*100).toFixed(2):'',bajo_umbral:bajoUmbral,operador})});
     const d=await res.json();
-    if(d.ok){toast(`✅ ${itemId}: metida en "${d.nombre_campana||d.promotion_id}"`);await ofmCargarPromociones(itemId);return;}
+    if(d.ok){
+      // Pedido de Maxx 2026-09-02: el backend ahora puede ajustar
+      // precio_pm por cuotas/envío real antes de mandarlo -- el precio
+      // final aplicado puede ser distinto al que se confirmó en el
+      // diálogo de arriba (que todavía no replica esa cuenta del lado
+      // del cliente). Avisar el número real aplicado en vez de dejar a
+      // Maxx creyendo que se metió al precio que él tipeó.
+      const msgAjuste=d.ajuste_cuotas_envio?` (${d.ajuste_cuotas_envio})`:'';
+      toast(`✅ ${itemId}: metida en "${d.nombre_campana||d.promotion_id}" a $${fmtN(d.precio_final??precioPm)}${msgAjuste}`);
+      await ofmCargarPromociones(itemId);return;
+    }
     if(d.techo_acreditado_ml!=null){
       const techo=Math.floor(d.techo_acreditado_ml);
       const descRealPct=(1-techo/precioPm)*100;

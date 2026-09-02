@@ -335,7 +335,9 @@ class MLOfertasClient(MLFullClient):
         `progreso_cb(procesados, total, "catalogo")` opcional -- este lote
         de llamadas (hasta ~310 para un escaneo completo de ofertas
         propias) es buena parte del tiempo "muerto" que veía Maxx antes de
-        que arrancara a reportar progreso el loop de promociones."""
+        que arrancara a reportar progreso el loop de promociones.
+
+        Pide `tags`, no `installments` -- ver `_cuotas_sin_interes`."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         salida: list[dict] = []
         total = len(item_ids)
@@ -345,7 +347,7 @@ class MLOfertasClient(MLFullClient):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,domain_id,installments"},
+                {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,domain_id,tags"},
                 headers,
             )
             for entrada in (d or []):
@@ -367,7 +369,7 @@ class MLOfertasClient(MLFullClient):
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         return self._get(
             f"https://api.mercadolibre.com/items/{item_id}",
-            {"attributes": "id,title,price,permalink,seller_custom_field,domain_id,installments"}, headers,
+            {"attributes": "id,title,price,permalink,seller_custom_field,domain_id,tags"}, headers,
         )
 
 
@@ -762,13 +764,21 @@ def activar_en_campana_tradicional(
 ) -> dict:
     """Automatiza el flujo real de Maxx (confirmado 2026-08-28, 80% de su
     uso): mete la publicación en su campaña mensual propia ("Oferta
-    Tradicional <mes>") dejando `precio_pm` (el precio que definió el PM)
-    como precio final -- SIEMPRE, pase lo que pase con el tachado. Esto es
-    puro posicionamiento: no hay descuento real, el cliente nunca paga
-    menos de lo que ya pagaría; el tachado es teatro para que ML muestre
-    la publicación como "en oferta". Por eso el precio final nunca se
-    negocia -- lo único que puede variar es cuánto hay que inflar el
-    tachado para que ML acepte mostrarlo.
+    Tradicional <mes>") dejando `precio_final` (`precio_pm` ajustado por
+    cuotas/envío real -- ver más abajo) como precio final -- SIEMPRE, pase
+    lo que pase con el tachado. Esto es puro posicionamiento: no hay
+    descuento real adicional al del ajuste, el cliente nunca paga menos de
+    lo que ya pagaría; el tachado es teatro para que ML muestre la
+    publicación como "en oferta". Por eso el precio final nunca se
+    negocia MÁS ALLÁ del ajuste de cuotas/envío -- lo único que puede
+    variar por campaña/ítem es cuánto hay que inflar el tachado para que
+    ML acepte mostrarlo.
+
+    **`precio_pm` ya NO es el precio final tal cual, desde 2026-09-02
+    (pedido explícito de Maxx).** Ver el bloque de "Ajuste por cuotas +
+    envío real" más abajo en el cuerpo de la función para la fórmula
+    exacta y el porqué -- en resumen: `precio_final = precio_pm × (1 +
+    %cuotas si aplica) + costo_envío_real (si tuvo envío gratis)`.
 
     **Fórmula del tachado estándar**, corregida 2026-08-28 (bug real
     encontrado por Maxx en vivo, MLA627267951: 25% de descuento sobre
@@ -862,16 +872,66 @@ def activar_en_campana_tradicional(
 
     if descuento_pct >= 100:
         return {"ok": False, "error": f"Descuento de {descuento_pct}% inválido -- tiene que ser menor a 100%."}
-    precio_tachado = (precio_pm / (1 - descuento_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     # Precio previo del ítem -- para poder restaurarlo tal cual estaba si
     # algo se corta a mitad de camino (ver docstring). Se lee ANTES de
     # tocar nada; si esta lectura falla, se sigue igual (mismo criterio
     # que el resto del módulo: no bloquear por un GET que no es central),
-    # pero una reversión posterior quedaría sin poder restaurar el precio.
+    # pero una reversión posterior quedaría sin poder restaurar el precio
+    # ni calcular el ajuste de cuotas de abajo (pide `tags` también, ver
+    # `_cuotas_sin_interes`).
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
-    previo = ml._get(f"https://api.mercadolibre.com/items/{item_id}", {"attributes": "id,price"}, headers) or {}
+    previo = ml._get(f"https://api.mercadolibre.com/items/{item_id}", {"attributes": "id,price,tags"}, headers) or {}
     precio_previo = previo.get("price")
+
+    # **Ajuste por cuotas + envío real -- pedido explícito de Maxx
+    # 2026-09-02.** `precio_pm` (lo que recibe esta función) es el precio
+    # SIN ajustar que define el PM para Ecom -- no necesariamente lo que
+    # hay que cobrar de verdad en esta campaña. Motivo, palabras de Maxx:
+    # "Ecom ya me sube automático el precio de envío (cuando tiene envío
+    # gratis) al precio de base" -- cuando ML te descuenta un envío real,
+    # el precio de lista tiene que subir esa misma plata para que el PM
+    # siga netando lo que pidió (ejemplo suyo: PM $100.000 + envío real
+    # $12.000 = $112.000). Mismo criterio con cuotas: si la publicación
+    # está en una campaña de cuotas sin interés (`_cuotas_sin_interes`,
+    # via `tags` -- ver su docstring, `installments` no existe), primero
+    # se le suma el % que ESO cuesta (`CUOTAS_PCT_DEFAULT`, la tabla real
+    # de lo que cobra ML por cuota -- NO la de `RULES`/frontend, que es
+    # el margen propio de Maxx), y RECIÉN DESPUÉS se le suma el envío
+    # real -- ese orden exacto, confirmado con Maxx. El tachado se calcula
+    # sobre este precio ajustado (`precio_final`), no sobre `precio_pm`
+    # crudo -- `precio_final` es el número que de verdad se cobra y el
+    # único que se manda/verifica contra ML de acá en adelante.
+    #
+    # El costo real de envío puede fallar (shipping_id viejo/inválido en
+    # la cache congelada, `/shipments/{id}` transitorio) -- nunca por eso
+    # se corta la activación entera por un dato que es un ajuste, no el
+    # corazón de la función. Se trata como "sin dato" (0), igual que
+    # cuando la cache todavía no tiene nada para este ítem.
+    cuotas_ofrecidas = _cuotas_sin_interes(previo)
+    cuotas_pct = CUOTAS_PCT_DEFAULT.get(cuotas_ofrecidas) if cuotas_ofrecidas else None
+    precio_con_cuotas = (
+        (precio_pm * (1 + cuotas_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if cuotas_pct else precio_pm
+    )
+    try:
+        envio_info = costo_envio_real_item(ml, item_id, cuenta)
+    except Exception:
+        envio_info = None
+    costo_envio = (
+        Decimal(str(envio_info["costo_envio_real"]))
+        if envio_info and envio_info.get("cost_type") == "free" else Decimal(0)
+    )
+    precio_final = precio_con_cuotas + costo_envio
+
+    _ajustes = []
+    if cuotas_pct:
+        _ajustes.append(f"+{cuotas_pct}% por estar en {cuotas_ofrecidas} cuotas sin interés")
+    if costo_envio:
+        _ajustes.append(f"+${costo_envio:.0f} de envío real (última venta)")
+    ajuste_aviso = f"Precio del PM (${precio_pm}) ajustado a ${precio_final:.0f} -- {', '.join(_ajustes)}." if _ajustes else None
+
+    precio_tachado = (precio_final / (1 - descuento_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     def _revertir_precio(motivo: str) -> str:
         if precio_previo is None:
@@ -910,23 +970,24 @@ def activar_en_campana_tradicional(
     max_desc = entrada.get("max_discounted_price") if entrada else None
     min_desc = entrada.get("min_discounted_price") if entrada else None
 
-    if min_desc is not None and float(precio_pm) < float(min_desc):
+    if min_desc is not None and float(precio_final) < float(min_desc):
         aviso = _revertir_precio(
-            f"El precio del PM (${precio_pm}) queda por DEBAJO del piso que exige ML para esta campaña "
-            f"(mínimo permitido: ${min_desc}) -- inflar el tachado no resuelve esto, el descuento resultante "
-            "sería más agresivo de lo que ML permite para este ítem."
+            f"El precio final (${precio_final}, PM ${precio_pm} ajustado) queda por DEBAJO del piso que exige ML "
+            f"para esta campaña (mínimo permitido: ${min_desc}) -- inflar el tachado no resuelve esto, el "
+            "descuento resultante sería más agresivo de lo que ML permite para este ítem."
         )
-        return {"ok": False, "error": aviso, "precio_pm": float(precio_pm), "min_discounted_price": float(min_desc)}
+        return {"ok": False, "error": aviso, "precio_pm": float(precio_pm), "precio_final": float(precio_final),
+                "min_discounted_price": float(min_desc)}
 
-    if max_desc is not None and float(precio_pm) > float(max_desc):
+    if max_desc is not None and float(precio_final) > float(max_desc):
         # El 25% (o el descuento_pct pedido) no alcanza para esta campaña
         # sobre este ítem puntual -- ML exige más "descuento visual". Se
-        # recalcula el tachado mínimo necesario para que precio_pm siga
+        # recalcula el tachado mínimo necesario para que precio_final siga
         # siendo el precio final exacto, usando la proporción real
         # observada (max_desc / tachado_aplicado) como el % mínimo real
         # que ML fuerza a este precio de lista.
         frac_min_ml = 1 - (Decimal(str(max_desc)) / Decimal(str(tachado_aplicado)))
-        tachado_ajustado = (precio_pm / (1 - frac_min_ml)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        tachado_ajustado = (precio_final / (1 - frac_min_ml)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         r1b = ml.fijar_precio_base(item_id, cuenta, tachado_ajustado)
         if not r1b.get("ok"):
             error = r1b.get("error") or ""
@@ -939,18 +1000,19 @@ def activar_en_campana_tradicional(
             )
             return {"ok": False, "error": aviso}
         tachado_aplicado = tachado_ajustado
-        pct_real = float((1 - precio_pm / tachado_aplicado) * 100)
+        pct_real = float((1 - precio_final / tachado_aplicado) * 100)
         aviso_pct = (
             f"Quedó al {pct_real:.1f}% de descuento visual, no al {float(descuento_pct):.0f}% de siempre -- ML "
-            f"exige más para esta campaña sobre este ítem. El precio final NO cambió, sigue siendo ${precio_pm} "
+            f"exige más para esta campaña sobre este ítem. El precio final NO cambió, sigue siendo ${precio_final} "
             "(el tachado es solo para posicionar, no es una rebaja real)."
         )
 
     def _es_rechazo_por_credibilidad(mensaje: str) -> bool:
         return "credib" in (mensaje or "").lower()  # cubre ERROR_CREDIBILITY_DISCOUNTED_PRICE y "not credible"
 
-    # Paso 3: enrolar con el precio final SIEMPRE clavado en precio_pm. UN
-    # solo intento -- NO se escala el tachado más allá de acá.
+    # Paso 3: enrolar con el precio final SIEMPRE clavado en precio_final
+    # (precio_pm ya ajustado por cuotas/envío, ver más arriba). UN solo
+    # intento -- NO se escala el tachado más allá de acá.
     #
     # **Sacada la escalada 2026-09-01** (había 2026-08-31, ver commit
     # df7f075): confirmado en vivo con DOS ítems reales el mismo día
@@ -963,16 +1025,16 @@ def activar_en_campana_tradicional(
     # referencia de ML propio del ítem que NO se mueve aunque se infle el
     # tachado -- confirmado leyendo el rango otra vez con el precio YA
     # restaurado a su valor real: `max_discounted_price` daba
-    # exactamente el mismo techo (bajo `precio_pm`) que venía rechazando
-    # desde el principio. Osea: cuando este rechazo aparece, significa
-    # que `precio_pm` (sin ningún descuento real) está por encima de lo
-    # que ML acredita HOY para este ítem puntual -- ninguna cantidad de
-    # tachado "de teatro" lo arregla, hace falta un descuento real (que
-    # esta función nunca aplica sola, por diseño: el precio final es
-    # sagrado). La única ganancia real de escalar era ninguna, y el costo
-    # SÍ era real: hasta 7 PUTs de precio de más por intento sobre una
-    # publicación en vivo.
-    r2 = ml.meter_en_campana(item_id, cuenta, promotion_id, precio_pm)
+    # exactamente el mismo techo que venía rechazando desde el principio.
+    # Osea: cuando este rechazo aparece, significa que `precio_final`
+    # (sin ningún descuento real) está por encima de lo que ML acredita
+    # HOY para este ítem puntual -- ninguna cantidad de tachado "de
+    # teatro" lo arregla, hace falta un descuento real (que esta función
+    # nunca aplica sola, por diseño: el precio final es sagrado). La
+    # única ganancia real de escalar era ninguna, y el costo SÍ era real:
+    # hasta 7 PUTs de precio de más por intento sobre una publicación en
+    # vivo.
+    r2 = ml.meter_en_campana(item_id, cuenta, promotion_id, precio_final)
 
     if not r2.get("ok"):
         mensaje = r2.get("error") or ""
@@ -981,7 +1043,7 @@ def activar_en_campana_tradicional(
             return challenge
         if _es_rechazo_por_credibilidad(mensaje):
             aviso = _revertir_precio(
-                f"ML no acepta ${precio_pm} como precio final para esta publicación en esta campaña -- "
+                f"ML no acepta ${precio_final} como precio final para esta publicación en esta campaña -- "
                 "rechazo de credibilidad. No es un problema del % de descuento visual (ningún tachado lo arregla): "
                 "ML exige que el precio final tenga un descuento REAL respecto de lo que acredita para este ítem."
             )
@@ -1005,34 +1067,38 @@ def activar_en_campana_tradicional(
                     "-- para meterlo en esta campaña habría que bajar el precio final de verdad, no solo el tachado."
                 )
             return {"ok": False, "error": aviso + techo_msg, "precio_pm": float(precio_pm),
+                    "precio_final": float(precio_final),
                     "techo_acreditado_ml": float(techo) if techo is not None else None}
         aviso = _revertir_precio(f"ML rechazó el enrolamiento en la campaña: \"{mensaje}\".")
         return {"ok": False, "error": aviso}
 
     # Verificación del resultado real -- nunca se confía en que ML aplicó
     # exactamente lo pedido solo porque respondió sin error. Lo único
-    # innegociable es que el precio final coincida con precio_pm; el
+    # innegociable es que el precio final coincida con precio_final; el
     # tachado real puede ser el ajustado, no necesariamente el estándar.
     precio_real, tachado_real = r2.get("price"), r2.get("original_price")
     coincide = (
         precio_real is not None and tachado_real is not None
-        and abs(float(precio_real) - float(precio_pm)) < 1
+        and abs(float(precio_real) - float(precio_final)) < 1
         and abs(float(tachado_real) - float(tachado_aplicado)) < 1
     )
     if not coincide:
         r3 = ml.sacar_de_promocion(item_id, cuenta, "SELLER_CAMPAIGN", promotion_id)
         detalle_salida = "Se sacó de la campaña." if r3.get("ok") else f"Y no se pudo sacar de la campaña automáticamente: {r3.get('error')} -- revisá la publicación a mano."
         aviso = _revertir_precio(
-            f"ML aplicó un resultado distinto al esperado pese al chequeo previo -- pedido: precio ${precio_pm} con "
+            f"ML aplicó un resultado distinto al esperado pese al chequeo previo -- pedido: precio ${precio_final} con "
             f"tachado ${tachado_aplicado}, real: precio {precio_real!r}, tachado {tachado_real!r}. {detalle_salida}"
         )
         return {"ok": False, "error": aviso,
-                "precio_pedido": float(precio_pm), "precio_real": precio_real,
+                "precio_pedido": float(precio_final), "precio_real": precio_real,
                 "tachado_pedido": float(tachado_aplicado), "tachado_real": tachado_real}
 
     resultado = {"ok": True, "promotion_id": promotion_id, "nombre_campana": nombre_campana,
                  "precio": precio_real, "original_price": tachado_real,
-                 "precio_tachado_pedido": float(tachado_aplicado)}
+                 "precio_tachado_pedido": float(tachado_aplicado),
+                 "precio_pm": float(precio_pm), "precio_final": float(precio_final)}
+    if ajuste_aviso:
+        resultado["ajuste_cuotas_envio"] = ajuste_aviso
     if aviso_pct:
         resultado["aviso"] = aviso_pct
     return resultado
@@ -1088,9 +1154,37 @@ class FilaOferta:
     incidencia: str | None
 
 
+_CUOTAS_TAG_RE = re.compile(r"^cuota-simple-(\d+)$|^(\d+)x_campaign$")
+
+
 def _cuotas_sin_interes(detalle: dict) -> int | None:
-    inst = detalle.get("installments") or {}
-    return inst.get("quantity") if inst.get("quantity", 0) > 1 and inst.get("rate") == 0 else None
+    """Corregido 2026-09-02 (bug real, encontrado por Maxx: "no me está
+    trayendo en ninguna publicación el dato de si tiene cuotas o no").
+    La versión anterior leía `detalle["installments"]["quantity"/"rate"]`
+    -- confirmado en vivo que ese campo NO EXISTE en `/items/{id}`, ni
+    filtrado por `attributes` ni en la respuesta completa sin filtrar
+    (probado dos veces, items reales, ninguna trajo la clave). Nunca
+    funcionó desde que se escribió.
+
+    El mecanismo real (developers.mercadolibre.com.ar, campañas de
+    cuotas): un ítem enrolado en una campaña de cuotas sin interés lo
+    muestra en su array `tags`, con un valor tipo `cuota-simple-3`/
+    `cuota-simple-6` (programa "Cuota Simple") o `3x_campaign` (u otro
+    N -- programa de campañas con cuotas). Confirmado en vivo 2026-09-02
+    contra un ítem real de Maxx (MLA3655836976, cuenta IT) que en ese
+    momento mostraba cuotas en la publicación real: `tags` traía
+    `"3x_campaign"`, sin ninguna clave `installments` en la respuesta.
+
+    Si un ítem tuviera más de un tag de cuotas al mismo tiempo (no visto
+    en un caso real, pero no confirmado que sea imposible), se queda con
+    el N más alto -- asume que es el más favorable/reciente, no una
+    regla documentada."""
+    encontrados = []
+    for tag in detalle.get("tags") or []:
+        m = _CUOTAS_TAG_RE.match(tag)
+        if m:
+            encontrados.append(int(m.group(1) or m.group(2)))
+    return max(encontrados) if encontrados else None
 
 
 def _armar_fila(

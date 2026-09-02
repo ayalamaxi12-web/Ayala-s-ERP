@@ -163,9 +163,9 @@ def test_mapeo_de_las_15_categorias_del_req():
 
 # ── MLOfertasClient + orquestación ──
 
-def _item_ofertas(item_id, sku, domain_id, titulo="T", installments=None):
+def _item_ofertas(item_id, sku, domain_id, titulo="T", tags=None):
     return {"id": item_id, "title": titulo, "seller_custom_field": sku, "domain_id": domain_id,
-            "installments": installments or {}}
+            "tags": tags or []}
 
 
 def test_items_de_promocion_pagina_con_search_after():
@@ -933,6 +933,103 @@ def test_activar_en_campana_tradicional_corta_por_challenge_seguridad():
     assert _fake_post.calls == []  # nunca se intentó meter en campaña
 
 
+# ── Ajuste por cuotas + envío real (pedido de Maxx 2026-09-02) ──
+
+def _armar_ml_ajuste(tags, envio_response, precio_inicial=20000.0):
+    estado_item = {"price": precio_inicial}
+
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional X"}]}
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return []  # sin candidato -- no ajusta el tachado estándar, no interfiere con el cálculo bajo prueba
+        if "/shipments/" in url:
+            assert headers.get("x-format-new") == "true"
+            return envio_response
+        if url.endswith("/items/MLA1"):
+            return {"id": "MLA1", "price": estado_item["price"], "tags": tags}
+        raise AssertionError(url)
+
+    def fake_put(url, headers, body):
+        estado_item["price"] = body["price"]
+        return {"id": "MLA1", "price": body["price"]}
+
+    def fake_post(url, headers, body):
+        return {"price": body["deal_price"], "original_price": estado_item["price"]}
+
+    _fake_put.calls = []
+    _fake_put.responder = fake_put
+    _fake_post.calls = []
+    _fake_post.responder = fake_post
+    return MLOfertasEscritura(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN, put_fn=_fake_put, post_fn=_fake_post)
+
+
+def test_activar_en_campana_tradicional_suma_envio_real_sin_cuotas():
+    # Ejemplo exacto de Maxx: PM $100.000 + envío real gratis $12.000 =
+    # precio final $112.000.
+    ml_ofertas._ultima_venta_cache.clear()
+    ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
+    try:
+        ml = _armar_ml_ajuste(tags=["immediate_payment"], envio_response={"lead_time": {"cost_type": "free", "list_cost": 12000.0}})
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+
+        assert r["ok"] is True
+        assert r["precio_pm"] == 100000.0
+        assert r["precio_final"] == 112000.0
+        assert r["precio"] == 112000.0
+        assert "envío real" in r["ajuste_cuotas_envio"]
+        assert "cuotas" not in r["ajuste_cuotas_envio"]
+    finally:
+        ml_ofertas._ultima_venta_cache.clear()
+
+
+def test_activar_en_campana_tradicional_suma_cuotas_y_envio_en_ese_orden():
+    # PM $100.000 en 3 cuotas (8.40%) -> $108.400, + envío real $12.000
+    # -> $120.400. Confirmado el orden con Maxx: cuotas primero, envío
+    # después.
+    ml_ofertas._ultima_venta_cache.clear()
+    ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
+    try:
+        ml = _armar_ml_ajuste(tags=["cuota-simple-3"], envio_response={"lead_time": {"cost_type": "free", "list_cost": 12000.0}})
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+
+        assert r["ok"] is True
+        assert r["precio_final"] == 120400.0
+        assert r["precio_tachado_pedido"] == 160533.0  # 120400 / 0.75, ROUND_HALF_UP
+        assert "3 cuotas sin interés" in r["ajuste_cuotas_envio"]
+        assert "envío real" in r["ajuste_cuotas_envio"]
+    finally:
+        ml_ofertas._ultima_venta_cache.clear()
+
+
+def test_activar_en_campana_tradicional_no_suma_envio_si_lo_pago_el_comprador():
+    # cost_type "charged" -- el comprador pagó el envío, no hay costo
+    # real que el vendedor absorba.
+    ml_ofertas._ultima_venta_cache.clear()
+    ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
+    try:
+        ml = _armar_ml_ajuste(tags=["immediate_payment"], envio_response={"lead_time": {"cost_type": "charged", "list_cost": 12000.0}})
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+
+        assert r["ok"] is True
+        assert r["precio_final"] == 100000.0
+        assert "ajuste_cuotas_envio" not in r
+    finally:
+        ml_ofertas._ultima_venta_cache.clear()
+
+
+def test_activar_en_campana_tradicional_sin_dato_de_envio_no_ajusta():
+    # Sin entrada en la cache congelada (job todavía no corrido para este
+    # ítem) -- no debe fallar, solo no ajustar nada.
+    ml_ofertas._ultima_venta_cache.clear()
+    ml = _armar_ml_ajuste(tags=[], envio_response={"lead_time": {"cost_type": "free", "list_cost": 12000.0}})
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+
+    assert r["ok"] is True
+    assert r["precio_final"] == 100000.0
+    assert "ajuste_cuotas_envio" not in r
+
+
 def test_activar_en_campana_tradicional_revierte_en_primer_rechazo_por_credibilidad():
     """Caso real 2026-09-01 (MLA1625270713 y MLA751588750): la escalada de
     tachado (30->70%, sacada este mismo día) nunca lograba nada -- ML
@@ -1114,10 +1211,13 @@ def test_resolver_item_para_gestion_trae_cuotas_ofrecidas():
     """Caso real detectado por Maxx en vivo (2026-09-01, MLA en 12 cuotas):
     el buscador puntual traía `installments` en el GET pero no lo usaba --
     el panel de "Oferta Tradicional" quedaba ciego a que la publicación
-    estaba vendiéndose en cuotas."""
+    estaba vendiéndose en cuotas. Corregido 2026-09-02: `installments` ni
+    siquiera existe en la respuesta real de ML (confirmado en vivo dos
+    veces) -- el dato real está en `tags` (`cuota-simple-N`/`Nx_campaign`,
+    confirmado contra MLA3655836976, tag real `3x_campaign`)."""
     def fake_get(url, params, headers):
         return {"id": "MLA1", "title": "T1", "price": 15000, "seller_custom_field": "SKU-1",
-                "domain_id": "MLA-TONERS", "installments": {"quantity": 12, "rate": 0}}
+                "domain_id": "MLA-TONERS", "tags": ["immediate_payment", "cuota-simple-12"]}
     ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
     costo = _CostoProviderFalso({"SKU-1": Decimal(5)})
     iva = _IvaProviderFalso({"SKU-1": Decimal("1.21")})
@@ -1125,6 +1225,25 @@ def test_resolver_item_para_gestion_trae_cuotas_ofrecidas():
     r = resolver_item_para_gestion(ml, costo, iva, "MLA1", "IT", Decimal(1000))
 
     assert r["cuotas_ofrecidas"] == 12
+
+
+def test_cuotas_sin_interes_reconoce_tag_nx_campaign():
+    # Caso real confirmado en vivo 2026-09-02 (MLA3655836976, cuenta IT):
+    # tags reales = ["3x_campaign", "immediate_payment", "cart_eligible"],
+    # sin ninguna clave "installments".
+    from ml_ofertas import _cuotas_sin_interes
+    assert _cuotas_sin_interes({"tags": ["3x_campaign", "immediate_payment", "cart_eligible"]}) == 3
+
+
+def test_cuotas_sin_interes_sin_tags_relevantes_da_none():
+    from ml_ofertas import _cuotas_sin_interes
+    assert _cuotas_sin_interes({"tags": ["brand_verified", "immediate_payment", "cart_eligible"]}) is None
+    assert _cuotas_sin_interes({}) is None
+
+
+def test_cuotas_sin_interes_se_queda_con_el_mayor_si_hay_varios():
+    from ml_ofertas import _cuotas_sin_interes
+    assert _cuotas_sin_interes({"tags": ["cuota-simple-3", "6x_campaign"]}) == 6
 
 
 def test_resolver_item_para_gestion_no_encontrado():
