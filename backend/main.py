@@ -14,7 +14,9 @@ import json
 import ml_full
 import ml_reposicion
 import ml_ofertas
+import ayala_core
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
+from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 
@@ -2143,3 +2145,80 @@ async def ml_ofertas_item_activar_campana(item_id: str, request: Request, backgr
             "Operador": body.get("operador", ""),
         })
     return r
+
+
+# ══════════════════════════════════════════════════════
+# AYALA CORE — motor de precios propio, Etapa 1 (solo lectura). Ver
+# docs/business/COMERCIAL/canales/mercadolibre/AYALA_CORE.md (constitución
+# del módulo). Esta etapa NO escribe nada a ML -- sirve para validar el
+# motor (`ayala_core.py`) contra el ejemplo real de la planilla de Maxx
+# antes de habilitar corrección de precio (Etapa 2).
+# ══════════════════════════════════════════════════════
+
+@app.get("/ayala-core/skus")
+async def ayala_core_skus():
+    return {"skus": ayala_core.SKUS_PILOTO}
+
+def _ayala_core_motor_sync(
+    sku: str, renta_contado: Decimal, diferencial_cuotas: Decimal,
+    envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
+) -> dict:
+    costo_usd = CostoVigenteProvider().obtener(sku)
+    if costo_usd is None:
+        raise HTTPException(status_code=404, detail=f"SIN_COSTO_TACTICA para SKU {sku!r}")
+    iva_factor = IvaProvider().factor(sku)
+    if iva_factor is None:
+        raise HTTPException(status_code=404, detail=f"SIN_IVA_TACTICA para SKU {sku!r}")
+    tc = Decimal(str(obtener_tc_bna().get("tc") or 0))
+    costo_sin_iva = costo_usd * tc
+
+    item_info = None
+    envio_usado = envio_real
+    if item_id:
+        if not cuenta:
+            raise HTTPException(status_code=422, detail="Falta 'cuenta' para resolver item_id")
+        ml = ml_ofertas.MLOfertasClient()
+        d = ml.detalle_item_completo(item_id, cuenta) or {}
+        if not d.get("id"):
+            raise HTTPException(status_code=404, detail="Publicación no encontrada en esa cuenta")
+        condicion_detectada = ayala_core.detectar_condicion_pago(d)
+        if envio_usado is None:
+            envio_info = ml_ofertas.costo_envio_real_item(ml, item_id, cuenta)
+            envio_usado = Decimal(str(envio_info["list_cost"])) if envio_info and envio_info.get("cost_type") == "free" else Decimal(0)
+        item_info = {
+            "item_id": d["id"], "titulo": d.get("title", ""), "precio_actual": d.get("price"),
+            "condicion_detectada": condicion_detectada,
+        }
+    if envio_usado is None:
+        envio_usado = Decimal(0)
+
+    precios = ayala_core.calcular_precios_todas_condiciones(
+        costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
+        renta_contado_pct=renta_contado, diferencial_cuotas_pct=diferencial_cuotas, envio_full=envio_full,
+    )
+    if item_info is not None:
+        item_info["precio_calculado"] = precios[str(item_info["condicion_detectada"])]
+
+    return {
+        "sku": sku, "costo_sin_iva_usd": float(costo_usd), "iva_factor": float(iva_factor),
+        "tc": float(tc), "costo_sin_iva_ars": float(costo_sin_iva), "envio_real": float(envio_usado),
+        "envio_full": envio_full, "renta_contado_pct": float(renta_contado),
+        "diferencial_cuotas_pct": float(diferencial_cuotas),
+        "precios": {k: float(v) for k, v in precios.items()},
+        "item": item_info,
+    }
+
+@app.get("/ayala-core/sku/{sku}/motor")
+async def ayala_core_sku_motor(
+    sku: str,
+    renta_contado: float = float(ayala_core.RENTA_CONTADO_DEFAULT),
+    diferencial_cuotas: float = float(ayala_core.RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+    envio_real: float | None = None,
+    envio_full: bool = False,
+    item_id: str | None = None,
+    cuenta: str | None = None,
+):
+    return await run_in_threadpool(
+        _ayala_core_motor_sync, sku, Decimal(str(renta_contado)), Decimal(str(diferencial_cuotas)),
+        Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
+    )
