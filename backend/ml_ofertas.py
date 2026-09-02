@@ -131,7 +131,7 @@ from typing import Callable
 import requests
 
 from ml_auth import SELLERS
-from ml_full import GetFn, MLFullClient
+from ml_full import GetFn, MLFullClient, _sku_de_item
 
 # ── Parámetros de margen -- valores por defecto del REQ §1.2.b/§2.0/§6,
 # todos editables en runtime vía ParametrosMargen (nunca hardcodeados en la
@@ -352,7 +352,7 @@ class MLOfertasClient(MLFullClient):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,domain_id,tags"},
+                {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,domain_id,tags,attributes"},
                 headers,
             )
             for entrada in (d or []):
@@ -374,7 +374,7 @@ class MLOfertasClient(MLFullClient):
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         return self._get(
             f"https://api.mercadolibre.com/items/{item_id}",
-            {"attributes": "id,title,price,permalink,seller_custom_field,domain_id,tags"}, headers,
+            {"attributes": "id,title,price,permalink,seller_custom_field,domain_id,tags,attributes"}, headers,
         )
 
 
@@ -1201,7 +1201,16 @@ def _armar_fila(
     arma la fila -- compartido entre `ofertas_activas` (campañas) y
     `ofertas_propias_activas` (PRICE_DISCOUNT) para no repetir la
     resolución de margen dos veces."""
-    sku_ml = detalle.get("seller_custom_field")
+    # Corregido 2026-09-02 (Maxx, en vivo: "hay muchísimos [SKU] que no
+    # trae y ya vi varios de esos que en ML sí están cargados"). El SKU
+    # puede vivir en `seller_custom_field` O en el atributo `SELLER_SKU`
+    # -- mismo bug/fix ya confirmado en `ml_full.py` (`_sku_de_item`,
+    # ver su docstring): acá solo se miraba `seller_custom_field`, y
+    # encima el batch de `/items` nunca pedía el campo `attributes` (el
+    # array de atributos del ítem), así que ese fallback ni siquiera
+    # tenía datos para intentar. Se reutiliza la misma función, no se
+    # duplica la lógica.
+    sku_ml = _sku_de_item(detalle)
     domain_id = detalle.get("domain_id")
     titulo = detalle.get("title", "")
     cuotas_ofrecidas = _cuotas_sin_interes(detalle)
@@ -1241,7 +1250,7 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
     d = ml.detalle_item_completo(item_id, cuenta) or {}
     if not d.get("id"):
         return {"encontrado": False}
-    sku_ml = d.get("seller_custom_field")
+    sku_ml = _sku_de_item(d)  # ver el comentario en `_armar_fila` -- mismo fallback
     incidencia = None
     costo_usd = iva_factor = None
     if not sku_ml:
@@ -1356,7 +1365,7 @@ def ofertas_propias_activas(
             # deja registrado -- no se estima en silencio (00_LEEME §6),
             # pero tampoco bloquea a los demás.
             incidencias.append({"item_id": item_id, "cuenta": cuenta,
-                                 "sku": detalles.get(item_id, {}).get("seller_custom_field"),
+                                 "sku": _sku_de_item(detalles.get(item_id, {})),
                                  "motivo": f"ERROR_ML_ITEM: {e}"})
             continue
         propia = next(
@@ -1560,7 +1569,7 @@ def detectar_skus_sin_oferta(
         lote = candidatos_ids[i:i + 20]
         d = ml._get(
             "https://api.mercadolibre.com/items",
-            {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,available_quantity"},
+            {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,available_quantity,attributes"},
             headers,
         )
         for entrada in (d or []):
@@ -1571,7 +1580,7 @@ def detectar_skus_sin_oferta(
             if stock <= 0:
                 continue
             resultado.append(CandidatoOferta(
-                item_id=cuerpo["id"], cuenta=cuenta, sku=cuerpo.get("seller_custom_field"),
+                item_id=cuerpo["id"], cuenta=cuenta, sku=_sku_de_item(cuerpo),
                 titulo=cuerpo.get("title", ""), permalink=cuerpo.get("permalink"),
                 ventas_periodo=ventas.get(cuerpo["id"], 0), stock=stock,
             ))

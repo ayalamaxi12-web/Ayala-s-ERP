@@ -253,6 +253,34 @@ def test_ofertas_activas_marca_incidencia_sin_costo_tactica():
     assert incidencias == [{"item_id": "MLA1", "cuenta": "IT", "sku": "SKU-SIN-COSTO", "motivo": "SIN_COSTO_TACTICA"}]
 
 
+def test_ofertas_activas_encuentra_sku_por_atributo_seller_sku():
+    # Corregido 2026-09-02 (Maxx, en vivo: "hay muchísimos [SKU] que no
+    # trae y ya vi varios de esos que en ML sí están cargados"). El SKU
+    # puede vivir en el atributo `SELLER_SKU` en vez de en
+    # `seller_custom_field` -- antes esto quedaba como SIN_SKU en falso
+    # (mismo bug/fix ya confirmado en `ml_full.py`, `_sku_de_item`).
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+        if "seller-promotions/promotions/C-1/items" in url:
+            return {"results": [{"id": "MLA1", "status": "started", "price": 9000, "original_price": 10000}],
+                    "paging": {"total": 1, "searchAfter": None}}
+        if url.endswith("/items"):
+            return [{"body": {"id": "MLA1", "title": "T", "seller_custom_field": None, "domain_id": "MLA-TONERS",
+                               "tags": [], "attributes": [{"id": "SELLER_SKU", "value_name": "SKU-ATRIB"}]}}]
+        raise AssertionError(url)
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    costo = _CostoProviderFalso({"SKU-ATRIB": Decimal(10)})
+    iva = _IvaProviderFalso({"SKU-ATRIB": Decimal("1.21")})
+
+    filas, incidencias = ofertas_activas(ml, costo, iva, cuentas=["IT"])
+
+    assert filas[0].sku == "SKU-ATRIB"
+    assert filas[0].incidencia is None
+    assert incidencias == []
+
+
 def test_ofertas_activas_sin_promociones_activas_no_pide_items():
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:
@@ -1258,6 +1286,25 @@ def test_resolver_item_para_gestion_sin_sku():
     ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
     r = resolver_item_para_gestion(ml, _CostoProviderFalso({}), _IvaProviderFalso({}), "MLA1", "IT", Decimal(1000))
     assert r["incidencia"] == "SIN_SKU"
+
+
+def test_resolver_item_para_gestion_sku_por_atributo_seller_sku():
+    # Corregido 2026-09-02 (Maxx, en vivo: "hay muchísimos [SKU] que no
+    # trae y ya vi varios de esos que en ML sí están cargados"). Mismo
+    # bug/fix ya confirmado en `ml_full.py` (`_sku_de_item`): el SKU
+    # puede vivir en el atributo `SELLER_SKU`, no solo en
+    # `seller_custom_field` -- antes esto daba SIN_SKU en falso.
+    def fake_get(url, params, headers):
+        return {"id": "MLA1", "title": "T1", "price": 15000, "seller_custom_field": None,
+                "domain_id": "MLA-TONERS", "attributes": [{"id": "SELLER_SKU", "value_name": "SKU-ATRIB"}]}
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    costo = _CostoProviderFalso({"SKU-ATRIB": Decimal(5)})
+    iva = _IvaProviderFalso({"SKU-ATRIB": Decimal("1.21")})
+
+    r = resolver_item_para_gestion(ml, costo, iva, "MLA1", "IT", Decimal(1000))
+
+    assert r["sku"] == "SKU-ATRIB"
+    assert r["incidencia"] is None
 
 
 def test_resolver_item_para_gestion_sin_costo_tactica():
