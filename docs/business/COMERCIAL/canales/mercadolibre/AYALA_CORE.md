@@ -189,12 +189,13 @@ _(Fecha de última actualización: 2026-09-02)_
     todos verdes.
   - `GET /ayala-core/skus` y `GET /ayala-core/sku/{sku}/motor` en `backend/main.py` — el segundo
     resuelve costo/IVA reales de Táctica + TC del BNA + (opcional) un `item_id` real para comparar
-    condición detectada/precio actual en vivo contra el precio calculado. Probado contra Táctica
-    real en local (SKU `PLANCHA-SUB-26X26-PORT`, dio precios coherentes con el ejemplo congelado,
-    diferencia esperada por costo/TC del día). El camino con `item_id` no se pudo probar en vivo
-    localmente (sin token de ML en el entorno de desarrollo) — pendiente de verificar en Railway.
-  - **NO existe todavía ninguna pantalla en `docs/index.html`** — el motor solo se puede probar por
-    API/curl hoy.
+    condición detectada/precio actual en vivo contra el precio calculado. Probado en vivo contra
+    Táctica real (SKU `PLANCHA-SUB-26X26-PORT`) y contra Railway con un `item_id` real
+    (MLA3655836976, detectó "Reducida" correctamente).
+  - Pantalla "Ayala Core — Motor de Precios" en `docs/index.html` (sidebar propio): selector de SKU,
+    Renta Contado % + diferencial por cuota editables, envío real (manual o auto-resuelto al
+    comparar un MLA), tabla de 6 condiciones, y comparador contra una publicación real. Probada en
+    vivo (local + Railway), sin errores de consola.
 - **Validación contra planilla:** ✅ el motor reproduce el ejemplo congelado de A.3.1 al peso exacto
   (los 6 valores, ver `test_ayala_core.py`) — la fórmula se sacó leyendo `Motor!B32:G32` de la
   planilla real, no se adivinó.
@@ -242,12 +243,10 @@ _(Fecha de última actualización: 2026-09-02)_
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
-- Falta la pantalla de Etapa 1 en `docs/index.html` (selector de SKU, panel de costo/renta editable,
-  tabla de 6 condiciones, comparación contra un MLA real) -- el motor y el endpoint ya existen, solo
-  falta el frontend.
-- Verificar en Railway (no se pudo en local, sin token de ML en el entorno de desarrollo) que
-  `GET /ayala-core/sku/{sku}/motor?item_id=...&cuenta=...` resuelve bien condición/precio actual
-  contra un MLA real.
-- Cerrar Etapa 1 del todo: una vez la pantalla exista, validar los 5 SKU piloto contra la planilla
-  real antes de pasar a Etapa 2 (escritura).
+- **Cerrar Etapa 1 del todo**: validar los 5 SKU piloto (no solo PLANCHA-SUB-26X26-PORT) contra la
+  planilla real, con Maxx mirando, antes de pasar a Etapa 2 (escritura).
+- Ecom→MLA discovery (A.5, "todas las publicaciones de un SKU, sin combos") sigue sin resolver --
+  hoy la comparación contra un MLA real requiere pasarlo a mano, uno por vez.
+- Etapa 2 (escritura habilitada) todavía no arrancó -- definir el endpoint PUT de precio por
+  condición, reutilizando el patrón de `fijar_precio_base`.
 - _(Code mantiene esta lista.)_
