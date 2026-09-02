@@ -5,21 +5,26 @@ from decimal import Decimal
 
 import requests
 
+import ml_ofertas
 from ml_ofertas import (
     MLOfertasClient,
     MLOfertasEscritura,
     ParametrosMargen,
     activar_en_campana_tradicional,
     calcular_margen_oferta,
+    costo_envio_real,
+    costo_envio_real_item,
     detectar_skus_sin_oferta,
     estado_job,
     iniciar_job,
     iniciar_job_alertas,
+    iniciar_job_costos_envio,
     listar_promociones_item,
     ofertas_activas,
     ofertas_propias_activas,
     resolver_item_para_gestion,
     ventas_por_item,
+    ventas_recientes_por_item,
 )
 
 _FAKE_TOKEN_FN = lambda cuenta: "FAKE-TOKEN"
@@ -377,6 +382,113 @@ def test_ventas_por_item_pagina_por_offset_y_suma_cantidades():
 
     assert ventas == {"MLA1": 3, "MLA2": 4}
     assert llamadas == [0, 2]
+
+
+# ── ventas_recientes_por_item / costo_envio_real / costo_envio_real_item ──
+
+def test_ventas_recientes_por_item_se_queda_con_la_orden_mas_nueva():
+    def fake_get(url, params, headers):
+        return {"results": [
+            {"date_closed": "2026-08-01T10:00:00Z", "shipping": {"id": 111},
+             "order_items": [{"item": {"id": "MLA1"}}]},
+            {"date_closed": "2026-08-05T10:00:00Z", "shipping": {"id": 222},
+             "order_items": [{"item": {"id": "MLA1"}}]},
+            {"date_closed": "2026-08-03T10:00:00Z", "shipping": {"id": 333},
+             "order_items": [{"item": {"id": "MLA2"}}]},
+        ], "paging": {"total": 3}}
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ultimas = ventas_recientes_por_item(ml, "IT", "2026-08-01T00:00:00.000-00:00", "2026-08-06T00:00:00.000-00:00")
+
+    assert ultimas["MLA1"]["shipping_id"] == 222  # la del 5/8, no la del 1/8
+    assert ultimas["MLA2"]["shipping_id"] == 333
+
+
+def test_ventas_recientes_por_item_ignora_ordenes_sin_shipping():
+    def fake_get(url, params, headers):
+        return {"results": [
+            {"date_closed": "2026-08-01T10:00:00Z", "shipping": {},
+             "order_items": [{"item": {"id": "MLA1"}}]},
+        ], "paging": {"total": 1}}
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ultimas = ventas_recientes_por_item(ml, "IT", "2026-08-01T00:00:00.000-00:00", "2026-08-06T00:00:00.000-00:00")
+
+    assert ultimas == {}
+
+
+def test_costo_envio_real_envio_gratis_usa_list_cost():
+    # Caso real confirmado en vivo 2026-09-01 (MLA680197251, orden
+    # 2000018227607384): Maxx cruzó el detalle real de la venta y
+    # coincidió centavo a centavo con list_cost ($8.890).
+    def fake_get(url, params, headers):
+        assert headers.get("x-format-new") == "true"
+        return {"lead_time": {"cost_type": "free", "list_cost": 8890.0}}
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    r = costo_envio_real(ml, "IT", 47907342840)
+
+    assert r == {"cost_type": "free", "costo_envio_real": 8890.0}
+
+
+def test_costo_envio_real_comprador_pago_no_hay_costo():
+    def fake_get(url, params, headers):
+        return {"lead_time": {"cost_type": "charged", "cost": 8990.0, "list_cost": 8990.0}}
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    r = costo_envio_real(ml, "IT", 47907447494)
+
+    assert r == {"cost_type": "charged", "costo_envio_real": 0.0}
+
+
+def test_costo_envio_real_item_usa_la_cache_congelada():
+    ml_ofertas._ultima_venta_cache.clear()
+    ml_ofertas._ultima_venta_cache["MLA1"] = {
+        "fecha": "2026-08-05T10:00:00Z", "shipping_id": 222, "orden_id": 999, "cuenta": "IT",
+    }
+    try:
+        def fake_get(url, params, headers):
+            assert "222" in url
+            return {"lead_time": {"cost_type": "free", "list_cost": 5000.0}}
+
+        ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+        r = costo_envio_real_item(ml, "MLA1", "IT")
+
+        assert r["costo_envio_real"] == 5000.0
+        assert r["orden_id"] == 999
+    finally:
+        ml_ofertas._ultima_venta_cache.clear()
+
+
+def test_costo_envio_real_item_none_si_no_esta_en_cache():
+    ml_ofertas._ultima_venta_cache.clear()
+    ml = MLOfertasClient(get_fn=lambda u, p, h: {}, token_fn=_FAKE_TOKEN_FN)
+    assert costo_envio_real_item(ml, "MLA-SIN-VENTAS", "IT") is None
+
+
+def test_iniciar_job_costos_envio_congela_la_cache():
+    ml_ofertas._ultima_venta_cache.clear()
+    ml_ofertas._jobs.clear()
+
+    def fake_get(url, params, headers):
+        return {"results": [
+            {"date_closed": "2026-08-05T10:00:00Z", "shipping": {"id": 222},
+             "order_items": [{"item": {"id": "MLA1"}}]},
+        ], "paging": {"total": 1}}
+
+    import ml_full as ml_full_mod
+    original = ml_full_mod.MLFullClient
+    class _MLFullFalso(original):
+        def __init__(self):
+            super().__init__(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    ml_ofertas.MLFullClient = _MLFullFalso
+    try:
+        iniciar_job_costos_envio("job-1", cuentas=["IT"], dias=10)
+        assert ml_ofertas._ultima_venta_cache["MLA1"]["shipping_id"] == 222
+        assert estado_job("job-1")["status"] == "done"
+    finally:
+        ml_ofertas.MLFullClient = original
+        ml_ofertas._ultima_venta_cache.clear()
 
 
 def test_detectar_skus_sin_oferta_filtra_por_ventas_stock_y_oferta_activa():

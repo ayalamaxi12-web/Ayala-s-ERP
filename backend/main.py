@@ -1972,6 +1972,20 @@ async def ml_ofertas_alertas_run(
 async def ml_ofertas_alertas_status(job_id: str):
     return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
 
+@app.post("/ml-ofertas/costos-envio/run")
+async def ml_ofertas_costos_envio_run(background_tasks: BackgroundTasks, dias: int = 60):
+    """Congela `shipping_id` de la venta más reciente de cada publicación
+    (ambas cuentas) -- pedido de Maxx 2026-09-01: correrlo cada tanto,
+    no en vivo por ítem. El costo real de envío en sí se resuelve recién
+    por ítem puntual (`resolver_item_para_gestion`), no acá."""
+    job_id = f"mlofertascostosenvio_{int(time.time())}"
+    background_tasks.add_task(ml_ofertas.iniciar_job_costos_envio, job_id, None, dias)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-ofertas/costos-envio/status/{job_id}")
+async def ml_ofertas_costos_envio_status(job_id: str):
+    return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
+
 # ── Fase 3 — escritura (activar/sacar UNA oferta, UNA publicación por
 # vez). Historial en la pestaña "Historial Ofertas ML" del mismo Sheet que
 # usa el resto del ERP (SPREADSHEET_ID) -- mismo patrón que "Historial
@@ -2010,6 +2024,22 @@ def _promociones_item_sync(item_id: str, cuenta: str) -> dict:
 @app.get("/ml-ofertas/item/{item_id}/promociones")
 async def ml_ofertas_item_promociones(item_id: str, cuenta: str):
     return await run_in_threadpool(_promociones_item_sync, item_id, cuenta)
+
+def _costo_envio_item_sync(item_id: str, cuenta: str) -> dict:
+    """Liviano a propósito -- solo resuelve UN ítem contra la cache que
+    `iniciar_job_costos_envio` congeló (un dict-lookup + a lo sumo UNA
+    llamada a /shipments/{id}), nunca el catálogo entero. Se llama en
+    paralelo con /promociones cada vez que se abre el panel de gestión
+    (misma cuenta/MLA que ya se está pidiendo ahí), tanto desde la tabla
+    principal como desde el buscador puntual -- por eso vive aparte y no
+    adentro de `_armar_fila`/`ofertas_activas` (eso sí es masivo, cientos
+    de ítems por corrida, y encarecería esa corrida sin necesidad)."""
+    ml = ml_ofertas.MLOfertasClient()
+    return {"costo_envio_real": ml_ofertas.costo_envio_real_item(ml, item_id, cuenta)}
+
+@app.get("/ml-ofertas/item/{item_id}/costo-envio")
+async def ml_ofertas_item_costo_envio(item_id: str, cuenta: str):
+    return await run_in_threadpool(_costo_envio_item_sync, item_id, cuenta)
 
 def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
     """Buscador puntual -- para activar una oferta en un MLA que hoy NO

@@ -1284,6 +1284,17 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       </table>
     </div>
   </div>
+
+  <div style="margin-top:24px">
+    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">💸 Costos de envío reales (reemplaza el aproximado de $8.500)</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Barre las ventas pagadas recientes de las dos cuentas y "congela" el costo real de envío de la última venta de cada MLA -- corré esto cada tanto (no hace falta más seguido). El panel de "Oferta Tradicional" de cada publicación lo muestra apenas lo corriste al menos una vez.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
+      <span style="display:flex;gap:4px;align-items:center">Días hacia atrás <input type="text" id="ofm-costos-envio-dias" value="60" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"></span>
+      <button class="btn" onclick="ofmCostosEnvioRun()" id="btn-ofm-costos-envio">Actualizar costos de envío reales</button>
+      <span id="ofm-costos-envio-status" style="color:var(--text3)"></span>
+    </div>
+    <div id="ofm-costos-envio-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace"></div>
+  </div>
 </div>
 <script>
 const S={
@@ -3077,6 +3088,16 @@ async function ofmCargarPromociones(itemId){
     const res=await fetch(`${url}/ml-ofertas/item/${itemId}/promociones?cuenta=${f.cuenta}`);
     const data=await res.json();
     ofmPromocionesCache[itemId]=data.promociones||[];
+    // Costo real de envío -- liviano, pedido aparte de /promociones (ver
+    // docstring del endpoint). Si ya vino de /buscar (buscador puntual)
+    // no lo vuelve a pedir; si vino de la tabla principal (bulk scan, que
+    // a propósito no lo trae) lo completa acá, una sola vez por apertura
+    // de panel, nunca para el catálogo entero.
+    if(f.costo_envio_real===undefined){
+      fetch(`${url}/ml-ofertas/item/${itemId}/costo-envio?cuenta=${f.cuenta}`)
+        .then(r=>r.json()).then(d=>{f.costo_envio_real=d.costo_envio_real;ofmRenderGestionarPanel(itemId,ofmPromocionesCache[itemId]);})
+        .catch(()=>{});
+    }
     ofmRenderGestionarPanel(itemId,ofmPromocionesCache[itemId]);
   }catch(e){if(cont)cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
@@ -3130,6 +3151,22 @@ function ofmRenderGestionarPanel(itemId,promociones){
     :`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en ${f.cuotas_ofrecidas} cuotas sin interés, pero no tengo el % que cobra ML para esa cantidad -- revisalo a mano.</div>`
   ):'';
 
+  // Costo real de envío -- pedido de Maxx 2026-09-01, ver
+  // ofmCostosEnvioRun/costo-envio endpoint. Puramente informativo por
+  // ahora (igual que cuotasHtml): el cálculo de abajo sigue usando el
+  // aproximado fijo, esto es referencia para decidir a mano.
+  const costoEnvio=f.costo_envio_real;
+  let costoEnvioHtml='';
+  if(costoEnvio===null){
+    costoEnvioHtml=`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">📦 Sin dato de envío real todavía para este ítem -- corré "Actualizar costos de envío reales" (al final de la página) para congelarlo.</div>`;
+  }else if(costoEnvio){
+    const fv=costoEnvio.fecha_venta||'';
+    const fecha=fv.length>=10?`${fv.slice(8,10)}/${fv.slice(5,7)}`:'?';
+    costoEnvioHtml=costoEnvio.cost_type==='free'
+      ?`<div style="font-size:9px;color:var(--text2);margin-bottom:6px">📦 Costo real de envío de la última venta (${fecha}): <b>$${fmtN(Math.round(costoEnvio.costo_envio_real))}</b> -- el cálculo de acá todavía usa el aproximado fijo ($8.500), esto es solo referencia.</div>`
+      :`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">📦 La última venta (${fecha}) no tuvo envío gratis -- lo pagó el comprador, sin costo real que vos absorbas ahí.</div>`;
+  }
+
   cont.innerHTML=`
     <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Promociones activas — ${f.titulo||itemId}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
@@ -3138,6 +3175,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Calcula el tachado para que, con el % de descuento que pongas (el mismo que ves en Promociones de ML), el precio final quede exactamente en el del PM -- y mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla). ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
     <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${fuentePm}</div>
     ${cuotasHtml}
+    ${costoEnvioHtml}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
       <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${Math.round(precioPmActual)}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <span>Descuento % <span style="color:var(--text3);font-size:8px">(el mismo % que ves en Promociones de ML)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="25" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
@@ -3339,6 +3377,7 @@ async function ofmBuscarMLA(){
       item_id:d.item_id, cuenta:d.cuenta, sku:d.sku, titulo:d.titulo, permalink:d.permalink, domain_id:d.domain_id,
       precio_normal:d.precio_actual, precio_oferta:null, incidencia:d.incidencia,
       _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva, cuotas_ofrecidas:d.cuotas_ofrecidas,
+      costo_envio_real:d.costo_envio_real,
     };
     if(d.tc)OFM.tc=OFM.tc||d.tc;
     ofmItemAbierto=d.item_id;
@@ -3361,6 +3400,24 @@ async function ofmAlertasRun(cuenta){
     status.textContent='Job: '+job_id;
     pollFullJob(`${url}/ml-ofertas/alertas/status/${job_id}`,logEl,status,btn,`Buscar candidatos ${cuenta}`,r=>ofmAlertasOnResult(r,cuenta));
   }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent=`Buscar candidatos ${cuenta}`;}
+}
+// ── Costo real de envío -- pedido de Maxx 2026-09-01. "Congela" el
+// shipping_id de la última venta de cada MLA (ambas cuentas) del lado
+// del backend -- acá solo dispara el job y muestra el progreso, el
+// costo en sí se resuelve por ítem puntual cuando se abre su panel
+// (ver ofmRenderGestionarPanel).
+async function ofmCostosEnvioRun(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const btn=qs('btn-ofm-costos-envio'),status=qs('ofm-costos-envio-status'),logEl=qs('ofm-costos-envio-log');
+  const dias=qs('ofm-costos-envio-dias').value||60;
+  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
+  try{
+    const res=await fetch(`${url}/ml-ofertas/costos-envio/run?dias=${dias}`,{method:'POST'});
+    const{job_id}=await res.json();
+    status.textContent='Job: '+job_id;
+    pollFullJob(`${url}/ml-ofertas/costos-envio/status/${job_id}`,logEl,status,btn,'Actualizar costos de envío reales',
+      r=>{status.innerHTML=`<span style="color:var(--green)">✅ ${r?.publicaciones_actualizadas||0} publicaciones actualizadas</span>`;});
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='Actualizar costos de envío reales';}
 }
 let ofmAlertasCandidatos={IT:[],MT:[]};
 function ofmAlertasOnResult(result,cuenta){

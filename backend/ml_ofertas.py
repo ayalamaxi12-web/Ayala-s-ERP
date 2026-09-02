@@ -124,6 +124,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable
 
@@ -1158,6 +1159,7 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
         "permalink": d.get("permalink"), "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
         "costo_sin_iva": costo_usd, "iva_factor": iva_factor, "tc": tc, "incidencia": incidencia,
         "cuotas_ofrecidas": _cuotas_sin_interes(d),
+        "costo_envio_real": costo_envio_real_item(ml, item_id, cuenta),
     }
 
 
@@ -1314,6 +1316,102 @@ def ventas_por_item(ml: MLFullClient, cuenta: str, desde_iso: str, hasta_iso: st
         if offset >= total or not resultados:
             break
     return acumulado
+
+
+# ── Costo real de envío -- pedido de Maxx 2026-09-01, ver
+# project_ofertas-ml-envio-gap en memoria. Reemplaza el aproximado fijo
+# ($8.500 si el precio final supera $33.000, `S.shippingCost`/
+# `S.shippingThreshold` en el frontend) por el costo REAL que ML le
+# descontó en la última venta real de cada MLA. Congelado y actualizado
+# "cada cierta cantidad de días" (decisión explícita de Maxx, no en
+# vivo por panel) -- ver `iniciar_job_costos_envio` más abajo.
+
+def ventas_recientes_por_item(ml: MLFullClient, cuenta: str, desde_iso: str, hasta_iso: str) -> dict[str, dict]:
+    """Para cada publicación vendida en el rango, se queda con la orden
+    PAGADA más reciente (fecha + `shipping.id`) -- no la suma de
+    unidades como `ventas_por_item`, folgan la última venta real para
+    poder resolver después su costo de envío puntual
+    (`costo_envio_real`). Mismo endpoint/paginación que `ventas_por_item`
+    (`/orders/search?seller=...&order.status=paid`) -- confirmado que
+    ML NO tiene filtro por ítem en este endpoint (probado en vivo
+    2026-09-01 con `item.id=`/`q=<sku>`, los dos ignorados en silencio),
+    así que hay que barrer y filtrar del lado nuestro."""
+    seller_id = SELLERS[cuenta]
+    headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
+    ultima: dict[str, dict] = {}
+    offset = 0
+    while True:
+        d = ml._get(
+            "https://api.mercadolibre.com/orders/search",
+            {"seller": seller_id, "order.status": "paid",
+             "order.date_closed.from": desde_iso, "order.date_closed.to": hasta_iso,
+             "offset": offset, "limit": 50},
+            headers,
+        )
+        resultados = (d or {}).get("results") or []
+        for orden in resultados:
+            fecha = orden.get("date_closed") or ""
+            shipping_id = (orden.get("shipping") or {}).get("id")
+            if not shipping_id:
+                continue
+            for oi in orden.get("order_items") or []:
+                item_id = (oi.get("item") or {}).get("id")
+                if not item_id:
+                    continue
+                previa = ultima.get(item_id)
+                if previa is None or fecha > previa["fecha"]:
+                    ultima[item_id] = {"fecha": fecha, "shipping_id": shipping_id, "orden_id": orden.get("id")}
+        paging = (d or {}).get("paging") or {}
+        total = paging.get("total", 0)
+        offset += len(resultados)
+        if offset >= total or not resultados:
+            break
+    return ultima
+
+
+def costo_envio_real(ml: MLFullClient, cuenta: str, shipping_id) -> dict:
+    """Costo real de envío que ML le descontó al vendedor en UNA venta
+    puntual. Confirmado en vivo 2026-09-01 (MLA680197251, orden
+    2000018227607384, cuenta IT): `GET /shipments/{id}` con el header
+    `x-format-new: true` (obligatorio -- sin él ML devuelve el formato
+    viejo) trae `lead_time.cost_type`/`lead_time.list_cost`.
+
+    - `cost_type == "charged"`: el comprador pagó el envío -- no hay
+      costo real que el vendedor absorba, se devuelve 0.
+    - `cost_type == "free"` (envío gratis para el comprador -- el caso
+      real que le interesa a Maxx, cuando ÉL absorbe el costo):
+      `list_cost` es lo que ML le descuenta de verdad. Confirmado
+      cruzando el detalle real de una venta puntual con Maxx: coincidió
+      centavo a centavo ($8.890)."""
+    headers = {"Authorization": f"Bearer {ml._token(cuenta)}", "x-format-new": "true"}
+    d = ml._get(f"https://api.mercadolibre.com/shipments/{shipping_id}", {}, headers) or {}
+    lead = d.get("lead_time") or {}
+    cost_type = lead.get("cost_type")
+    costo = Decimal(str(lead["list_cost"])) if cost_type == "free" and lead.get("list_cost") is not None else Decimal(0)
+    return {"cost_type": cost_type, "costo_envio_real": float(costo)}
+
+
+# Cache en memoria del último barrido -- item_id -> {"cuenta", "shipping_id",
+# "orden_id", "fecha_venta"}. Se "congela" acá entre corridas del job
+# (`iniciar_job_costos_envio`), y `resolver_item_para_gestion` lo consulta
+# para resolver el costo real puntual SOLO del ítem que se está mirando
+# (nunca pide /shipments para todo el catálogo de una -- eso sería miles
+# de llamadas de más). Se pierde si el proceso reinicia, igual que
+# `_jobs` -- mismo modelo de persistencia (o falta de) que el resto de
+# este módulo.
+_ultima_venta_cache: dict[str, dict] = {}
+
+
+def costo_envio_real_item(ml: MLFullClient, item_id: str, cuenta: str) -> dict | None:
+    """Resuelve el costo real de envío para UN ítem puntual, usando el
+    `shipping_id` congelado por el último `iniciar_job_costos_envio` --
+    `None` si ese ítem no vendió nada en la ventana del último barrido
+    (todavía no corrido, o sin ventas recientes)."""
+    entrada = _ultima_venta_cache.get(item_id)
+    if not entrada:
+        return None
+    costo = costo_envio_real(ml, cuenta, entrada["shipping_id"])
+    return {**costo, "orden_id": entrada["orden_id"], "fecha_venta": entrada["fecha"]}
 
 
 @dataclass
@@ -1491,6 +1589,40 @@ def iniciar_job_alertas(job_id: str, cuenta: str, item_ids_con_oferta: list, dia
         }
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["log"].append(f"Listo: {len(candidatos)} candidatos encontrados.")
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["log"].append(f"Error: {e}")
+
+
+def iniciar_job_costos_envio(job_id: str, cuentas: list = None, dias: int = 60) -> None:
+    """Barre las ventas pagadas recientes (ambas cuentas por default) y
+    "congela" en `_ultima_venta_cache` el `shipping_id` de la venta más
+    reciente de cada publicación -- pedido explícito de Maxx 2026-09-01:
+    correrlo cada tanto, no en vivo por ítem. NO llama a
+    `/shipments/{id}` acá para todo el catálogo (sería carísimo) -- eso
+    se resuelve recién por ítem puntual, al abrir su panel de gestión
+    (`costo_envio_real_item`)."""
+    _jobs[job_id] = {"status": "running", "log": ["Barriendo ventas recientes..."], "result": None, "progress": None}
+    try:
+        ml = MLFullClient()
+        cuentas = cuentas or list(SELLERS.keys())
+        hoy = date.today()
+        # Mismo tope real de 60 días que ya vale para stock/fulfillment --
+        # acá es /orders/search, sin ese límite documentado, pero no hay
+        # necesidad real de ir más atrás: interesa la venta MÁS RECIENTE.
+        desde = (hoy - timedelta(days=min(dias, 60))).isoformat() + "T00:00:00.000-00:00"
+        hasta = hoy.isoformat() + "T23:00:00.000-00:00"
+        total_items = 0
+        for cuenta in cuentas:
+            _jobs[job_id]["log"].append(f"Escaneando órdenes pagadas ({cuenta})...")
+            ultimas = ventas_recientes_por_item(ml, cuenta, desde, hasta)
+            for item_id, info in ultimas.items():
+                _ultima_venta_cache[item_id] = {**info, "cuenta": cuenta}
+            total_items += len(ultimas)
+            _jobs[job_id]["log"].append(f"{len(ultimas)} publicaciones con venta reciente ({cuenta}).")
+        _jobs[job_id]["result"] = {"publicaciones_actualizadas": total_items}
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["log"].append(f"Listo: {total_items} publicaciones con dato de envío congelado.")
     except Exception as e:
         _jobs[job_id]["status"] = "error"
         _jobs[job_id]["log"].append(f"Error: {e}")
