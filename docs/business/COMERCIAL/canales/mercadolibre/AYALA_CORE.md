@@ -166,16 +166,21 @@ _(Fecha de última actualización: 2026-09-02)_
   12→21,6% (antes 8,4/12,3/15,7/19,2). La Reducida se verificó en el mismo simulador y **sigue en
   5% fijo, no cambió**. Corregido en `backend/ml_ofertas.py` (`CUOTAS_PCT_DEFAULT`),
   `docs/index.html` (`CUOTAS_PCT_ML` y `OFM.cuotasPct`), `REQ_MODULO_OFERTAS_ML.md` y acá (A.3).
-  **Pendiente real:** el ejemplo congelado de A.3.1 puede seguir calculado con las tasas viejas si
-  la pestaña "Tasas" de la planilla de Maxx todavía no las tiene actualizadas -- antes de cerrar la
-  Etapa 1 contra ese ejemplo, confirmar con Maxx si el Sheet ya refleja 8,9/13,4/17,8/21,6% o si
-  hay que re-congelar el ejemplo con los números nuevos.
+  Maxx ya actualizó la pestaña "Tasas" con estos valores. **Aclaración de Maxx (2026-09-02) sobre
+  el rol del Sheet de acá en adelante**: la planilla fue para que Code entendiera el proceso/motor
+  de cálculo, no queda como fuente de verdad continua -- una vez que Ayala Core esté construido en
+  el ERP, las tasas se gestionan y corrigen directo ahí (no hay que mantener el Sheet sincronizado
+  a futuro cada vez que ML cambie un %).
 
 ## Decisiones tomadas (log)
 - **2026-09-02**: `CUOTAS_PCT_DEFAULT` corregido de 8,4/12,3/15,7/19,2% a 8,9/13,4/17,8/21,6% (3/6/9/12
   cuotas), confirmado en vivo por Maxx contra el simulador real de ML. Corregido a la vez en
   `backend/ml_ofertas.py`, `docs/index.html` y `REQ_MODULO_OFERTAS_ML.md`. La Reducida (5% fijo) se
   revisó en el mismo simulador y no cambió.
+- **2026-09-02**: el Sheet "VENTAS POR CANALES MATIAS" **NO es fuente de verdad continua** para
+  Ayala Core -- fue para que Code entendiera el motor de cálculo. Una vez construido el módulo en
+  el ERP, las tasas (comisión, cuotas, envío) se gestionan y corrigen directo ahí, sin depender de
+  mantener el Sheet actualizado a futuro.
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
