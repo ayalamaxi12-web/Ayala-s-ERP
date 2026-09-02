@@ -52,8 +52,9 @@ producto.
    - Contado: 0%
    - Reducida (tag real de ML `pcj-co-funded`, "3 a 12 cuotas con interés BAJO"): **5% fijo**,
      sin importar cuántas cuotas elija el comprador dentro del rango.
-   - Cuotas sin interés: 3→8,4% · 6→12,3% · 9→15,7% · 12→19,2%
-     (mismos valores que `CUOTAS_PCT_DEFAULT`, ya en uso en Ofertas ML).
+   - Cuotas sin interés: 3→8,9% · 6→13,4% · 9→17,8% · 12→21,6%
+     (mismos valores que `CUOTAS_PCT_DEFAULT`, ya en uso en Ofertas ML — corregidos
+     2026-09-02, ver Decisiones tomadas).
 6. **Costo de envío real** → el job ya construido esta semana (última venta real, NO la tabla de
    tramos por peso de la planilla).
 7. **Renta objetivo (%) por condición de pago** → configurable a mano por SKU. Arranca con los
@@ -159,16 +160,22 @@ _(Fecha de última actualización: 2026-09-02)_
   automáticamente de la otra.
 - Definir el endpoint exacto para escribir precio directo a ML por condición (reutilizar el mismo
   patrón PUT que ya existe en `fijar_precio_base`).
-- **`CUOTAS_PCT_DEFAULT` (8,4% / 12,3% / 15,7% / 19,2% para 3/6/9/12 cuotas) puede estar
-  desactualizado.** Maxx vio 8,9% en ML para 3 cuotas hace poco, contra el 8,4% que dicen tanto el
-  código (`backend/ml_ofertas.py`) como esta planilla. Ayala Core usa estos mismos números para el
-  costo financiero -- si están viejos, el precio calculado queda sistemáticamente un poco corto. A
-  chequear (con Claude in Chrome mirando el detalle real de una publicación en 3 cuotas), no
-  corregir todavía sin confirmar. **Importante: este valor NO es exclusivo de Ayala Core** -- el
-  mismo `CUOTAS_PCT_DEFAULT` lo usa también Ofertas ML (`activar_en_campana_tradicional`). Si se
-  confirma que el número real es distinto, corregir en los DOS lugares a la vez, no solo acá.
+- **RESUELTO 2026-09-02 — `CUOTAS_PCT_DEFAULT` estaba desactualizado, ya corregido en los DOS
+  lugares.** Confirmado en vivo con Claude in Chrome (simulador de costos real, "Modificar
+  publicación" de MLA3655836976): los valores reales subieron a 3→8,9% · 6→13,4% · 9→17,8% ·
+  12→21,6% (antes 8,4/12,3/15,7/19,2). La Reducida se verificó en el mismo simulador y **sigue en
+  5% fijo, no cambió**. Corregido en `backend/ml_ofertas.py` (`CUOTAS_PCT_DEFAULT`),
+  `docs/index.html` (`CUOTAS_PCT_ML` y `OFM.cuotasPct`), `REQ_MODULO_OFERTAS_ML.md` y acá (A.3).
+  **Pendiente real:** el ejemplo congelado de A.3.1 puede seguir calculado con las tasas viejas si
+  la pestaña "Tasas" de la planilla de Maxx todavía no las tiene actualizadas -- antes de cerrar la
+  Etapa 1 contra ese ejemplo, confirmar con Maxx si el Sheet ya refleja 8,9/13,4/17,8/21,6% o si
+  hay que re-congelar el ejemplo con los números nuevos.
 
 ## Decisiones tomadas (log)
+- **2026-09-02**: `CUOTAS_PCT_DEFAULT` corregido de 8,4/12,3/15,7/19,2% a 8,9/13,4/17,8/21,6% (3/6/9/12
+  cuotas), confirmado en vivo por Maxx contra el simulador real de ML. Corregido a la vez en
+  `backend/ml_ofertas.py`, `docs/index.html` y `REQ_MODULO_OFERTAS_ML.md`. La Reducida (5% fijo) se
+  revisó en el mismo simulador y no cambió.
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos

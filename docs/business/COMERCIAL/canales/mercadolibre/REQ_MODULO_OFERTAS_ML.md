@@ -44,10 +44,11 @@ Estos son los valores CONFIRMADOS que debe usar la calculadora. Reemplazan cualq
 - (Nota: con Full/correo/colecta el costo fijo se calcula por precio+medidas+peso; dejar la regla Flex como base y contemplar Full como caso aparte si se necesita.)
 
 **Cuotas sin interés (% que se SUMA al cargo por vender):**
-- 3 cuotas → 8,40%
-- 6 cuotas → **12,30%** (RESUELVE la divergencia del REQ anterior: el valor real es 12,30%, confirmado en simulador + tabla oficial)
-- 9 cuotas → 15,70%
-- 12 cuotas → 19,20%
+- 3 cuotas → 8,90%
+- 6 cuotas → 13,40%
+- 9 cuotas → 17,80%
+- 12 cuotas → 21,60%
+- **Corregido 2026-09-02** (Maxx, en vivo, simulador de costos real en "Modificar publicación"): estos valores subieron desde los anteriores (8,40/12,30/15,70/19,20 — los de la revisión del 26/08/2026). Mismo ajuste aplicado en `backend/ml_ofertas.py` (`CUOTAS_PCT_DEFAULT`), `docs/index.html` (`CUOTAS_PCT_ML`/`OFM.cuotasPct`) y `AYALA_CORE.md`.
 - **18 cuotas NO existe en ML Argentina hoy** — el máximo es 12. Eliminar el plan de 18 del panel.
 
 **Costo de envío** — umbral de envío gratis: $33.000 (en productos de $33.000+ el vendedor absorbe el envío). Con descuento por reputación (la cuenta es MercadoLíder Platinum). Tabla oficial ya con descuento (0,5–1 kg): <$33.000 → $9.800 · $33.000–$49.999 → $7.000 · +$50.000 → $7.470.
@@ -84,7 +85,7 @@ Dado un **precio de oferta** (el precio con descuento que va a tener la publicac
 base_sin_iva   = precio_oferta / (1 + iva_pct)          # IVA se quita primero; margen se mide sobre base sin IVA
 comision       = precio_oferta × comision_categoria_pct  # editable por categoría
 costo_fijo     = tramo_por_precio(precio_oferta)         # 1255 / 2500 / 3030 / 0 (solo <33k, regla Flex)
-cuotas         = precio_oferta × cuotas_pct              # 0 si no ofrece cuotas; 8,4 / 12,3 / 15,7 / 19,2%
+cuotas         = precio_oferta × cuotas_pct              # 0 si no ofrece cuotas; 8,9 / 13,4 / 17,8 / 21,6% (corregido 2026-09-02)
 envio          = regla_envio(precio_oferta)              # 0 si <33k; si aplica, tabla con descuento reputación
 imp_cheque     = precio_oferta × 1,2%                    # sobre el precio CON IVA (bruto)
 iibb           = base_sin_iva × 5%                       # corregido 2026-08-27: sobre el precio SIN IVA (neto), no sobre precio_oferta

@@ -167,8 +167,13 @@ COSTO_FIJO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
 
 # % que se SUMA al cargo por vender cuando la oferta ofrece cuotas sin
 # interés. 18 cuotas no existe en ML Argentina hoy (REQ §1.2.b) -- no está.
+# Corregido 2026-09-02 (Maxx, en vivo -- simulador de costos real de una
+# publicación en "Modificar publicación"): ML subió estas tasas desde los
+# valores anteriores (8,40/12,30/15,70/19,20). La Reducida (5% fijo) NO
+# cambió, se verificó en el mismo simulador. Mismo ajuste aplicado en
+# docs/index.html (CUOTAS_PCT_ML y OFM.cuotasPct) y en AYALA_CORE.md.
 CUOTAS_PCT_DEFAULT: dict[int, Decimal] = {
-    3: Decimal("8.40"), 6: Decimal("12.30"), 9: Decimal("15.70"), 12: Decimal("19.20"),
+    3: Decimal("8.90"), 6: Decimal("13.40"), 9: Decimal("17.80"), 12: Decimal("21.60"),
 }
 
 # Envío con descuento por reputación (MercadoLíder Platinum). (techo, monto).

@@ -113,7 +113,7 @@ def test_cuotas_suman_solo_si_se_ofrecen():
     sin_cuotas = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), None, None, params)
     con_6_cuotas = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), None, 6, params)
     assert sin_cuotas.cuotas == Decimal(0)
-    assert con_6_cuotas.cuotas == Decimal(10000) * Decimal("12.30") / 100
+    assert con_6_cuotas.cuotas == Decimal(10000) * Decimal("13.40") / 100
     assert con_6_cuotas.margen < sin_cuotas.margen
 
 
@@ -984,9 +984,9 @@ def test_activar_en_campana_tradicional_suma_envio_real_sin_cuotas():
 
 
 def test_activar_en_campana_tradicional_suma_cuotas_y_envio_en_ese_orden():
-    # PM $100.000 en 3 cuotas (8.40%) -> $108.400, + envío real $12.000
-    # -> $120.400. Confirmado el orden con Maxx: cuotas primero, envío
-    # después.
+    # PM $100.000 en 3 cuotas (8.90%, corregido 2026-09-02) -> $108.900,
+    # + envío real $12.000 -> $120.900. Confirmado el orden con Maxx:
+    # cuotas primero, envío después.
     ml_ofertas._ultima_venta_cache.clear()
     ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
     try:
@@ -994,8 +994,8 @@ def test_activar_en_campana_tradicional_suma_cuotas_y_envio_en_ese_orden():
         r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
 
         assert r["ok"] is True
-        assert r["precio_final"] == 120400.0
-        assert r["precio_tachado_pedido"] == 160533.0  # 120400 / 0.75, ROUND_HALF_UP
+        assert r["precio_final"] == 120900.0
+        assert r["precio_tachado_pedido"] == 161200.0  # 120900 / 0.75, ROUND_HALF_UP
         assert "3 cuotas sin interés" in r["ajuste_cuotas_envio"]
         assert "envío real" in r["ajuste_cuotas_envio"]
     finally:
