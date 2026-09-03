@@ -1353,7 +1353,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
     <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
       <table>
-        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th></tr></thead>
+        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th></tr></thead>
         <tbody id="ac-publicaciones-tbody"></tbody>
       </table>
     </div>
@@ -3737,6 +3737,7 @@ function ayalaCorePublicacionesRepintar(){
       <td>${f.sku}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
       <td>${ayalaCoreCondLabel(f.condicion_detectada)}</td>
+      <td style="text-align:right">${ayalaCoreFmt(f.envio_real)}${f.envio_real?'':' <span style="color:var(--text3)" title="Sin venta reciente registrada para este MLA -- se usó $0">(sin dato)</span>'}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_actual)}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_calculado)}</td>
       <td style="text-align:right;color:${color}">${ayalaCoreFmt(f.diferencia)}</td>
