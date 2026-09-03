@@ -374,7 +374,7 @@ class MLOfertasClient(MLFullClient):
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         return self._get(
             f"https://api.mercadolibre.com/items/{item_id}",
-            {"attributes": "id,title,price,permalink,seller_custom_field,domain_id,tags,attributes"}, headers,
+            {"attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes"}, headers,
         )
 
 

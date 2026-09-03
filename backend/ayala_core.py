@@ -166,23 +166,31 @@ def descubrir_publicaciones(
     renta_contado_pct: Decimal = RENTA_CONTADO_DEFAULT,
     diferencial_cuotas_pct: Decimal = RENTA_DIFERENCIAL_CUOTAS_DEFAULT,
     progreso_cb: Callable[[int, int, str], None] | None = None,
+    skus_filtro: list[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Pedido de Maxx 2026-09-02: "que detecte los SKU solos de las dos
     cuentas" -- escanea TODAS las publicaciones activas de las cuentas
     pedidas (`ml.items_activos`) y se queda solo con las que tienen
-    exactamente uno de `SKUS_PILOTO` como SKU (via `_sku_de_item`,
-    `seller_custom_field` o el atributo `SELLER_SKU`). Un combo (SKU +
-    otros SKU) nunca matchea exacto a uno solo de la lista, así que esto
-    ya cumple la exclusión de combos de A.5 -- no hace falta consultar
-    Ecom para esto en particular (Ecom sí sigue haciendo falta para casos
-    donde el combo reutiliza el mismo SKU sin concatenar, no confirmado
-    todavía que pase acá).
+    exactamente uno de `skus_filtro` (default `SKUS_PILOTO`, pero
+    seleccionable -- pedido 2026-09-03: "que selecciono 1 o varios SKU")
+    como SKU (via `_sku_de_item`, `seller_custom_field` o el atributo
+    `SELLER_SKU`). Un combo (SKU + otros SKU) nunca matchea exacto a uno
+    solo de la lista, así que esto ya cumple la exclusión de combos de
+    A.5 -- no hace falta consultar Ecom para esto en particular (Ecom sí
+    sigue haciendo falta para casos donde el combo reutiliza el mismo SKU
+    sin concatenar, no confirmado todavía que pase acá).
+
+    Cada fila trae también `costo_sin_iva_ars`/`iva_factor` -- pedido
+    2026-09-03: el frontend los necesita para recalcular el precio de una
+    condición sin referencia de competencia con un margen manual, sin
+    tener que pegarle de nuevo al backend por cada tecla que Maxx toca.
 
     Caro: recorre TODO el catálogo activo (~6.200 publicaciones hoy entre
     las dos cuentas) -- pensado para correr como job de background, no en
     cada carga de pantalla (mismo criterio que `ofertas_propias_activas`).
     `progreso_cb(procesados, total, fase)` opcional, mismo patrón que el
     resto de los escaneos largos de este módulo."""
+    skus_validos = skus_filtro or SKUS_PILOTO
     filas: list[dict] = []
     incidencias: list[dict] = []
     for cuenta in cuentas:
@@ -195,7 +203,7 @@ def descubrir_publicaciones(
         detalles = ml.detalle_items_ofertas(ids, cuenta, _progreso if progreso_cb else None)
         for d in detalles:
             sku = _sku_de_item(d)
-            if sku not in SKUS_PILOTO:
+            if sku not in skus_validos:
                 continue
             costo_usd = costo_provider.obtener(sku)
             iva_factor = iva_provider.factor(sku)
@@ -226,8 +234,31 @@ def descubrir_publicaciones(
                 "permalink": d.get("permalink"), "condicion_detectada": condicion,
                 "precio_actual": precio_actual, "precio_calculado": precio_calculado,
                 "diferencia": precio_actual - precio_calculado, "envio_real": envio_real,
+                "costo_sin_iva_ars": costo_ars, "iva_factor": iva_factor,
             })
     return filas, incidencias
+
+
+def resolver_referencia_competencia(ml, item_id: str, cuenta: str = "IT") -> dict:
+    """Pedido de Maxx 2026-09-03: encontró un competidor vendiendo casi al
+    mismo precio que él pero en 9 cuotas -- eso lo deja afuera de las
+    ventas en cuotas para tickets altos. Trae precio/tachado/condición de
+    UNA publicación de la competencia (no la propia) para comparar "en las
+    mismas condiciones" en vez de a ciegas contra el costo.
+
+    Es una publicación PÚBLICA de otro vendedor -- `cuenta` solo elige
+    qué token de las dos propias usar para pegarle a la API, no importa
+    cuál (no hace falta ser el dueño para leer precio/tags/original_price,
+    a diferencia de `seller_custom_field`, que acá ni se pide)."""
+    d = ml.detalle_item_completo(item_id, cuenta) or {}
+    if not d.get("id"):
+        return {"encontrado": False}
+    return {
+        "encontrado": True, "item_id": d["id"], "titulo": d.get("title", ""),
+        "permalink": d.get("permalink"), "precio": d.get("price"),
+        "precio_tachado": d.get("original_price"),
+        "condicion_detectada": detectar_condicion_pago(d),
+    }
 
 
 # ── Job en background -- mismo patrón que ml_ofertas.py/ml_full.py ──
@@ -235,10 +266,14 @@ def descubrir_publicaciones(
 _jobs: dict = {}
 
 
+_CAMPOS_DECIMAL = ("precio_actual", "precio_calculado", "diferencia", "envio_real", "costo_sin_iva_ars", "iva_factor")
+
+
 def iniciar_job_publicaciones(
     job_id: str, cuentas: list[str] | None = None, tc: float = 0,
     renta_contado: float = float(RENTA_CONTADO_DEFAULT),
     diferencial_cuotas: float = float(RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+    skus: list[str] | None = None,
 ) -> None:
     _jobs[job_id] = {"status": "running", "log": ["Escaneando publicaciones activas..."], "result": None, "progress": None}
     try:
@@ -256,14 +291,13 @@ def iniciar_job_publicaciones(
         filas, incidencias = descubrir_publicaciones(
             ml, costo_provider, iva_provider, cuentas or list(SELLERS.keys()), tc_decimal,
             renta_contado_pct=Decimal(str(renta_contado)), diferencial_cuotas_pct=Decimal(str(diferencial_cuotas)),
-            progreso_cb=_progreso,
+            progreso_cb=_progreso, skus_filtro=skus,
         )
         _jobs[job_id]["progress"] = None
         _jobs[job_id]["result"] = {
             "filas": [{
-                **{k: v for k, v in f.items() if k not in ("precio_actual", "precio_calculado", "diferencia", "envio_real")},
-                "precio_actual": float(f["precio_actual"]), "precio_calculado": float(f["precio_calculado"]),
-                "diferencia": float(f["diferencia"]), "envio_real": float(f["envio_real"]),
+                **{k: v for k, v in f.items() if k not in _CAMPOS_DECIMAL},
+                **{k: float(f[k]) for k in _CAMPOS_DECIMAL},
             } for f in filas],
             "incidencias": incidencias,
         }

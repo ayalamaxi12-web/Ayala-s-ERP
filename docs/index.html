@@ -1330,16 +1330,29 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="table-wrap" id="ac-tabla-wrap" style="display:none;max-width:420px"></div>
 
   <div style="margin-top:24px">
+    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🥊 Referencias de competencia</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Pegá el MLA de un competidor para un SKU -- se lee su precio, tachado y condición de venta, y se muestra al lado de la fila que tenga esa misma condición en la tabla de abajo, para competir en igualdad en vez de a ciegas contra el costo.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <select id="ac-ref-sku" class="fi"></select>
+      <input type="text" id="ac-ref-mla" placeholder="MLA del competidor..." class="fi" style="width:160px">
+      <select id="ac-ref-cuenta" class="fi"><option value="IT">IT</option><option value="MT">MT</option></select>
+      <button class="btn" onclick="ayalaCoreRefAgregar()">➕ Agregar referencia</button>
+    </div>
+    <div id="ac-ref-lista" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
+  </div>
+
+  <div style="margin-top:24px">
     <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 Publicaciones de los SKU piloto — real vs. calculado</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Escanea TODAS las publicaciones activas de las dos cuentas (IT + MT), se queda con las que tienen un SKU piloto, y compara el precio actual en vivo contra el que el motor calcula para la condición de pago detectada. Tarda unos minutos (recorre el catálogo completo) -- no escribe nada a ML.</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Escanea TODAS las publicaciones activas de las dos cuentas (IT + MT), se queda con las de los SKU tildados, y compara el precio actual en vivo contra el que el motor calcula para la condición de pago detectada. Tarda unos minutos (recorre el catálogo completo) -- no escribe nada a ML.</div>
+    <div id="ac-publicaciones-skus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn primary" onclick="ayalaCorePublicacionesRun()" id="btn-ac-publicaciones">🔄 Detectar publicaciones (IT+MT)</button>
+      <button class="btn primary" onclick="ayalaCorePublicacionesRun()" id="btn-ac-publicaciones">🔄 Detectar publicaciones</button>
       <span id="ac-publicaciones-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     </div>
     <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
     <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
       <table>
-        <thead><tr><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th></tr></thead>
+        <thead><tr><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th></tr></thead>
         <tbody id="ac-publicaciones-tbody"></tbody>
       </table>
     </div>
@@ -3525,8 +3538,58 @@ async function ayalaCoreLoad(){
     const d=await res.json();
     AC_SKUS=d.skus||[];
     qs('ac-sku').innerHTML='<option value="">— Todos —</option>'+AC_SKUS.map(s=>`<option value="${s}">${s}</option>`).join('');
+    qs('ac-ref-sku').innerHTML=AC_SKUS.map(s=>`<option value="${s}">${s}</option>`).join('');
+    qs('ac-publicaciones-skus').innerHTML=AC_SKUS.map(s=>`<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" class="ac-pub-sku-chk" value="${s}" checked>${s}</label>`).join('');
     ayalaCoreLoaded=true;
   }catch(e){}
+}
+// ── Referencias de competencia (pedido 2026-09-03) -- AC_REFERENCIAS[sku]
+// es un array de {item_id,titulo,precio,precio_tachado,condicion_detectada}
+// -- una publicación de competencia puede cubrir una sola condición, por
+// eso es array (puede haber una para Contado y otra para 9 cuotas, etc).
+let AC_REFERENCIAS={};
+async function ayalaCoreRefAgregar(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const sku=qs('ac-ref-sku').value;
+  const itemId=(qs('ac-ref-mla').value||'').trim().toUpperCase();if(!itemId){toast('Ingresá un MLA','error');return;}
+  const cuenta=qs('ac-ref-cuenta').value;
+  try{
+    const res=await fetch(`${url}/ayala-core/referencia/${itemId}?cuenta=${cuenta}`);
+    if(!res.ok){const e=await res.json().catch(()=>({}));toast(e.detail||'No se encontró la publicación','error');return;}
+    const r=await res.json();
+    AC_REFERENCIAS[sku]=(AC_REFERENCIAS[sku]||[]).filter(x=>String(x.condicion_detectada)!==String(r.condicion_detectada));
+    AC_REFERENCIAS[sku].push(r);
+    qs('ac-ref-mla').value='';
+    ayalaCoreRenderRefLista();
+    ayalaCorePublicacionesRepintar();
+  }catch(e){toast(e.message,'error');}
+}
+function ayalaCoreRefQuitar(sku,condicion){
+  AC_REFERENCIAS[sku]=(AC_REFERENCIAS[sku]||[]).filter(x=>String(x.condicion_detectada)!==String(condicion));
+  ayalaCoreRenderRefLista();
+  ayalaCorePublicacionesRepintar();
+}
+function ayalaCoreRenderRefLista(){
+  const filas=[];
+  for(const sku in AC_REFERENCIAS)for(const r of AC_REFERENCIAS[sku])filas.push({sku,...r});
+  qs('ac-ref-lista').innerHTML=filas.length?filas.map(r=>
+    `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${r.sku} · ${ayalaCoreCondLabel(r.condicion_detectada)} · <a href="${r.permalink||`https://articulo.mercadolibre.com.ar/${r.item_id}`}" target="_blank" style="color:var(--accent)">${r.item_id}</a> · ${r.titulo} · Precio <b>${ayalaCoreFmt(r.precio)}</b>${r.precio_tachado?` (tachado ${ayalaCoreFmt(r.precio_tachado)})`:''} <button class="btn" style="padding:1px 6px;font-size:9px" onclick="ayalaCoreRefQuitar('${r.sku}','${r.condicion_detectada}')">quitar</button></div>`
+  ).join(''):'<span style="color:var(--text3)">Sin referencias cargadas todavía.</span>';
+}
+// ── Recalculo de precio en el navegador -- mismos parámetros por
+// defecto que backend/ayala_core.py (COMISION_ML_DEFAULT/IIBB_PCT_DEFAULT),
+// para el margen manual por fila ("que no sea lineal, que yo pueda
+// jugar", pedido 2026-09-03) sin ida y vuelta al backend por cada tecla. ──
+const AC_COMISION_PCT=15.32, AC_IIBB_PCT=6.50, AC_IVA_SERVICIOS_ML=1.21;
+function ayalaCoreFinancieroPct(condicion){
+  if(condicion==='contado')return 0;
+  if(condicion==='reducida')return 5;
+  return CUOTAS_PCT_ML[condicion]||0;
+}
+function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct){
+  const num=costoSinIvaArs+envioReal/AC_IVA_SERVICIOS_ML;
+  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(financieroPct/100)-(rentaPct/100);
+  return Math.round(num/den);
 }
 const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
 function ayalaCoreRenderMotor(d){
@@ -3576,35 +3639,65 @@ async function ayalaCorePublicacionesRun(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const btn=qs('btn-ac-publicaciones'),status=qs('ac-publicaciones-status'),logEl=qs('ac-publicaciones-log');
   const rentaContado=qs('ac-renta-contado').value||32, diferencial=qs('ac-diferencial').value||2;
+  const skus=[...document.querySelectorAll('.ac-pub-sku-chk:checked')].map(c=>c.value);
+  if(!skus.length){toast('Tildá al menos un SKU','error');return;}
   btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando (recorre el catálogo completo, puede tardar)...';logEl.style.display='block';logEl.innerHTML='';
   qs('ac-publicaciones-wrap').style.display='none';
   try{
-    const res=await fetch(`${url}/ayala-core/publicaciones/run?renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}`,{method:'POST'});
+    const res=await fetch(`${url}/ayala-core/publicaciones/run?renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}&skus=${skus.join(',')}`,{method:'POST'});
     const{job_id}=await res.json();
     status.textContent='Job: '+job_id;
-    pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones (IT+MT)',ayalaCorePublicacionesOnResult);
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Detectar publicaciones (IT+MT)';}
+    pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones',ayalaCorePublicacionesOnResult);
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Detectar publicaciones';}
 }
+let AC_PUB_FILAS=[];
 function ayalaCorePublicacionesOnResult(result){
-  const filas=(result&&result.filas)||[];
+  AC_PUB_FILAS=(result&&result.filas)||[];
+  const inc=(result&&result.incidencias)||[];
+  if(inc.length)qs('ac-publicaciones-status').innerHTML+=` · <span style="color:var(--yellow)">${inc.length} sin costo/IVA en Táctica</span>`;
+  ayalaCorePublicacionesRepintar();
+}
+function ayalaCoreRefParaFila(f){
+  return (AC_REFERENCIAS[f.sku]||[]).find(r=>String(r.condicion_detectada)===String(f.condicion_detectada));
+}
+// Repinta con lo último calculado -- se llama tanto al terminar el job
+// como al agregar/quitar una referencia de competencia, sin tener que
+// correr el escaneo de vuelta.
+function ayalaCorePublicacionesRepintar(){
+  if(!AC_PUB_FILAS.length)return;
   qs('ac-publicaciones-wrap').style.display='block';
-  // las más desviadas primero -- son las que hay que mirar
-  const ordenadas=[...filas].sort((a,b)=>Math.abs(b.diferencia)-Math.abs(a.diferencia));
-  qs('ac-publicaciones-tbody').innerHTML=ordenadas.map(f=>{
+  const ordenadas=[...AC_PUB_FILAS].sort((a,b)=>Math.abs(b.diferencia)-Math.abs(a.diferencia));
+  qs('ac-publicaciones-tbody').innerHTML=ordenadas.map((f,idx)=>{
     const color=Math.abs(f.diferencia)<50?'var(--green)':'var(--red)';
+    const ref=ayalaCoreRefParaFila(f);
+    let colCompetencia;
+    if(ref){
+      const diffRef=f.precio_actual-ref.precio;
+      colCompetencia=`Competencia <b>${ayalaCoreFmt(ref.precio)}</b>${ref.precio_tachado?` (tachado ${ayalaCoreFmt(ref.precio_tachado)})`:''} · dif. <b style="color:${Math.abs(diffRef)<50?'var(--green)':'var(--red)'}">${ayalaCoreFmt(diffRef)}</b>`;
+    }else{
+      colCompetencia=`Margen % <input type="text" data-idx="${idx}" class="ac-pub-margen" value="32" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center" onchange="ayalaCorePubRecalcularFila(this)"> <span id="ac-pub-recalc-${idx}"></span>`;
+    }
     return `<tr>
       <td>${f.cuenta}</td>
       <td><a href="${f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
       <td>${f.sku}</td>
-      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
       <td>${ayalaCoreCondLabel(f.condicion_detectada)}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_actual)}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_calculado)}</td>
       <td style="text-align:right;color:${color}">${ayalaCoreFmt(f.diferencia)}</td>
+      <td>${colCompetencia}</td>
     </tr>`;
   }).join('');
-  const inc=(result&&result.incidencias)||[];
-  if(inc.length)qs('ac-publicaciones-status').innerHTML+=` · <span style="color:var(--yellow)">${inc.length} sin costo/IVA en Táctica</span>`;
+  window._acPubOrdenadas=ordenadas; // para que ayalaCorePubRecalcularFila encuentre la fila por índice
+}
+function ayalaCorePubRecalcularFila(input){
+  const idx=Number(input.dataset.idx);
+  const f=window._acPubOrdenadas[idx];
+  const rentaPct=Number(input.value||0);
+  const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
+  const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
+  qs(`ac-pub-recalc-${idx}`).innerHTML=`→ <b>${ayalaCoreFmt(precio)}</b>`;
 }
 async function ayalaCoreCompararMLA(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}

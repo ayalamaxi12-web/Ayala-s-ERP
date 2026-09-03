@@ -6,6 +6,7 @@ from ayala_core import (
     calcular_precios_todas_condiciones,
     descubrir_publicaciones,
     detectar_condicion_pago,
+    resolver_referencia_competencia,
 )
 
 
@@ -38,6 +39,13 @@ class _MLFalso:
         if progreso_cb:
             progreso_cb(0, len(item_ids), "catalogo")
         return [i for i in self._items.get(cuenta, []) if i["id"] in item_ids]
+
+    def detalle_item_completo(self, item_id, cuenta):
+        for items in self._items.values():
+            for i in items:
+                if i["id"] == item_id:
+                    return i
+        return {}
 
 
 # ── Ejemplo congelado, AYALA_CORE.md A.3.1 (PLANCHA-SUB-26X26-PORT,
@@ -262,3 +270,51 @@ def test_descubrir_publicaciones_usa_envio_real_solo_si_es_gratis(monkeypatch):
     filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
 
     assert filas[0]["envio_real"] == Decimal("12000.0")
+
+
+def test_descubrir_publicaciones_filtra_por_skus_seleccionados(monkeypatch):
+    # Pedido 2026-09-03: "que selecciono 1 o varios SKU" -- no siempre
+    # los 5 piloto, un subconjunto elegido a mano.
+    _sin_envio(monkeypatch)
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
+        {"id": "MLA2", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-GORRA", "tags": []},
+    ]})
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50), "PLANCHA-SUB-GORRA": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21"), "PLANCHA-SUB-GORRA": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000), skus_filtro=["PLANCHA-SUB-TERMO"])
+
+    assert [f["sku"] for f in filas] == ["PLANCHA-SUB-TERMO"]
+
+
+def test_descubrir_publicaciones_incluye_costo_e_iva_para_recalculo_en_frontend():
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
+    ]})
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
+
+    assert filas[0]["costo_sin_iva_ars"] == Decimal(50000)
+    assert filas[0]["iva_factor"] == Decimal("1.21")
+
+
+# ── Referencia de competencia -- pedido 2026-09-03 ──
+
+def test_resolver_referencia_competencia_ok():
+    ml = _MLFalso({"IT": [
+        {"id": "MLA9", "title": "Plancha de un competidor", "price": 200000, "original_price": 280000,
+         "tags": ["cuota-simple-9"]},
+    ]})
+    r = resolver_referencia_competencia(ml, "MLA9", "IT")
+    assert r == {
+        "encontrado": True, "item_id": "MLA9", "titulo": "Plancha de un competidor",
+        "permalink": None, "precio": 200000, "precio_tachado": 280000, "condicion_detectada": 9,
+    }
+
+
+def test_resolver_referencia_competencia_no_encontrado():
+    ml = _MLFalso({})
+    assert resolver_referencia_competencia(ml, "MLA1", "IT") == {"encontrado": False}

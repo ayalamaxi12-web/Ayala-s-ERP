@@ -2226,22 +2226,40 @@ async def ayala_core_sku_motor(
 
 @app.post("/ayala-core/publicaciones/run")
 async def ayala_core_publicaciones_run(
-    background_tasks: BackgroundTasks, cuentas: str = "",
+    background_tasks: BackgroundTasks, cuentas: str = "", skus: str = "",
     renta_contado: float = float(ayala_core.RENTA_CONTADO_DEFAULT),
     diferencial_cuotas: float = float(ayala_core.RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
 ):
     """Escaneo caro (recorre TODO el catálogo activo de las cuentas
     pedidas) -- por eso corre en background, mismo patrón que
-    `/ml-ofertas/run`. `cuentas` viaja como string separado por comas
-    ("IT,MT"); vacío = las dos."""
+    `/ml-ofertas/run`. `cuentas` y `skus` viajan como string separado por
+    comas; vacío = las dos cuentas / los 5 SKU piloto."""
     job_id = f"ayalacore_pub_{int(time.time())}"
     tc = obtener_tc_bna().get("tc") or 0
     lista_cuentas = [c for c in cuentas.split(",") if c] or None
+    lista_skus = [s for s in skus.split(",") if s] or None
     background_tasks.add_task(
-        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_contado, diferencial_cuotas,
+        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_contado, diferencial_cuotas, lista_skus,
     )
     return {"job_id": job_id, "status": "started"}
 
 @app.get("/ayala-core/publicaciones/status/{job_id}")
 async def ayala_core_publicaciones_status(job_id: str):
     return ayala_core.estado_job(job_id) or {"status": "not_found"}
+
+def _ayala_core_referencia_sync(item_id: str, cuenta: str) -> dict:
+    ml = ml_ofertas.MLOfertasClient()
+    r = ayala_core.resolver_referencia_competencia(ml, item_id, cuenta)
+    if not r.get("encontrado"):
+        raise HTTPException(status_code=404, detail="Publicación de competencia no encontrada")
+    r.pop("encontrado")
+    return r
+
+@app.get("/ayala-core/referencia/{item_id}")
+async def ayala_core_referencia(item_id: str, cuenta: str = "IT"):
+    """Publicación PÚBLICA de un competidor (precio/tachado/condición) --
+    pedido de Maxx 2026-09-03 para comparar "en las mismas condiciones"
+    contra una referencia real, no solo contra el costo. `cuenta` solo
+    elige qué token propio usar para pegarle a la API, no hace falta ser
+    el dueño de la publicación."""
+    return await run_in_threadpool(_ayala_core_referencia_sync, item_id, cuenta)
