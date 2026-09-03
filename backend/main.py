@@ -2263,3 +2263,28 @@ async def ayala_core_referencia(item_id: str, cuenta: str = "IT"):
     elige qué token propio usar para pegarle a la API, no hace falta ser
     el dueño de la publicación."""
     return await run_in_threadpool(_ayala_core_referencia_sync, item_id, cuenta)
+
+def _ayala_core_aplicar_precio_sync(item_id: str, cuenta: str, precio: Decimal) -> dict:
+    """Etapa 2 (escritura), una publicación por vez -- pedido de Maxx
+    2026-09-03, confirmado el diseño ("me sirve así el tilde": tildar
+    varias, un solo botón, pero por dentro se escribe de a una, cada una
+    con su propio resultado, nunca un lote silencioso). Reutiliza
+    `fijar_precio_base` (mismo PUT verificado con GET aparte que ya usa
+    Ofertas ML) -- Ayala Core no necesita tachado/campaña acá, es
+    corregir el precio de lista directo."""
+    ml = ml_ofertas.MLOfertasEscritura()
+    return ml.fijar_precio_base(item_id, cuenta, precio)
+
+@app.post("/ayala-core/item/{item_id}/aplicar-precio")
+async def ayala_core_aplicar_precio(item_id: str, request: Request, background_tasks: BackgroundTasks):
+    body = await request.json()
+    cuenta = body["cuenta"]
+    precio = Decimal(str(body["precio"]))
+    r = await run_in_threadpool(_ayala_core_aplicar_precio_sync, item_id, cuenta, precio)
+    background_tasks.add_task(_registrar_historial_oferta, {
+        "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
+        "Accion": "Ayala Core -- aplicar precio", "Tipo/Promocion": "Ayala Core",
+        "Precio Anterior": body.get("precio_anterior", ""), "Precio Nuevo": f"{precio}",
+        "Margen % Resultante": "", "Bajo Umbral": "No", "Operador": body.get("operador", ""),
+    })
+    return r

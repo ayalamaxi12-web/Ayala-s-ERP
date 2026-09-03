@@ -1352,10 +1352,15 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
     <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
       <table>
-        <thead><tr><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th></tr></thead>
+        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th></tr></thead>
         <tbody id="ac-publicaciones-tbody"></tbody>
       </table>
     </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px" id="ac-aplicar-bar" hidden>
+      <button class="btn primary" onclick="ayalaCoreRevisarSeleccion()">✅ Aplicar tildadas</button>
+    </div>
+    <div id="ac-aplicar-confirmar" style="display:none;margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"></div>
+    <div id="ac-aplicar-log" style="display:none;max-height:140px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:8px"></div>
   </div>
 
   <div style="margin-top:24px">
@@ -3666,7 +3671,16 @@ function ayalaCoreRefParaFila(f){
 function ayalaCorePublicacionesRepintar(){
   if(!AC_PUB_FILAS.length)return;
   qs('ac-publicaciones-wrap').style.display='block';
+  qs('ac-aplicar-bar').hidden=false;
   const ordenadas=[...AC_PUB_FILAS].sort((a,b)=>Math.abs(b.diferencia)-Math.abs(a.diferencia));
+  window._acPubOrdenadas=ordenadas; // para que ayalaCorePubRecalcularFila encuentre la fila por índice
+  // precio a aplicar por defecto: el de la competencia si hay referencia
+  // para esa condición ("desde ese mismo número igualo condiciones"),
+  // si no el que calculó el motor -- se puede pisar con el margen manual.
+  window._acPubPrecioDefinido=ordenadas.map(f=>{
+    const ref=ayalaCoreRefParaFila(f);
+    return ref?ref.precio:f.precio_calculado;
+  });
   qs('ac-publicaciones-tbody').innerHTML=ordenadas.map((f,idx)=>{
     const color=Math.abs(f.diferencia)<50?'var(--green)':'var(--red)';
     const ref=ayalaCoreRefParaFila(f);
@@ -3675,21 +3689,22 @@ function ayalaCorePublicacionesRepintar(){
       const diffRef=f.precio_actual-ref.precio;
       colCompetencia=`Competencia <b>${ayalaCoreFmt(ref.precio)}</b>${ref.precio_tachado?` (tachado ${ayalaCoreFmt(ref.precio_tachado)})`:''} · dif. <b style="color:${Math.abs(diffRef)<50?'var(--green)':'var(--red)'}">${ayalaCoreFmt(diffRef)}</b>`;
     }else{
-      colCompetencia=`Margen % <input type="text" data-idx="${idx}" class="ac-pub-margen" value="32" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center" onchange="ayalaCorePubRecalcularFila(this)"> <span id="ac-pub-recalc-${idx}"></span>`;
+      colCompetencia=`Margen % <input type="text" data-idx="${idx}" class="ac-pub-margen" value="32" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center" onchange="ayalaCorePubRecalcularFila(this)">`;
     }
     return `<tr>
+      <td><input type="checkbox" class="ac-pub-chk" data-idx="${idx}"></td>
       <td>${f.cuenta}</td>
       <td><a href="${f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
       <td>${f.sku}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
       <td>${ayalaCoreCondLabel(f.condicion_detectada)}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_actual)}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_calculado)}</td>
       <td style="text-align:right;color:${color}">${ayalaCoreFmt(f.diferencia)}</td>
       <td>${colCompetencia}</td>
+      <td style="text-align:right" id="ac-pub-definido-${idx}"><b>${ayalaCoreFmt(window._acPubPrecioDefinido[idx])}</b></td>
     </tr>`;
   }).join('');
-  window._acPubOrdenadas=ordenadas; // para que ayalaCorePubRecalcularFila encuentre la fila por índice
 }
 function ayalaCorePubRecalcularFila(input){
   const idx=Number(input.dataset.idx);
@@ -3697,7 +3712,43 @@ function ayalaCorePubRecalcularFila(input){
   const rentaPct=Number(input.value||0);
   const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
   const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
-  qs(`ac-pub-recalc-${idx}`).innerHTML=`→ <b>${ayalaCoreFmt(precio)}</b>`;
+  window._acPubPrecioDefinido[idx]=precio;
+  qs(`ac-pub-definido-${idx}`).innerHTML=`<b>${ayalaCoreFmt(precio)}</b>`;
+}
+// ── Aplicar a ML -- Etapa 2, confirmada por Maxx 2026-09-03 ("me sirve
+// así el tilde"): tildar varias, un solo botón, pero SIEMPRE de a una
+// publicación por vez adentro, con su propio resultado visible -- nunca
+// un lote silencioso (regla heredada de Ofertas ML, A.6). ──
+function ayalaCoreRevisarSeleccion(){
+  const idxs=[...document.querySelectorAll('.ac-pub-chk:checked')].map(c=>Number(c.dataset.idx));
+  if(!idxs.length){toast('Tildá al menos una publicación','error');return;}
+  const filas=idxs.map(i=>({f:window._acPubOrdenadas[i],precio:window._acPubPrecioDefinido[i]}));
+  qs('ac-aplicar-confirmar').style.display='block';
+  qs('ac-aplicar-confirmar').innerHTML=`⚠️ Vas a escribir precio en <b>${filas.length}</b> publicación(es) real(es) de ML:<br>${
+    filas.map(({f,precio})=>`${f.cuenta} · ${f.item_id} · ${f.sku} (${ayalaCoreCondLabel(f.condicion_detectada)}): ${ayalaCoreFmt(f.precio_actual)} → <b>${ayalaCoreFmt(precio)}</b>`).join('<br>')
+  }<br><button class="btn primary" style="margin-top:8px" onclick="ayalaCoreConfirmarAplicar()">Confirmar y aplicar ${filas.length}</button> <button class="btn" style="margin-top:8px" onclick="qs('ac-aplicar-confirmar').style.display='none'">Cancelar</button>`;
+}
+async function ayalaCoreConfirmarAplicar(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const idxs=[...document.querySelectorAll('.ac-pub-chk:checked')].map(c=>Number(c.dataset.idx));
+  qs('ac-aplicar-confirmar').style.display='none';
+  const logEl=qs('ac-aplicar-log');logEl.style.display='block';logEl.innerHTML='';
+  let ok=0,error=0;
+  for(const idx of idxs){
+    const f=window._acPubOrdenadas[idx];
+    const precio=window._acPubPrecioDefinido[idx];
+    logEl.innerHTML+=`<div>${f.cuenta} · ${f.item_id} · ${f.sku} -- aplicando ${ayalaCoreFmt(precio)}...</div>`;
+    logEl.scrollTop=logEl.scrollHeight;
+    try{
+      const res=await fetch(`${url}/ayala-core/item/${f.item_id}/aplicar-precio`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({cuenta:f.cuenta,sku:f.sku,precio:precio,precio_anterior:f.precio_actual})});
+      const r=await res.json();
+      if(r.ok){ok++;logEl.innerHTML+=`<div style="color:var(--green)">✅ ${f.item_id} OK</div>`;}
+      else{error++;logEl.innerHTML+=`<div style="color:var(--red)">❌ ${f.item_id}: ${r.error||'error desconocido'}</div>`;}
+    }catch(e){error++;logEl.innerHTML+=`<div style="color:var(--red)">❌ ${f.item_id}: ${e.message}</div>`;}
+    logEl.scrollTop=logEl.scrollHeight;
+  }
+  logEl.innerHTML+=`<div style="margin-top:6px;font-weight:700">${error===0?'✅ OK -- se aplicaron las '+ok+' publicaciones seleccionadas.':`Terminado: ${ok} OK, ${error} con error.`}</div>`;
 }
 async function ayalaCoreCompararMLA(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
