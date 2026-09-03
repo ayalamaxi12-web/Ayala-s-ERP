@@ -181,7 +181,8 @@ precio fijo por SKU.
 ## Estado actual
 _(Fecha de última actualización: 2026-09-03)_
 
-- **Etapa en curso:** Etapa 1 (solo lectura) — motor construido y expuesto, falta la pantalla.
+- **Etapa en curso:** Etapa 2 (escritura) arrancada -- código shippeado, sin el primer test real
+  todavía (ver Pendientes). Etapa 1 (motor + pantalla) cerrada salvo validar los 5 SKU piloto.
 - **Escrito hasta ahora:**
   - `backend/ayala_core.py` — motor completo (`calcular_precio_condicion`/
     `calcular_precios_todas_condiciones`, la fórmula exacta de A.3), detección de condición de pago
@@ -209,8 +210,10 @@ _(Fecha de última actualización: 2026-09-03)_
     las condiciones sin referencia, un campo de "margen %" editable recalcula el precio al toque en
     el navegador (mismo motor, portado a JS -- `ayalaCoreCalcularPrecioJS`, debe mantenerse igual a
     `calcular_precio_condicion` si la fórmula cambia algún día).
-  - Todavía **no escribe nada a ML** -- el flujo de "tildar y aplicar" quedó diseñado pero no
-    construido, ver Pendientes (choca con la regla de "nunca masivo" y falta que Maxx lo confirme).
+  - **2026-09-03 — Etapa 2 arrancada**: `POST /ayala-core/item/{item_id}/aplicar-precio` escribe
+    precio real a ML (reutiliza `fijar_precio_base`). Frontend: tildar filas + "Aplicar tildadas" +
+    confirmación explícita + log secuencial (ver Decisiones tomadas). Sin probar contra una
+    publicación real todavía -- ver Pendientes.
 - **Validación contra planilla:** ✅ el motor reproduce el ejemplo congelado de A.3.1 al peso exacto
   (los 6 valores, ver `test_ayala_core.py`) — la fórmula se sacó leyendo `Motor!B32:G32` de la
   planilla real, no se adivinó.
@@ -263,15 +266,27 @@ _(Fecha de última actualización: 2026-09-03)_
   ventas. Decisión: en vez de una regla automática de ceiling/floor, el sistema MUESTRA la
   comparación (competencia si hay referencia, margen manual editable si no) y Maxx decide caso por
   caso ("quiero poder jugar") -- no hay un algoritmo de igualar/subcotizar automático todavía.
-- **2026-09-03, PENDIENTE de confirmar por Maxx**: escribir a ML con selección múltiple (tildar
-  varias filas de SKU/MLA distintos y aplicar). Choca con la regla "nunca masivo" heredada de
-  Ofertas ML (A.6). Code propuso un compromiso: tildar + un solo botón "Aplicar", pero que por
-  dentro recorra publicación por publicación mostrando el resultado de cada una en un log (mismo
-  patrón de job que ya existe), no una escritura masiva silenciosa. **No implementar la escritura
-  hasta que Maxx confirme si este compromiso le sirve.**
+- **2026-09-03, CONFIRMADO por Maxx** ("me sirve así el tilde"): el compromiso propuesto para
+  escribir a ML con selección múltiple queda aprobado -- tildar varias filas, un solo botón
+  "Aplicar tildadas", que primero muestra un resumen de confirmación (precio actual → precio a
+  aplicar por cada una) y recién con un segundo click ("Confirmar y aplicar N") escribe, publicación
+  por publicación, cada una con su propio resultado en un log -- nunca un lote silencioso. **Etapa
+  2 arrancada y shippeada la misma sesión**: `POST /ayala-core/item/{item_id}/aplicar-precio`
+  reutiliza `fijar_precio_base` (`ml_ofertas.py`) tal cual, sin duplicar la lógica de escritura;
+  loguea a "Historial Ofertas ML" con `Accion="Ayala Core -- aplicar precio"` (mismo sheet que
+  Ofertas ML, distinguible por esa columna -- no se creó un sheet de historial aparte). El "precio a
+  aplicar" por fila es el de la referencia de competencia si existe para esa condición (pedido
+  explícito: "desde ese mismo número igualo condiciones"), si no el que calculó el motor, pisable
+  con el margen manual. **Probado el flujo completo con `fetch` interceptado (sin red real) --
+  DELIBERADAMENTE no se probó contra una publicación real todavía** (es la primera vez que corre
+  este endpoint nuevo y escribe precio de verdad en ML; mejor que el primer disparo real lo mire y
+  autorice Maxx).
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
+- **Falta el primer test real de Etapa 2**: nadie corrió `POST /ayala-core/item/{id}/aplicar-precio`
+  contra una publicación real todavía -- antes de confiar en el flujo, probarlo una vez con Maxx
+  mirando (un MLA de bajo riesgo) y confirmar que el precio realmente cambia en ML.
 - **Bloqueante para probar en vivo (no es un bug de este código)**: la conexión a Táctica vía el
   puente Tailscale (`ts_sql_bridge`) estuvo caída el 2026-09-03 (confirmado con curl, timeout de
   40s en `/ayala-core/sku/{sku}/motor` mientras `/tc/bna` respondía normal) -- re-verificar en vivo
