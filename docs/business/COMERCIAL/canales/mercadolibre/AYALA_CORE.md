@@ -151,6 +151,12 @@ precio fijo por SKU.
   `seller_custom_field` directo en ningún código nuevo de Ayala Core).
 - Flujo de campaña/tachado: `activar_en_campana_tradicional` — reapuntado para usar el precio de
   Ayala Core en vez del precio del PM/reglas de Ecom.
+- Ofertas de un producto de catálogo (todos los vendedores): `MLOfertasClient.items_de_producto`
+  (`ml_ofertas.py`, `GET /products/{id}/items`) — **el único camino que funciona** para leer una
+  publicación que no es propia (`GET /items/{id}` está gateado por ownership para publicaciones
+  ajenas, 403 confirmado en vivo 2026-09-03; scrapear la página pública tampoco sirve, ML bloquea
+  ese `requests.get` como tráfico sospechoso). Cualquier función nueva que necesite datos de un
+  competidor tiene que pasar por acá, con el ID de la FICHA de producto, no un `item_id` puntual.
 
 ## A.8 La pantalla del módulo (lo que ve Maxx)
 1. Selector de SKU (arranca con los 5, extensible).
@@ -281,6 +287,28 @@ _(Fecha de última actualización: 2026-09-03)_
   DELIBERADAMENTE no se probó contra una publicación real todavía** (es la primera vez que corre
   este endpoint nuevo y escribe precio de verdad en ML; mejor que el primer disparo real lo mire y
   autorice Maxx).
+- **2026-09-03 — dos bugs reales corregidos en vivo (encontrados por Maxx usando el módulo)**:
+  1. La API bloquea `GET /items/{id}` para publicaciones que no son propias (403 `access_denied`,
+     confirmado con y sin auth, pidiendo solo campos públicos) -- la primera versión de
+     "referencias de competencia" pedía justo eso y nunca podía leer un competidor real.
+     Solucionado usando `GET /products/{id}/items` (ver A.7 actualizado) con el ID de la FICHA de
+     producto, no el `item_id` puntual.
+  2. `descubrir_publicaciones` mostraba **precio actual $0 en todas las filas** -- reutilizaba
+     `detalle_items_ofertas` (`ml_ofertas.py`), que nunca pedía el campo `price` (se armó para un
+     caso donde el precio salía de otro lado). Se agregó `price`/`original_price` a esa consulta.
+  3. `KeyError: 'list_cost'` rompía tanto el job de publicaciones como la comparación contra un MLA
+     puntual -- `costo_envio_real_item` devuelve la clave `costo_envio_real`, nunca `list_cost`;
+     estaba mal en dos lugares (`ayala_core.py` y `main.py`). Nunca se disparó en las pruebas
+     anteriores porque el único MLA probado no estaba en modo envío gratis en ese momento.
+  **Lección para la próxima sesión**: ninguno de estos tres lo agarraron los tests unitarios (los
+  fakes devuelven lo que uno les dice, no reproducen el filtro real de campos de la API ni el shape
+  real de un dict) -- se encontraron recién corriendo el módulo de verdad. Verificar en vivo sigue
+  siendo obligatorio antes de dar por cerrada una función nueva.
+  **También revisado y confirmado que NO es un bug**: Maxx comparó el precio Contado del ERP contra
+  el de la planilla para PLANCHA-SUB-30X38-5EN1 y no coincidían ($412.758 vs $407.839). Con el
+  MISMO envío ($32.090) el motor del ERP reproduce $407.839 exacto -- la diferencia real viene de
+  que el ERP usa el envío REAL de la última venta (~$34.590 en ese caso), no la tabla teórica por
+  peso de la planilla. Es la diferencia esperada entre "teórico" y "real", no un error de fórmula.
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
