@@ -179,7 +179,7 @@ precio fijo por SKU.
 > con lo que se hizo, lo que quedó pendiente y cualquier decisión nueva. Poné fecha.
 
 ## Estado actual
-_(Fecha de última actualización: 2026-09-02)_
+_(Fecha de última actualización: 2026-09-03)_
 
 - **Etapa en curso:** Etapa 1 (solo lectura) — motor construido y expuesto, falta la pantalla.
 - **Escrito hasta ahora:**
@@ -196,6 +196,21 @@ _(Fecha de última actualización: 2026-09-02)_
     Renta Contado % + diferencial por cuota editables, envío real (manual o auto-resuelto al
     comparar un MLA), tabla de 6 condiciones, y comparador contra una publicación real. Probada en
     vivo (local + Railway), sin errores de consola.
+  - **2026-09-03**: `descubrir_publicaciones` (`ayala_core.py`) escanea TODAS las publicaciones
+    activas de las dos cuentas (`ml.items_activos`) y se queda con las que tienen un SKU piloto
+    exacto -- corre como job de background (`POST /ayala-core/publicaciones/run` + status), con
+    selección de SKU por checkboxes en el frontend (uno, varios o todos). Esto **resuelve el gap de
+    A.5** sin necesitar Ecom (ver Research pendiente, más abajo).
+  - **2026-09-03**: "Referencias de competencia" -- Maxx encontró un competidor vendiendo casi al
+    mismo precio que el propio pero en 9 cuotas (lo saca de la venta en cuotas en tickets altos).
+    Se puede pegar el MLA de un competidor por SKU (`resolver_referencia_competencia` +
+    `GET /ayala-core/referencia/{item_id}`, publicación pública, no hace falta ser el dueño) y se
+    muestra al lado de la fila con la misma condición detectada en la tabla de publicaciones. Para
+    las condiciones sin referencia, un campo de "margen %" editable recalcula el precio al toque en
+    el navegador (mismo motor, portado a JS -- `ayalaCoreCalcularPrecioJS`, debe mantenerse igual a
+    `calcular_precio_condicion` si la fórmula cambia algún día).
+  - Todavía **no escribe nada a ML** -- el flujo de "tildar y aplicar" quedó diseñado pero no
+    construido, ver Pendientes (choca con la regla de "nunca masivo" y falta que Maxx lo confirme).
 - **Validación contra planilla:** ✅ el motor reproduce el ejemplo congelado de A.3.1 al peso exacto
   (los 6 valores, ver `test_ayala_core.py`) — la fórmula se sacó leyendo `Motor!B32:G32` de la
   planilla real, no se adivinó.
@@ -204,9 +219,12 @@ _(Fecha de última actualización: 2026-09-02)_
   El resto de Ayala Core (motor + panel de lectura) sigue en curso, no está pausado.
 
 ## Research pendiente (no bloquea el diseño, se resuelve al implementar)
-- Cómo identificar desde la API/GraphQL de Ecom qué MLA está vinculado a **exactamente un SKU**
-  (vs. combos). Es research de implementación, no decisión de producto. Sigue sin resolver — el
-  endpoint de Etapa 1 hoy requiere pasar el `item_id` a mano, no descubre los MLA de un SKU solo.
+- **RESUELTO 2026-09-03 — sin necesitar Ecom.** Cómo identificar qué MLA está vinculado a
+  **exactamente un SKU** (vs. combos): `descubrir_publicaciones` escanea TODO el catálogo activo y
+  matchea `_sku_de_item` EXACTO contra la lista de SKU pedida -- un combo tiene un SKU distinto/
+  concatenado, nunca matchea uno solo, así que la exclusión sale gratis. **Caveat sin confirmar**:
+  si algún combo reutiliza el SKU de un componente SIN concatenar nada, esto no lo detectaría --
+  no se vio ese caso todavía, pero no está descartado. Si aparece, ahí sí hará falta Ecom.
 - **RESUELTO 2026-09-02**: la condición Reducida se detecta en vivo (`detectar_condicion_pago`,
   tag `pcj-co-funded`) — ya no es research pendiente, ver A.7.
 - Definir el endpoint exacto para escribir precio directo a ML por condición (reutilizar el mismo
@@ -240,13 +258,27 @@ _(Fecha de última actualización: 2026-09-02)_
 - **2026-09-02**: Maxx corrigió "NO, pausamos Ofertas ML, seguimos con Ayala Core" -- la pausa es
   SOLO de la sub-sección Ofertas (esperando el audio/MD), no de todo el módulo. Se construyó la
   Etapa 1 (motor + endpoint) en la misma sesión.
+- **2026-09-03**: nace la idea de "referencias de competencia" -- Maxx encontró en vivo un
+  competidor vendiendo casi al mismo precio propio pero en 9 cuotas, quedando afuera de esas
+  ventas. Decisión: en vez de una regla automática de ceiling/floor, el sistema MUESTRA la
+  comparación (competencia si hay referencia, margen manual editable si no) y Maxx decide caso por
+  caso ("quiero poder jugar") -- no hay un algoritmo de igualar/subcotizar automático todavía.
+- **2026-09-03, PENDIENTE de confirmar por Maxx**: escribir a ML con selección múltiple (tildar
+  varias filas de SKU/MLA distintos y aplicar). Choca con la regla "nunca masivo" heredada de
+  Ofertas ML (A.6). Code propuso un compromiso: tildar + un solo botón "Aplicar", pero que por
+  dentro recorra publicación por publicación mostrando el resultado de cada una en un log (mismo
+  patrón de job que ya existe), no una escritura masiva silenciosa. **No implementar la escritura
+  hasta que Maxx confirme si este compromiso le sirve.**
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
+- **Bloqueante para probar en vivo (no es un bug de este código)**: la conexión a Táctica vía el
+  puente Tailscale (`ts_sql_bridge`) estuvo caída el 2026-09-03 (confirmado con curl, timeout de
+  40s en `/ayala-core/sku/{sku}/motor` mientras `/tc/bna` respondía normal) -- re-verificar en vivo
+  el modo "Todos" del motor y el job de publicaciones apenas se confirme que el puente está sano.
+- **Escritura a ML todavía no implementada** -- ver la decisión pendiente de arriba (tildar +
+  aplicar uno por uno). Definir el endpoint PUT de precio por condición, reutilizando el patrón de
+  `fijar_precio_base`, recién cuando Maxx confirme el flujo.
 - **Cerrar Etapa 1 del todo**: validar los 5 SKU piloto (no solo PLANCHA-SUB-26X26-PORT) contra la
   planilla real, con Maxx mirando, antes de pasar a Etapa 2 (escritura).
-- Ecom→MLA discovery (A.5, "todas las publicaciones de un SKU, sin combos") sigue sin resolver --
-  hoy la comparación contra un MLA real requiere pasarlo a mano, uno por vez.
-- Etapa 2 (escritura habilitada) todavía no arrancó -- definir el endpoint PUT de precio por
-  condición, reutilizando el patrón de `fijar_precio_base`.
 - _(Code mantiene esta lista.)_
