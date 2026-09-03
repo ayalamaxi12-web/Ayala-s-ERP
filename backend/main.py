@@ -2184,7 +2184,9 @@ def _ayala_core_motor_sync(
         condicion_detectada = ayala_core.detectar_condicion_pago(d)
         if envio_usado is None:
             envio_info = ml_ofertas.costo_envio_real_item(ml, item_id, cuenta)
-            envio_usado = Decimal(str(envio_info["list_cost"])) if envio_info and envio_info.get("cost_type") == "free" else Decimal(0)
+            # Mismo bug/fix que ayala_core.descubrir_publicaciones: la clave
+            # real es "costo_envio_real", no "list_cost".
+            envio_usado = Decimal(str(envio_info["costo_envio_real"])) if envio_info else Decimal(0)
         item_info = {
             "item_id": d["id"], "titulo": d.get("title", ""), "precio_actual": d.get("price"),
             "condicion_detectada": condicion_detectada,

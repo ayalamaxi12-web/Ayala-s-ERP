@@ -259,8 +259,13 @@ def test_descubrir_publicaciones_detecta_condicion_y_calcula_diferencia(monkeypa
 
 
 def test_descubrir_publicaciones_usa_envio_real_solo_si_es_gratis(monkeypatch):
+    # Bug real 2026-09-03, encontrado corriendo el job en vivo (Maxx):
+    # "Error: 'list_cost'" -- `costo_envio_real_item` devuelve la clave
+    # `costo_envio_real` (ya resuelta a 0 si no es "free"), nunca
+    # `list_cost`. Este fake usa la forma REAL a propósito, para que este
+    # test hubiera fallado si el código seguía leyendo `list_cost`.
     monkeypatch.setattr(ayala_core, "costo_envio_real_item",
-                         lambda ml, item_id, cuenta: {"cost_type": "free", "list_cost": 12000.0})
+                         lambda ml, item_id, cuenta: {"cost_type": "free", "costo_envio_real": 12000.0})
     ml = _MLFalso({"IT": [
         {"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
     ]})
@@ -270,6 +275,20 @@ def test_descubrir_publicaciones_usa_envio_real_solo_si_es_gratis(monkeypatch):
     filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
 
     assert filas[0]["envio_real"] == Decimal("12000.0")
+
+
+def test_descubrir_publicaciones_costo_envio_real_cero_si_no_es_gratis(monkeypatch):
+    monkeypatch.setattr(ayala_core, "costo_envio_real_item",
+                         lambda ml, item_id, cuenta: {"cost_type": "charged", "costo_envio_real": 0.0})
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
+    ]})
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
+
+    assert filas[0]["envio_real"] == Decimal("0.0")
 
 
 def test_descubrir_publicaciones_filtra_por_skus_seleccionados(monkeypatch):

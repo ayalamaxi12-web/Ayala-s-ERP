@@ -219,10 +219,12 @@ def descubrir_publicaciones(
                 envio_info = costo_envio_real_item(ml, d["id"], cuenta)
             except Exception:
                 envio_info = None
-            envio_real = (
-                Decimal(str(envio_info["list_cost"]))
-                if envio_info and envio_info.get("cost_type") == "free" else Decimal(0)
-            )
+            # Corregido 2026-09-03 (bug real, encontrado corriendo el job en
+            # vivo: "Error: 'list_cost'"): `costo_envio_real_item` devuelve
+            # `costo_envio_real` (ya resuelto a 0 si no es "free"), NUNCA
+            # `list_cost` -- esa clave no existe en este dict, ver su
+            # docstring/`costo_envio_real` en ml_ofertas.py.
+            envio_real = Decimal(str(envio_info["costo_envio_real"])) if envio_info else Decimal(0)
             precios = calcular_precios_todas_condiciones(
                 costo_sin_iva=costo_ars, iva_factor=iva_factor, envio_real=envio_real,
                 renta_contado_pct=renta_contado_pct, diferencial_cuotas_pct=diferencial_cuotas_pct,
