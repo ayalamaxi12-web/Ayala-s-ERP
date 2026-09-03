@@ -342,7 +342,16 @@ class MLOfertasClient(MLFullClient):
         propias) es buena parte del tiempo "muerto" que veía Maxx antes de
         que arrancara a reportar progreso el loop de promociones.
 
-        Pide `tags`, no `installments` -- ver `_cuotas_sin_interes`."""
+        Pide `tags`, no `installments` -- ver `_cuotas_sin_interes`.
+
+        **`price`/`original_price` sumados 2026-09-03** para que
+        `ayala_core.descubrir_publicaciones` pueda leer el precio actual
+        real sin un pedido aparte -- bug real encontrado por Maxx (todas
+        las filas de "Detectar publicaciones" traían precio actual $0,
+        porque este batch nunca pedía `price` -- los otros dos llamadores
+        de acá, `ofertas_activas`/`ofertas_propias_activas`, sacan el
+        precio de la promoción, nunca de este dict, así que no se rompe
+        nada agregándolo)."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         salida: list[dict] = []
         total = len(item_ids)
@@ -352,7 +361,7 @@ class MLOfertasClient(MLFullClient):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,permalink,seller_custom_field,domain_id,tags,attributes"},
+                {"ids": ",".join(lote), "attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes"},
                 headers,
             )
             for entrada in (d or []):
