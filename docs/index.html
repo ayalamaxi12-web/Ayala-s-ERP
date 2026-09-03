@@ -1331,13 +1331,14 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
   <div style="margin-top:24px">
     <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🥊 Referencias de competencia</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Pegá el MLA de un competidor para un SKU -- se lee su precio, tachado y condición de venta, y se muestra al lado de la fila que tenga esa misma condición en la tabla de abajo, para competir en igualdad en vez de a ciegas contra el costo.</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Pegá el <b>ID de la ficha de producto</b> (no el MLA de un vendedor puntual -- es el que aparece después de <code>/p/</code> en la URL de la página "Opciones de compra" de ML) para un SKU. Trae el precio/condición de cada competidor real que vende ese producto -- elegís cuál usar como referencia, y se muestra al lado de la fila con esa misma condición en la tabla de abajo.</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <select id="ac-ref-sku" class="fi"></select>
-      <input type="text" id="ac-ref-mla" placeholder="MLA del competidor..." class="fi" style="width:160px">
+      <input type="text" id="ac-ref-producto" placeholder="ID de producto (ej. MLA68609606)..." class="fi" style="width:200px">
       <select id="ac-ref-cuenta" class="fi"><option value="IT">IT</option><option value="MT">MT</option></select>
-      <button class="btn" onclick="ayalaCoreRefAgregar()">➕ Agregar referencia</button>
+      <button class="btn" onclick="ayalaCoreRefBuscar()">🔎 Buscar competencia</button>
     </div>
+    <div id="ac-ref-candidatos" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);margin-bottom:8px"></div>
     <div id="ac-ref-lista" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
   </div>
 
@@ -3553,21 +3554,31 @@ async function ayalaCoreLoad(){
 // -- una publicación de competencia puede cubrir una sola condición, por
 // eso es array (puede haber una para Contado y otra para 9 cuotas, etc).
 let AC_REFERENCIAS={};
-async function ayalaCoreRefAgregar(){
+let AC_REF_CANDIDATOS=[];
+async function ayalaCoreRefBuscar(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
-  const sku=qs('ac-ref-sku').value;
-  const itemId=(qs('ac-ref-mla').value||'').trim().toUpperCase();if(!itemId){toast('Ingresá un MLA','error');return;}
+  const productId=(qs('ac-ref-producto').value||'').trim().toUpperCase();if(!productId){toast('Ingresá el ID de la ficha de producto','error');return;}
   const cuenta=qs('ac-ref-cuenta').value;
+  const cont=qs('ac-ref-candidatos');
+  cont.textContent='Buscando...';
   try{
-    const res=await fetch(`${url}/ayala-core/referencia/${itemId}?cuenta=${cuenta}`);
-    if(!res.ok){const e=await res.json().catch(()=>({}));toast(e.detail||'No se encontró la publicación','error');return;}
-    const r=await res.json();
-    AC_REFERENCIAS[sku]=(AC_REFERENCIAS[sku]||[]).filter(x=>String(x.condicion_detectada)!==String(r.condicion_detectada));
-    AC_REFERENCIAS[sku].push(r);
-    qs('ac-ref-mla').value='';
-    ayalaCoreRenderRefLista();
-    ayalaCorePublicacionesRepintar();
-  }catch(e){toast(e.message,'error');}
+    const res=await fetch(`${url}/ayala-core/producto/${productId}/competencia?cuenta=${cuenta}`);
+    if(!res.ok){const e=await res.json().catch(()=>({}));cont.innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
+    const{ofertas}=await res.json();
+    AC_REF_CANDIDATOS=ofertas||[];
+    if(!AC_REF_CANDIDATOS.length){cont.innerHTML='<span style="color:var(--text3)">No se encontró competencia real (todas las ofertas de esa ficha son cuentas propias).</span>';return;}
+    cont.innerHTML=AC_REF_CANDIDATOS.map((o,i)=>
+      `<div style="padding:3px 0;border-bottom:1px solid var(--border)">${o.item_id} (seller ${o.seller_id}) · ${ayalaCoreCondLabel(o.condicion_detectada)} · <b>${ayalaCoreFmt(o.precio)}</b>${o.precio_tachado?` (tachado ${ayalaCoreFmt(o.precio_tachado)})`:''} <button class="btn" style="padding:1px 6px;font-size:9px" onclick="ayalaCoreRefUsar(${i})">Usar como referencia</button></div>`
+    ).join('');
+  }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+function ayalaCoreRefUsar(idx){
+  const sku=qs('ac-ref-sku').value;
+  const o=AC_REF_CANDIDATOS[idx];
+  AC_REFERENCIAS[sku]=(AC_REFERENCIAS[sku]||[]).filter(x=>String(x.condicion_detectada)!==String(o.condicion_detectada));
+  AC_REFERENCIAS[sku].push(o);
+  ayalaCoreRenderRefLista();
+  ayalaCorePublicacionesRepintar();
 }
 function ayalaCoreRefQuitar(sku,condicion){
   AC_REFERENCIAS[sku]=(AC_REFERENCIAS[sku]||[]).filter(x=>String(x.condicion_detectada)!==String(condicion));
@@ -3578,7 +3589,7 @@ function ayalaCoreRenderRefLista(){
   const filas=[];
   for(const sku in AC_REFERENCIAS)for(const r of AC_REFERENCIAS[sku])filas.push({sku,...r});
   qs('ac-ref-lista').innerHTML=filas.length?filas.map(r=>
-    `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${r.sku} · ${ayalaCoreCondLabel(r.condicion_detectada)} · <a href="${r.permalink||`https://articulo.mercadolibre.com.ar/${r.item_id}`}" target="_blank" style="color:var(--accent)">${r.item_id}</a> · ${r.titulo} · Precio <b>${ayalaCoreFmt(r.precio)}</b>${r.precio_tachado?` (tachado ${ayalaCoreFmt(r.precio_tachado)})`:''} <button class="btn" style="padding:1px 6px;font-size:9px" onclick="ayalaCoreRefQuitar('${r.sku}','${r.condicion_detectada}')">quitar</button></div>`
+    `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${r.sku} · ${ayalaCoreCondLabel(r.condicion_detectada)} · <a href="https://articulo.mercadolibre.com.ar/${r.item_id}" target="_blank" style="color:var(--accent)">${r.item_id}</a> (seller ${r.seller_id}) · Precio <b>${ayalaCoreFmt(r.precio)}</b>${r.precio_tachado?` (tachado ${ayalaCoreFmt(r.precio_tachado)})`:''} <button class="btn" style="padding:1px 6px;font-size:9px" onclick="ayalaCoreRefQuitar('${r.sku}','${r.condicion_detectada}')">quitar</button></div>`
   ).join(''):'<span style="color:var(--text3)">Sin referencias cargadas todavía.</span>';
 }
 // ── Recalculo de precio en el navegador -- mismos parámetros por

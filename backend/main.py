@@ -2247,22 +2247,21 @@ async def ayala_core_publicaciones_run(
 async def ayala_core_publicaciones_status(job_id: str):
     return ayala_core.estado_job(job_id) or {"status": "not_found"}
 
-def _ayala_core_referencia_sync(item_id: str, cuenta: str) -> dict:
+def _ayala_core_competencia_sync(product_id: str, cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()
-    r = ayala_core.resolver_referencia_competencia(ml, item_id, cuenta)
-    if not r.get("encontrado"):
-        raise HTTPException(status_code=404, detail="Publicación de competencia no encontrada")
-    r.pop("encontrado")
-    return r
+    return {"ofertas": ayala_core.resolver_competencia_por_producto(ml, product_id, cuenta)}
 
-@app.get("/ayala-core/referencia/{item_id}")
-async def ayala_core_referencia(item_id: str, cuenta: str = "IT"):
-    """Publicación PÚBLICA de un competidor (precio/tachado/condición) --
+@app.get("/ayala-core/producto/{product_id}/competencia")
+async def ayala_core_competencia(product_id: str, cuenta: str = "IT"):
+    """Ofertas de la competencia real para una ficha de catálogo --
     pedido de Maxx 2026-09-03 para comparar "en las mismas condiciones"
-    contra una referencia real, no solo contra el costo. `cuenta` solo
-    elige qué token propio usar para pegarle a la API, no hace falta ser
-    el dueño de la publicación."""
-    return await run_in_threadpool(_ayala_core_referencia_sync, item_id, cuenta)
+    contra una referencia real, no solo contra el costo. `product_id` es
+    el ID de la ficha (el que aparece después de `/p/` en la página de
+    "Opciones de compra" de ML), NO el `item_id` de un vendedor puntual --
+    `GET /items/{id}` está gateado por ownership para publicaciones
+    ajenas, confirmado en vivo 2026-09-03 (ver docstring de
+    `resolver_competencia_por_producto`)."""
+    return await run_in_threadpool(_ayala_core_competencia_sync, product_id, cuenta)
 
 def _ayala_core_aplicar_precio_sync(item_id: str, cuenta: str, precio: Decimal) -> dict:
     """Etapa 2 (escritura), una publicación por vez -- pedido de Maxx

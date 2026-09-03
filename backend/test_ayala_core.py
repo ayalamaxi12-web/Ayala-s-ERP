@@ -6,7 +6,7 @@ from ayala_core import (
     calcular_precios_todas_condiciones,
     descubrir_publicaciones,
     detectar_condicion_pago,
-    resolver_referencia_competencia,
+    resolver_competencia_por_producto,
 )
 
 
@@ -301,20 +301,30 @@ def test_descubrir_publicaciones_incluye_costo_e_iva_para_recalculo_en_frontend(
     assert filas[0]["iva_factor"] == Decimal("1.21")
 
 
-# ── Referencia de competencia -- pedido 2026-09-03 ──
+# ── Competencia por producto -- pedido 2026-09-03, corregido el mismo día
+# (GET /items/{id} está gateado por ownership para publicaciones ajenas,
+# ver docstring de resolver_competencia_por_producto) ──
 
-def test_resolver_referencia_competencia_ok():
-    ml = _MLFalso({"IT": [
-        {"id": "MLA9", "title": "Plancha de un competidor", "price": 200000, "original_price": 280000,
-         "tags": ["cuota-simple-9"]},
-    ]})
-    r = resolver_referencia_competencia(ml, "MLA9", "IT")
-    assert r == {
-        "encontrado": True, "item_id": "MLA9", "titulo": "Plancha de un competidor",
-        "permalink": None, "precio": 200000, "precio_tachado": 280000, "condicion_detectada": 9,
-    }
+class _MLProductoFalso:
+    def __init__(self, ofertas: list[dict]):
+        self._ofertas = ofertas
+
+    def items_de_producto(self, product_id, cuenta):
+        return self._ofertas
 
 
-def test_resolver_referencia_competencia_no_encontrado():
-    ml = _MLFalso({})
-    assert resolver_referencia_competencia(ml, "MLA1", "IT") == {"encontrado": False}
+def test_resolver_competencia_por_producto_excluye_cuentas_propias():
+    ml = _MLProductoFalso([
+        {"item_id": "MLA1", "seller_id": 115764017, "price": 77719, "tags": ["pcj-co-funded"]},  # IT, propio
+        {"item_id": "MLA2", "seller_id": 1001057832, "price": 78745, "tags": ["immediate_payment"]},
+        {"item_id": "MLA3", "seller_id": 1001057832, "price": 89990, "original_price": None, "tags": ["3x_campaign"]},
+    ])
+    r = resolver_competencia_por_producto(ml, "MLA68609606", "IT")
+    assert [x["item_id"] for x in r] == ["MLA2", "MLA3"]
+    assert r[0]["condicion_detectada"] == "contado"
+    assert r[1]["condicion_detectada"] == 3
+
+
+def test_resolver_competencia_por_producto_sin_competidores():
+    ml = _MLProductoFalso([{"item_id": "MLA1", "seller_id": 115764017, "price": 77719, "tags": []}])
+    assert resolver_competencia_por_producto(ml, "MLA68609606", "IT") == []

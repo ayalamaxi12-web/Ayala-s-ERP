@@ -377,6 +377,25 @@ class MLOfertasClient(MLFullClient):
             {"attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes"}, headers,
         )
 
+    def items_de_producto(self, product_id: str, cuenta: str) -> list[dict]:
+        """Todas las ofertas (de todos los vendedores) para una ficha de
+        producto de catálogo (el `MLA...` que aparece en la URL después de
+        `/p/` en la página de "Opciones de compra"). Corregido 2026-09-03:
+        `GET /items/{id}` (single o multiget) está gateado por ownership
+        para publicaciones que no son propias -- confirmado en vivo, 403
+        `access_denied` incluso pidiendo solo campos públicos, con y sin
+        auth (mismo síntoma ya diagnosticado antes para /items/{id} en
+        general). `GET /products/{id}/items` NO tiene ese gate (trae el
+        `seller_id` de cada oferta) -- es el mismo mecanismo que arma la
+        página de comparación de precios que Maxx ya mira a mano, así que
+        pedirle el ID de esa ficha (no un MLA de un vendedor puntual) es
+        indistinguible de lo que ya hace en el navegador, no hace falta
+        scrapear la página (bot-detection real, confirmado en vivo,
+        bloqueado explícitamente -- no intentar de nuevo)."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        d = self._get(f"https://api.mercadolibre.com/products/{product_id}/items", {}, headers) or {}
+        return d.get("results") or []
+
 
 # ── Fase 3 — escritura (activar / sacar de UNA promoción puntual) ──
 # Habilitada 2026-08-27 por decisión explícita de Maxx: el criterio

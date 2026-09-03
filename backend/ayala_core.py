@@ -239,26 +239,40 @@ def descubrir_publicaciones(
     return filas, incidencias
 
 
-def resolver_referencia_competencia(ml, item_id: str, cuenta: str = "IT") -> dict:
+def resolver_competencia_por_producto(ml, product_id: str, cuenta: str = "IT") -> list[dict]:
     """Pedido de Maxx 2026-09-03: encontró un competidor vendiendo casi al
     mismo precio que él pero en 9 cuotas -- eso lo deja afuera de las
-    ventas en cuotas para tickets altos. Trae precio/tachado/condición de
-    UNA publicación de la competencia (no la propia) para comparar "en las
-    mismas condiciones" en vez de a ciegas contra el costo.
+    ventas en cuotas para tickets altos. Trae precio/condición de CADA
+    vendedor real que compite en una ficha de producto, para comparar "en
+    las mismas condiciones" en vez de a ciegas contra el costo.
 
-    Es una publicación PÚBLICA de otro vendedor -- `cuenta` solo elige
-    qué token de las dos propias usar para pegarle a la API, no importa
-    cuál (no hace falta ser el dueño para leer precio/tags/original_price,
-    a diferencia de `seller_custom_field`, que acá ni se pide)."""
-    d = ml.detalle_item_completo(item_id, cuenta) or {}
-    if not d.get("id"):
-        return {"encontrado": False}
-    return {
-        "encontrado": True, "item_id": d["id"], "titulo": d.get("title", ""),
-        "permalink": d.get("permalink"), "precio": d.get("price"),
-        "precio_tachado": d.get("original_price"),
-        "condicion_detectada": detectar_condicion_pago(d),
-    }
+    `product_id` es el ID de la ficha de catálogo (el `MLA...` que
+    aparece en la URL después de `/p/` en la página de "Opciones de
+    compra" de ML) -- NO el `item_id` de una publicación puntual.
+
+    **Corregido 2026-09-03** (encontrado al responder "¿de dónde lo va a
+    detectar?"): la primera versión pedía `GET /items/{item_id}` de la
+    publicación del competidor -- confirmado en vivo que ESE endpoint
+    está gateado por ownership para publicaciones ajenas (403
+    `access_denied`, con y sin auth, hasta pidiendo solo campos
+    públicos). Scrapear la página pública tampoco es opción: ML sirve una
+    interstitial de "tráfico sospechoso" ante un `requests.get` con
+    User-Agent de navegador -- es bot-detection real, no se intenta
+    evadir (política del proyecto). La salida real es
+    `ml.items_de_producto()` (`GET /products/{id}/items`), que SÍ trae
+    todos los vendedores -- se descartan los que son cuentas propias
+    (`SELLERS`) para quedarse solo con competencia real."""
+    propios = set(SELLERS.values())
+    ofertas = ml.items_de_producto(product_id, cuenta)
+    return [
+        {
+            "item_id": o.get("item_id"), "seller_id": o.get("seller_id"),
+            "precio": o.get("price"), "precio_tachado": o.get("original_price"),
+            "condicion_detectada": detectar_condicion_pago(o),
+        }
+        for o in ofertas
+        if str(o.get("seller_id")) not in propios
+    ]
 
 
 # ── Job en background -- mismo patrón que ml_ofertas.py/ml_full.py ──
