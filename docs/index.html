@@ -3607,21 +3607,49 @@ function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financiero
   const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(financieroPct/100)-(rentaPct/100);
   return Math.round(num/den);
 }
+// Desglose de qué se descuenta para llegar al precio -- pedido 2026-09-03
+// ("todos los impuestos que se descontaron para llegar al precio"),
+// mismas cuentas que Motor!B33:B44 de la planilla real (COSTO PRODUCTO/
+// COMISIÓN/FINANCIERO/ENVÍO/IIBB + el "IVA COMISIÓN"/"IVA ENVÍO" que
+// neutralizan el 21% de IVA que ya viene adentro de esos dos cargos).
+function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull){
+  const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct);
+  const comision=-(AC_COMISION_PCT/100)*precio;
+  const financiero=-(financieroPct/100)*precio;
+  const envioFijo=-envioReal;
+  const iibb=-(AC_IIBB_PCT/100)*(precio/ivaFactor);
+  const envioFullMonto=envioFull?-(0.5/100)*precio:0;
+  const ivaComision=comision/AC_IVA_SERVICIOS_ML-comision;
+  const ivaEnvio=envioFijo/AC_IVA_SERVICIOS_ML-envioFijo;
+  const ventaSinIva=precio/ivaFactor;
+  const costoSinIvaTotal=-costoSinIvaArs+comision+financiero+envioFijo+iibb+envioFullMonto+ivaComision+ivaEnvio;
+  const rentaMonto=ventaSinIva+costoSinIvaTotal;
+  return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,envioFull:-envioFullMonto,renta:rentaMonto};
+}
 const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
+const AC_ESCALON={contado:0,reducida:0,'3':1,'6':2,'9':3,'12':4};
+function ayalaCoreRentaPct(condicion,rentaContado,diferencial){return rentaContado-diferencial*AC_ESCALON[condicion];}
+const AC_DESGLOSE_HEAD='<th style="text-align:right">Comisión</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío</th><th style="text-align:right">IIBB</th><th style="text-align:right">Renta $</th>';
+function ayalaCoreDesgloseFila(d,c,rentaContado,diferencial){
+  const rentaPct=ayalaCoreRentaPct(c,rentaContado,diferencial);
+  const fin=ayalaCoreFinancieroPct(c);
+  const g=ayalaCoreDesglose(d.costo_sin_iva_ars,d.iva_factor,d.envio_real,fin,rentaPct,d.envio_full);
+  return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
+}
 function ayalaCoreRenderMotor(d){
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th></tr></thead><tbody>${
-    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td></tr>`).join('')
+  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
+    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c,d.renta_contado_pct,d.diferencial_cuotas_pct)}</tr>`).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
-  qs('ac-tabla-wrap').style.maxWidth='420px';
+  qs('ac-tabla-wrap').style.maxWidth='none';
 }
 function ayalaCoreRenderMotorMulti(resultados){
   // resultados: [{sku,d}] -- una fila por SKU x condición (30 filas para los 5 piloto)
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">Precio</th></tr></thead><tbody>${
-    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td></tr>`).join('')).join('')
+  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">Precio</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
+    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c,d.renta_contado_pct,d.diferencial_cuotas_pct)}</tr>`).join('')).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
-  qs('ac-tabla-wrap').style.maxWidth='560px';
+  qs('ac-tabla-wrap').style.maxWidth='none';
 }
 async function ayalaCoreCalcular(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
