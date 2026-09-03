@@ -315,13 +315,14 @@ _(Fecha de última actualización: 2026-09-03)_
 - **Falta el primer test real de Etapa 2**: nadie corrió `POST /ayala-core/item/{id}/aplicar-precio`
   contra una publicación real todavía -- antes de confiar en el flujo, probarlo una vez con Maxx
   mirando (un MLA de bajo riesgo) y confirmar que el precio realmente cambia en ML.
-- **Bloqueante para probar en vivo (no es un bug de este código)**: la conexión a Táctica vía el
-  puente Tailscale (`ts_sql_bridge`) estuvo caída el 2026-09-03 (confirmado con curl, timeout de
-  40s en `/ayala-core/sku/{sku}/motor` mientras `/tc/bna` respondía normal) -- re-verificar en vivo
-  el modo "Todos" del motor y el job de publicaciones apenas se confirme que el puente está sano.
-- **Escritura a ML todavía no implementada** -- ver la decisión pendiente de arriba (tildar +
-  aplicar uno por uno). Definir el endpoint PUT de precio por condición, reutilizando el patrón de
-  `fijar_precio_base`, recién cuando Maxx confirme el flujo.
+- **Detección de condición: gap real encontrado 2026-09-03, sin resolver.** Al menos una
+  publicación real (MLA3193414376, "6 cuotas" real y confirmado en el simulador de ML) no trae el
+  tag `6x_campaign` por ningún endpoint probado (`/items/{id}`, `/products/{id}/items`,
+  `/items/{id}/prices`) -- se detecta como Contado en falso. Las otras 5 condiciones del mismo
+  producto (3/9/12 cuotas y Reducida) sí traen su tag correcto, así que parece un caso aislado de
+  ML, no un fallo del método. Si vuelve a aparecer, inspeccionar con la pestaña de Red del navegador
+  la página real de "Modificar publicación" para encontrar qué llamada usa ML internamente (no se
+  llegó a probar eso todavía).
 - **Cerrar Etapa 1 del todo**: validar los 5 SKU piloto (no solo PLANCHA-SUB-26X26-PORT) contra la
-  planilla real, con Maxx mirando, antes de pasar a Etapa 2 (escritura).
+  planilla real, con Maxx mirando.
 - _(Code mantiene esta lista.)_
