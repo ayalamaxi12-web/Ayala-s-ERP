@@ -3737,14 +3737,38 @@ function ayalaCorePublicacionesRepintar(){
       <td>${f.sku}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
       <td>${ayalaCoreCondLabel(f.condicion_detectada)}</td>
-      <td style="text-align:right">${ayalaCoreFmt(f.envio_real)}${f.envio_real?'':' <span style="color:var(--text3)" title="Sin venta reciente registrada para este MLA -- se usó $0">(sin dato)</span>'}</td>
+      <td style="text-align:right">
+        <input type="text" data-idx="${idx}" class="ac-pub-envio" value="${Math.round(f.envio_real)}" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubRecalcularEnvio(this)">
+        ${f.envio_real?'':'<span style="color:var(--text3)" title="Sin venta reciente registrada para este MLA -- se usó $0, corregilo a mano si lo sabés">(sin dato)</span>'}
+      </td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_actual)}</td>
-      <td style="text-align:right">${ayalaCoreFmt(f.precio_calculado)}</td>
-      <td style="text-align:right;color:${color}">${ayalaCoreFmt(f.diferencia)}</td>
+      <td style="text-align:right" id="ac-pub-calc-${idx}">${ayalaCoreFmt(f.precio_calculado)}</td>
+      <td style="text-align:right;color:${color}" id="ac-pub-dif-${idx}">${ayalaCoreFmt(f.diferencia)}</td>
       <td>${colCompetencia}</td>
       <td style="text-align:right" id="ac-pub-definido-${idx}"><b>${ayalaCoreFmt(window._acPubPrecioDefinido[idx])}</b></td>
     </tr>`;
   }).join('');
+}
+function ayalaCorePubRecalcularEnvio(input){
+  const idx=Number(input.dataset.idx);
+  const f=window._acPubOrdenadas[idx];
+  const envio=Number(input.value||0);
+  const rentaContado=Number(qs('ac-renta-contado').value||32), diferencial=Number(qs('ac-diferencial').value||2);
+  const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
+  const rentaPct=ayalaCoreRentaPct(f.condicion_detectada,rentaContado,diferencial);
+  const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,envio,financiero,rentaPct);
+  f.envio_real=envio;
+  f.precio_calculado=precio;
+  f.diferencia=f.precio_actual-precio;
+  qs(`ac-pub-calc-${idx}`).textContent=ayalaCoreFmt(precio);
+  const dif=qs(`ac-pub-dif-${idx}`);
+  dif.textContent=ayalaCoreFmt(f.diferencia);
+  dif.style.color=Math.abs(f.diferencia)<50?'var(--green)':'var(--red)';
+  // si no hay referencia de competencia para esta fila, "precio a aplicar" sigue al calculado
+  if(!ayalaCoreRefParaFila(f)){
+    window._acPubPrecioDefinido[idx]=precio;
+    qs(`ac-pub-definido-${idx}`).innerHTML=`<b>${ayalaCoreFmt(precio)}</b>`;
+  }
 }
 function ayalaCorePubRecalcularFila(input){
   const idx=Number(input.dataset.idx);
