@@ -4,8 +4,40 @@ import ayala_core
 from ayala_core import (
     calcular_precio_condicion,
     calcular_precios_todas_condiciones,
+    descubrir_publicaciones,
     detectar_condicion_pago,
 )
+
+
+class _CostoProviderFalso:
+    def __init__(self, costos: dict):
+        self._costos = costos
+
+    def obtener(self, sku):
+        return self._costos.get(sku)
+
+
+class _IvaProviderFalso:
+    def __init__(self, factores: dict):
+        self._factores = factores
+
+    def factor(self, sku):
+        return self._factores.get(sku)
+
+
+class _MLFalso:
+    """`items_activos`/`detalle_items_ofertas` fakeados por cuenta -- mismo
+    par de métodos que usa `descubrir_publicaciones`."""
+    def __init__(self, items_por_cuenta: dict):
+        self._items = items_por_cuenta
+
+    def items_activos(self, cuenta):
+        return [i["id"] for i in self._items.get(cuenta, [])]
+
+    def detalle_items_ofertas(self, item_ids, cuenta, progreso_cb=None):
+        if progreso_cb:
+            progreso_cb(0, len(item_ids), "catalogo")
+        return [i for i in self._items.get(cuenta, []) if i["id"] in item_ids]
 
 
 # ── Ejemplo congelado, AYALA_CORE.md A.3.1 (PLANCHA-SUB-26X26-PORT,
@@ -149,3 +181,84 @@ def test_skus_piloto_son_los_5_confirmados():
         "PLANCHA-SUB-26X26-PORT", "PLANCHA-SUB-30X38-10EN1", "PLANCHA-SUB-30X38-5EN1",
         "PLANCHA-SUB-GORRA", "PLANCHA-SUB-TERMO",
     ]
+
+
+# ── Descubrir publicaciones -- pedido de Maxx 2026-09-02: "que detecte
+# los SKU solos de las dos cuentas" ──
+
+def _sin_envio(monkeypatch):
+    monkeypatch.setattr(ayala_core, "costo_envio_real_item", lambda ml, item_id, cuenta: None)
+
+
+def test_descubrir_publicaciones_filtra_por_sku_piloto(monkeypatch):
+    _sin_envio(monkeypatch)
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "Plancha", "price": 100000, "seller_custom_field": "PLANCHA-SUB-GORRA", "tags": []},
+        {"id": "MLA2", "title": "Combo", "price": 50000, "seller_custom_field": "PLANCHA-SUB-GORRA+OTRO-SKU", "tags": []},
+        {"id": "MLA3", "title": "Otra cosa", "price": 20000, "seller_custom_field": "TONER-XYZ", "tags": []},
+    ]})
+    costo = _CostoProviderFalso({"PLANCHA-SUB-GORRA": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-GORRA": Decimal("1.21")})
+
+    filas, incidencias = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
+
+    assert len(filas) == 1
+    assert filas[0]["item_id"] == "MLA1"
+    assert filas[0]["sku"] == "PLANCHA-SUB-GORRA"
+    assert incidencias == []
+
+
+def test_descubrir_publicaciones_marca_incidencia_sin_costo_tactica(monkeypatch):
+    _sin_envio(monkeypatch)
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "Plancha", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
+    ]})
+    filas, incidencias = descubrir_publicaciones(ml, _CostoProviderFalso({}), _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")}), ["IT"], Decimal(1000))
+    assert filas == []
+    assert incidencias == [{"item_id": "MLA1", "cuenta": "IT", "sku": "PLANCHA-SUB-TERMO", "motivo": "SIN_COSTO_TACTICA"}]
+
+
+def test_descubrir_publicaciones_recorre_las_dos_cuentas(monkeypatch):
+    _sin_envio(monkeypatch)
+    ml = _MLFalso({
+        "IT": [{"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []}],
+        "MT": [{"id": "MLA2", "title": "T", "price": 110000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []}],
+    })
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT", "MT"], Decimal(1000))
+
+    assert {f["cuenta"] for f in filas} == {"IT", "MT"}
+    assert {f["item_id"] for f in filas} == {"MLA1", "MLA2"}
+
+
+def test_descubrir_publicaciones_detecta_condicion_y_calcula_diferencia(monkeypatch):
+    _sin_envio(monkeypatch)
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO",
+         "tags": ["cuota-simple-6"]},
+    ]})
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
+
+    assert filas[0]["condicion_detectada"] == 6
+    esperado = calcular_precios_todas_condiciones(costo_sin_iva=Decimal(50000), iva_factor=Decimal("1.21"), envio_real=Decimal(0))["6"]
+    assert filas[0]["precio_calculado"] == esperado
+    assert filas[0]["diferencia"] == Decimal(100000) - esperado
+
+
+def test_descubrir_publicaciones_usa_envio_real_solo_si_es_gratis(monkeypatch):
+    monkeypatch.setattr(ayala_core, "costo_envio_real_item",
+                         lambda ml, item_id, cuenta: {"cost_type": "free", "list_cost": 12000.0})
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
+    ]})
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
+
+    assert filas[0]["envio_real"] == Decimal("12000.0")

@@ -2222,3 +2222,26 @@ async def ayala_core_sku_motor(
         _ayala_core_motor_sync, sku, Decimal(str(renta_contado)), Decimal(str(diferencial_cuotas)),
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
     )
+
+
+@app.post("/ayala-core/publicaciones/run")
+async def ayala_core_publicaciones_run(
+    background_tasks: BackgroundTasks, cuentas: str = "",
+    renta_contado: float = float(ayala_core.RENTA_CONTADO_DEFAULT),
+    diferencial_cuotas: float = float(ayala_core.RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+):
+    """Escaneo caro (recorre TODO el catálogo activo de las cuentas
+    pedidas) -- por eso corre en background, mismo patrón que
+    `/ml-ofertas/run`. `cuentas` viaja como string separado por comas
+    ("IT,MT"); vacío = las dos."""
+    job_id = f"ayalacore_pub_{int(time.time())}"
+    tc = obtener_tc_bna().get("tc") or 0
+    lista_cuentas = [c for c in cuentas.split(",") if c] or None
+    background_tasks.add_task(
+        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_contado, diferencial_cuotas,
+    )
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ayala-core/publicaciones/status/{job_id}")
+async def ayala_core_publicaciones_status(job_id: str):
+    return ayala_core.estado_job(job_id) or {"status": "not_found"}

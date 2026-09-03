@@ -14,8 +14,11 @@ AYALA_CORE.md A.3.1 al peso exacto (ver test_ayala_core.py).
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Callable
 
-from ml_ofertas import CUOTAS_PCT_DEFAULT, _cuotas_sin_interes
+from ml_auth import SELLERS
+from ml_full import _sku_de_item
+from ml_ofertas import CUOTAS_PCT_DEFAULT, _cuotas_sin_interes, costo_envio_real_item
 
 # Los 5 SKU piloto (AYALA_CORE.md A.1) -- lista extensible, NO un límite
 # estructural: no hardcodear "5" en ningún lado que dependa de esto.
@@ -156,3 +159,120 @@ def detectar_condicion_pago(detalle: dict) -> str | int:
         return "reducida"
     cuotas = _cuotas_sin_interes(detalle)
     return cuotas if cuotas else "contado"
+
+
+def descubrir_publicaciones(
+    ml, costo_provider, iva_provider, cuentas: list[str], tc: Decimal,
+    renta_contado_pct: Decimal = RENTA_CONTADO_DEFAULT,
+    diferencial_cuotas_pct: Decimal = RENTA_DIFERENCIAL_CUOTAS_DEFAULT,
+    progreso_cb: Callable[[int, int, str], None] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Pedido de Maxx 2026-09-02: "que detecte los SKU solos de las dos
+    cuentas" -- escanea TODAS las publicaciones activas de las cuentas
+    pedidas (`ml.items_activos`) y se queda solo con las que tienen
+    exactamente uno de `SKUS_PILOTO` como SKU (via `_sku_de_item`,
+    `seller_custom_field` o el atributo `SELLER_SKU`). Un combo (SKU +
+    otros SKU) nunca matchea exacto a uno solo de la lista, así que esto
+    ya cumple la exclusión de combos de A.5 -- no hace falta consultar
+    Ecom para esto en particular (Ecom sí sigue haciendo falta para casos
+    donde el combo reutiliza el mismo SKU sin concatenar, no confirmado
+    todavía que pase acá).
+
+    Caro: recorre TODO el catálogo activo (~6.200 publicaciones hoy entre
+    las dos cuentas) -- pensado para correr como job de background, no en
+    cada carga de pantalla (mismo criterio que `ofertas_propias_activas`).
+    `progreso_cb(procesados, total, fase)` opcional, mismo patrón que el
+    resto de los escaneos largos de este módulo."""
+    filas: list[dict] = []
+    incidencias: list[dict] = []
+    for cuenta in cuentas:
+        ids = ml.items_activos(cuenta)
+
+        def _progreso(actual, total, fase, cuenta=cuenta):
+            if progreso_cb:
+                progreso_cb(actual, total, f"Trayendo catálogo ({cuenta})")
+
+        detalles = ml.detalle_items_ofertas(ids, cuenta, _progreso if progreso_cb else None)
+        for d in detalles:
+            sku = _sku_de_item(d)
+            if sku not in SKUS_PILOTO:
+                continue
+            costo_usd = costo_provider.obtener(sku)
+            iva_factor = iva_provider.factor(sku)
+            if costo_usd is None or iva_factor is None:
+                incidencias.append({
+                    "item_id": d.get("id"), "cuenta": cuenta, "sku": sku,
+                    "motivo": "SIN_COSTO_TACTICA" if costo_usd is None else "SIN_IVA_TACTICA",
+                })
+                continue
+            costo_ars = costo_usd * tc
+            condicion = detectar_condicion_pago(d)
+            try:
+                envio_info = costo_envio_real_item(ml, d["id"], cuenta)
+            except Exception:
+                envio_info = None
+            envio_real = (
+                Decimal(str(envio_info["list_cost"]))
+                if envio_info and envio_info.get("cost_type") == "free" else Decimal(0)
+            )
+            precios = calcular_precios_todas_condiciones(
+                costo_sin_iva=costo_ars, iva_factor=iva_factor, envio_real=envio_real,
+                renta_contado_pct=renta_contado_pct, diferencial_cuotas_pct=diferencial_cuotas_pct,
+            )
+            precio_calculado = precios[str(condicion)]
+            precio_actual = Decimal(str(d.get("price") or 0))
+            filas.append({
+                "cuenta": cuenta, "item_id": d.get("id"), "sku": sku, "titulo": d.get("title", ""),
+                "permalink": d.get("permalink"), "condicion_detectada": condicion,
+                "precio_actual": precio_actual, "precio_calculado": precio_calculado,
+                "diferencia": precio_actual - precio_calculado, "envio_real": envio_real,
+            })
+    return filas, incidencias
+
+
+# ── Job en background -- mismo patrón que ml_ofertas.py/ml_full.py ──
+
+_jobs: dict = {}
+
+
+def iniciar_job_publicaciones(
+    job_id: str, cuentas: list[str] | None = None, tc: float = 0,
+    renta_contado: float = float(RENTA_CONTADO_DEFAULT),
+    diferencial_cuotas: float = float(RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+) -> None:
+    _jobs[job_id] = {"status": "running", "log": ["Escaneando publicaciones activas..."], "result": None, "progress": None}
+    try:
+        from ml_ofertas import MLOfertasClient
+        from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+
+        ml = MLOfertasClient()
+        costo_provider = CostoVigenteProvider()
+        iva_provider = IvaProvider()
+        tc_decimal = Decimal(str(tc)) if tc else Decimal(1)
+
+        def _progreso(actual, total, label):
+            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": label}
+
+        filas, incidencias = descubrir_publicaciones(
+            ml, costo_provider, iva_provider, cuentas or list(SELLERS.keys()), tc_decimal,
+            renta_contado_pct=Decimal(str(renta_contado)), diferencial_cuotas_pct=Decimal(str(diferencial_cuotas)),
+            progreso_cb=_progreso,
+        )
+        _jobs[job_id]["progress"] = None
+        _jobs[job_id]["result"] = {
+            "filas": [{
+                **{k: v for k, v in f.items() if k not in ("precio_actual", "precio_calculado", "diferencia", "envio_real")},
+                "precio_actual": float(f["precio_actual"]), "precio_calculado": float(f["precio_calculado"]),
+                "diferencia": float(f["diferencia"]), "envio_real": float(f["envio_real"]),
+            } for f in filas],
+            "incidencias": incidencias,
+        }
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["log"].append(f"Listo: {len(filas)} publicaciones de los SKU piloto encontradas.")
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["log"].append(f"Error: {e}")
+
+
+def estado_job(job_id: str):
+    return _jobs.get(job_id)
