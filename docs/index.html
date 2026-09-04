@@ -1529,7 +1529,16 @@ function toast(msg,type){const el=qs('toast');el.textContent=msg;el.className='t
 function normSku(s){let sk=(s||"").replace(/[\r\n\t]/g," ").trim().toLowerCase().replace(/[\u200b\u00a0\ufeff\u00ad]/g,"");return sk;}
 function parseNum(s){if(!s)return 0;let str=String(s).replace(/^"|"$/g,'').trim();const hasDot=str.includes('.');const hasCom=str.includes(',');if(hasDot&&hasCom){str=str.replace(/\./g,'').replace(',','.');}else if(hasCom){str=str.replace(',','.');}str=str.replace(/[^\d.]/g,'');return parseFloat(str)||0;}
 function dPct(a,r){if(!a||!r)return null;return(a-r)/r*100;}
-function dStr(pct){if(pct===null)return'<span style="color:var(--text3)">—</span>';const cls=Math.abs(pct)<0.01?'price-ok':'price-bad';return`<span class="${cls}">${pct>0?'+':''}${pct.toFixed(2)}%</span>`;}
+// `tol`: el mismo umbral que decide "estado=diff" en la página que llama
+// (Táctica: 1.5 fijo; Ecom: S.tolGreen) -- corregido 2026-09-04 (bug real
+// reportado por Maxx: la celda se pintaba "mala" con Math.abs(pct)<0.01,
+// un umbral tan chico que CUALQUIER diferencia de redondeo real la
+// marcaba en rojo, sin relación con el 1.5%/tolGreen que de verdad decide
+// si la fila cuenta como "Difiere" y si el SKU sale en el export -- por
+// eso podía ver "%1.37" en rojo en una celda y el export decir "sin
+// diferencias" para ese mismo SKU: la celda y la fila usaban dos
+// criterios distintos de "es diferencia" sin que se notara.
+function dStr(pct,tol){if(pct===null)return'<span style="color:var(--text3)">—</span>';tol=tol==null?0.01:tol;const cls=Math.abs(pct)<tol?'price-ok':'price-bad';return`<span class="${cls}">${pct>0?'+':''}${pct.toFixed(2)}%</span>`;}
 function catRec(sku){const k=(sku||'').toLowerCase();return S.catData[k]||(k.startsWith('pv-')?S.catData[k.slice(3)]:null)||null;}
 function getCat(sku){const c=catRec(sku);return c?c.categoria:'';}
 function getSubcat(sku){const c=catRec(sku);return c?c.subcategoria:'';}
@@ -1666,7 +1675,7 @@ function renderEcom(){
   if(!page.length){tbody.innerHTML='<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';renderPag('ecom-pag',0,0,'ePage','renderEcom');return;}
   tbody.innerHTML=page.map(r=>{
     const badge=r.estado==='ok'?'<span class="badge badge-green">OK</span>':r.estado==='diff'?'<span class="badge badge-red">Difiere</span>':'<span class="badge badge-gray">Sin PM</span>';
-    const mkP=(actual,pmVal,diff)=>`<td class="mono" style="font-size:10px">${actual?'$'+fmtN(actual):'-'}</td><td class="mono" style="font-size:10px">${pmVal?'$'+fmtN(pmVal):'-'}</td><td>${dStr(diff)}</td>`;
+    const mkP=(actual,pmVal,diff)=>`<td class="mono" style="font-size:10px">${actual?'$'+fmtN(actual):'-'}</td><td class="mono" style="font-size:10px">${pmVal?'$'+fmtN(pmVal):'-'}</td><td>${dStr(diff,S.tolGreen)}</td>`;
     const accion=`<div style="display:flex;gap:4px;align-items:center"><input class="edit-inp ecom-new-price" data-sku="${r.sku}" placeholder="Nuevo $" style="width:80px"><button class="btn-xs ecom-fix-btn" data-sku="${r.sku}">✓</button></div>`;
     return`<tr><td class="sku-cell">${r.sku}</td><td style="font-size:10px;color:var(--text2)">${r.cat||'-'}</td>${mkP(r.ml,r.pm&&r.pm.ml,r.dml)}${mkP(r.web,r.pm&&r.pm.web,r.dweb)}${mkP(r.frave,r.pmFrave,r.dfrave)}<td style="font-size:10px;color:var(--accent)">${r.pm?r.pm.pmName:'-'}</td><td>${badge}</td><td>${accion}</td></tr>`;
   }).join('');
@@ -1882,7 +1891,7 @@ function renderTactica(){
   const tbody=qs('tactica-tbody');
   if(!page.length){tbody.innerHTML='<tr><td colspan="22" style="text-align:center;padding:20px;color:var(--text3)">Sin resultados</td></tr>';renderPag('tactica-pag',0,0,'tPage','renderTactica');return;}
   const fmtP=v=>v?'$'+fmtN(v):'-';
-  const mkDiff=(pct,tacVal,pmVal)=>{if(tacVal===0&&pmVal>0)return`<span class="price-bad">FALTA</span>`;return dStr(pct);};
+  const mkDiff=(pct,tacVal,pmVal)=>{if(tacVal===0&&pmVal>0)return`<span class="price-bad">FALTA</span>`;return dStr(pct,1.5);};
   tbody.innerHTML=page.map(r=>{
     const badge=r.estado==='ok'?'<span class="badge badge-green">OK</span>':r.estado==='diff'?'<span class="badge badge-red">Difiere</span>':'<span class="badge badge-gray">Sin PM</span>';
     const rowCls=r.estado==='diff'?'tac-diff-row':r.estado==='ok'?'tac-ok-row':'';
