@@ -2181,7 +2181,7 @@ def _ayala_core_motor_sync(
         d = ml.detalle_item_completo(item_id, cuenta) or {}
         if not d.get("id"):
             raise HTTPException(status_code=404, detail="Publicación no encontrada en esa cuenta")
-        condicion_detectada = ayala_core.detectar_condicion_pago(d)
+        condicion_detectada = ayala_core.resolver_condicion_pago(ml, d, cuenta)
         if envio_usado is None:
             envio_info = ml_ofertas.costo_envio_real_item(ml, item_id, cuenta)
             # Mismo bug/fix que ayala_core.descubrir_publicaciones: la clave
@@ -2190,6 +2190,7 @@ def _ayala_core_motor_sync(
         item_info = {
             "item_id": d["id"], "titulo": d.get("title", ""), "precio_actual": d.get("price"),
             "condicion_detectada": condicion_detectada,
+            "precio_tachado_actual": d.get("original_price"),
         }
     if envio_usado is None:
         envio_usado = Decimal(0)
@@ -2265,15 +2266,28 @@ async def ayala_core_competencia(product_id: str, cuenta: str = "IT"):
     `resolver_competencia_por_producto`)."""
     return await run_in_threadpool(_ayala_core_competencia_sync, product_id, cuenta)
 
-def _ayala_core_aplicar_precio_sync(item_id: str, cuenta: str, precio: Decimal) -> dict:
+def _ayala_core_aplicar_precio_sync(item_id: str, cuenta: str, precio: Decimal, precio_tachado: Decimal | None) -> dict:
     """Etapa 2 (escritura), una publicación por vez -- pedido de Maxx
     2026-09-03, confirmado el diseño ("me sirve así el tilde": tildar
     varias, un solo botón, pero por dentro se escribe de a una, cada una
-    con su propio resultado, nunca un lote silencioso). Reutiliza
+    con su propio resultado, nunca un lote silencioso).
+
+    **`precio_tachado` opcional sumado 2026-09-04** (pedido de Maxx: "que
+    me deje poner el precio tachado"). Sin tachado sigue igual que antes:
     `fijar_precio_base` (mismo PUT verificado con GET aparte que ya usa
-    Ofertas ML) -- Ayala Core no necesita tachado/campaña acá, es
-    corregir el precio de lista directo."""
+    Ofertas ML), precio de lista directo. Con tachado usa
+    `activar_oferta_propia` en vez -- es el ÚNICO camino confirmado en
+    vivo (ver su docstring, `ml_ofertas.py`) para que ML acepte
+    `original_price`: un PUT que solo manda `price` (sin otro atributo)
+    ahora siempre devuelve 400, y ML puede aceptar el PUT con 200 OK sin
+    aplicar el tachado igual (reputación no verde, ítem no nuevo,
+    descuento fuera de 5%-80%, publicación en un DEAL activo, etc.) --
+    por eso el resultado trae `modo` (`con_tachado`/`sin_tachado_ml`/
+    `sin_tachado_bids`), no asumir que "ok":true significa que el
+    tachado quedó puesto, mostrarle a Maxx el `aviso` si vino."""
     ml = ml_ofertas.MLOfertasEscritura()
+    if precio_tachado is not None:
+        return ml.activar_oferta_propia(item_id, cuenta, precio, precio_tachado)
     return ml.fijar_precio_base(item_id, cuenta, precio)
 
 @app.post("/ayala-core/item/{item_id}/aplicar-precio")
@@ -2281,11 +2295,14 @@ async def ayala_core_aplicar_precio(item_id: str, request: Request, background_t
     body = await request.json()
     cuenta = body["cuenta"]
     precio = Decimal(str(body["precio"]))
-    r = await run_in_threadpool(_ayala_core_aplicar_precio_sync, item_id, cuenta, precio)
+    precio_tachado_raw = body.get("precio_tachado")
+    precio_tachado = Decimal(str(precio_tachado_raw)) if precio_tachado_raw not in (None, "") else None
+    r = await run_in_threadpool(_ayala_core_aplicar_precio_sync, item_id, cuenta, precio, precio_tachado)
     background_tasks.add_task(_registrar_historial_oferta, {
         "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
         "Accion": "Ayala Core -- aplicar precio", "Tipo/Promocion": "Ayala Core",
-        "Precio Anterior": body.get("precio_anterior", ""), "Precio Nuevo": f"{precio}",
+        "Precio Anterior": body.get("precio_anterior", ""),
+        "Precio Nuevo": f"{precio}" + (f" (tachado {precio_tachado})" if precio_tachado is not None else ""),
         "Margen % Resultante": "", "Bajo Umbral": "No", "Operador": body.get("operador", ""),
     })
     return r

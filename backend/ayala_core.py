@@ -161,6 +161,86 @@ def detectar_condicion_pago(detalle: dict) -> str | int:
     return cuotas if cuotas else "contado"
 
 
+def _condicion_por_eliminacion(item_id: str | None, hermanos: list[dict]) -> str | int | None:
+    """Dentro de una familia completa (6 hermanas, una por condición --
+    A.4/A.5), si exactamente UNA condición no aparece en ninguna tag y
+    exactamente UNA condición quedó "duplicada" (dos hermanas con el mismo
+    tag, o dos sin tag que caen juntas al default `contado`), la hermana
+    de sobra de ese balde duplicado solo puede ser la condición faltante
+    -- no hay otra lectura posible con 6 casilleros y 6 hermanas. Cubre
+    dos casos reales pedidos por Maxx 2026-09-04:
+    1. Tag ausente (MLA3193414376, SKU PLANCHA-SUB-30X38-5EN1, cuenta IT):
+       la publicación tiene 6 cuotas reales pero ML no exponía ningún tag
+       de cuotas en `/items/{id}` -- su único tag no genérico era
+       `standard_price_by_channel` (precio-por-canal Marketplace/Mercado
+       Shops, confirmado vía `/items/{id}/prices`, sin relación con
+       cuotas) -- cae al default 'contado', duplicando ese balde.
+    2. "Pasaje de cuotas": el tag de una hermana quedó mal asignado a OTRA
+       condición ya ocupada (ej. dos hermanas con `9x_campaign` cuando una
+       en realidad es de 6) -- el balde duplicado puede ser cualquiera,
+       no solo 'contado'.
+    Para desambiguar cuál de las dos hermanas del balde es la "real" y
+    cuál la "huérfana" (la que hay que reasignar) se compara el precio
+    contra el orden canónico de costo financiero (`CONDICIONES`, ya
+    ordenado de más barato a más caro): si la condición faltante es más
+    barata que la del balde duplicado, la huérfana es la de precio más
+    bajo del par; si es más cara, la de precio más alto. Deliberadamente
+    conservador: ante cualquier ambigüedad (familia incompleta, más de un
+    hueco, más de un balde duplicado, balde con más de 2) devuelve `None`
+    y quien llama se queda con la detección naive -- nunca inventa una
+    condición con más de una lectura posible."""
+    if not item_id or len(hermanos) != len(CONDICIONES):
+        return None
+    por_condicion: dict[str | int, list[dict]] = {}
+    for h in hermanos:
+        por_condicion.setdefault(detectar_condicion_pago(h), []).append(h)
+    faltantes = [c for c in CONDICIONES if c not in por_condicion]
+    sobrantes = [c for c, items in por_condicion.items() if len(items) > 1]
+    if len(faltantes) != 1 or len(sobrantes) != 1:
+        return None
+    condicion_faltante = faltantes[0]
+    condicion_balde = sobrantes[0]
+    balde = por_condicion[condicion_balde]
+    if len(balde) != 2:
+        return None
+    ordenados = sorted(balde, key=lambda h: Decimal(str(h.get("price") or 0)))
+    idx_faltante, idx_balde = CONDICIONES.index(condicion_faltante), CONDICIONES.index(condicion_balde)
+    huerfano, _real = (ordenados[0], ordenados[1]) if idx_faltante < idx_balde else (ordenados[1], ordenados[0])
+    if huerfano.get("item_id") != item_id:
+        return None
+    return condicion_faltante
+
+
+def resolver_condicion_pago(
+    ml, detalle: dict, cuenta: str, cache_familias: dict[str, list[dict]] | None = None,
+) -> str | int:
+    """Envoltorio de `detectar_condicion_pago` que siempre cruza contra la
+    familia completa (`ml.items_de_producto(user_product_id, cuenta)`,
+    A.4/A.5: un MLA por condición) antes de confiar en el tag propio --
+    ver `_condicion_por_eliminacion` para los dos casos reales que motivan
+    esto (tag ausente y "pasaje de cuotas"/tag duplicado en otra
+    condición). Si no hay `user_product_id` (o la familia no tiene
+    exactamente 6 o no hay ambigüedad clara) se resigna a la detección
+    naive por tag. `cache_familias` opcional evita pedir la misma familia
+    dos veces en un mismo escaneo (la comparten hasta 6 hermanas)."""
+    condicion = detectar_condicion_pago(detalle)
+    user_product_id = detalle.get("user_product_id")
+    item_id = detalle.get("id")
+    if not user_product_id or not item_id:
+        return condicion
+    if cache_familias is not None and user_product_id in cache_familias:
+        hermanos = cache_familias[user_product_id]
+    else:
+        try:
+            hermanos = ml.items_de_producto(user_product_id, cuenta)
+        except Exception:
+            hermanos = []
+        if cache_familias is not None:
+            cache_familias[user_product_id] = hermanos
+    override = _condicion_por_eliminacion(item_id, hermanos)
+    return override if override is not None else condicion
+
+
 def descubrir_publicaciones(
     ml, costo_provider, iva_provider, cuentas: list[str], tc: Decimal,
     renta_contado_pct: Decimal = RENTA_CONTADO_DEFAULT,
@@ -193,6 +273,7 @@ def descubrir_publicaciones(
     skus_validos = skus_filtro or SKUS_PILOTO
     filas: list[dict] = []
     incidencias: list[dict] = []
+    cache_familias: dict[str, list[dict]] = {}
     for cuenta in cuentas:
         ids = ml.items_activos(cuenta)
 
@@ -214,7 +295,7 @@ def descubrir_publicaciones(
                 })
                 continue
             costo_ars = costo_usd * tc
-            condicion = detectar_condicion_pago(d)
+            condicion = resolver_condicion_pago(ml, d, cuenta, cache_familias)
             try:
                 envio_info = costo_envio_real_item(ml, d["id"], cuenta)
             except Exception:
@@ -231,12 +312,18 @@ def descubrir_publicaciones(
             )
             precio_calculado = precios[str(condicion)]
             precio_actual = Decimal(str(d.get("price") or 0))
+            # Pedido de Maxx 2026-09-04: mostrar en la tabla si la
+            # publicación YA tiene un precio tachado puesto en ML
+            # (`original_price`, ya venía pedido en el batch desde
+            # 2026-09-02, solo faltaba exponerlo acá).
+            tachado_actual = d.get("original_price")
             filas.append({
                 "cuenta": cuenta, "item_id": d.get("id"), "sku": sku, "titulo": d.get("title", ""),
                 "permalink": d.get("permalink"), "condicion_detectada": condicion,
                 "precio_actual": precio_actual, "precio_calculado": precio_calculado,
                 "diferencia": precio_actual - precio_calculado, "envio_real": envio_real,
                 "costo_sin_iva_ars": costo_ars, "iva_factor": iva_factor,
+                "precio_tachado_actual": Decimal(str(tachado_actual)) if tachado_actual else None,
             })
     return filas, incidencias
 

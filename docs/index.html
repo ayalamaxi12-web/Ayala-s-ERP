@@ -1353,7 +1353,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
     <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
       <table>
-        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th></tr></thead>
+        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th><th style="text-align:right">Tachado actual</th><th style="text-align:right">Tachado a aplicar</th></tr></thead>
         <tbody id="ac-publicaciones-tbody"></tbody>
       </table>
     </div>
@@ -3720,6 +3720,15 @@ function ayalaCorePublicacionesRepintar(){
     const ref=ayalaCoreRefParaFila(f);
     return ref?ref.precio:f.precio_calculado;
   });
+  // Tachado a aplicar -- pedido de Maxx 2026-09-04: opcional, en blanco
+  // por default (no se toca el tachado si no se completa este campo,
+  // mismo comportamiento que antes). Si hay referencia de competencia
+  // con tachado, se precarga ese número ("desde ese mismo número igualo
+  // condiciones", mismo criterio ya usado para el precio).
+  window._acPubPrecioTachado=ordenadas.map(f=>{
+    const ref=ayalaCoreRefParaFila(f);
+    return (ref&&ref.precio_tachado)?ref.precio_tachado:null;
+  });
   qs('ac-publicaciones-tbody').innerHTML=ordenadas.map((f,idx)=>{
     const color=Math.abs(f.diferencia)<50?'var(--green)':'var(--red)';
     const ref=ayalaCoreRefParaFila(f);
@@ -3746,8 +3755,17 @@ function ayalaCorePublicacionesRepintar(){
       <td style="text-align:right;color:${color}" id="ac-pub-dif-${idx}">${ayalaCoreFmt(f.diferencia)}</td>
       <td>${colCompetencia}</td>
       <td style="text-align:right" id="ac-pub-definido-${idx}"><b>${ayalaCoreFmt(window._acPubPrecioDefinido[idx])}</b></td>
+      <td style="text-align:right">${f.precio_tachado_actual?ayalaCoreFmt(f.precio_tachado_actual):'<span style="color:var(--text3)">sin tachado</span>'}</td>
+      <td style="text-align:right">
+        <input type="text" data-idx="${idx}" class="ac-pub-tachado" placeholder="sin tocar" value="${window._acPubPrecioTachado[idx]||''}" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubTachadoCambio(this)">
+      </td>
     </tr>`;
   }).join('');
+}
+function ayalaCorePubTachadoCambio(input){
+  const idx=Number(input.dataset.idx);
+  const v=(input.value||'').trim();
+  window._acPubPrecioTachado[idx]=v?Number(v):null;
 }
 function ayalaCorePubRecalcularEnvio(input){
   const idx=Number(input.dataset.idx);
@@ -3786,10 +3804,10 @@ function ayalaCorePubRecalcularFila(input){
 function ayalaCoreRevisarSeleccion(){
   const idxs=[...document.querySelectorAll('.ac-pub-chk:checked')].map(c=>Number(c.dataset.idx));
   if(!idxs.length){toast('Tildá al menos una publicación','error');return;}
-  const filas=idxs.map(i=>({f:window._acPubOrdenadas[i],precio:window._acPubPrecioDefinido[i]}));
+  const filas=idxs.map(i=>({f:window._acPubOrdenadas[i],precio:window._acPubPrecioDefinido[i],tachado:window._acPubPrecioTachado[i]}));
   qs('ac-aplicar-confirmar').style.display='block';
   qs('ac-aplicar-confirmar').innerHTML=`⚠️ Vas a escribir precio en <b>${filas.length}</b> publicación(es) real(es) de ML:<br>${
-    filas.map(({f,precio})=>`${f.cuenta} · ${f.item_id} · ${f.sku} (${ayalaCoreCondLabel(f.condicion_detectada)}): ${ayalaCoreFmt(f.precio_actual)} → <b>${ayalaCoreFmt(precio)}</b>`).join('<br>')
+    filas.map(({f,precio,tachado})=>`${f.cuenta} · ${f.item_id} · ${f.sku} (${ayalaCoreCondLabel(f.condicion_detectada)}): ${ayalaCoreFmt(f.precio_actual)} → <b>${ayalaCoreFmt(precio)}</b>${tachado?` · tachado → <b>${ayalaCoreFmt(tachado)}</b> <span style="color:var(--text3)">(ML puede no aplicarlo -- reputación no verde, ítem no nuevo, descuento fuera de 5%-80%, etc., el log de abajo lo va a confirmar por publicación)</span>`:''}`).join('<br>')
   }<br><button class="btn primary" style="margin-top:8px" onclick="ayalaCoreConfirmarAplicar()">Confirmar y aplicar ${filas.length}</button> <button class="btn" style="margin-top:8px" onclick="qs('ac-aplicar-confirmar').style.display='none'">Cancelar</button>`;
 }
 async function ayalaCoreConfirmarAplicar(){
@@ -3801,13 +3819,21 @@ async function ayalaCoreConfirmarAplicar(){
   for(const idx of idxs){
     const f=window._acPubOrdenadas[idx];
     const precio=window._acPubPrecioDefinido[idx];
-    logEl.innerHTML+=`<div>${f.cuenta} · ${f.item_id} · ${f.sku} -- aplicando ${ayalaCoreFmt(precio)}...</div>`;
+    const tachado=window._acPubPrecioTachado[idx];
+    logEl.innerHTML+=`<div>${f.cuenta} · ${f.item_id} · ${f.sku} -- aplicando ${ayalaCoreFmt(precio)}${tachado?` (tachado ${ayalaCoreFmt(tachado)})`:''}...</div>`;
     logEl.scrollTop=logEl.scrollHeight;
     try{
       const res=await fetch(`${url}/ayala-core/item/${f.item_id}/aplicar-precio`,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({cuenta:f.cuenta,sku:f.sku,precio:precio,precio_anterior:f.precio_actual})});
+        body:JSON.stringify({cuenta:f.cuenta,sku:f.sku,precio:precio,precio_tachado:tachado||null,precio_anterior:f.precio_actual})});
       const r=await res.json();
-      if(r.ok){ok++;logEl.innerHTML+=`<div style="color:var(--green)">✅ ${f.item_id} OK</div>`;}
+      if(r.ok){
+        ok++;
+        // con tachado pedido, "ok":true no siempre significa que ML lo
+        // aplicó (ver docstring de activar_oferta_propia) -- el `modo`
+        // dice la verdad, mostrarlo siempre que no sea "con_tachado".
+        const nota=(tachado&&r.modo&&r.modo!=='con_tachado')?` <span style="color:var(--yellow)">⚠ ${r.aviso||('modo: '+r.modo)}</span>`:'';
+        logEl.innerHTML+=`<div style="color:var(--green)">✅ ${f.item_id} OK${nota}</div>`;
+      }
       else{error++;logEl.innerHTML+=`<div style="color:var(--red)">❌ ${f.item_id}: ${r.error||'error desconocido'}</div>`;}
     }catch(e){error++;logEl.innerHTML+=`<div style="color:var(--red)">❌ ${f.item_id}: ${e.message}</div>`;}
     logEl.scrollTop=logEl.scrollHeight;
@@ -3831,7 +3857,7 @@ async function ayalaCoreCompararMLA(){
     if(!it){cont.innerHTML='Sin datos de publicación';return;}
     const diff=(it.precio_actual||0)-(it.precio_calculado||0);
     const color=Math.abs(diff)<50?'var(--green)':'var(--red)';
-    cont.innerHTML=`<b>${it.titulo}</b><br>Condición detectada: <b>${ayalaCoreCondLabel(it.condicion_detectada)}</b> · Precio actual: <b>${ayalaCoreFmt(it.precio_actual)}</b> · Precio calculado: <b>${ayalaCoreFmt(it.precio_calculado)}</b> · Diferencia: <b style="color:${color}">${ayalaCoreFmt(diff)}</b>`;
+    cont.innerHTML=`<b>${it.titulo}</b><br>Condición detectada: <b>${ayalaCoreCondLabel(it.condicion_detectada)}</b> · Precio actual: <b>${ayalaCoreFmt(it.precio_actual)}</b> · Precio calculado: <b>${ayalaCoreFmt(it.precio_calculado)}</b> · Diferencia: <b style="color:${color}">${ayalaCoreFmt(diff)}</b><br>Tachado actual: <b>${it.precio_tachado_actual?ayalaCoreFmt(it.precio_tachado_actual):'sin tachado'}</b>`;
     qs('ac-envio-real').value=d.envio_real;
     qs('ac-datos').style.display='block';
     qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}`;

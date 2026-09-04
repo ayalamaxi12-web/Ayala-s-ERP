@@ -351,7 +351,12 @@ class MLOfertasClient(MLFullClient):
         porque este batch nunca pedía `price` -- los otros dos llamadores
         de acá, `ofertas_activas`/`ofertas_propias_activas`, sacan el
         precio de la promoción, nunca de este dict, así que no se rompe
-        nada agregándolo)."""
+        nada agregándolo).
+
+        **`user_product_id` sumado 2026-09-04** para que
+        `ayala_core.resolver_condicion_pago` pueda pedir la familia de
+        hermanas (`items_de_producto`) cuando el tag de cuotas no está --
+        ver su docstring."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         salida: list[dict] = []
         total = len(item_ids)
@@ -361,7 +366,7 @@ class MLOfertasClient(MLFullClient):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes"},
+                {"ids": ",".join(lote), "attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes,user_product_id"},
                 headers,
             )
             for entrada in (d or []):
@@ -379,11 +384,12 @@ class MLOfertasClient(MLFullClient):
         no oferta activa, y armar la fila a mano" (pedido 2026-08-27:
         activar una oferta nueva en una publicación que hoy no tiene
         ninguna, no solo gestionar las que ya aparecen en el escaneo de
-        campañas)."""
+        campañas). `user_product_id` sumado 2026-09-04, ver
+        `detalle_items_ofertas`."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         return self._get(
             f"https://api.mercadolibre.com/items/{item_id}",
-            {"attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes"}, headers,
+            {"attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes,user_product_id"}, headers,
         )
 
     def items_de_producto(self, product_id: str, cuenta: str) -> list[dict]:
