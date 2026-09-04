@@ -57,13 +57,16 @@ producto.
      2026-09-02, ver Decisiones tomadas).
 6. **Costo de envío real** → el job ya construido esta semana (última venta real, NO la tabla de
    tramos por peso de la planilla).
-7. **Renta objetivo (%) por condición de pago** → configurable a mano por SKU. Arranca con los
-   valores de la planilla (ej. 32 / 32 / 30 / 28 / 26 / 24 para Contado / Reducida / 3 / 6 / 9 / 12
-   cuotas). **Confirmado leyendo la fórmula real 2026-09-02**: no son 6 números sueltos — es UN
-   valor (renta Contado) más UN diferencial fijo que se resta por escalón (default 2 puntos),
-   arrancando desde Reducida (que no cambia respecto a Contado): Reducida = Contado; 3c = Reducida
-   − 2; 6c = 3c − 2; 9c = 6c − 2; 12c = 9c − 2. Los dos valores (renta Contado + diferencial) son
-   los que hay que exponer editables, no una tabla de 6 celdas independientes.
+7. **Renta objetivo (%) por condición de pago** → configurable a mano por SKU. **Cambiado
+   2026-09-04 a pedido explícito de Maxx** ("en vez de la escalada que tiene ahora, quiero una
+   casilla a completar porcentaje con cada uno de mis diferentes formas de venta"): son 6 números
+   INDEPENDIENTES, uno por condición (Contado / Reducida / 3 / 6 / 9 / 12 cuotas), sin ninguna
+   fórmula derivando uno de otro. **Decisión anterior (2026-09-02, ya no vigente)**: se leyó la
+   fórmula real de la planilla y en ese momento sí era una cascada -- un valor (renta Contado) más
+   un diferencial fijo restado por escalón (Reducida = Contado; 3c = Reducida − 2; 6c = 3c − 2; 9c
+   = 6c − 2; 12c = 9c − 2, default 2 puntos). Los defaults de los 6 campos (32 / 32 / 30 / 28 / 26 /
+   24) son simplemente los valores que esa cascada vieja daba para el ejemplo congelado de A.3.1 --
+   punto de partida al migrar, cada uno editable sin relación con los demás desde ahora.
 8. **Envío a Bodega (Full)** → 0,50% adicional sobre el precio, SOLO si el envío es a Bodega (Full)
    en vez de a Casa central (dato de la planilla, `Calculadora!B7`). Componente real encontrado
    leyendo la fórmula 2026-09-02, no estaba en esta lista antes — no es la misma cuenta que "costo
@@ -309,20 +312,42 @@ _(Fecha de última actualización: 2026-09-03)_
   MISMO envío ($32.090) el motor del ERP reproduce $407.839 exacto -- la diferencia real viene de
   que el ERP usa el envío REAL de la última venta (~$34.590 en ese caso), no la tabla teórica por
   peso de la planilla. Es la diferencia esperada entre "teórico" y "real", no un error de fórmula.
+- **2026-09-04 — gap de detección de condición generalizado y cerrado (mayormente), reabriendo la
+  sección Ofertas, y renta objetivo pasa a 6 valores independientes.**
+  1. Un segundo MLA real (MLA1749991559, cuenta MT) probó que la corrección por eliminación
+     (`resolver_condicion_pago`, ver A.4) no alcanza siempre: en MT cada condición de un SKU vive en
+     un ítem con su propio `user_product_id`, sin agrupar -- ML no expone ninguna forma confiable de
+     listar las hermanas ahí (`/products/{id}/items` devuelve SOLO el ítem pedido). Se probó inferir
+     la condición por precio (contra `CUOTAS_PCT_DEFAULT`) y dio MAL (9 cuotas para un ítem
+     confirmado de 6) -- descartado por no confiable. **Fix**: en vez de perseguir más casos de
+     catálogo, se agregó una corrección manual SIEMPRE disponible en las dos pantallas (un
+     `<select>` de condición que recalcula todo al toque) -- la detección automática sigue
+     resolviendo sola los casos limpios (como IT), esto es la red de seguridad.
+  2. **Reabierta la sub-sección Ofertas** (pausada desde 2026-09-02) -- Maxx pidió directamente
+     "quiero que sea igual que como se ven en Ofertas ML, que me deje desglosar por mla para aplicar
+     la oferta" sin esperar el audio/MD pendiente. Se reutilizó el panel de Ofertas ML tal cual
+     (`ofmToggleGestionar`, generalizado con colspan dinámico en vez de fijo) poblado con los datos
+     que Ayala Core ya tiene, incluido el envío real ya resuelto ("congelado", mismo criterio que
+     precio/costo/cuotas) para que el panel no le pida a ML un envío distinto al que la fila ya usó.
+  3. **Renta objetivo vuelve a ser 6 números independientes** (revierte la Decisión del 2026-09-02
+     de abajo) -- pedido explícito: "en vez de la escalada que tiene ahora, quiero una casilla a
+     completar porcentaje con cada una de mis diferentes formas de venta". Ver A.3 punto 7
+     actualizado.
+  4. Soporte de precio tachado sumado al flujo de aplicar precio (`activar_oferta_propia` en vez de
+     `fijar_precio_base` cuando se pide un tachado) -- ML solo acepta `original_price` a través de
+     ese mecanismo (`PRICE_DISCOUNT`), confirmado en Ofertas ML, no hay atajo para un tachado "suelto".
 - _(Code agrega acá cada decisión nueva con fecha, para que la próxima sesión no la olvide.)_
 
 ## Pendientes / próximos pasos
 - **Falta el primer test real de Etapa 2**: nadie corrió `POST /ayala-core/item/{id}/aplicar-precio`
   contra una publicación real todavía -- antes de confiar en el flujo, probarlo una vez con Maxx
   mirando (un MLA de bajo riesgo) y confirmar que el precio realmente cambia en ML.
-- **Detección de condición: gap real encontrado 2026-09-03, sin resolver.** Al menos una
-  publicación real (MLA3193414376, "6 cuotas" real y confirmado en el simulador de ML) no trae el
-  tag `6x_campaign` por ningún endpoint probado (`/items/{id}`, `/products/{id}/items`,
-  `/items/{id}/prices`) -- se detecta como Contado en falso. Las otras 5 condiciones del mismo
-  producto (3/9/12 cuotas y Reducida) sí traen su tag correcto, así que parece un caso aislado de
-  ML, no un fallo del método. Si vuelve a aparecer, inspeccionar con la pestaña de Red del navegador
-  la página real de "Modificar publicación" para encontrar qué llamada usa ML internamente (no se
-  llegó a probar eso todavía).
+- **Detección de condición: mayormente resuelto 2026-09-04, ver Decisiones tomadas.** Cuenta IT
+  (familias completas de 6 vía `user_product_id`) se resuelve automáticamente por eliminación. Cuenta
+  MT (sin agrupación de familia real en el catálogo) no tiene una vía automática confiable todavía --
+  cubierto por la corrección manual siempre disponible en la UI, no por más código de detección. Si
+  aparece un patrón de catálogo nuevo, seguir sumando salvavidas manuales antes que heurísticas de
+  precio (ya se probó una y dio mal, ver Decisiones tomadas).
 - **Cerrar Etapa 1 del todo**: validar los 5 SKU piloto (no solo PLANCHA-SUB-26X26-PORT) contra la
   planilla real, con Maxx mirando.
 - _(Code mantiene esta lista.)_

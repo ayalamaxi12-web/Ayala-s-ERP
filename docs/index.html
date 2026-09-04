@@ -3345,16 +3345,19 @@ function ofmSimularActivar(itemId){
   if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
   const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
   const costoARS=f._costoUnitSinIva*tc;
-  const m=ofmMargenAt(precio,f._ivaFactor,costoARS,f.domain_id,null);
+  const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
   const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
   const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
-  const resumen=`Margen simulado: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
+  const resumen=`Margen simulado${f._ayalaCoreMotor?' (motor Ayala Core)':''}: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
+  // Costo fijo/Imp.CH no existen en el motor de Ayala Core -- se omiten
+  // en vez de mostrar $0 como si aplicaran, y "Cuotas" pasa a llamarse
+  // "Financiero" (mismo número, nombre real de ese cargo en ese motor).
   const desglose=`<div style="display:grid;grid-template-columns:repeat(4,auto);gap:2px 14px;margin-top:4px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
     <span>Base sin IVA: $${fmtN(Math.round(m.baseSinIva))}</span>
     <span>− Comisión: $${fmtN(Math.round(m.comision))}</span>
-    <span>− Costo fijo: $${fmtN(Math.round(m.costoFijo))}</span>
+    ${f._ayalaCoreMotor?'':`<span>− Costo fijo: $${fmtN(Math.round(m.costoFijo))}</span>`}
     <span>− Envío: $${fmtN(Math.round(m.envio))}</span>
-    <span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>
+    ${f._ayalaCoreMotor?`<span>− Financiero: $${fmtN(Math.round(m.cuotas))}</span>`:`<span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>`}
     <span>− IIBB: $${fmtN(Math.round(m.iibb))}</span>
     <span>− Costo producto: $${fmtN(Math.round(costoARS))}</span>
     <span style="color:${color}">= Margen: $${fmtN(Math.round(m.margen))}</span>
@@ -3372,7 +3375,7 @@ async function ofmConfirmarActivar(itemId){
   let margenPct=null,bajoUmbral=false;
   if(f._costoUnitSinIva!=null){
     const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
-    const m=ofmMargenAt(precio,f._ivaFactor,f._costoUnitSinIva*tc,f.domain_id,null);
+    const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
     margenPct=m.margenPct;bajoUmbral=margenPct!==null&&margenPct*100<OFM.umbral;
   }
   const margenTxt=margenPct!==null?(margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)';
@@ -3412,7 +3415,7 @@ function ofmSimularCampana(itemId){
   if(f._costoUnitSinIva==null){out.innerHTML=`<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
   const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
   const costoARS=f._costoUnitSinIva*tc;
-  const m=ofmMargenAt(precio,f._ivaFactor,costoARS,f.domain_id,null);
+  const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
   const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
   const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
   let avisoDesc='';
@@ -3420,7 +3423,7 @@ function ofmSimularCampana(itemId){
     const descPct=(tachado-precio)/tachado*100;
     if(descPct<10||descPct>=80)avisoDesc=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- las campañas propias exigen entre 10% y 80%.</div>`;
   }
-  out.innerHTML=`${avisoDesc}Margen simulado: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
+  out.innerHTML=`${avisoDesc}Margen simulado${f._ayalaCoreMotor?' (motor Ayala Core)':''}: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
 }
 // Pedido explícito de Maxx 2026-09-01: cuando ML rechaza por credibilidad
 // y devuelve un techo real (`techo_acreditado_ml`), no es un error mudo --
@@ -3442,7 +3445,7 @@ async function ofmConfirmarCampana(itemId,opts){
   const margenEn=(precio)=>{
     if(f._costoUnitSinIva==null)return{pct:null,txt:'sin dato (falta costo/IVA de Táctica)'};
     const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
-    const m=ofmMargenAt(precio,f._ivaFactor,f._costoUnitSinIva*tc,f.domain_id,null);
+    const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
     return{pct:m.margenPct,txt:m.margenPct!==null?(m.margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)'};
   };
   const {pct:margenPct,txt:margenTxt}=margenEn(precioPm);
@@ -3660,8 +3663,15 @@ function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financiero
 // mismas cuentas que Motor!B33:B44 de la planilla real (COSTO PRODUCTO/
 // COMISIÓN/FINANCIERO/ENVÍO/IIBB + el "IVA COMISIÓN"/"IVA ENVÍO" que
 // neutralizan el 21% de IVA que ya viene adentro de esos dos cargos).
-function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull){
-  const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct);
+// Extraído 2026-09-04 -- la parte del desglose que trabaja a partir de
+// un precio DADO (no necesariamente el que resuelve la fórmula inversa
+// para una renta objetivo). La "renta" que devuelve sigue siendo válida
+// para cualquier precio: es lo que sobra después de comisión/financiero/
+// envío/IIBB, sea cual sea el precio -- reutilizado por
+// `ayalaCoreMargenAt` para simular margen a un precio que Maxx tipeó a
+// mano (panel de Ofertas reusado, pedido 2026-09-04: "que use el motor
+// de cálculo de este módulo").
+function ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,financieroPct,envioFull){
   const comision=-(AC_COMISION_PCT/100)*precio;
   const financiero=-(financieroPct/100)*precio;
   const envioFijo=-envioReal;
@@ -3673,6 +3683,34 @@ function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rent
   const costoSinIvaTotal=-costoSinIvaArs+comision+financiero+envioFijo+iibb+envioFullMonto+ivaComision+ivaEnvio;
   const rentaMonto=ventaSinIva+costoSinIvaTotal;
   return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,envioFull:-envioFullMonto,renta:rentaMonto};
+}
+function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull){
+  const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct);
+  return ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,financieroPct,envioFull);
+}
+// Margen simulado con el motor REAL de Ayala Core (comisión/financiero
+// por condición/envío real/IIBB) en vez del modelo genérico de Ofertas
+// ML (comisión por dominio + tramos de costo fijo/envío + impuesto al
+// cheque) -- pedido explícito de Maxx 2026-09-04: "en este módulo en
+// particular que use el motor de cálculo de este módulo, no los
+// márgenes que ya usamos en la otra sección". Misma forma de salida que
+// `ofmMargenAt` para reutilizar el resto del panel sin duplicarlo --
+// `costoFijo`/`impCheque` no existen en este motor, quedan en 0 (el
+// desglose los omite cuando `f._ayalaCoreMotor`, ver `ofmSimularActivar`/
+// `ofmSimularCampana`).
+function ayalaCoreMargenAt(precio,f){
+  const financieroPct=ayalaCoreFinancieroPct(f._condicionAyalaCore);
+  const g=ayalaCoreDesgloseDesdeP(precio,f._costoSinIvaArs,f._ivaFactor,f._envioReal,financieroPct,false);
+  return{baseSinIva:precio/f._ivaFactor,comision:g.comision,costoFijo:0,cuotas:g.financiero,envio:g.envio,impCheque:0,iibb:g.iibb,margen:g.renta,margenPct:precio?g.renta/precio:null};
+}
+// Único punto de despacho: si la fila viene de Ayala Core usa su motor
+// real (que no necesita `costoARS`/`domainId`/`cuotasOfrecidas` -- ya
+// tiene todo en `f`), si no el modelo genérico de Ofertas ML -- así los
+// 4 lugares que simulaban margen no repiten la rama. `costoARS` lo sigue
+// calculando cada llamador (lo usa también para su propio texto de
+// desglose fuera de acá).
+function margenParaFila(f,precio,costoARS,domainId,cuotasOfrecidas){
+  return f._ayalaCoreMotor?ayalaCoreMargenAt(precio,f):ofmMargenAt(precio,f._ivaFactor,costoARS,domainId,cuotasOfrecidas);
 }
 const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
 // Reemplazado 2026-09-04: antes calculaba la renta por escalada
@@ -3873,6 +3911,17 @@ async function ayalaCoreAbrirOferta(btn){
     // Core no la trae, solo el número ya resuelto) -- el panel la
     // muestra como "?" si falta, no rompe nada.
     costo_envio_real:{cost_type:f.envio_real?'free':'charged',costo_envio_real:f.envio_real,fecha_venta:null},
+    // Pedido de Maxx 2026-09-04: "que use el motor de cálculo de este
+    // módulo, no los márgenes que ya usamos en la otra sección" --
+    // `_ayalaCoreMotor` hace que `margenParaFila` (ofmSimularActivar/
+    // ofmSimularCampana/ofmConfirmarActivar/ofmConfirmarCampana) use el
+    // reverse-markup real de Ayala Core en vez del modelo genérico de
+    // Ofertas ML. `_condicionAyalaCore` (no `cuotas_ofrecidas`, que
+    // pierde la distinción Contado/Reducida) resuelve el financiero_pct
+    // correcto; `_costoSinIvaArs`/`_envioReal` son los mismos que ya usó
+    // esta fila para `precio_calculado` -- ningún número nuevo.
+    _ayalaCoreMotor:true,_condicionAyalaCore:f.condicion_detectada,
+    _costoSinIvaArs:f.costo_sin_iva_ars,_envioReal:f.envio_real,
   };
   await ofmToggleGestionar(btn,f.item_id);
 }
