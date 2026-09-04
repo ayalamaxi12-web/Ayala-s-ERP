@@ -1312,11 +1312,28 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <span style="display:flex;flex-direction:column;gap:3px">SKU
       <select id="ac-sku" class="fi" style="min-width:200px"></select>
     </span>
+    <!-- Reemplazado 2026-09-04 a pedido de Maxx: "en vez de la escalada
+    que tiene ahora, quiero una casilla a completar porcentaje con cada
+    uno de mis diferentes formas de venta" -- un % de Renta editable por
+    condición, sin ninguna fórmula derivándolo de otra (antes: Renta
+    Contado % + Diferencial por cuota, cascada -2pts por escalón). -->
     <span style="display:flex;flex-direction:column;gap:3px">Renta Contado %
       <input type="text" id="ac-renta-contado" value="32" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
     </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Diferencial por cuota (pts)
-      <input type="text" id="ac-diferencial" value="2" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    <span style="display:flex;flex-direction:column;gap:3px">Renta Reducida %
+      <input type="text" id="ac-renta-reducida" value="32" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Renta 3 cuotas %
+      <input type="text" id="ac-renta-3" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Renta 6 cuotas %
+      <input type="text" id="ac-renta-6" value="28" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Renta 9 cuotas %
+      <input type="text" id="ac-renta-9" value="26" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
+    <span style="display:flex;flex-direction:column;gap:3px">Renta 12 cuotas %
+      <input type="text" id="ac-renta-12" value="24" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
     </span>
     <span style="display:flex;flex-direction:column;gap:3px">Envío real $ (opcional)
       <input type="text" id="ac-envio-real" placeholder="auto si comparás un MLA" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
@@ -3658,18 +3675,25 @@ function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rent
   return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,envioFull:-envioFullMonto,renta:rentaMonto};
 }
 const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
-const AC_ESCALON={contado:0,reducida:0,'3':1,'6':2,'9':3,'12':4};
-function ayalaCoreRentaPct(condicion,rentaContado,diferencial){return rentaContado-diferencial*AC_ESCALON[condicion];}
+// Reemplazado 2026-09-04: antes calculaba la renta por escalada
+// (Contado - diferencial×escalón). Ahora cada condición tiene su propio
+// input (`ac-renta-<condicion>`, ver AC_COND_ORDEN/el HTML) -- sin
+// fórmula, se lee directo.
+function ayalaCoreRentaPct(condicion){return Number(qs('ac-renta-'+condicion)?.value||0);}
 const AC_DESGLOSE_HEAD='<th style="text-align:right">Comisión</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío</th><th style="text-align:right">IIBB</th><th style="text-align:right">Renta $</th>';
-function ayalaCoreDesgloseFila(d,c,rentaContado,diferencial){
-  const rentaPct=ayalaCoreRentaPct(c,rentaContado,diferencial);
+function ayalaCoreDesgloseFila(d,c){
+  // `d.renta_por_condicion` viene del backend -- es la renta que ESE
+  // resultado usó de verdad, no necesariamente lo que muestran los
+  // inputs de arriba ahora mismo (podrían haber cambiado desde el
+  // último "Calcular").
+  const rentaPct=d.renta_por_condicion[c];
   const fin=ayalaCoreFinancieroPct(c);
   const g=ayalaCoreDesglose(d.costo_sin_iva_ars,d.iva_factor,d.envio_real,fin,rentaPct,d.envio_full);
   return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
 }
 function ayalaCoreRenderMotor(d){
   qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c,d.renta_contado_pct,d.diferencial_cuotas_pct)}</tr>`).join('')
+    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
@@ -3677,17 +3701,23 @@ function ayalaCoreRenderMotor(d){
 function ayalaCoreRenderMotorMulti(resultados){
   // resultados: [{sku,d}] -- una fila por SKU x condición (30 filas para los 5 piloto)
   qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">Precio</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c,d.renta_contado_pct,d.diferencial_cuotas_pct)}</tr>`).join('')).join('')
+    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
 }
+// Un % de Renta por condición (2026-09-04, ver AC_COND_ORDEN/el HTML de
+// arriba) -- arma el fragmento de query string compartido por los 3
+// endpoints que lo piden (Calcular, Detectar publicaciones, Comparar
+// MLA), un solo lugar para no repetir la lectura de los 6 inputs.
+function ayalaCoreRentaQueryParams(){
+  return AC_COND_ORDEN.map(c=>`renta_${c}=${qs('ac-renta-'+c)?.value||0}`).join('&');
+}
 async function ayalaCoreCalcular(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const sku=qs('ac-sku').value;
-  const rentaContado=qs('ac-renta-contado').value||32, diferencial=qs('ac-diferencial').value||2;
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
-  let qparams=`renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}&envio_full=${envioFull}`;
+  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   try{
@@ -3713,13 +3743,12 @@ async function ayalaCoreCalcular(){
 async function ayalaCorePublicacionesRun(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const btn=qs('btn-ac-publicaciones'),status=qs('ac-publicaciones-status'),logEl=qs('ac-publicaciones-log');
-  const rentaContado=qs('ac-renta-contado').value||32, diferencial=qs('ac-diferencial').value||2;
   const skus=[...document.querySelectorAll('.ac-pub-sku-chk:checked')].map(c=>c.value);
   if(!skus.length){toast('Tildá al menos un SKU','error');return;}
   btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando (recorre el catálogo completo, puede tardar)...';logEl.style.display='block';logEl.innerHTML='';
   qs('ac-publicaciones-wrap').style.display='none';
   try{
-    const res=await fetch(`${url}/ayala-core/publicaciones/run?renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}&skus=${skus.join(',')}`,{method:'POST'});
+    const res=await fetch(`${url}/ayala-core/publicaciones/run?${ayalaCoreRentaQueryParams()}&skus=${skus.join(',')}`,{method:'POST'});
     const{job_id}=await res.json();
     status.textContent='Job: '+job_id;
     pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones',ayalaCorePublicacionesOnResult);
@@ -3833,6 +3862,17 @@ async function ayalaCoreAbrirOferta(btn){
     // decidió aplicar.
     precio_oferta:window._acPubPrecioDefinido[idx],precio_normal:f.precio_actual,domain_id:null,
     cuotas_ofrecidas:cuotasOfrecidas,_ivaFactor:f.iva_factor,_costoUnitSinIva:f.costo_sin_iva_ars/tc,
+    // Pedido de Maxx 2026-09-04: "congelar" acá también el envío real,
+    // igual que ya se congela precio/costo/cuotas arriba -- sin esto,
+    // `ofmCargarPromociones` ve `costo_envio_real===undefined` y le pide
+    // a ML el dato de nuevo (`/ml-ofertas/item/{id}/costo-envio`), que
+    // puede volver a resolver un shipping_id/venta distinto al que esta
+    // fila ya usó para calcular `precio_calculado` -- reusar el mismo
+    // número evita que el panel muestre un envío distinto al que ya está
+    // aplicado en el precio de arriba. `fecha_venta` se pierde (Ayala
+    // Core no la trae, solo el número ya resuelto) -- el panel la
+    // muestra como "?" si falta, no rompe nada.
+    costo_envio_real:{cost_type:f.envio_real?'free':'charged',costo_envio_real:f.envio_real,fecha_venta:null},
   };
   await ofmToggleGestionar(btn,f.item_id);
 }
@@ -3845,9 +3885,8 @@ function ayalaCorePubRecalcularEnvio(input){
   const idx=Number(input.dataset.idx);
   const f=window._acPubOrdenadas[idx];
   const envio=Number(input.value||0);
-  const rentaContado=Number(qs('ac-renta-contado').value||32), diferencial=Number(qs('ac-diferencial').value||2);
   const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
-  const rentaPct=ayalaCoreRentaPct(f.condicion_detectada,rentaContado,diferencial);
+  const rentaPct=ayalaCoreRentaPct(f.condicion_detectada);
   const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,envio,financiero,rentaPct);
   f.envio_real=envio;
   f.precio_calculado=precio;
@@ -3900,9 +3939,8 @@ function ayalaCorePubCondicionCambio(select){
   const idx=Number(select.dataset.idx);
   const f=window._acPubOrdenadas[idx];
   f.condicion_detectada=select.value;
-  const rentaContado=Number(qs('ac-renta-contado').value||32), diferencial=Number(qs('ac-diferencial').value||2);
   const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
-  const rentaPct=ayalaCoreRentaPct(f.condicion_detectada,rentaContado,diferencial);
+  const rentaPct=ayalaCoreRentaPct(f.condicion_detectada);
   const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
   f.precio_calculado=precio;
   f.diferencia=f.precio_actual-precio;
@@ -3967,12 +4005,11 @@ async function ayalaCoreCompararMLA(){
   const sku=qs('ac-sku').value;if(!sku){toast('Elegí un SKU primero','error');return;}
   const itemId=(qs('ac-mla').value||'').trim().toUpperCase();if(!itemId){toast('Ingresá un MLA','error');return;}
   const cuenta=qs('ac-cuenta').value;
-  const rentaContado=qs('ac-renta-contado').value||32, diferencial=qs('ac-diferencial').value||2;
   const envioFull=qs('ac-envio-full').checked;
   const cont=qs('ac-mla-resultado');
   cont.style.display='block';cont.textContent='Buscando...';
   try{
-    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?renta_contado=${rentaContado}&diferencial_cuotas=${diferencial}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}`);
+    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}`);
     if(!res.ok){const e=await res.json().catch(()=>({}));cont.innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
     const d=await res.json();
     const it=d.item;

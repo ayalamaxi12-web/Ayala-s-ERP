@@ -129,21 +129,36 @@ def test_congelado_las_6_condiciones_juntas_con_tasas_vigentes():
     assert set(precios) == {"contado", "reducida", "3", "6", "9", "12"}
 
 
-def test_renta_baja_2_puntos_por_escalon_de_cuotas():
-    # Motor!D31:G31 real: cada escalón resta 2 puntos sobre el anterior,
-    # arrancando desde Reducida (no desde Contado directo -- Reducida
-    # "hereda" la renta de Contado sin cambio).
-    precios_altos = calcular_precios_todas_condiciones(
+def test_renta_por_condicion_es_independiente_no_hay_escalada():
+    # Reemplaza el viejo modelo de cascada (Contado + diferencial por
+    # escalón, Motor!D31:G31) -- pedido explícito de Maxx 2026-09-04: "en
+    # vez de la escalada... quiero una casilla a completar porcentaje con
+    # cada una de mis diferentes formas de venta". Valores deliberadamente
+    # NO monótonos (una cascada real jamás podría producir esto) para
+    # probar que cada condición usa SU PROPIO % sin derivarlo de otra.
+    renta = {"contado": Decimal("50"), "reducida": Decimal("10"), 3: Decimal("40"),
+             6: Decimal("5"), 9: Decimal("45"), 12: Decimal("15")}
+    precios = calcular_precios_todas_condiciones(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
-        renta_contado_pct=Decimal("40"), diferencial_cuotas_pct=Decimal("2"),
-    )
-    # A mayor renta objetivo, el precio de cada condición debe subir vs.
-    # el default (32%) -- prueba de sanidad, no un valor congelado.
-    default = calcular_precios_todas_condiciones(
-        costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
+        renta_por_condicion=renta,
     )
     for cond in ayala_core.CONDICIONES:
-        assert precios_altos[str(cond)] > default[str(cond)]
+        esperado = calcular_precio_condicion(
+            costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
+            financiero_pct=ayala_core._financiero_pct(cond), renta_pct=renta[cond],
+        )
+        assert precios[str(cond)] == esperado
+
+
+def test_renta_por_condicion_default_reproduce_la_vieja_cascada_congelada():
+    # RENTA_POR_CONDICION_DEFAULT son los valores que la vieja cascada
+    # (32% Contado, -2pts por escalón) daba para el ejemplo congelado de
+    # AYALA_CORE.md A.3.1 -- punto de partida al migrar, no una regla que
+    # siga vigente (cada uno es editable independiente ahora).
+    assert ayala_core.RENTA_POR_CONDICION_DEFAULT == {
+        "contado": Decimal("32.00"), "reducida": Decimal("32.00"),
+        3: Decimal("30.00"), 6: Decimal("28.00"), 9: Decimal("26.00"), 12: Decimal("24.00"),
+    }
 
 
 def test_envio_full_suma_un_medio_pct_solo_si_se_pide():

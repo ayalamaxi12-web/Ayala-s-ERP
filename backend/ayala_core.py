@@ -47,19 +47,19 @@ ENVIO_FULL_PCT_DEFAULT = Decimal("0.50")  # solo si envío a Bodega (Full), Tasa
 REDUCIDA_PCT_DEFAULT = Decimal("5.00")
 
 # Renta objetivo -- Calculadora!B11 (Contado) + B12 ("Diferencial en
-# cuotas"). Motor!D31:G31 confirma la cascada real: cada escalón de
-# cuotas resta EXACTAMENTE el mismo diferencial sobre el escalón
-# anterior (Contado -> Reducida: sin cambio; Reducida -> 3c -> 6c -> 9c
-# -> 12c: -2 puntos cada paso). Default 32%/2 puntos reproduce el
-# ejemplo de AYALA_CORE.md A.3.1 (32/32/30/28/26/24) -- ambos valores son
-# editables por SKU (A.3 punto 7).
-RENTA_CONTADO_DEFAULT = Decimal("32.00")
-RENTA_DIFERENCIAL_CUOTAS_DEFAULT = Decimal("2.00")
-
-# Cuántos "escalones" de -diferencial% aplican por condición, contados
-# desde Contado/Reducida (escalón 0) hasta 12 cuotas (escalón 4).
-_ESCALON_POR_CONDICION: dict[str | int, int] = {
-    "contado": 0, "reducida": 0, 3: 1, 6: 2, 9: 3, 12: 4,
+# cuotas") ORIGINALMENTE calculaba esto como una cascada (Contado ->
+# Reducida: sin cambio; Reducida -> 3c -> 6c -> 9c -> 12c: -2 puntos cada
+# paso, Motor!D31:G31). **Reemplazado 2026-09-04 a pedido explícito de
+# Maxx**: "en vez de la escalada... quiero una casilla a completar
+# porcentaje con cada una de mis diferentes formas de venta" -- ahora
+# cada condición tiene su propio % de renta, editable independiente, sin
+# ninguna fórmula derivándolo de otra. Los defaults de abajo son
+# simplemente los valores que la cascada vieja daba para el ejemplo
+# congelado de AYALA_CORE.md A.3.1 (32/32/30/28/26/24) -- punto de
+# partida, no una regla que siga vigente.
+RENTA_POR_CONDICION_DEFAULT: dict[str | int, Decimal] = {
+    "contado": Decimal("32.00"), "reducida": Decimal("32.00"),
+    3: Decimal("30.00"), 6: Decimal("28.00"), 9: Decimal("26.00"), 12: Decimal("24.00"),
 }
 
 CONDICIONES: tuple[str | int, ...] = ("contado", "reducida", 3, 6, 9, 12)
@@ -120,8 +120,7 @@ def calcular_precios_todas_condiciones(
     costo_sin_iva: Decimal,
     iva_factor: Decimal,
     envio_real: Decimal,
-    renta_contado_pct: Decimal = RENTA_CONTADO_DEFAULT,
-    diferencial_cuotas_pct: Decimal = RENTA_DIFERENCIAL_CUOTAS_DEFAULT,
+    renta_por_condicion: dict[str | int, Decimal] | None = None,
     envio_full: bool = False,
     comision_pct: Decimal = COMISION_ML_DEFAULT,
     iibb_pct: Decimal = IIBB_PCT_DEFAULT,
@@ -130,14 +129,18 @@ def calcular_precios_todas_condiciones(
     AYALA_CORE.md: "tabla ... precio calculado por el motor para cada
     condición"). Devuelve un dict con claves 'contado'/'reducida'/'3'/
     '6'/'9'/'12' -- strings, para que sea JSON-friendly tal cual en el
-    endpoint."""
+    endpoint. `renta_por_condicion` -- un % de renta INDEPENDIENTE por
+    condición (2026-09-04, reemplaza la cascada Contado/diferencial, ver
+    `RENTA_POR_CONDICION_DEFAULT`) -- debe traer las 6 claves de
+    `CONDICIONES`; si no se pasa, usa los defaults."""
+    renta_por_condicion = renta_por_condicion or RENTA_POR_CONDICION_DEFAULT
     return {
         str(condicion): calcular_precio_condicion(
             costo_sin_iva=costo_sin_iva,
             iva_factor=iva_factor,
             envio_real=envio_real,
             financiero_pct=_financiero_pct(condicion),
-            renta_pct=renta_contado_pct - diferencial_cuotas_pct * _ESCALON_POR_CONDICION[condicion],
+            renta_pct=renta_por_condicion[condicion],
             comision_pct=comision_pct,
             iibb_pct=iibb_pct,
             envio_full=envio_full,
@@ -243,8 +246,7 @@ def resolver_condicion_pago(
 
 def descubrir_publicaciones(
     ml, costo_provider, iva_provider, cuentas: list[str], tc: Decimal,
-    renta_contado_pct: Decimal = RENTA_CONTADO_DEFAULT,
-    diferencial_cuotas_pct: Decimal = RENTA_DIFERENCIAL_CUOTAS_DEFAULT,
+    renta_por_condicion: dict[str | int, Decimal] | None = None,
     progreso_cb: Callable[[int, int, str], None] | None = None,
     skus_filtro: list[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
@@ -308,7 +310,7 @@ def descubrir_publicaciones(
             envio_real = Decimal(str(envio_info["costo_envio_real"])) if envio_info else Decimal(0)
             precios = calcular_precios_todas_condiciones(
                 costo_sin_iva=costo_ars, iva_factor=iva_factor, envio_real=envio_real,
-                renta_contado_pct=renta_contado_pct, diferencial_cuotas_pct=diferencial_cuotas_pct,
+                renta_por_condicion=renta_por_condicion,
             )
             precio_calculado = precios[str(condicion)]
             precio_actual = Decimal(str(d.get("price") or 0))
@@ -374,8 +376,7 @@ _CAMPOS_DECIMAL = ("precio_actual", "precio_calculado", "diferencia", "envio_rea
 
 def iniciar_job_publicaciones(
     job_id: str, cuentas: list[str] | None = None, tc: float = 0,
-    renta_contado: float = float(RENTA_CONTADO_DEFAULT),
-    diferencial_cuotas: float = float(RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+    renta_por_condicion: dict[str | int, float] | None = None,
     skus: list[str] | None = None,
 ) -> None:
     _jobs[job_id] = {"status": "running", "log": ["Escaneando publicaciones activas..."], "result": None, "progress": None}
@@ -387,13 +388,16 @@ def iniciar_job_publicaciones(
         costo_provider = CostoVigenteProvider()
         iva_provider = IvaProvider()
         tc_decimal = Decimal(str(tc)) if tc else Decimal(1)
+        renta_decimal = (
+            {c: Decimal(str(v)) for c, v in renta_por_condicion.items()} if renta_por_condicion else None
+        )
 
         def _progreso(actual, total, label):
             _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": label}
 
         filas, incidencias = descubrir_publicaciones(
             ml, costo_provider, iva_provider, cuentas or list(SELLERS.keys()), tc_decimal,
-            renta_contado_pct=Decimal(str(renta_contado)), diferencial_cuotas_pct=Decimal(str(diferencial_cuotas)),
+            renta_por_condicion=renta_decimal,
             progreso_cb=_progreso, skus_filtro=skus,
         )
         _jobs[job_id]["progress"] = None

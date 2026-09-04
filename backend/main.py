@@ -2159,8 +2159,20 @@ async def ml_ofertas_item_activar_campana(item_id: str, request: Request, backgr
 async def ayala_core_skus():
     return {"skus": ayala_core.SKUS_PILOTO}
 
+def _ayala_core_renta_dict(
+    renta_contado: float, renta_reducida: float, renta_3: float, renta_6: float, renta_9: float, renta_12: float,
+) -> dict[str | int, Decimal]:
+    """Arma el dict de renta por condición que pide `calcular_precios_
+    todas_condiciones` a partir de los 6 query params planos (uno por
+    condición, ver `ayala_core.RENTA_POR_CONDICION_DEFAULT` -- reemplaza
+    la cascada Contado/diferencial, pedido de Maxx 2026-09-04)."""
+    return {
+        "contado": Decimal(str(renta_contado)), "reducida": Decimal(str(renta_reducida)),
+        3: Decimal(str(renta_3)), 6: Decimal(str(renta_6)), 9: Decimal(str(renta_9)), 12: Decimal(str(renta_12)),
+    }
+
 def _ayala_core_motor_sync(
-    sku: str, renta_contado: Decimal, diferencial_cuotas: Decimal,
+    sku: str, renta_por_condicion: dict[str | int, Decimal],
     envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
 ) -> dict:
     costo_usd = CostoVigenteProvider().obtener(sku)
@@ -2197,7 +2209,7 @@ def _ayala_core_motor_sync(
 
     precios = ayala_core.calcular_precios_todas_condiciones(
         costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
-        renta_contado_pct=renta_contado, diferencial_cuotas_pct=diferencial_cuotas, envio_full=envio_full,
+        renta_por_condicion=renta_por_condicion, envio_full=envio_full,
     )
     if item_info is not None:
         item_info["precio_calculado"] = precios[str(item_info["condicion_detectada"])]
@@ -2205,8 +2217,8 @@ def _ayala_core_motor_sync(
     return {
         "sku": sku, "costo_sin_iva_usd": float(costo_usd), "iva_factor": float(iva_factor),
         "tc": float(tc), "costo_sin_iva_ars": float(costo_sin_iva), "envio_real": float(envio_usado),
-        "envio_full": envio_full, "renta_contado_pct": float(renta_contado),
-        "diferencial_cuotas_pct": float(diferencial_cuotas),
+        "envio_full": envio_full,
+        "renta_por_condicion": {str(k): float(v) for k, v in renta_por_condicion.items()},
         "precios": {k: float(v) for k, v in precios.items()},
         "item": item_info,
     }
@@ -2214,15 +2226,20 @@ def _ayala_core_motor_sync(
 @app.get("/ayala-core/sku/{sku}/motor")
 async def ayala_core_sku_motor(
     sku: str,
-    renta_contado: float = float(ayala_core.RENTA_CONTADO_DEFAULT),
-    diferencial_cuotas: float = float(ayala_core.RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+    renta_contado: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT["contado"]),
+    renta_reducida: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT["reducida"]),
+    renta_3: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[3]),
+    renta_6: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[6]),
+    renta_9: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[9]),
+    renta_12: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[12]),
     envio_real: float | None = None,
     envio_full: bool = False,
     item_id: str | None = None,
     cuenta: str | None = None,
 ):
+    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
     return await run_in_threadpool(
-        _ayala_core_motor_sync, sku, Decimal(str(renta_contado)), Decimal(str(diferencial_cuotas)),
+        _ayala_core_motor_sync, sku, renta_por_condicion,
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
     )
 
@@ -2230,8 +2247,12 @@ async def ayala_core_sku_motor(
 @app.post("/ayala-core/publicaciones/run")
 async def ayala_core_publicaciones_run(
     background_tasks: BackgroundTasks, cuentas: str = "", skus: str = "",
-    renta_contado: float = float(ayala_core.RENTA_CONTADO_DEFAULT),
-    diferencial_cuotas: float = float(ayala_core.RENTA_DIFERENCIAL_CUOTAS_DEFAULT),
+    renta_contado: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT["contado"]),
+    renta_reducida: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT["reducida"]),
+    renta_3: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[3]),
+    renta_6: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[6]),
+    renta_9: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[9]),
+    renta_12: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[12]),
 ):
     """Escaneo caro (recorre TODO el catálogo activo de las cuentas
     pedidas) -- por eso corre en background, mismo patrón que
@@ -2241,8 +2262,9 @@ async def ayala_core_publicaciones_run(
     tc = obtener_tc_bna().get("tc") or 0
     lista_cuentas = [c for c in cuentas.split(",") if c] or None
     lista_skus = [s for s in skus.split(",") if s] or None
+    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
     background_tasks.add_task(
-        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_contado, diferencial_cuotas, lista_skus,
+        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_por_condicion, lista_skus,
     )
     return {"job_id": job_id, "status": "started"}
 
