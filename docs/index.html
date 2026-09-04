@@ -1349,11 +1349,17 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn primary" onclick="ayalaCorePublicacionesRun()" id="btn-ac-publicaciones">🔄 Detectar publicaciones</button>
       <span id="ac-publicaciones-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+      <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace">Operador (para meter en oferta):
+        <select id="ac-operador" onchange="localStorage.setItem('ofm_operador',this.value)" class="fi" style="font-size:10px;padding:3px 6px">
+          <option value="">Elegir...</option>
+          <option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option>
+        </select>
+      </span>
     </div>
     <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
     <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
       <table>
-        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th><th style="text-align:right">Tachado actual</th><th style="text-align:right">Tachado a aplicar</th></tr></thead>
+        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th><th style="text-align:right">Tachado actual</th><th style="text-align:right">Tachado a aplicar</th><th>Oferta</th></tr></thead>
         <tbody id="ac-publicaciones-tbody"></tbody>
       </table>
     </div>
@@ -2976,7 +2982,11 @@ function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
 }
 function ofmCfgSave(){try{localStorage.setItem('ofm_cfg',JSON.stringify(OFM));}catch(e){}}
 function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o)Object.assign(OFM,o);const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
-function ofmRequireOperador(){const op=qs('ofm-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
+// `ac-operador` sumado 2026-09-04: el panel "⚙ Gestionar" de Ofertas ML se
+// reutiliza tal cual dentro de Ayala Core (Maxx: "quiero que sea igual
+// que como se ven en Ofertas ML"), que no tiene el campo `ofm-operador`
+// propio -- mismo localStorage `ofm_operador`, campo de input distinto.
+function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
 function ofmRenderPanel(){
   const dominiosHtml=Object.keys(OFM.comisionPorDominio).map(d=>
     `<span style="display:flex;gap:3px;align-items:center" title="${d}"><span style="color:var(--text3)">${OFM_DOMAIN_LABELS[d]||d}</span><input type="text" value="${OFM.comisionPorDominio[d]}" onchange="OFM.comisionPorDominio['${d}']=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:38px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>`
@@ -3172,7 +3182,11 @@ async function ofmToggleGestionar(btn,itemId){
   ofmItemAbierto=itemId;
   const row=document.createElement('tr');
   row.className='ofm-gestionar-row';
-  row.innerHTML=`<td colspan="13" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${itemId}">Cargando promociones activas...</td>`;
+  // colspan dinámico (antes 13 fijo) -- reutilizado desde Ayala Core
+  // 2026-09-04 (Maxx: "quiero que sea igual que como se ven en Ofertas
+  // ML"), cuya tabla de "Detectar publicaciones" tiene otra cantidad de
+  // columnas.
+  row.innerHTML=`<td colspan="${tr.cells.length}" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${itemId}">Cargando promociones activas...</td>`;
   tr.after(row);
   await ofmCargarPromociones(itemId);
 }
@@ -3562,6 +3576,7 @@ async function ayalaCoreLoad(){
     qs('ac-sku').innerHTML='<option value="">— Todos —</option>'+AC_SKUS.map(s=>`<option value="${s}">${s}</option>`).join('');
     qs('ac-ref-sku').innerHTML=AC_SKUS.map(s=>`<option value="${s}">${s}</option>`).join('');
     qs('ac-publicaciones-skus').innerHTML=AC_SKUS.map(s=>`<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" class="ac-pub-sku-chk" value="${s}" checked>${s}</label>`).join('');
+    const acOp=qs('ac-operador');if(acOp)acOp.value=localStorage.getItem('ofm_operador')||'';
     ayalaCoreLoaded=true;
   }catch(e){}
 }
@@ -3772,8 +3787,54 @@ function ayalaCorePublicacionesRepintar(){
       <td style="text-align:right">
         <input type="text" data-idx="${idx}" class="ac-pub-tachado" placeholder="sin tocar" value="${window._acPubPrecioTachado[idx]||''}" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubTachadoCambio(this)">
       </td>
+      <td style="text-align:center"><button class="btn-xs" data-idx="${idx}" onclick="ayalaCoreAbrirOferta(this)">⚙ Gestionar</button></td>
     </tr>`;
   }).join('');
+}
+// ── "Ofertas" dentro de Ayala Core -- pedido de Maxx 2026-09-04: "quiero
+// que sea igual que como se ven en Ofertas ML, que me deje desglosar por
+// mla para aplicar la oferta". En vez de duplicar el panel de "Meter en
+// campaña"/"Descuento propio" (con todo su manejo de cuotas/envío real
+// ya resuelto del lado del backend, ver `ajuste_cuotas_envio` en
+// `ofmConfirmarCampana`), se reutiliza EL MISMO panel de Ofertas ML
+// (`ofmToggleGestionar`/`ofmRenderGestionarPanel`, ya genérico en el DOM
+// -- no depende de vivir en la tabla `ofm-tbody`), poblando
+// `ofmFilaPorId[item_id]` con los datos que ya tiene esta fila de Ayala
+// Core en vez de pedirle nada nuevo a ML. Así "el mismo envío" (el envío
+// real que ya está en el precio de esta fila) llega gratis: el backend
+// de `activar-campana` ya ajusta por el envío real congelado de la
+// publicación, ver su docstring en `ml_ofertas.py` -- no hace falta un
+// campo aparte para "usar el mismo envío", ya lo usa.
+async function ayalaCoreAbrirOferta(btn){
+  const idx=Number(btn.dataset.idx);
+  const f=window._acPubOrdenadas[idx];
+  // OFM.tc (compartido con Ofertas ML) es lo que usan ofmMargenAt/
+  // ofmSimularCampana para pasar de costo USD a ARS -- si Maxx no cargó
+  // Ofertas ML esta sesión, OFM.tc queda en 0 (default) y esas cuentas
+  // saldrían mal. Se pisa acá con el TC real (BNA), misma fuente que ya
+  // usa el motor de Ayala Core.
+  if(!OFM.tc){
+    try{
+      const url=getBackendUrl();
+      const r=await fetch(`${url}/tc/bna`);
+      const d=await r.json();
+      if(d.tc)OFM.tc=d.tc;
+    }catch(e){}
+  }
+  const tc=OFM.tc||1;
+  const cuotasOfrecidas=['3','6','9','12'].includes(String(f.condicion_detectada))?Number(f.condicion_detectada):null;
+  ofmFilaPorId[f.item_id]={
+    item_id:f.item_id,cuenta:f.cuenta,sku:f.sku,titulo:f.titulo,permalink:f.permalink,
+    // precio_oferta = "precio a aplicar" que ya calculó esta fila (motor
+    // o competencia, lo que Maxx ya está viendo en la tabla) -- NO
+    // f.precio_actual (el que hoy tiene en vivo la publicación): el
+    // campo "Precio PM (final)" del panel arranca de acá, y sin esto
+    // arrancaría mostrando el precio actual en vez del que Maxx ya
+    // decidió aplicar.
+    precio_oferta:window._acPubPrecioDefinido[idx],precio_normal:f.precio_actual,domain_id:null,
+    cuotas_ofrecidas:cuotasOfrecidas,_ivaFactor:f.iva_factor,_costoUnitSinIva:f.costo_sin_iva_ars/tc,
+  };
+  await ofmToggleGestionar(btn,f.item_id);
 }
 function ayalaCorePubTachadoCambio(input){
   const idx=Number(input.dataset.idx);
