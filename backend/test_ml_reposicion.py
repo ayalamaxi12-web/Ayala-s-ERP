@@ -4,7 +4,7 @@ lado Ecom, `leer_fn` inyectable del lado Táctica), sin red real."""
 from datetime import date
 
 from ml_full import EcomFullAdapter, MLFullClient, TacticaStockSheetAdapter
-from ml_reposicion import calcular_reposicion_mla
+from ml_reposicion import calcular_reposicion_mla, parsear_pdf_envio_pendiente
 
 _FAKE_TOKEN_FN = lambda cuenta: "FAKE-TOKEN"
 
@@ -409,3 +409,47 @@ def test_sin_ventas_en_el_periodo():
     assert fila.ventas_diarias == 0.0
     assert fila.cantidad_enviar == 0
     assert fila.sugerido == 0
+
+
+# ── PDF "Instrucciones de preparación" -- ver docstring de
+# `parsear_pdf_envio_pendiente`. El PDF real de ML separa la columna
+# "Producto" de la columna "Unidades" en dos bloques de texto (confirmado
+# leyendo el envío real #75982428, 53 productos -- emparejar por orden de
+# aparición reprodujo el total real del encabezado, 2035, exacto); acá se
+# arma un PDF sintético con esa misma forma para no depender de un archivo
+# externo en el repo. ──
+
+def _pdf_instrucciones_preparacion(bloques: list[tuple[str, str, int]]) -> bytes:
+    """`bloques` = [(codigo_ml, sku, unidades), ...]. Arma un PDF de una
+    sola página cuyo texto, al extraerlo, tiene la misma forma que el real:
+    todos los bloques de producto primero, el header de la tabla, después
+    todas las unidades en líneas propias."""
+    import fitz
+
+    productos = "\n".join(f"Código ML: {cod} Código universal: N/A\nSKU: {sku}\nTítulo de prueba" for cod, sku, _ in bloques)
+    unidades = "\n".join(str(u) for _, _, u in bloques)
+    texto = f"{productos}\nPRODUCTO\nUNIDADES\nIDENTIFICACIÓN\nINSTRUCCIONES DE PREPARACIÓN\n{unidades}\n"
+    doc = fitz.open()
+    pagina = doc.new_page()
+    pagina.insert_text((36, 36), texto, fontsize=8)
+    return doc.tobytes()
+
+
+def test_parsear_pdf_envio_pendiente_empareja_por_orden():
+    pdf = _pdf_instrucciones_preparacion([
+        ("OVRA28323", "LAM-POUCH-G-303X426MM-150MIC", 5),
+        ("TSSU05808", "CB435A-436A-CE285AUNIVCOMP", 20),
+        ("GKVM85194", "MLTD101SCOMP", 30),
+    ])
+    assert parsear_pdf_envio_pendiente(pdf) == {"OVRA28323": 5, "TSSU05808": 20, "GKVM85194": 30}
+
+
+def test_parsear_pdf_envio_pendiente_suma_si_el_inventory_id_se_repite():
+    # No debería pasar en un envío real (un inventory_id no se repite dos
+    # veces en el mismo envío), pero si pasara no debe pisarse un valor con
+    # el otro -- se suman, mismo criterio defensivo que el resto del módulo.
+    pdf = _pdf_instrucciones_preparacion([
+        ("OVRA28323", "SKU-A", 5),
+        ("OVRA28323", "SKU-A", 3),
+    ])
+    assert parsear_pdf_envio_pendiente(pdf) == {"OVRA28323": 8}

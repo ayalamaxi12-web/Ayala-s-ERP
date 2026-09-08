@@ -1,7 +1,7 @@
 """
 Ayala's ERP - Backend API
 """
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi import FastAPI, BackgroundTasks, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
@@ -430,6 +430,19 @@ async def ml_full_reposicion_run(
 @app.get("/ml-full/reposicion/status/{job_id}")
 async def ml_full_reposicion_status(job_id: str):
     return ml_reposicion.estado_job(job_id) or {"status": "not_found"}
+
+def _reposicion_pdf_sync(contenido: bytes) -> dict:
+    return {"pendientes_por_inventory": ml_reposicion.parsear_pdf_envio_pendiente(contenido)}
+
+@app.post("/ml-full/reposicion/pdf-envio-pendiente")
+async def ml_full_reposicion_pdf(archivo: UploadFile = File(...)):
+    """Sube el PDF "Instrucciones de preparación" de un envío Full en
+    preparación (lo descarga Maxx a mano del panel de Full de ML -- ver
+    docstring de `parsear_pdf_envio_pendiente`, no hay API pública para
+    esto). Devuelve `{inventory_id: unidades}` para que el frontend
+    complete "Envíos pendientes (paq.)" -- no escribe nada, solo lectura."""
+    contenido = await archivo.read()
+    return await run_in_threadpool(_reposicion_pdf_sync, contenido)
 
 # ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)

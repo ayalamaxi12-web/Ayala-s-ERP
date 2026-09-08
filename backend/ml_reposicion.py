@@ -337,3 +337,55 @@ def iniciar_job(
 
 def estado_job(job_id: str) -> dict | None:
     return _jobs.get(job_id)
+
+
+# ── PDF de "Instrucciones de preparación" de un envío Full en preparación
+# -- pedido de Maxx 2026-09-08: `envio_pendiente` (ver `ml_full.
+# envios_pendientes_por_inventory`) solo ve unidades ya RECIBIDAS en el
+# depósito (`INBOUND_RECEPTION`); un envío todavía "en preparación" no generó
+# ningún evento de recepción todavía, así que es invisible para esa consulta
+# aunque Maxx ya lo esté armando -- sin esto, `cantidad_enviar` duplica lo
+# que ya va en camino. No hay API pública para esto (la pantalla real del
+# envío vive en `vendedores.mercadolibre.com.ar`, autenticada por cookie de
+# sesión, no por Bearer OAuth -- confirmado en vivo 2026-09-08, se descartó
+# automatizarla por el mismo riesgo de cuenta flagueada que ya se vio con
+# ml_vendedor.py ese mismo día). El PDF "Instrucciones de preparación" que
+# ML deja descargar por envío es la única fuente sin ese riesgo. ──
+
+def parsear_pdf_envio_pendiente(contenido: bytes) -> dict:
+    """Extrae `{inventory_id: unidades}` del PDF de instrucciones de
+    preparación de un envío Full ("Código ML: X ... SKU: Y ... título" por
+    producto, seguido de la tabla Unidades/Identificación/Instrucciones).
+
+    El extractor de texto de PyMuPDF separa las columnas de la tabla en dos
+    bloques (todo el texto de la columna "Producto" primero, después un
+    bloque plano con los números de la columna "Unidades") en vez de
+    devolver fila por fila -- confirmado leyendo el PDF real de un envío
+    (#75982428, 53 productos): emparejar el bloque de producto N-ésimo con
+    el número N-ésimo del bloque de unidades (mismo orden de aparición,
+    ambos de arriba hacia abajo) reprodujo el total real del encabezado
+    ("Total de unidades: 2035") exacto -- no es una suposición, se verificó
+    contra el numero declarado por ML en el propio documento.
+
+    Devuelve por `inventory_id` (el "Código ML", clave real que usa
+    `FilaReposicionMLA.inventory_id` -- el SKU no alcanza porque un mismo
+    SKU puede repetirse en varios `inventory_id`, ver AYALA_CORE.md)."""
+    import re
+    import fitz
+
+    doc = fitz.open(stream=contenido, filetype="pdf")
+    pendientes: dict[str, int] = {}
+    marcador = "INSTRUCCIONES DE PREPARACI"
+    for pagina in doc:
+        texto = pagina.get_text()
+        idx = texto.find(marcador)
+        if idx == -1:
+            continue
+        antes, despues = texto[:idx], texto[idx + len(marcador):]
+        bloques = [b for b in re.split(r"(?=C.digo ML:)", antes) if "SKU" in b]
+        unidades = [int(n.strip()) for n in despues.split("\n") if n.strip().isdigit()]
+        for bloque, cantidad in zip(bloques, unidades):
+            m = re.search(r"C.digo ML:\s*(\S+)", bloque)
+            if m:
+                pendientes[m.group(1)] = pendientes.get(m.group(1), 0) + cantidad
+    return pendientes

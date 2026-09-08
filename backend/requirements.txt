@@ -22,3 +22,8 @@ openpyxl==3.1.5
 
 # Requerido por FastAPI para recibir archivos/form-data (endpoints /cierres/ecom/excel).
 python-multipart==0.0.32
+
+# Parseo del PDF "Instrucciones de preparación" de un envío Full en
+# preparación (ml_reposicion.parsear_pdf_envio_pendiente) -- no hay API
+# pública para ese dato, ver docstring.
+PyMuPDF==1.26.0

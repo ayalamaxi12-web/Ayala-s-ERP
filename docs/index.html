@@ -990,7 +990,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <div style="display:flex;align-items:center;gap:0">
         <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
         <button class="btn" id="full-repo-tab-btn-MT" onclick="goFullRepoTab('MT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Arg</button>
-        <button class="btn primary" style="margin-left:auto" onclick="exportFullReposicionParaML()">⬆ Exportar para subir a ML</button>
+        <input type="file" id="full-repo-pdf-input" accept="application/pdf" style="display:none" onchange="fullRepoSubirPDF(this.files[0])">
+        <button class="btn" style="margin-left:auto" title="PDF &quot;Instrucciones de preparación&quot; de un envío Full en preparación -- completa Envíos pendientes (paq.) con lo que ya vas a mandar en ese envío" onclick="qs('full-repo-pdf-input').click()">📄 Cargar PDF de envío pendiente</button>
+        <span id="full-repo-pdf-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></span>
+        <button class="btn primary" onclick="exportFullReposicionParaML()">⬆ Exportar para subir a ML</button>
         <button class="btn" onclick="exportFullReposicion()">⬇ Exportar CSV</button>
       </div>
       <div class="table-wrap">
@@ -2834,6 +2837,34 @@ function goFullRepoTab(cuenta){
   bIT.style.borderBottomColor=cuenta==='IT'?'var(--accent)':'transparent';bIT.style.opacity=cuenta==='IT'?'1':'.6';
   bMT.style.borderBottomColor=cuenta==='MT'?'var(--accent)':'transparent';bMT.style.opacity=cuenta==='MT'?'1':'.6';
   renderFullReposicionTabla();
+}
+// "Envíos pendientes (paq.)" solo ve recepciones YA procesadas en el depósito
+// (ver docstring de ml_reposicion.parsear_pdf_envio_pendiente) -- un envío
+// todavía en preparación no aparece ahí, así que cantidad_enviar/sugerido lo
+// duplicarían sin este dato manual. Reemplaza el valor de la fila (no suma) --
+// pedido de Maxx 2026-09-08: no debería haber más de un envío en preparación
+// pendiente a la vez.
+async function fullRepoSubirPDF(file){
+  if(!file)return;
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  if(!fullRepoResult){alert('Corré la simulación primero');return;}
+  const status=qs('full-repo-pdf-status');status.textContent='Leyendo PDF...';
+  try{
+    const fd=new FormData();fd.append('archivo',file);
+    const res=await fetch(`${url}/ml-full/reposicion/pdf-envio-pendiente`,{method:'POST',body:fd});
+    if(!res.ok){const e=await res.json().catch(()=>({}));status.textContent='❌ '+(e.detail||'Error');return;}
+    const{pendientes_por_inventory}=await res.json();
+    let matcheados=0;
+    fullRepoResult.filas.forEach(f=>{
+      const u=pendientes_por_inventory[f.inventory_id];
+      if(u===undefined)return;
+      fullRepoEnviosPend[f.item_id]=Math.ceil(u/f.factor);
+      matcheados++;
+    });
+    status.textContent=`✅ ${matcheados} publicaciones actualizadas con "${file.name}" (${Object.keys(pendientes_por_inventory).length} códigos en el PDF)`;
+    renderFullReposicionTabla();
+  }catch(e){status.textContent='❌ '+e.message;}
+  qs('full-repo-pdf-input').value='';
 }
 function fullRepoToggleAll(checked){
   if(!fullRepoResult) return;
