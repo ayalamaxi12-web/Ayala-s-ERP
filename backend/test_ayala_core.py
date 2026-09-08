@@ -312,7 +312,7 @@ def test_descubrir_publicaciones_usa_resolver_condicion_pago(monkeypatch):
 def test_skus_piloto_son_los_5_confirmados():
     assert ayala_core.SKUS_PILOTO == [
         "PLANCHA-SUB-26X26-PORT", "PLANCHA-SUB-30X38-10EN1", "PLANCHA-SUB-30X38-5EN1",
-        "PLANCHA-SUB-GORRA", "PLANCHA-SUB-TERMO",
+        "PLANCHA-SUB-GORRA", "PLANCHA-SUB-TERMO", "GLOBAL-G720S",
     ]
 
 
