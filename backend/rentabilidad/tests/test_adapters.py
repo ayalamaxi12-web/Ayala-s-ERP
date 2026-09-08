@@ -108,7 +108,7 @@ def test_consultar_catalogo_tactica_reintenta_ante_corte_de_conexion(monkeypatch
     intentos = {"n": 0}
     def fake_connect(**kwargs):
         intentos["n"] += 1
-        if intentos["n"] < 3:
+        if intentos["n"] < 5:
             raise pymssql.OperationalError((20017, b"DB-Lib error message 20017, severity 9:\nUnexpected EOF from the server\n"))
         return _FakeConn()
 
@@ -116,7 +116,7 @@ def test_consultar_catalogo_tactica_reintenta_ante_corte_de_conexion(monkeypatch
 
     filas = _consultar_catalogo_tactica_real()
 
-    assert intentos["n"] == 3
+    assert intentos["n"] == 5
     assert filas == [{"sku": "SKU1", "costo": "1.5", "iva_descripcion": "IVA Debito 21%"}]
 
 

@@ -98,13 +98,18 @@ def _consultar_catalogo_tactica_real() -> list[dict]:
     producción (2026-08-27) que el link a Táctica corta a veces a mitad de
     consulta (`DB-Lib error 20017: Unexpected EOF from the server`, sin
     reintento antes, mataba el job de Ofertas ML entero por un corte de
-    red). 3 intentos con backoff corto (2s/4s); solo cubre errores de
-    `pymssql` (conexión/protocolo) -- no reinterpreta ni oculta un error
-    real de la query."""
+    red). Ampliado a 5 intentos con backoff 2/4/8/16s (~30s de margen total,
+    antes 3 intentos / 2s+4s) -- confirmado en vivo 2026-09-08 con los logs
+    reales del túnel Tailscale de Ayala Core (Railway <-> PC de Maxx): el
+    corte no es un blip de un instante, el propio tailscaled de Railway
+    reporta 3 rechazos SOCKS5 seguidos ("context deadline exceeded") en una
+    ventana de ~20s antes de recuperarse -- exactamente lo que agotaba los
+    3 intentos anteriores. Solo cubre errores de `pymssql` (conexión/
+    protocolo) -- no reinterpreta ni oculta un error real de la query."""
     import pymssql
 
     ultimo_error: Exception | None = None
-    for intento in range(3):
+    for intento in range(5):
         try:
             conn = pymssql.connect(
                 server=requerido("RENT_TACTICA_SQL_SERVER"),
@@ -122,7 +127,7 @@ def _consultar_catalogo_tactica_real() -> list[dict]:
                 conn.close()
         except pymssql.Error as e:
             ultimo_error = e
-            if intento < 2:
+            if intento < 4:
                 time.sleep(2 ** (intento + 1))
                 continue
     raise ultimo_error
