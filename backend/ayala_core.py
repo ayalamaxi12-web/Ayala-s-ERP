@@ -29,6 +29,9 @@ SKUS_PILOTO: list[str] = [
     "PLANCHA-SUB-GORRA",
     "PLANCHA-SUB-TERMO",
     "GLOBAL-G720S",
+    "PLANCHA-SUB-AUTO-38X38",
+    "GLOBAL-G305",
+    "PLANCHA-SUB-PORTATIL",
 ]
 
 # Tasas del motor -- Tasas!B6:D7 de la planilla real (misma para las dos
