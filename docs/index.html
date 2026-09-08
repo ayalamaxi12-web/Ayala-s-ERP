@@ -2854,14 +2854,19 @@ async function fullRepoSubirPDF(file){
     const res=await fetch(`${url}/ml-full/reposicion/pdf-envio-pendiente`,{method:'POST',body:fd});
     if(!res.ok){const e=await res.json().catch(()=>({}));status.textContent='❌ '+(e.detail||'Error');return;}
     const{pendientes_por_inventory}=await res.json();
+    // Reemplaza TODO fullRepoEnviosPend, no solo lo que matchea -- si no, una
+    // fila que traía el dato viejo de la API (envios_pendientes_por_inventory,
+    // ver ml_full.py) quedaba pisando el PDF en vez de quedar en 0. Pedido de
+    // Maxx 2026-09-08: que solo quede cargado lo que trae el PDF subido.
     let matcheados=0;
+    fullRepoEnviosPend={};
     fullRepoResult.filas.forEach(f=>{
       const u=pendientes_por_inventory[f.inventory_id];
       if(u===undefined)return;
       fullRepoEnviosPend[f.item_id]=Math.ceil(u/f.factor);
       matcheados++;
     });
-    status.textContent=`✅ ${matcheados} publicaciones actualizadas con "${file.name}" (${Object.keys(pendientes_por_inventory).length} códigos en el PDF)`;
+    status.textContent=`✅ ${matcheados} publicaciones actualizadas con "${file.name}" (${Object.keys(pendientes_por_inventory).length} códigos en el PDF) -- el resto quedó en 0`;
     renderFullReposicionTabla();
   }catch(e){status.textContent='❌ '+e.message;}
   qs('full-repo-pdf-input').value='';
