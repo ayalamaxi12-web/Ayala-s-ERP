@@ -1606,7 +1606,7 @@ function goPage(page,el){
   if(page==='dashboard')goVentasTab(ventasTab);
   else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
-  if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded)loadDashboard();}
+  if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
   if(page==='brasil'&&!brLoaded)loadBrasil();
@@ -1644,6 +1644,14 @@ function loadStor(){try{const d=JSON.parse(localStorage.getItem('global_erp_v1')
 function saveStor(){try{localStorage.setItem('global_erp_v1',JSON.stringify({mlToken:S.mlToken,mlToken2:S.mlToken2,mlSellerId:S.mlSellerId,mlSellerId2:S.mlSellerId2,sheetsKey:S.sheetsKey,ecomCookie:S.ecomCookie,ecomEmail:S.ecomEmail,sheets:S.sheets,tolGreen:S.tolGreen,tolYellow:S.tolYellow,shippingThreshold:S.shippingThreshold,shippingCost:S.shippingCost,rules:RULES.map(r=>({key:r.key,pct:r.pct}))}));}catch(e){}}
 function saveBackendUrl(){const url=qs('backend-url-input').value.trim().replace(/\/+$/,'');localStorage.setItem('erp_backend_url',url);window.BACKEND_URL_RUNTIME=url;qs('backend-status').textContent='✅ Guardado: '+url;}
 function getBackendUrl(){return window.BACKEND_URL_RUNTIME||localStorage.getItem('erp_backend_url')||'';}
+// ── Persistencia genérica de "último resultado cargado" por módulo --
+// pedido de Maxx 2026-09-08: mismo patrón que ya existía solo para Ofertas
+// ML (`ofmGuardarUltimoResultado`/`OFM_RESULT_KEY`), generalizado para no
+// copiarlo a mano en cada módulo. Un refresh (F5) no debería dejar la
+// pantalla vacía si ya se había cargado algo -- se restaura sin volver a
+// pedirle nada al backend/Sheets, el usuario decide cuándo re-cargar.
+function guardarUltimoResultado(clave,datos){try{localStorage.setItem('ult_'+clave,JSON.stringify({datos,ts:Date.now()}));}catch(e){}}
+function restaurarUltimoResultado(clave){try{const c=JSON.parse(localStorage.getItem('ult_'+clave)||'null');return c?c.datos:null;}catch(e){return null;}}
 async function testBackend(){const url=getBackendUrl();if(!url){qs('backend-status').textContent='⚠ Ingresá la URL primero';return;}qs('backend-status').textContent='● Testeando...';try{const res=await fetch(url+'/health',{signal:AbortSignal.timeout(5000)});const d=await res.json();qs('backend-status').textContent='✅ Backend online · '+d.time;}catch(e){qs('backend-status').textContent='❌ No se pudo conectar: '+e.message;}}
 
 // ── CATS ──
@@ -4196,10 +4204,14 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
       fetch(`${bu}/rentabilidad/historico/ecom`).then(r=>{if(!r.ok)throw new Error(`Ecom: status ${r.status}`);return r.json();}),
     ]);
     allSalesData=tac.map(mapVentaTacticaOut).concat(eco.map(mapVentaEcomOut));
+    guardarUltimoResultado('dashboard',allSalesData);
   }catch(e){
     qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">No se pudo cargar el histórico del backend.<br><small>${e.message}</small></span></div>`;
     return;
   }
+  _dashFinalizarCarga();
+}
+function _dashFinalizarCarga(){
   if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
 // ── "hist" (histórico, sin tocar) vs "vivo" (pestaña nueva 2026-08-19) --
 // accessors chicos en vez de duplicar cada función entera. ──
