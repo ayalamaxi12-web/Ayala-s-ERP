@@ -145,6 +145,19 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:rgba(0,157,188,.05);}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;}
 .card-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:12px;}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;}
+.ofm-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:'DM Mono',monospace;display:flex;flex-direction:column;gap:6px;}
+.ofm-card:hover{border-color:var(--accent);}
+.ofm-card .ofm-card-titulo{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+.ofm-card .ofm-card-sub{font-size:9px;color:var(--text3);display:flex;gap:8px;flex-wrap:wrap;}
+.ofm-card .ofm-card-precios{display:flex;align-items:baseline;gap:8px;margin-top:2px;}
+.ofm-card .ofm-card-precio-normal{font-size:11px;color:var(--text3);text-decoration:line-through;}
+.ofm-card .ofm-card-precio-oferta{font-size:16px;color:var(--accent);font-weight:700;}
+.ofm-card .ofm-card-desc{font-size:10px;color:var(--green);font-weight:700;}
+.ofm-card .ofm-card-fila{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text2);border-top:1px solid var(--border);padding-top:6px;margin-top:2px;}
+.ofm-card .ofm-card-margen{font-size:13px;font-weight:700;}
+.ofm-card .ofm-card-acciones{display:flex;gap:6px;align-items:center;margin-top:4px;}
+.ofm-card-panel{grid-column:1/-1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;}
 .field{margin-bottom:10px;}
 .field label{display:block;font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'DM Mono',monospace;}
 .field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace;}
@@ -1258,17 +1271,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <span id="ofm-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
 
-  <div class="table-wrap" id="ofm-table-wrap" style="display:none">
-    <table id="ofm-table">
-      <thead><tr>
-        <th>Publicación</th><th>MLA</th><th>SKU</th><th>Categoría</th><th>Tipo oferta</th>
-        <th>Precio normal</th><th>Precio oferta</th><th>% Desc.</th><th>Cuotas</th>
-        <th title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas (CUOTAS_PCT_ML) -- comparado contra el precio de oferta (lo que paga el cliente), no contra el tachado">PM esperado</th><th title="Precio de oferta vs. PM esperado">Dif. vs PM</th>
-        <th>Margen $</th><th>Margen %</th><th>Gestionar</th><th></th>
-      </tr></thead>
-      <tbody id="ofm-tbody"></tbody>
-    </table>
-    <div class="pagination" id="ofm-pag"></div>
+  <div id="ofm-table-wrap" style="display:none">
+    <div class="cards-grid" id="ofm-tbody"></div>
   </div>
 
   <div style="margin-top:24px">
@@ -3038,6 +3042,11 @@ const OFM={
   impChequePct:1.2, iibbPct:5,
   usarComision:true, usarCostoFijo:true, usarCuotas:true, usarEnvio:true, usarImpCheque:true, usarIibb:true,
   tc:0, umbral:10,
+  // Default del % de tachado (item 17, pedido de Natalia 2026-09-09) --
+  // antes 25 hardcodeado en cada fila del panel "Gestionar"; ahora
+  // configurable acá y cada fila arranca con este valor (sigue editable
+  // por publicación).
+  inflacionDefaultPct:25,
 };
 function ofmPorTramo(precio,tramos){for(const t of tramos){const techo=t[0],monto=t[1];if(techo===null||precio<techo)return monto;}return 0;}
 function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
@@ -3076,6 +3085,7 @@ function ofmRenderPanel(){
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarIibb?'checked':''} onchange="OFM.usarIibb=this.checked;ofmCfgSave();ofmRender()">IIBB<input type="text" value="${OFM.iibbPct}" onchange="OFM.iibbPct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:30px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
       <span style="display:flex;gap:4px;align-items:center">TC:<input type="text" id="ofm-tc" placeholder="${OFM.tc||'BNA auto'}" oninput="OFM.tc=parseFloat(this.value.replace(',','.'))||0;ofmRender()" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;outline:none"></span>
       <span style="display:flex;gap:4px;align-items:center">Umbral alerta margen:<input type="text" value="${OFM.umbral}" onchange="OFM.umbral=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
+      <span style="display:flex;gap:4px;align-items:center" title="Default del % de tachado al abrir el panel Gestionar de una publicación -- item 17 de Natalia, sigue editable por publicación">Tachado por defecto:<input type="text" value="${OFM.inflacionDefaultPct}" onchange="OFM.inflacionDefaultPct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
     </div>
     <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
       <span style="font-weight:700;color:var(--accent)">Comisión por categoría (domain_id ML):</span>
@@ -3191,6 +3201,13 @@ function ofmPrecioEsperadoPM(f){
 }
 function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento propio';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'Campaña propia';return'Campaña de ML'+(f.nombre_campana?` (${f.nombre_campana})`:'');}
 function ofmTipoFiltro(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'PRICE_DISCOUNT';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'SELLER_CAMPAIGN';return'ML';}
+// Tag visual por tipo de oferta -- pedido de Natalia (item 8 de su lista,
+// 2026-09-09): antes era solo texto plano (ofmTipoLabel).
+function ofmTipoBadge(f){
+  const tipo=ofmTipoFiltro(f);
+  const clase=tipo==='PRICE_DISCOUNT'?'badge-green':tipo==='SELLER_CAMPAIGN'?'badge-blue':'badge-orange';
+  return`<span class="badge ${clase}" title="${(f.nombre_campana||'').replace(/"/g,'&quot;')}">${ofmTipoLabel(f)}</span>`;
+}
 function ofmRender(){
   if(!ofmResult){ofmReanclarPanelAbierto();return;}
   const tc=OFM.tc||ofmResult.tc||1;
@@ -3242,23 +3259,34 @@ function ofmRender(){
     const m=f._margen;
     const margenColor=!m||m.margenPct===null?'var(--text2)':m.margenPct*100<OFM.umbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
     const link=f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`;
-    return`<tr data-item-id="${f.item_id}">
-      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f.titulo||'').replace(/"/g,'&quot;')}">${f.titulo||''}</td>
-      <td><a href="${link}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
-      <td>${f.sku||f.sku_ml||'<span style="color:var(--red)">sin SKU</span>'}</td>
-      <td style="font-size:9px;color:var(--text3)">${OFM_DOMAIN_LABELS[f.domain_id]||f.domain_id||'—'}</td>
-      <td style="font-size:9px">${ofmTipoLabel(f)}</td>
-      <td style="text-align:right">$${fmtN(Math.round(f.precio_normal||0))}</td>
-      <td style="text-align:right;color:var(--accent)">$${fmtN(Math.round(f.precio_oferta||0))}</td>
-      <td style="text-align:right">${f.descuento_pct!=null?f.descuento_pct.toFixed(1)+'%':'—'}</td>
-      <td style="text-align:center">${f.cuotas_ofrecidas||'—'}</td>
-      <td style="text-align:right">${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'<span style="color:var(--text3)">sin PM</span>'}</td>
-      <td style="text-align:right;color:${f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5)?'var(--red)':'var(--text2)'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</td>
-      <td style="text-align:right;color:${margenColor}">${m&&m.margenPct!==null?'$'+fmtN(Math.round(m.margen)):'—'}</td>
-      <td style="text-align:right;color:${margenColor};font-weight:600">${m&&m.margenPct!==null?(m.margenPct*100).toFixed(1)+'%':(f.incidencia||'—')}</td>
-      <td style="text-align:center"><button class="btn-xs" onclick="ofmToggleGestionar(this,'${f.item_id}')">⚙ Gestionar</button></td>
-      <td><a href="${link}" target="_blank" style="color:var(--text3)">🔗</a></td>
-    </tr>`;
+    const pmDifiere=f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5);
+    return`<div class="ofm-card" data-item-id="${f.item_id}">
+      <div class="ofm-card-titulo" title="${(f.titulo||'').replace(/"/g,'&quot;')}">${f.titulo||''}</div>
+      <div class="ofm-card-sub">
+        <a href="${link}" target="_blank" style="color:var(--accent)">${f.item_id}</a>
+        <span>${f.sku||f.sku_ml||'<span style="color:var(--red)">sin SKU</span>'}</span>
+        <span style="color:var(--text3)">${OFM_DOMAIN_LABELS[f.domain_id]||f.domain_id||'—'}</span>
+        ${ofmTipoBadge(f)}
+      </div>
+      <div class="ofm-card-precios">
+        <span class="ofm-card-precio-normal">$${fmtN(Math.round(f.precio_normal||0))}</span>
+        <span class="ofm-card-precio-oferta">$${fmtN(Math.round(f.precio_oferta||0))}</span>
+        <span class="ofm-card-desc">${f.descuento_pct!=null?'-'+f.descuento_pct.toFixed(1)+'%':'—'}</span>
+        ${f.cuotas_ofrecidas?`<span class="badge badge-blue">${f.cuotas_ofrecidas}x</span>`:'<span class="badge badge-gray">Contado</span>'}
+      </div>
+      <div class="ofm-card-fila">
+        <span title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota (CUOTAS_PCT_ML), comparado contra el precio de oferta">PM esperado: <b style="color:var(--text)">${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'sin PM'}</b></span>
+        <span class="badge ${pmDifiere?'badge-red':'badge-gray'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</span>
+      </div>
+      <div class="ofm-card-fila">
+        <span>Margen</span>
+        <span class="ofm-card-margen" style="color:${margenColor}">${m&&m.margenPct!==null?fmtN(Math.round(m.margen))+' ('+(m.margenPct*100).toFixed(1)+'%)':(f.incidencia||'—')}</span>
+      </div>
+      <div class="ofm-card-acciones">
+        <button class="btn-xs" onclick="ofmToggleGestionar(this,'${f.item_id}')">⚙ Gestionar</button>
+        <a href="${link}" target="_blank" style="color:var(--text3);font-size:11px">🔗 Ver en ML</a>
+      </div>
+    </div>`;
   }).join('');
   filas.forEach(f=>{ofmFilaPorId[f.item_id]=f;});
   document.querySelectorAll('.ofm-gestionar-row').forEach(row=>row.remove());
@@ -3270,15 +3298,29 @@ function ofmRender(){
 // directamente nunca se enteraba de nada porque vive fuera de esa tabla.
 // `ofmItemAbierto`/`ofmPromocionesCache` reconstruyen o refrescan el panel
 // después de cada `ofmRender()`, sin pedir de nuevo las promociones a ML.
+// El panel "Gestionar" se cuelga tanto de filas de tabla (<tr>, la tabla
+// de "Detectar publicaciones" de Ayala Core) como de las tarjetas de Ofertas
+// ML (.ofm-card, div) -- `_ofmCrearPanelTras` arma el wrapper correcto
+// según el tipo de contenedor que se le pasa, para no duplicar esta lógica
+// en los dos lugares que llaman a ofmToggleGestionar.
+function _ofmCrearPanelTras(contenedor,itemId,contenidoInicial){
+  const esFila=contenedor.tagName==='TR';
+  const row=document.createElement(esFila?'tr':'div');
+  row.className='ofm-gestionar-row';
+  if(esFila){
+    row.innerHTML=`<td colspan="${contenedor.cells.length}" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${itemId}">${contenidoInicial}</td>`;
+  }else{
+    row.innerHTML=`<div class="ofm-card-panel" id="ofm-gestionar-${itemId}">${contenidoInicial}</div>`;
+  }
+  contenedor.after(row);
+  return row;
+}
 function ofmReanclarPanelAbierto(){
   if(!ofmItemAbierto||!ofmPromocionesCache[ofmItemAbierto])return;
   if(qs('ofm-gestionar-'+ofmItemAbierto)){ofmRenderGestionarPanel(ofmItemAbierto,ofmPromocionesCache[ofmItemAbierto]);return;}
-  const filaTr=document.querySelector(`#ofm-tbody tr[data-item-id="${ofmItemAbierto}"]`);
-  if(!filaTr){ofmItemAbierto=null;return;}
-  const row=document.createElement('tr');
-  row.className='ofm-gestionar-row';
-  row.innerHTML=`<td colspan="${filaTr.cells.length}" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${ofmItemAbierto}"></td>`;
-  filaTr.after(row);
+  const contenedor=document.querySelector(`#ofm-tbody [data-item-id="${ofmItemAbierto}"]`);
+  if(!contenedor){ofmItemAbierto=null;return;}
+  _ofmCrearPanelTras(contenedor,ofmItemAbierto,'');
   ofmRenderGestionarPanel(ofmItemAbierto,ofmPromocionesCache[ofmItemAbierto]);
 }
 
@@ -3287,19 +3329,12 @@ function ofmReanclarPanelAbierto(){
 // ML"). A propósito NO hay botón masivo acá -- cada acción es un clic por
 // publicación, con confirmación y guardrail de margen. ──
 async function ofmToggleGestionar(btn,itemId){
-  const tr=btn.closest('tr');
-  const next=tr.nextElementSibling;
+  const contenedor=btn.closest('tr, .ofm-card');
+  const next=contenedor.nextElementSibling;
   if(next&&next.classList.contains('ofm-gestionar-row')){next.remove();ofmItemAbierto=null;return;}
   document.querySelectorAll('.ofm-gestionar-row').forEach(x=>x.remove());
   ofmItemAbierto=itemId;
-  const row=document.createElement('tr');
-  row.className='ofm-gestionar-row';
-  // colspan dinámico (antes 13 fijo) -- reutilizado desde Ayala Core
-  // 2026-09-04 (Maxx: "quiero que sea igual que como se ven en Ofertas
-  // ML"), cuya tabla de "Detectar publicaciones" tiene otra cantidad de
-  // columnas.
-  row.innerHTML=`<td colspan="${tr.cells.length}" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${itemId}">Cargando promociones activas...</td>`;
-  tr.after(row);
+  _ofmCrearPanelTras(contenedor,itemId,'Cargando promociones activas...');
   await ofmCargarPromociones(itemId);
 }
 async function ofmCargarPromociones(itemId){
@@ -3405,7 +3440,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     ${costoEnvioHtml}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
       <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás -- ya con cuotas/envío sumado si aplica)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${precioPmAjustado}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <span>Descuento % <span style="color:var(--text3);font-size:8px">(el mismo % que ves en Promociones de ML)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="25" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
+      <span>Descuento % <span style="color:var(--text3);font-size:8px">(el mismo % que ves en Promociones de ML)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="${OFM.inflacionDefaultPct}" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <span id="ofm-camp-tachado-${itemId}" style="color:var(--text3);font-size:9px"></span>
       <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarCampana('${itemId}')">📢 Meter en campaña</button>
     </div>
