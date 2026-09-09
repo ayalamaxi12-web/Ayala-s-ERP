@@ -1249,7 +1249,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <option value="PRICE_DISCOUNT">Descuento propio</option>
     </select>
     <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)"><input type="checkbox" id="ofm-filter-bajo-umbral" onchange="ofmRender()">Solo bajo umbral</label>
-    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)" title="Tachado vs. lo que pide el PM: precio base si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas"><input type="checkbox" id="ofm-filter-dif-pm" onchange="ofmRender()">Solo con diferencia vs. PM</label>
+    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)" title="Precio de oferta (lo que paga el cliente) vs. lo que pide el PM: precio base si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas"><input type="checkbox" id="ofm-filter-dif-pm" onchange="ofmRender()">Solo con diferencia vs. PM</label>
     <select id="ofm-sort" class="fi" onchange="ofmRender()">
       <option value="margen-asc">Margen % ↑</option>
       <option value="margen-desc">Margen % ↓</option>
@@ -1263,7 +1263,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <thead><tr>
         <th>Publicación</th><th>MLA</th><th>SKU</th><th>Categoría</th><th>Tipo oferta</th>
         <th>Precio normal</th><th>Precio oferta</th><th>% Desc.</th><th>Cuotas</th>
-        <th title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas (CUOTAS_PCT_ML)">PM esperado (tachado)</th><th>Dif. vs PM</th>
+        <th title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas (CUOTAS_PCT_ML) -- comparado contra el precio de oferta (lo que paga el cliente), no contra el tachado">PM esperado</th><th title="Precio de oferta vs. PM esperado">Dif. vs PM</th>
         <th>Margen $</th><th>Margen %</th><th>Gestionar</th><th></th>
       </tr></thead>
       <tbody id="ofm-tbody"></tbody>
@@ -3165,13 +3165,17 @@ function ofmTab(cuenta){
   ofmRender();
 }
 // Filtro "diferencia vs PM" -- pedido de Maxx 2026-09-09: marcar ofertas
-// activas cuyo tachado (precio_normal) no coincide con lo que pide el PM.
-// Cuota simple (sin cuotas_ofrecidas) -> tachado esperado = precio base del
-// PM tal cual. Con cuotas -> + el % REAL que cobra ML por esa cuota
-// (CUOTAS_PCT_ML, no la tabla RULES de arriba -- esa es un margen de
-// seguridad propio de otra pantalla, aclarado por Maxx: "la regla es subir
-// lineal lo que me cobra ML en %"). Sin PM o sin % conocido para esa
-// cantidad de cuotas -> null, no se puede chequear esa fila.
+// activas cuyo precio de oferta (lo que paga el cliente) no coincide con
+// lo que pide el PM. NO contra el tachado (precio_normal) -- confirmado por
+// Maxx que el tachado se infla a propósito como "teatro" para mostrar más
+// descuento, así que compararlo daría diferencia todo el tiempo sin ser un
+// problema real; "el que importa es el precio final al cliente".
+// Cuota simple (sin cuotas_ofrecidas) -> esperado = precio base del PM tal
+// cual. Con cuotas -> + el % REAL que cobra ML por esa cuota (CUOTAS_PCT_ML,
+// no la tabla RULES de arriba -- esa es un margen de seguridad propio de
+// otra pantalla, aclarado por Maxx: "la regla es subir lineal lo que me
+// cobra ML en %"). Sin PM o sin % conocido para esa cantidad de cuotas ->
+// null, no se puede chequear esa fila.
 function ofmPrecioEsperadoPM(f){
   const pm=S.pmData[normSku(f.sku||'')];
   if(!pm||!pm.ml)return null;
@@ -3198,8 +3202,12 @@ function ofmRender(){
       const costoARS=f._costoUnitSinIva*tc;
       margen=ofmMargenAt(f.precio_oferta,f._ivaFactor,costoARS,f.domain_id,f.cuotas_ofrecidas);
     }
+    // Contra precio_oferta (lo que paga el cliente), NO precio_normal --
+    // el tachado se infla a propósito como "teatro" para mostrar más
+    // descuento (confirmado por Maxx 2026-09-09), así que compararlo
+    // contra el PM daría diferencia todo el tiempo sin ser un problema real.
     const pmEsperado=ofmPrecioEsperadoPM(f);
-    const pmDiffPct=(pmEsperado&&f.precio_normal)?(f.precio_normal-pmEsperado)/pmEsperado*100:null;
+    const pmDiffPct=(pmEsperado&&f.precio_oferta)?(f.precio_oferta-pmEsperado)/pmEsperado*100:null;
     return{...f,_margen:margen,_pmEsperado:pmEsperado,_pmDiffPct:pmDiffPct};
   });
 
