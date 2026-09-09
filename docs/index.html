@@ -158,6 +158,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ofm-card .ofm-card-margen{font-size:13px;font-weight:700;}
 .ofm-card .ofm-card-acciones{display:flex;gap:6px;align-items:center;margin-top:4px;}
 .ofm-card-panel{grid-column:1/-1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;}
+.ofm-card.ofm-card-alerta{border-color:var(--red);}
+.ofm-card-alerta-msg{font-size:9px;color:var(--red);font-weight:700;background:rgba(255,107,107,.1);border-radius:4px;padding:3px 6px;}
 .field{margin-bottom:10px;}
 .field label{display:block;font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'DM Mono',monospace;}
 .field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace;}
@@ -1251,6 +1253,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="stat-card"><div class="stat-value price-bad" id="ofm-bajo-umbral">0</div><div class="stat-label">Bajo umbral</div></div>
     <div class="stat-card"><div class="stat-value" style="color:var(--text2)" id="ofm-incidencias">0</div><div class="stat-label">Sin costo/IVA Táctica</div></div>
     <div class="stat-card"><div class="stat-value price-bad" id="ofm-dif-pm">0</div><div class="stat-label">Difieren del PM</div></div>
+    <div class="stat-card"><div class="stat-value price-bad" id="ofm-alertas-estado">0</div><div class="stat-label">Inactivas y/o sin stock</div></div>
   </div>
 
   <div class="erp-filters" id="ofm-filters" style="display:none">
@@ -3203,6 +3206,19 @@ function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento pr
 function ofmTipoFiltro(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'PRICE_DISCOUNT';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'SELLER_CAMPAIGN';return'ML';}
 // Tag visual por tipo de oferta -- pedido de Natalia (item 8 de su lista,
 // 2026-09-09): antes era solo texto plano (ofmTipoLabel).
+// Alertas 10/11/12 de Natalia (2026-09-09): MLA inactivado y/o sin stock
+// mientras sigue en oferta -- combinadas en un solo mensaje (item 12),
+// null si no aplica ninguna. `f.estado` viene de ML tal cual (`active`
+// cuando está bien, cualquier otro valor -- `paused`/`closed`/etc. -- es
+// la alerta); `stock_disponible===0` es sin stock. Ambos pueden faltar
+// (null) si el batch de /items no los devolvió -- no se alerta en ese caso,
+// no se inventa un estado.
+function ofmAlertaTexto(f){
+  const partes=[];
+  if(f.estado!=null&&f.estado!=='active')partes.push(`MLA ${f.estado}${f.sub_estado?' ('+f.sub_estado+')':''}`);
+  if(f.stock_disponible===0)partes.push('sin stock');
+  return partes.length?partes.join(' + '):null;
+}
 function ofmTipoBadge(f){
   const tipo=ofmTipoFiltro(f);
   const clase=tipo==='PRICE_DISCOUNT'?'badge-green':tipo==='SELLER_CAMPAIGN'?'badge-blue':'badge-orange';
@@ -3235,12 +3251,14 @@ function ofmRender(){
   let incidenciasCount=filas.filter(f=>f.incidencia).length;
   let bajoUmbralCount=filas.filter(f=>f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<OFM.umbral).length;
   let difPMCount=filas.filter(f=>f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5)).length;
+  let alertaEstadoCount=filas.filter(f=>ofmAlertaTexto(f)).length;
   qs('ofm-total').textContent=filas.length;
   const conMargen=filas.filter(f=>f._margen&&f._margen.margenPct!==null);
   qs('ofm-margen-prom').textContent=conMargen.length?(conMargen.reduce((s,f)=>s+f._margen.margenPct,0)/conMargen.length*100).toFixed(1)+'%':'—';
   qs('ofm-bajo-umbral').textContent=bajoUmbralCount;
   qs('ofm-incidencias').textContent=incidenciasCount;
   qs('ofm-dif-pm').textContent=difPMCount;
+  qs('ofm-alertas-estado').textContent=alertaEstadoCount;
 
   if(search)filas=filas.filter(f=>(f.titulo||'').toLowerCase().includes(search)||(f.sku||'').toLowerCase().includes(search)||(f.item_id||'').toLowerCase().includes(search));
   if(filtroTipo)filas=filas.filter(f=>ofmTipoFiltro(f)===filtroTipo);
@@ -3260,7 +3278,9 @@ function ofmRender(){
     const margenColor=!m||m.margenPct===null?'var(--text2)':m.margenPct*100<OFM.umbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
     const link=f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`;
     const pmDifiere=f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5);
-    return`<div class="ofm-card" data-item-id="${f.item_id}">
+    const alerta=ofmAlertaTexto(f);
+    return`<div class="ofm-card${alerta?' ofm-card-alerta':''}" data-item-id="${f.item_id}">
+      ${alerta?`<div class="ofm-card-alerta-msg">⚠ ${alerta}</div>`:''}
       <div class="ofm-card-titulo" title="${(f.titulo||'').replace(/"/g,'&quot;')}">${f.titulo||''}</div>
       <div class="ofm-card-sub">
         <a href="${link}" target="_blank" style="color:var(--accent)">${f.item_id}</a>

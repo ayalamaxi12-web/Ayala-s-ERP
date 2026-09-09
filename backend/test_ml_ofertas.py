@@ -231,6 +231,33 @@ def test_ofertas_activas_toma_la_de_mejor_precio_si_esta_en_dos_campanas():
     assert incidencias == []
 
 
+def test_ofertas_activas_trae_estado_y_stock_para_alertas():
+    # Alertas 10/11/12 de Natalia (2026-09-09): publicacion inactivada y/o
+    # sin stock mientras esta en oferta -- mismo lote de /items, sin pedido
+    # aparte.
+    def fake_get(url, params, headers):
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C-1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "X"}]}
+        if "seller-promotions/promotions/C-1/items" in url:
+            return {"results": [{"id": "MLA1", "status": "started", "price": 9000, "original_price": 10000}],
+                    "paging": {"total": 1, "searchAfter": None}}
+        if url.endswith("/items"):
+            item = _item_ofertas("MLA1", "SKU-A", "MLA-TONERS")
+            item.update({"status": "paused", "sub_status": "out_of_stock", "available_quantity": 0})
+            return [{"body": item}]
+        raise AssertionError(url)
+
+    ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    costo = _CostoProviderFalso({"SKU-A": Decimal(10)})
+    iva = _IvaProviderFalso({"SKU-A": Decimal("1.21")})
+
+    filas, _ = ofertas_activas(ml, costo, iva, cuentas=["IT"], tc=Decimal(1000))
+
+    assert filas[0].estado == "paused"
+    assert filas[0].sub_estado == "out_of_stock"
+    assert filas[0].stock_disponible == 0
+
+
 def test_ofertas_activas_marca_incidencia_sin_costo_tactica():
     def fake_get(url, params, headers):
         if "seller-promotions/users" in url:

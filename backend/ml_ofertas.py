@@ -356,7 +356,12 @@ class MLOfertasClient(MLFullClient):
         **`user_product_id` sumado 2026-09-04** para que
         `ayala_core.resolver_condicion_pago` pueda pedir la familia de
         hermanas (`items_de_producto`) cuando el tag de cuotas no está --
-        ver su docstring."""
+        ver su docstring.
+
+        **`status`/`sub_status`/`available_quantity` sumados 2026-09-09**
+        (alertas 10/11/12 de Natalia: MLA inactivado y/o sin stock estando
+        en oferta) -- mismo lote de `/items` que ya se pedía, sin llamada
+        aparte."""
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         salida: list[dict] = []
         total = len(item_ids)
@@ -366,7 +371,7 @@ class MLOfertasClient(MLFullClient):
             lote = item_ids[i:i + 20]
             d = self._get(
                 "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes,user_product_id"},
+                {"ids": ",".join(lote), "attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes,user_product_id,status,sub_status,available_quantity"},
                 headers,
             )
             for entrada in (d or []):
@@ -1191,6 +1196,13 @@ class FilaOferta:
     cuotas_ofrecidas: int | None
     margen: ResultadoMargenOferta | None  # None si hay incidencia (sin poder calcular)
     incidencia: str | None
+    # Alertas 10/11/12 de Natalia (2026-09-09): estado real de la publicación
+    # y stock disponible mientras está en oferta -- `estado`/`sub_estado` son
+    # los `status`/`sub_status` reales de ML (ej. "paused", "closed",
+    # "out_of_stock"), `stock_disponible` es `available_quantity` tal cual.
+    estado: str | None
+    sub_estado: str | None
+    stock_disponible: int | None
 
 
 _CUOTAS_TAG_RE = re.compile(r"^cuota-simple-(\d+)$|^(\d+)x_campaign$")
@@ -1269,6 +1281,8 @@ def _armar_fila(
         domain_id=domain_id, tipo_oferta=tipo, nombre_campana=nombre_campana, precio_normal=precio_normal,
         precio_oferta=precio_oferta, descuento_pct=descuento_pct, cuotas_ofrecidas=cuotas_ofrecidas,
         margen=margen, incidencia=incidencia,
+        estado=detalle.get("status"), sub_estado=detalle.get("sub_status"),
+        stock_disponible=detalle.get("available_quantity"),
     )
     incidencia_dict = {"item_id": item_id, "cuenta": cuenta, "sku": sku_ml, "motivo": incidencia} if incidencia else None
     return fila, incidencia_dict
@@ -1640,6 +1654,7 @@ def _fila_a_dict(f: FilaOferta) -> dict:
         "precio_normal": _num(f.precio_normal), "precio_oferta": _num(f.precio_oferta),
         "descuento_pct": _num(f.descuento_pct), "cuotas_ofrecidas": f.cuotas_ofrecidas,
         "incidencia": f.incidencia,
+        "estado": f.estado, "sub_estado": f.sub_estado, "stock_disponible": f.stock_disponible,
         "margen": None if m is None else {
             "base_sin_iva": _num(m.base_sin_iva), "comision": _num(m.comision),
             "costo_fijo": _num(m.costo_fijo), "cuotas": _num(m.cuotas),
