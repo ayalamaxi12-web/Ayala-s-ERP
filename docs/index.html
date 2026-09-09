@@ -1237,6 +1237,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="stat-card"><div class="stat-value" id="ofm-margen-prom">—</div><div class="stat-label">Margen % promedio</div></div>
     <div class="stat-card"><div class="stat-value price-bad" id="ofm-bajo-umbral">0</div><div class="stat-label">Bajo umbral</div></div>
     <div class="stat-card"><div class="stat-value" style="color:var(--text2)" id="ofm-incidencias">0</div><div class="stat-label">Sin costo/IVA Táctica</div></div>
+    <div class="stat-card"><div class="stat-value price-bad" id="ofm-dif-pm">0</div><div class="stat-label">Difieren del PM</div></div>
   </div>
 
   <div class="erp-filters" id="ofm-filters" style="display:none">
@@ -1248,6 +1249,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <option value="PRICE_DISCOUNT">Descuento propio</option>
     </select>
     <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)"><input type="checkbox" id="ofm-filter-bajo-umbral" onchange="ofmRender()">Solo bajo umbral</label>
+    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)" title="Tachado vs. lo que pide el PM: precio base si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas"><input type="checkbox" id="ofm-filter-dif-pm" onchange="ofmRender()">Solo con diferencia vs. PM</label>
     <select id="ofm-sort" class="fi" onchange="ofmRender()">
       <option value="margen-asc">Margen % ↑</option>
       <option value="margen-desc">Margen % ↓</option>
@@ -1261,6 +1263,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <thead><tr>
         <th>Publicación</th><th>MLA</th><th>SKU</th><th>Categoría</th><th>Tipo oferta</th>
         <th>Precio normal</th><th>Precio oferta</th><th>% Desc.</th><th>Cuotas</th>
+        <th title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas (CUOTAS_PCT_ML)">PM esperado (tachado)</th><th>Dif. vs PM</th>
         <th>Margen $</th><th>Margen %</th><th>Gestionar</th><th></th>
       </tr></thead>
       <tbody id="ofm-tbody"></tbody>
@@ -3161,6 +3164,23 @@ function ofmTab(cuenta){
   ['IT','MT'].forEach(c=>{const b=qs('ofm-tab-'+c);if(b)b.className='btn'+(c===cuenta?' primary':' btn-secondary');});
   ofmRender();
 }
+// Filtro "diferencia vs PM" -- pedido de Maxx 2026-09-09: marcar ofertas
+// activas cuyo tachado (precio_normal) no coincide con lo que pide el PM.
+// Cuota simple (sin cuotas_ofrecidas) -> tachado esperado = precio base del
+// PM tal cual. Con cuotas -> + el % REAL que cobra ML por esa cuota
+// (CUOTAS_PCT_ML, no la tabla RULES de arriba -- esa es un margen de
+// seguridad propio de otra pantalla, aclarado por Maxx: "la regla es subir
+// lineal lo que me cobra ML en %"). Sin PM o sin % conocido para esa
+// cantidad de cuotas -> null, no se puede chequear esa fila.
+function ofmPrecioEsperadoPM(f){
+  const pm=S.pmData[normSku(f.sku||'')];
+  if(!pm||!pm.ml)return null;
+  const n=f.cuotas_ofrecidas;
+  if(!n)return Math.round(pm.ml);
+  const pct=CUOTAS_PCT_ML[n];
+  if(pct===undefined)return null;
+  return Math.round(pm.ml*(1+pct/100));
+}
 function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento propio';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'Campaña propia';return'Campaña de ML'+(f.nombre_campana?` (${f.nombre_campana})`:'');}
 function ofmTipoFiltro(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'PRICE_DISCOUNT';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'SELLER_CAMPAIGN';return'ML';}
 function ofmRender(){
@@ -3169,6 +3189,7 @@ function ofmRender(){
   const search=(qs('ofm-search')?.value||'').toLowerCase();
   const filtroTipo=qs('ofm-filter-tipo')?.value||'';
   const soloBajoUmbral=qs('ofm-filter-bajo-umbral')?.checked;
+  const soloDifPM=qs('ofm-filter-dif-pm')?.checked;
   const sortVal=qs('ofm-sort')?.value||'margen-asc';
 
   let filas=ofmResult.filas.filter(f=>f.cuenta===ofmTabCuenta).map(f=>{
@@ -3177,20 +3198,25 @@ function ofmRender(){
       const costoARS=f._costoUnitSinIva*tc;
       margen=ofmMargenAt(f.precio_oferta,f._ivaFactor,costoARS,f.domain_id,f.cuotas_ofrecidas);
     }
-    return{...f,_margen:margen};
+    const pmEsperado=ofmPrecioEsperadoPM(f);
+    const pmDiffPct=(pmEsperado&&f.precio_normal)?(f.precio_normal-pmEsperado)/pmEsperado*100:null;
+    return{...f,_margen:margen,_pmEsperado:pmEsperado,_pmDiffPct:pmDiffPct};
   });
 
   let incidenciasCount=filas.filter(f=>f.incidencia).length;
   let bajoUmbralCount=filas.filter(f=>f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<OFM.umbral).length;
+  let difPMCount=filas.filter(f=>f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5)).length;
   qs('ofm-total').textContent=filas.length;
   const conMargen=filas.filter(f=>f._margen&&f._margen.margenPct!==null);
   qs('ofm-margen-prom').textContent=conMargen.length?(conMargen.reduce((s,f)=>s+f._margen.margenPct,0)/conMargen.length*100).toFixed(1)+'%':'—';
   qs('ofm-bajo-umbral').textContent=bajoUmbralCount;
   qs('ofm-incidencias').textContent=incidenciasCount;
+  qs('ofm-dif-pm').textContent=difPMCount;
 
   if(search)filas=filas.filter(f=>(f.titulo||'').toLowerCase().includes(search)||(f.sku||'').toLowerCase().includes(search)||(f.item_id||'').toLowerCase().includes(search));
   if(filtroTipo)filas=filas.filter(f=>ofmTipoFiltro(f)===filtroTipo);
   if(soloBajoUmbral)filas=filas.filter(f=>f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<OFM.umbral);
+  if(soloDifPM)filas=filas.filter(f=>f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5));
 
   filas.sort((a,b)=>{
     if(sortVal==='desc-desc')return(b.descuento_pct||0)-(a.descuento_pct||0);
@@ -3214,6 +3240,8 @@ function ofmRender(){
       <td style="text-align:right;color:var(--accent)">$${fmtN(Math.round(f.precio_oferta||0))}</td>
       <td style="text-align:right">${f.descuento_pct!=null?f.descuento_pct.toFixed(1)+'%':'—'}</td>
       <td style="text-align:center">${f.cuotas_ofrecidas||'—'}</td>
+      <td style="text-align:right">${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'<span style="color:var(--text3)">sin PM</span>'}</td>
+      <td style="text-align:right;color:${f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5)?'var(--red)':'var(--text2)'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</td>
       <td style="text-align:right;color:${margenColor}">${m&&m.margenPct!==null?'$'+fmtN(Math.round(m.margen)):'—'}</td>
       <td style="text-align:right;color:${margenColor};font-weight:600">${m&&m.margenPct!==null?(m.margenPct*100).toFixed(1)+'%':(f.incidencia||'—')}</td>
       <td style="text-align:center"><button class="btn-xs" onclick="ofmToggleGestionar(this,'${f.item_id}')">⚙ Gestionar</button></td>
@@ -3237,7 +3265,7 @@ function ofmReanclarPanelAbierto(){
   if(!filaTr){ofmItemAbierto=null;return;}
   const row=document.createElement('tr');
   row.className='ofm-gestionar-row';
-  row.innerHTML=`<td colspan="13" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${ofmItemAbierto}"></td>`;
+  row.innerHTML=`<td colspan="${filaTr.cells.length}" style="background:var(--surface2);padding:12px 16px" id="ofm-gestionar-${ofmItemAbierto}"></td>`;
   filaTr.after(row);
   ofmRenderGestionarPanel(ofmItemAbierto,ofmPromocionesCache[ofmItemAbierto]);
 }
