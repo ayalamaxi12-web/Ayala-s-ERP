@@ -157,7 +157,12 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ofm-card .ofm-card-fila{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text2);border-top:1px solid var(--border);padding-top:6px;margin-top:2px;}
 .ofm-card .ofm-card-margen{font-size:13px;font-weight:700;}
 .ofm-card .ofm-card-acciones{display:flex;gap:6px;align-items:center;margin-top:4px;}
-.ofm-card-panel{grid-column:1/-1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;}
+.ofm-card-panel{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;}
+/* El wrapper (.ofm-gestionar-row) es el hijo directo real del grid -- el
+   grid-column tiene que ir acá, no en .ofm-card-panel (que vive adentro),
+   si no el panel queda apretado en el ancho de una sola tarjeta en vez de
+   ocupar todo el ancho. Bug real reportado por Natalia 2026-09-09. */
+.cards-grid>.ofm-gestionar-row{grid-column:1/-1;}
 .ofm-card.ofm-card-alerta{border-color:var(--red);}
 .ofm-card-alerta-msg{font-size:9px;color:var(--red);font-weight:700;background:rgba(255,107,107,.1);border-radius:4px;padding:3px 6px;}
 .field{margin-bottom:10px;}
