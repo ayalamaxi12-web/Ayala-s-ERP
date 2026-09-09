@@ -1263,6 +1263,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
   <div class="erp-filters" id="ofm-filters" style="display:none">
     <input type="text" id="ofm-search" placeholder="Buscar SKU, título o MLA..." oninput="ofmRender()" style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+    <div class="ms-wrap" id="ms-ofm-pm"><div class="ms-trigger" onclick="toggleMS('ms-ofm-pm')">Todos los PMs</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ofm-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ofm-pm')">Todos</button><button onclick="clearMS('ms-ofm-pm')">Ninguno</button></div></div></div>
+    <div class="ms-wrap" id="ms-ofm-cat"><div class="ms-trigger" onclick="toggleMS('ms-ofm-cat')">Todas las categorías</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ofm-cat')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ofm-cat')">Todos</button><button onclick="clearMS('ms-ofm-cat')">Ninguno</button></div></div></div>
     <select id="ofm-filter-tipo" class="fi" onchange="ofmRender()">
       <option value="">Todos los tipos</option>
       <option value="SELLER_CAMPAIGN">Campaña propia</option>
@@ -3200,11 +3202,20 @@ function ofmPrecioEsperadoPM(f){
   const n=f.cuotas_ofrecidas;
   let p=n?pm.ml*(1+(CUOTAS_PCT_ML[n]||0)/100):pm.ml;
   if(n&&CUOTAS_PCT_ML[n]===undefined)return null;
-  // Mismo ajuste plano que calcExp()/compMargenAt() y el resto del ERP --
-  // no hace falta correr el job de costo de envío real (ese es para margen,
-  // no para el precio esperado): pedido de Maxx 2026-09-09, confirmar que
-  // una publicación que supera el umbral tiene el envío sumado al precio.
-  if(p>=S.shippingThreshold)p+=S.shippingCost;
+  // Corregido 2026-09-09 (Maxx, en vivo, caso real $66.629 en 3 cuotas):
+  // el panel "Gestionar" YA tiene un mecanismo mas preciso para el envio
+  // (costo real por publicacion, ver costo_envio_real/ofmSimularCampana) --
+  // este filtro masivo NO lo tiene disponible (el escaneo en bloque a
+  // proposito no lo trae, es caro por publicacion). Sumar un estimado
+  // plano ($8500, mismo criterio que calcExp() en Verificar ML) generaba
+  // un "PM esperado" mas caro que el numero real que da Gestionar, sin
+  // ser el mismo calculo -- mejor no inventarlo aca: si hay costo real ya
+  // resuelto para esta fila (abriste Gestionar antes) se usa ese, si no,
+  // el envio queda afuera de esta comparacion rapida (el numero preciso
+  // sigue estando en "Gestionar").
+  if(f.costo_envio_real&&f.costo_envio_real.cost_type==='free'){
+    p+=Number(f.costo_envio_real.costo_envio_real)||0;
+  }
   return Math.round(p);
 }
 function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento propio';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'Campaña propia';return'Campaña de ML'+(f.nombre_campana?` (${f.nombre_campana})`:'');}
@@ -3229,6 +3240,12 @@ function ofmTipoBadge(f){
   const clase=tipo==='PRICE_DISCOUNT'?'badge-green':tipo==='SELLER_CAMPAIGN'?'badge-blue':'badge-orange';
   return`<span class="badge ${clase}" title="${(f.nombre_campana||'').replace(/"/g,'&quot;')}">${ofmTipoLabel(f)}</span>`;
 }
+// Filtro por PM/categoría (sectorizado, pedido de Natalia 2026-09-09) --
+// encadena sobre el wrap que ya usa Competidores ML (toggleMSValue/clearMS/
+// selectAllMS ya vienen envueltos una vez ahí), agrega el caso ms-ofm-*.
+const _oTMVOfm=toggleMSValue;toggleMSValue=function(id,v){_oTMVOfm(id,v);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
+const _oCMSOfm=clearMS;clearMS=function(id){_oCMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
+const _oSAMSOfm=selectAllMS;selectAllMS=function(id){_oSAMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
 function ofmRender(){
   if(!ofmResult){ofmReanclarPanelAbierto();return;}
   const tc=OFM.tc||ofmResult.tc||1;
@@ -3265,10 +3282,19 @@ function ofmRender(){
   qs('ofm-dif-pm').textContent=difPMCount;
   qs('ofm-alertas-estado').textContent=alertaEstadoCount;
 
+  // Sectorizado por PM/categoría -- pedido de Natalia 2026-09-09, mismo
+  // patrón ya usado en Competidores ML (S.pmData/getCat(), initMS/getMSValues).
+  const _pmSetOfm=new Set(),_catSetOfm=new Set();
+  filas.forEach(f=>{const p=S.pmData[normSku(f.sku||'')];if(p&&p.pmName)_pmSetOfm.add(p.pmName);_catSetOfm.add(getCat(f.sku||'')||'Sin categoría');});
+  initMS('ms-ofm-pm',_pmSetOfm);initMS('ms-ofm-cat',_catSetOfm);
+  const fPMOfm=getMSValues('ms-ofm-pm'),fCatOfm=getMSValues('ms-ofm-cat');
+
   if(search)filas=filas.filter(f=>(f.titulo||'').toLowerCase().includes(search)||(f.sku||'').toLowerCase().includes(search)||(f.item_id||'').toLowerCase().includes(search));
   if(filtroTipo)filas=filas.filter(f=>ofmTipoFiltro(f)===filtroTipo);
   if(soloBajoUmbral)filas=filas.filter(f=>f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<OFM.umbral);
   if(soloDifPM)filas=filas.filter(f=>f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5));
+  if(fPMOfm)filas=filas.filter(f=>{const p=S.pmData[normSku(f.sku||'')];return p&&fPMOfm.includes(p.pmName);});
+  if(fCatOfm)filas=filas.filter(f=>fCatOfm.includes(getCat(f.sku||'')||'Sin categoría'));
 
   filas.sort((a,b)=>{
     if(sortVal==='desc-desc')return(b.descuento_pct||0)-(a.descuento_pct||0);
