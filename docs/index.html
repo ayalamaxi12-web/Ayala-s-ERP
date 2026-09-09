@@ -3334,7 +3334,11 @@ async function ofmToggleGestionar(btn,itemId){
   if(next&&next.classList.contains('ofm-gestionar-row')){next.remove();ofmItemAbierto=null;return;}
   document.querySelectorAll('.ofm-gestionar-row').forEach(x=>x.remove());
   ofmItemAbierto=itemId;
-  _ofmCrearPanelTras(contenedor,itemId,'Cargando promociones activas...');
+  const panel=_ofmCrearPanelTras(contenedor,itemId,'Cargando promociones activas...');
+  // Bug real 2026-09-09 (Natalia): al abrir "Gestionar" el cuadro se
+  // expandía pero la pantalla no lo acompañaba -- quedaba fuera de la
+  // vista, parecía que se había perdido la información.
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
   await ofmCargarPromociones(itemId);
 }
 async function ofmCargarPromociones(itemId){
