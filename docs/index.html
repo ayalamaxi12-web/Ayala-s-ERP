@@ -3180,10 +3180,14 @@ function ofmPrecioEsperadoPM(f){
   const pm=S.pmData[normSku(f.sku||'')];
   if(!pm||!pm.ml)return null;
   const n=f.cuotas_ofrecidas;
-  if(!n)return Math.round(pm.ml);
-  const pct=CUOTAS_PCT_ML[n];
-  if(pct===undefined)return null;
-  return Math.round(pm.ml*(1+pct/100));
+  let p=n?pm.ml*(1+(CUOTAS_PCT_ML[n]||0)/100):pm.ml;
+  if(n&&CUOTAS_PCT_ML[n]===undefined)return null;
+  // Mismo ajuste plano que calcExp()/compMargenAt() y el resto del ERP --
+  // no hace falta correr el job de costo de envío real (ese es para margen,
+  // no para el precio esperado): pedido de Maxx 2026-09-09, confirmar que
+  // una publicación que supera el umbral tiene el envío sumado al precio.
+  if(p>=S.shippingThreshold)p+=S.shippingCost;
+  return Math.round(p);
 }
 function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento propio';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'Campaña propia';return'Campaña de ML'+(f.nombre_campana?` (${f.nombre_campana})`:'');}
 function ofmTipoFiltro(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'PRICE_DISCOUNT';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'SELLER_CAMPAIGN';return'ML';}
