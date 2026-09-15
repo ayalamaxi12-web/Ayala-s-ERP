@@ -2,14 +2,20 @@
 falso, `EcomFullAdapter` recibe un cliente GraphQL falso. Mismo patrón que
 `rentabilidad/tests/` (fetch_fn/post_fn inyectable, ver
 `rentabilidad/ingesta_ecom_api.py`)."""
+import gspread
 import pytest
 
+import ml_full
 from ml_full import (
     EcomFullAdapter,
+    FilaConciliacion,
     ItemFullML,
     MLFullClient,
+    ResultadoConciliacion,
+    _col_letra,
     conciliar,
     extraer_items_full,
+    registrar_historial_conciliacion,
 )
 
 _FAKE_TOKEN_FN = lambda cuenta: "FAKE-TOKEN"
@@ -637,3 +643,122 @@ def test_conciliar_variante_sin_match_en_ecom_deja_incidencia_propia():
         "item_id": "MLA1", "cuenta": "IT", "sku_ml": "SKU-ML-VAR",
         "motivo": "VARIANTE_SIN_MATCH_EN_ECOM_FACTOR_1_ASUMIDO",
     }]
+
+
+# ── Historial de conciliación en Sheets (pedido de Maxx 2026-09-15) ──
+
+def test_col_letra():
+    assert _col_letra(1) == "A"
+    assert _col_letra(2) == "B"
+    assert _col_letra(26) == "Z"
+    assert _col_letra(27) == "AA"
+    assert _col_letra(28) == "AB"
+
+
+class _FakeWorksheet:
+    def __init__(self, valores=None, title="Sheet1"):
+        self._valores = valores or []
+        self.title = title
+        self.updates = []
+
+    def get_all_values(self):
+        return [list(f) for f in self._valores]
+
+    def update(self, values, range_name):
+        self.updates.append({"range_name": range_name, "values": values})
+
+    def update_title(self, nuevo):
+        self.title = nuevo
+
+
+class _FakeSpreadsheet:
+    def __init__(self, title):
+        self.title = title
+        self.url = f"https://sheets.example/{title}"
+        self._hojas = [_FakeWorksheet(title="Sheet1")]
+        self.compartido_con = []
+
+    def worksheet(self, nombre):
+        for h in self._hojas:
+            if h.title == nombre:
+                return h
+        raise gspread.WorksheetNotFound(nombre)
+
+    @property
+    def sheet1(self):
+        return self._hojas[0]
+
+    def share(self, email, perm_type, role, notify):
+        self.compartido_con.append(email)
+
+
+class _FakeGS:
+    def __init__(self):
+        self._por_titulo = {}
+        self.creados = []
+
+    def open(self, title):
+        if title not in self._por_titulo:
+            raise gspread.SpreadsheetNotFound(title)
+        return self._por_titulo[title]
+
+    def create(self, title):
+        ss = _FakeSpreadsheet(title)
+        self._por_titulo[title] = ss
+        self.creados.append(title)
+        return ss
+
+
+def _resultado(*filas):
+    return ResultadoConciliacion(
+        filas=[FilaConciliacion(sku=sku, stock_ml=0, stock_ecom=0, diferencia=dif) for sku, dif in filas],
+        incidencias_sku=[], incidencias_sin_vincular=[], skus_no_en_ecom=[],
+    )
+
+
+def test_registrar_historial_crea_el_sheet_y_lo_comparte_la_primera_vez(monkeypatch):
+    fake_gs = _FakeGS()
+    monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
+
+    registrar_historial_conciliacion(_resultado(("SKU-A", 3), ("SKU-B", -2)))
+
+    assert ml_full.HIST_CONCILIACION_TITULO in fake_gs.creados
+    ss = fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO]
+    assert ss.compartido_con == [ml_full.HIST_CONCILIACION_COMPARTIR_CON]
+    assert ss.sheet1.title == "Historial"
+
+
+def test_registrar_historial_columna_a_y_columna_nueva_alineadas_por_sku(monkeypatch):
+    fake_gs = _FakeGS()
+    monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
+
+    registrar_historial_conciliacion(_resultado(("SKU-A", 3), ("SKU-B", -2), ("SKU-C", 0)))
+
+    ws = fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO].sheet1
+    col_a = next(u for u in ws.updates if u["range_name"] == "A1:A4")
+    assert col_a["values"] == [["SKU"], ["SKU-A"], ["SKU-B"], ["SKU-C"]]
+    col_b = next(u for u in ws.updates if u["range_name"].startswith("B1:B"))
+    assert [v[0] for v in col_b["values"][1:]] == [3, -2, 0]  # 0 es un valor real, no "sin dato"
+    assert "/" in col_b["values"][0][0]  # encabezado con fecha
+
+
+def test_registrar_historial_reusa_filas_existentes_y_agrega_nuevos_skus_al_final(monkeypatch):
+    fake_gs = _FakeGS()
+    existente = _FakeWorksheet(
+        valores=[["SKU", "01/01/2026 10:00"], ["SKU-A", "5"], ["SKU-B", "-1"]],
+        title="Historial",
+    )
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_TITULO)
+    ss._hojas = [existente]
+    fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO] = ss
+    monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
+
+    # SKU-A sigue, SKU-B ya no aparece en esta corrida (debe conservar su
+    # fila con hueco en la columna nueva), SKU-C es nuevo (va al final).
+    registrar_historial_conciliacion(_resultado(("SKU-A", 7), ("SKU-C", 1)))
+
+    col_a = next(u for u in existente.updates if u["range_name"] == "A1:A4")
+    assert col_a["values"] == [["SKU"], ["SKU-A"], ["SKU-B"], ["SKU-C"]]
+    col_c = next(u for u in existente.updates if u["range_name"].startswith("C1:C"))
+    assert [v[0] for v in col_c["values"][1:]] == [7, "", 1]
+    assert fake_gs.creados == []  # ya existía, no se creó de nuevo

@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Callable
 
 import requests
@@ -772,6 +773,87 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
     )
 
 
+# ── Historial de conciliación en Sheets -- pedido de Maxx 2026-09-15:
+# "quiero un histórico cada vez que quiera conciliar". Formato ANCHO (no
+# el mismo que "Historial Competidores" de main.py, que es por filas): la
+# columna A es el SKU y queda ESTABLE fila a fila entre corridas (un SKU
+# nuevo se agrega al final, uno que deja de aparecer conserva su fila con
+# huecos en las columnas siguientes); cada corrida agrega una columna
+# nueva a la derecha, encabezada con fecha y hora, con la diferencia
+# (+/-, en blanco si no hay match en Ecom) de esa corrida. No toca ningún
+# canal ni Ecom -- ver docs/business/COMERCIAL/00_LEEME.md §5, esto es
+# lectura/diagnóstico (guarda lo que ya se ve en pantalla), no escritura
+# al canal. Usa `rentabilidad.gsheets.get_client()` (no `main.get_gs()`)
+# para no acoplar este módulo a main.py, mismo criterio que el resto del
+# archivo (ver el comentario de `_jobs` más abajo).
+HIST_CONCILIACION_TITULO = "Ayala ERP -- Historial Conciliación Full"
+HIST_CONCILIACION_COMPARTIR_CON = "maximilianoayala@globalecom.ar"
+
+
+def _col_letra(n: int) -> str:
+    """1 -> 'A', 26 -> 'Z', 27 -> 'AA', ..."""
+    letra = ""
+    while n > 0:
+        n, resto = divmod(n - 1, 26)
+        letra = chr(65 + resto) + letra
+    return letra
+
+
+def _hist_conciliacion_worksheet(gs):
+    """Primera vez: no existe ningún Sheet para esto todavía (confirmado
+    con Maxx 2026-09-15, "no tengo ninguno destinado a esto") -- se crea
+    por título (no hay un ID que hardcodear de entrada) y se comparte con
+    su cuenta para que le llegue el link. Corridas siguientes: se abre por
+    el mismo título, sin necesidad de persistir el ID en ningún lado --
+    Drive del service account ES la persistencia."""
+    import gspread
+    try:
+        ss = gs.open(HIST_CONCILIACION_TITULO)
+    except gspread.SpreadsheetNotFound:
+        ss = gs.create(HIST_CONCILIACION_TITULO)
+        ss.share(HIST_CONCILIACION_COMPARTIR_CON, perm_type="user", role="writer", notify=True)
+    try:
+        ws = ss.worksheet("Historial")
+    except gspread.WorksheetNotFound:
+        ws = ss.sheet1
+        ws.update_title("Historial")
+    return ss, ws
+
+
+def registrar_historial_conciliacion(resultado: ResultadoConciliacion) -> str:
+    """Agrega una columna al historial (ver comentario de arriba). Devuelve
+    la URL del Sheet, para loguearla al terminar el job. Se llama desde
+    `iniciar_job` DESPUÉS de tener `resultado` -- si esto falla (Sheets
+    caído, credenciales, lo que sea), no debe tirar abajo la conciliación
+    que Maxx ya está viendo en pantalla; el caller decide si lo atrapa."""
+    gs = gsheets.get_client()
+    ss, ws = _hist_conciliacion_worksheet(gs)
+    existentes = ws.get_all_values()
+    filas_actuales = [f for f in existentes[1:] if f] if len(existentes) > 1 else []
+    fila_de_sku = {f[0]: i for i, f in enumerate(filas_actuales)}
+
+    diferencia_por_sku = {f.sku: f.diferencia for f in resultado.filas if f.sku}
+    for sku in diferencia_por_sku:
+        if sku not in fila_de_sku:
+            fila_de_sku[sku] = len(filas_actuales)
+            filas_actuales.append([sku])
+
+    # Columna A completa (por si se agregaron SKU nuevos al final).
+    col_a = ["SKU"] + [f[0] for f in filas_actuales]
+    ws.update(values=[[v] for v in col_a], range_name=f"A1:A{len(col_a)}")
+
+    # Columna nueva de esta corrida, en el mismo orden de filas que A.
+    col_idx = (len(existentes[0]) if existentes else 1) + 1
+    col_letra = _col_letra(col_idx)
+    encabezado = datetime.now().strftime("%d/%m/%Y %H:%M")
+    columna = [encabezado]
+    for fila in filas_actuales:
+        dif = diferencia_por_sku.get(fila[0])
+        columna.append(dif if dif is not None else "")
+    ws.update(values=[[v] for v in columna], range_name=f"{col_letra}1:{col_letra}{len(columna)}")
+    return ss.url
+
+
 def _resolver_vinculacion(
     fila: ItemFullML, factor_ecom: "FactorPack | None",
 ) -> tuple[list[tuple[str, int, str | None]], bool, dict | None]:
@@ -846,6 +928,14 @@ def iniciar_job(job_id: str, ecom_email: str | None = None, ecom_password: str |
         }
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["log"].append(f"Listo: {len(resultado.filas)} SKUs conciliados.")
+        # Historial en Sheets -- pedido de Maxx 2026-09-15. Nunca debe tumbar
+        # una conciliación que ya salió bien; si falla (Sheets caído,
+        # credenciales, lo que sea) se deja constancia en el log y se sigue.
+        try:
+            url = registrar_historial_conciliacion(resultado)
+            _jobs[job_id]["log"].append(f"📋 Historial actualizado en Sheets: {url}")
+        except Exception as e:
+            _jobs[job_id]["log"].append(f"⚠ No se pudo actualizar el historial en Sheets: {e}")
     except Exception as e:
         _jobs[job_id]["status"] = "error"
         _jobs[job_id]["log"].append(f"Error: {e}")
