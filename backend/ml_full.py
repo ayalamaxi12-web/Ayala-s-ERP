@@ -786,14 +786,26 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
 # al canal. Usa `rentabilidad.gsheets.get_client()` (no `main.get_gs()`)
 # para no acoplar este módulo a main.py, mismo criterio que el resto del
 # archivo (ver el comentario de `_jobs` más abajo).
-HIST_CONCILIACION_TITULO = "Ayala ERP -- Historial Conciliación Full"
+#
+# ID fijo, NO se crea por título -- confirmado en vivo 2026-09-16 (`APIError
+# [403]: The user's Drive storage quota has been exceeded`): una cuenta de
+# servicio de Google Cloud sin Workspace tiene 0 bytes de cuota propia en
+# Drive, así que `gs.create(...)` nunca puede funcionar para ella, es una
+# limitación estructural de Google, no algo que se resuelva habilitando la
+# API o dando permisos. La única forma real: Maxx crea la planilla en SU
+# propio Drive (`maximilianoayalait@gmail.com`) y la comparte como Editor
+# con la cuenta de servicio -- mismo patrón que el resto de los Sheets que
+# ya usa este backend (todos creados por Maxx, nunca por el service account).
+HIST_CONCILIACION_SPREADSHEET_ID = "1KFASunOIc2brfiwec0neV1Vfde0MOkkv10m2uyXnFMY"
 # Lista, no un solo mail -- pedido de Maxx 2026-09-16: sumar un segundo
 # destinatario. `_asegurar_compartido` converge esta lista contra los
-# permisos reales del Sheet en cada corrida (no solo al crearlo), para que
-# un mail agregado después de que el Sheet ya existía también reciba
-# acceso -- sin volver a notificar a quien ya lo tenía (chequea permisos
-# existentes antes de compartir, `ss.share()` sin ese chequeo reenviaría
-# el mail de "se compartió con vos" en cada corrida).
+# permisos reales del Sheet en cada corrida, para que un mail agregado
+# después de que el Sheet ya existía también reciba acceso -- sin volver a
+# notificar a quien ya lo tenía (chequea permisos existentes antes de
+# compartir, `ss.share()` sin ese chequeo reenviaría el mail de "se
+# compartió con vos" en cada corrida). No hace falta cuota de Drive para
+# esto -- compartir un archivo ajeno (la cuenta de servicio es Editora, no
+# dueña) no es "crear" uno nuevo.
 HIST_CONCILIACION_COMPARTIR_CON = [
     "maximilianoayala@globalecom.ar",
     "maximilianoingleseit@gmail.com",
@@ -830,16 +842,10 @@ def _asegurar_compartido(ss) -> None:
 
 
 def _hist_conciliacion_worksheet(gs):
-    """Primera vez: no existe ningún Sheet para esto todavía (confirmado
-    con Maxx 2026-09-15, "no tengo ninguno destinado a esto") -- se crea
-    por título (no hay un ID que hardcodear de entrada). Corridas
-    siguientes: se abre por el mismo título, sin necesidad de persistir el
-    ID en ningún lado -- Drive del service account ES la persistencia."""
+    """Abre el Sheet fijo (ver HIST_CONCILIACION_SPREADSHEET_ID más arriba
+    -- NUNCA se crea desde acá, la cuenta de servicio no puede)."""
     import gspread
-    try:
-        ss = gs.open(HIST_CONCILIACION_TITULO)
-    except gspread.SpreadsheetNotFound:
-        ss = gs.create(HIST_CONCILIACION_TITULO)
+    ss = gs.open_by_key(HIST_CONCILIACION_SPREADSHEET_ID)
     _asegurar_compartido(ss)
     try:
         ws = ss.worksheet("Historial")

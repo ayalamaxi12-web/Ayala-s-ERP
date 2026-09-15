@@ -698,20 +698,19 @@ class _FakeSpreadsheet:
 
 
 class _FakeGS:
+    """`open_by_key` -- el código real NUNCA llama `create`/`open` por
+    título (una cuenta de servicio sin Workspace no tiene cuota de Drive
+    para crear archivos, confirmado en vivo 2026-09-16: el Sheet lo crea
+    Maxx y se abre siempre por ID fijo). Si el ID no está pre-registrado,
+    lo crea vacío en el fake -- representa "el Sheet fijo ya existe",
+    nunca "se creó ahora", que es justamente lo que no puede pasar."""
     def __init__(self):
-        self._por_titulo = {}
-        self.creados = []
+        self._por_id = {}
 
-    def open(self, title):
-        if title not in self._por_titulo:
-            raise gspread.SpreadsheetNotFound(title)
-        return self._por_titulo[title]
-
-    def create(self, title):
-        ss = _FakeSpreadsheet(title)
-        self._por_titulo[title] = ss
-        self.creados.append(title)
-        return ss
+    def open_by_key(self, key):
+        if key not in self._por_id:
+            self._por_id[key] = _FakeSpreadsheet(key)
+        return self._por_id[key]
 
 
 def _resultado(*filas):
@@ -721,14 +720,13 @@ def _resultado(*filas):
     )
 
 
-def test_registrar_historial_crea_el_sheet_y_lo_comparte_con_todos_la_primera_vez(monkeypatch):
+def test_registrar_historial_abre_el_sheet_fijo_y_comparte_con_todos(monkeypatch):
     fake_gs = _FakeGS()
     monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
 
     registrar_historial_conciliacion(_resultado(("SKU-A", 3), ("SKU-B", -2)))
 
-    assert ml_full.HIST_CONCILIACION_TITULO in fake_gs.creados
-    ss = fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO]
+    ss = fake_gs._por_id[ml_full.HIST_CONCILIACION_SPREADSHEET_ID]
     assert ss.permisos == ml_full.HIST_CONCILIACION_COMPARTIR_CON
     assert ss.sheet1.title == "Historial"
 
@@ -740,9 +738,9 @@ def test_registrar_historial_comparte_con_un_mail_agregado_despues_a_un_sheet_ya
     # al que ya lo tenía.
     fake_gs = _FakeGS()
     existente = _FakeWorksheet(valores=[["SKU"]], title="Historial")
-    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_TITULO, ya_compartido_con=[ml_full.HIST_CONCILIACION_COMPARTIR_CON[0]])
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_SPREADSHEET_ID, ya_compartido_con=[ml_full.HIST_CONCILIACION_COMPARTIR_CON[0]])
     ss._hojas = [existente]
-    fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO] = ss
+    fake_gs._por_id[ml_full.HIST_CONCILIACION_SPREADSHEET_ID] = ss
     monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
 
     registrar_historial_conciliacion(_resultado(("SKU-A", 1)))
@@ -754,9 +752,9 @@ def test_registrar_historial_comparte_con_un_mail_agregado_despues_a_un_sheet_ya
 def test_registrar_historial_no_reshare_si_ya_estan_todos(monkeypatch):
     fake_gs = _FakeGS()
     existente = _FakeWorksheet(valores=[["SKU"]], title="Historial")
-    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_TITULO, ya_compartido_con=list(ml_full.HIST_CONCILIACION_COMPARTIR_CON))
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_SPREADSHEET_ID, ya_compartido_con=list(ml_full.HIST_CONCILIACION_COMPARTIR_CON))
     ss._hojas = [existente]
-    fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO] = ss
+    fake_gs._por_id[ml_full.HIST_CONCILIACION_SPREADSHEET_ID] = ss
     monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
 
     registrar_historial_conciliacion(_resultado(("SKU-A", 1)))
@@ -770,7 +768,7 @@ def test_registrar_historial_columna_a_y_columna_nueva_alineadas_por_sku(monkeyp
 
     registrar_historial_conciliacion(_resultado(("SKU-A", 3), ("SKU-B", -2), ("SKU-C", 0)))
 
-    ws = fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO].sheet1
+    ws = fake_gs._por_id[ml_full.HIST_CONCILIACION_SPREADSHEET_ID].sheet1
     col_a = next(u for u in ws.updates if u["range_name"] == "A1:A4")
     assert col_a["values"] == [["SKU"], ["SKU-A"], ["SKU-B"], ["SKU-C"]]
     col_b = next(u for u in ws.updates if u["range_name"].startswith("B1:B"))
@@ -784,9 +782,9 @@ def test_registrar_historial_reusa_filas_existentes_y_agrega_nuevos_skus_al_fina
         valores=[["SKU", "01/01/2026 10:00"], ["SKU-A", "5"], ["SKU-B", "-1"]],
         title="Historial",
     )
-    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_TITULO)
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_SPREADSHEET_ID)
     ss._hojas = [existente]
-    fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO] = ss
+    fake_gs._por_id[ml_full.HIST_CONCILIACION_SPREADSHEET_ID] = ss
     monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
 
     # SKU-A sigue, SKU-B ya no aparece en esta corrida (debe conservar su
@@ -797,4 +795,3 @@ def test_registrar_historial_reusa_filas_existentes_y_agrega_nuevos_skus_al_fina
     assert col_a["values"] == [["SKU"], ["SKU-A"], ["SKU-B"], ["SKU-C"]]
     col_c = next(u for u in existente.updates if u["range_name"].startswith("C1:C"))
     assert [v[0] for v in col_c["values"][1:]] == [7, "", 1]
-    assert fake_gs.creados == []  # ya existía, no se creó de nuevo
