@@ -248,6 +248,36 @@ def resolver_condicion_pago(
     return override if override is not None else condicion
 
 
+def resolver_precio_real(ml, item_id: str, cuenta: str, d: dict) -> tuple[Decimal, Decimal | None]:
+    """Precio de venta real (lo que cobra el vendedor) y su tachado, sin
+    asumir que `d['price']` (item detail, `detalle_items_ofertas`/
+    `detalle_item_completo`) ya lo refleja. Bug real reportado por Maxx
+    2026-09-15: cuando la publicación está en una campaña o "oferta
+    propia" (`PRICE_DISCOUNT`/`SELLER_CAMPAIGN`/etc.) activa, `d['price']`
+    es el TACHADO (precio de lista sin el descuento aplicado), no lo que
+    paga el comprador -- por eso la diferencia contra el precio calculado
+    nunca cerraba en $0 aunque el precio puesto en ML fuera el correcto.
+    El precio real solo sale del objeto de la promoción activa (mismo
+    criterio que `ofertas_activas`/`ofertas_propias_activas` en
+    `ml_ofertas.py`, que ya lo resuelven bien para Ofertas ML -- acá nunca
+    se había aplicado). Si hay más de una promoción activa a la vez, gana
+    la de menor precio ("la que realmente rige", mismo criterio que
+    `ofertas_activas`). Sin ninguna promoción activa, `d['price']` ya es
+    el precio de venta real."""
+    try:
+        promos = ml.promociones_item(item_id, cuenta) or []
+    except Exception:
+        promos = []
+    activas = [p for p in promos if p.get("status") == "started"]
+    if activas:
+        mejor = min(activas, key=lambda p: Decimal(str(p.get("price") or 0)))
+        tachado = mejor.get("original_price")
+        return Decimal(str(mejor.get("price") or 0)), (Decimal(str(tachado)) if tachado else None)
+    precio = Decimal(str(d.get("price") or 0))
+    tachado = d.get("original_price")
+    return precio, (Decimal(str(tachado)) if tachado else None)
+
+
 def descubrir_publicaciones(
     ml, costo_provider, iva_provider, cuentas: list[str], tc: Decimal,
     renta_por_condicion: dict[str | int, Decimal] | None = None,
@@ -317,19 +347,17 @@ def descubrir_publicaciones(
                 renta_por_condicion=renta_por_condicion,
             )
             precio_calculado = precios[str(condicion)]
-            precio_actual = Decimal(str(d.get("price") or 0))
-            # Pedido de Maxx 2026-09-04: mostrar en la tabla si la
-            # publicación YA tiene un precio tachado puesto en ML
-            # (`original_price`, ya venía pedido en el batch desde
-            # 2026-09-02, solo faltaba exponerlo acá).
-            tachado_actual = d.get("original_price")
+            # Corregido 2026-09-15: NO tomar `d['price']` directo -- si hay
+            # una campaña/oferta activa ese campo es el tachado, no lo que
+            # cobra el vendedor. Ver docstring de `resolver_precio_real`.
+            precio_actual, tachado_actual = resolver_precio_real(ml, d.get("id"), cuenta, d)
             filas.append({
                 "cuenta": cuenta, "item_id": d.get("id"), "sku": sku, "titulo": d.get("title", ""),
                 "permalink": d.get("permalink"), "condicion_detectada": condicion,
                 "precio_actual": precio_actual, "precio_calculado": precio_calculado,
                 "diferencia": precio_actual - precio_calculado, "envio_real": envio_real,
                 "costo_sin_iva_ars": costo_ars, "iva_factor": iva_factor,
-                "precio_tachado_actual": Decimal(str(tachado_actual)) if tachado_actual else None,
+                "precio_tachado_actual": tachado_actual,
             })
     return filas, incidencias
 

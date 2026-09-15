@@ -1362,12 +1362,18 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <span style="display:flex;flex-direction:column;gap:3px">Envío real $ (opcional)
       <input type="text" id="ac-envio-real" placeholder="auto si comparás un MLA" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
     </span>
+    <!-- Pedido de Maxx 2026-09-15: poder simular con un TC propio en vez
+    del de BNA en vivo. Vacío = automático, igual que Envío real. -->
+    <span style="display:flex;flex-direction:column;gap:3px">TC (opcional)
+      <input type="text" id="ac-tc-manual" placeholder="auto (BNA)" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
+    </span>
     <label style="display:flex;gap:4px;align-items:center;cursor:pointer;padding-bottom:6px"><input type="checkbox" id="ac-envio-full">Envío a Bodega (Full)</label>
     <button class="btn primary" onclick="ayalaCoreCalcular()">🧮 Calcular</button>
   </div>
 
   <div id="ac-datos" style="display:none;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
 
+  <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px">"Manual": escribí un precio propio por condición y tildá "Usar" para que sea ESE (no el calculado) el que se compare más abajo, en "Detectar publicaciones" y "Comparar un MLA".</div>
   <div class="table-wrap" id="ac-tabla-wrap" style="display:none"></div>
 
   <div style="margin-top:24px">
@@ -1398,6 +1404,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       </span>
     </div>
     <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
+    <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px">Condición: <span style="color:var(--yellow)">borde amarillo</span> = la corregiste a mano, queda fija aunque vuelvas a correr el escaneo · borde normal = automática, se actualiza en cada corrida.</div>
     <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
       <table>
         <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th><th style="text-align:right">Tachado actual</th><th style="text-align:right">Tachado a aplicar</th><th>Oferta</th></tr></thead>
@@ -3772,6 +3779,29 @@ let AC_SKUS=[];
 const AC_COND_LABEL={contado:'Contado',reducida:'Reducida','3':'3 cuotas','6':'6 cuotas','9':'9 cuotas','12':'12 cuotas'};
 function ayalaCoreCondLabel(c){return AC_COND_LABEL[String(c)]||c;}
 function ayalaCoreFmt(n){return n==null?'—':'$'+Number(n).toLocaleString('es-AR',{maximumFractionDigits:0});}
+// Corrección manual de condición, por item_id -- pedido de Maxx
+// 2026-09-15: antes se perdía en cada corrida nueva de "Detectar
+// publicaciones" (se recalculaba todo desde cero contra ML). Ahora
+// persiste en localStorage y se re-aplica siempre que llegan datos
+// frescos -- SOLO para los item_id que están acá adentro (los que Maxx ya
+// corrigió a mano alguna vez); todo lo demás sigue leyendo lo que trae ML
+// en cada corrida. Así "amarillo = lo corregí yo, no se pisa solo" vs.
+// "normal = automático, se actualiza con cada corrida" le dice de un
+// vistazo qué ya revisó y qué no.
+function acCondManualLoad(){try{return JSON.parse(localStorage.getItem('ac_condicion_manual')||'{}');}catch(e){return{};}}
+let AC_COND_MANUAL=acCondManualLoad();
+function acCondManualSave(){try{localStorage.setItem('ac_condicion_manual',JSON.stringify(AC_COND_MANUAL));}catch(e){}}
+// Precio manual por SKU+condición -- pedido de Maxx 2026-09-15: al lado de
+// cada precio calculado en la tabla del motor, poder escribir otro a mano
+// y tildar cuál de los dos se usa más abajo (Detectar publicaciones /
+// Comparar un MLA). Solo dura la sesión (no se persiste, mismo criterio
+// que Renta %/Envío real, que tampoco sobreviven a un refresh).
+let AC_PRECIO_OVERRIDE={};
+function ayalaCorePrecioOverrideKey(sku,condicion){return `${sku}::${condicion}`;}
+function ayalaCorePrecioEfectivo(sku,condicion,calculado){
+  const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,condicion)];
+  return (o&&o.usar&&o.valor!=null&&!isNaN(o.valor))?o.valor:calculado;
+}
 async function ayalaCoreLoad(){
   const url=getBackendUrl();if(!url)return;
   try{
@@ -3914,20 +3944,55 @@ function ayalaCoreDesgloseFila(d,c){
   const g=ayalaCoreDesglose(d.costo_sin_iva_ars,d.iva_factor,d.envio_real,fin,rentaPct,d.envio_full);
   return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
 }
+// Celdas "Precio manual"/"Usar" compartidas por las dos tablas de abajo --
+// pedido de Maxx 2026-09-15: al lado de cada precio calculado, poder poner
+// otro a mano y tildar cuál de los dos rige más abajo (Detectar
+// publicaciones / Comparar un MLA), sin tener que repetir el margen
+// simulado en dos lugares.
+function ayalaCorePrecioOverrideCellsHtml(sku,c){
+  const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]||{};
+  return `<td style="text-align:right"><input type="text" data-sku="${sku}" data-cond="${c}" class="ac-precio-manual" value="${o.valor!=null?o.valor:''}" placeholder="manual" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePrecioManualCambio(this)"></td><td style="text-align:center"><input type="checkbox" data-sku="${sku}" data-cond="${c}" class="ac-precio-usar" ${o.usar?'checked':''} onchange="ayalaCorePrecioUsarCambio(this)" title="Usar este precio en vez del calculado en lo que compara más abajo"></td>`;
+}
 function ayalaCoreRenderMotor(d){
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
+  const sku=qs('ac-sku').value||d.sku||'';
+  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th><th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
+    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
 }
 function ayalaCoreRenderMotorMulti(resultados){
   // resultados: [{sku,d}] -- una fila por SKU x condición (30 filas para los 5 piloto)
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">Precio</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')).join('')
+  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">Precio</th><th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
+    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
+}
+function ayalaCorePrecioManualCambio(input){
+  const sku=input.dataset.sku,c=input.dataset.cond,v=(input.value||'').trim();
+  const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]||{};
+  o.valor=v?Number(v):null;
+  AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]=o;
+  ayalaCorePropagarOverride(sku,c);
+}
+function ayalaCorePrecioUsarCambio(input){
+  const sku=input.dataset.sku,c=input.dataset.cond;
+  const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]||{};
+  o.usar=input.checked;
+  AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]=o;
+  ayalaCorePropagarOverride(sku,c);
+}
+// Repropaga a lo que ya está pintado más abajo (Detectar publicaciones /
+// Comparar un MLA) cuando cambia un precio manual arriba, sin tener que
+// volver a correr nada -- mismo criterio que ayalaCoreRefParaFila.
+function ayalaCorePropagarOverride(sku,condicion){
+  if(window._acPubOrdenadas)window._acPubOrdenadas.forEach((f,idx)=>{
+    if(f.sku===sku&&String(f.condicion_detectada)===String(condicion))ayalaCorePubAplicarCondicion(idx,f.condicion_detectada);
+  });
+  if(window._acMlaData&&window._acMlaData.sku===sku&&window._acMlaData.item&&String(window._acMlaData.item.condicion_detectada)===String(condicion)){
+    ayalaCoreMlaAplicarCondicion(condicion);
+  }
 }
 // Un % de Renta por condición (2026-09-04, ver AC_COND_ORDEN/el HTML de
 // arriba) -- arma el fragmento de query string compartido por los 3
@@ -3936,11 +4001,12 @@ function ayalaCoreRenderMotorMulti(resultados){
 function ayalaCoreRentaQueryParams(){
   return AC_COND_ORDEN.map(c=>`renta_${c}=${qs('ac-renta-'+c)?.value||0}`).join('&');
 }
+function ayalaCoreTcParam(){const v=qs('ac-tc-manual')?.value;return v?`&tc=${v}`:'';}
 async function ayalaCoreCalcular(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const sku=qs('ac-sku').value;
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
-  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}`;
+  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   try{
@@ -3971,7 +4037,7 @@ async function ayalaCorePublicacionesRun(){
   btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando (recorre el catálogo completo, puede tardar)...';logEl.style.display='block';logEl.innerHTML='';
   qs('ac-publicaciones-wrap').style.display='none';
   try{
-    const res=await fetch(`${url}/ayala-core/publicaciones/run?${ayalaCoreRentaQueryParams()}&skus=${skus.join(',')}`,{method:'POST'});
+    const res=await fetch(`${url}/ayala-core/publicaciones/run?${ayalaCoreRentaQueryParams()}&skus=${skus.join(',')}${ayalaCoreTcParam()}`,{method:'POST'});
     const{job_id}=await res.json();
     status.textContent='Job: '+job_id;
     pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones',ayalaCorePublicacionesOnResult);
@@ -3980,9 +4046,26 @@ async function ayalaCorePublicacionesRun(){
 let AC_PUB_FILAS=[];
 function ayalaCorePublicacionesOnResult(result){
   AC_PUB_FILAS=(result&&result.filas)||[];
+  AC_PUB_FILAS.forEach(ayalaCoreAplicarOverrides);
   const inc=(result&&result.incidencias)||[];
   if(inc.length)qs('ac-publicaciones-status').innerHTML+=` · <span style="color:var(--yellow)">${inc.length} sin costo/IVA en Táctica</span>`;
   ayalaCorePublicacionesRepintar();
+}
+// Aplica, sobre una fila recién traída de ML, la condición manual
+// pisada (si la hay -- ver AC_COND_MANUAL) y el precio manual tildado (si
+// lo hay -- ver AC_PRECIO_OVERRIDE), ANTES de pintarla. `condicion_ml`
+// guarda lo que trajo esta corrida (para poder "revertir a automático"
+// después sin perder ese dato).
+function ayalaCoreAplicarOverrides(f){
+  f.condicion_ml=f.condicion_detectada;
+  const condManual=AC_COND_MANUAL[f.item_id];
+  const condicion=condManual!==undefined?condManual:f.condicion_detectada;
+  f.condicion_detectada=condicion;
+  const precioMotor=condManual!==undefined
+    ?ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,ayalaCoreFinancieroPct(condicion),ayalaCoreRentaPct(condicion))
+    :f.precio_calculado;
+  f.precio_calculado=ayalaCorePrecioEfectivo(f.sku,condicion,precioMotor);
+  f.diferencia=f.precio_actual-f.precio_calculado;
 }
 function ayalaCoreRefParaFila(f){
   return (AC_REFERENCIAS[f.sku]||[]).find(r=>String(r.condicion_detectada)===String(f.condicion_detectada));
@@ -4021,11 +4104,7 @@ function ayalaCorePublicacionesRepintar(){
       <td><a href="${f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
       <td>${f.sku}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
-      <td>
-        <select data-idx="${idx}" class="ac-pub-cond" onchange="ayalaCorePubCondicionCambio(this)" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px">
-          ${AC_COND_ORDEN.map(c=>`<option value="${c}" ${String(c)===String(f.condicion_detectada)?'selected':''}>${ayalaCoreCondLabel(c)}</option>`).join('')}
-        </select>
-      </td>
+      <td id="ac-pub-cond-td-${idx}">${ayalaCorePubCondCellHtml(f,idx)}</td>
       <td style="text-align:right">
         <input type="text" data-idx="${idx}" class="ac-pub-envio" value="${Math.round(f.envio_real)}" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubRecalcularEnvio(this)">
         ${f.envio_real?'':'<span style="color:var(--text3)" title="Sin venta reciente registrada para este MLA -- se usó $0, corregilo a mano si lo sabés">(sin dato)</span>'}
@@ -4121,7 +4200,8 @@ function ayalaCorePubRecalcularEnvio(input){
   const envio=Number(input.value||0);
   const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
   const rentaPct=ayalaCoreRentaPct(f.condicion_detectada);
-  const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,envio,financiero,rentaPct);
+  const precioMotor=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,envio,financiero,rentaPct);
+  const precio=ayalaCorePrecioEfectivo(f.sku,f.condicion_detectada,precioMotor);
   f.envio_real=envio;
   f.precio_calculado=precio;
   f.diferencia=f.precio_actual-precio;
@@ -4169,13 +4249,29 @@ function ayalaCorePubColCompetenciaHtml(f,idx){
 // (la sabés mirando la publicación en ML) y todo el cálculo de esa fila
 // se recalcula al toque -- incluida la referencia de competencia, que
 // puede cambiar si la condición nueva tiene otra cargada.
-function ayalaCorePubCondicionCambio(select){
-  const idx=Number(select.dataset.idx);
+// Celda de condición de "Detectar publicaciones" -- select + botón de
+// revertir cuando corresponde. Factorizado para poder repintar SOLO esta
+// celda (no la fila/tabla entera) tanto al cargar como al tildar/revertir
+// manualmente. `esManual` decide el color (ver AC_COND_MANUAL más arriba).
+function ayalaCorePubCondCellHtml(f,idx){
+  const esManual=AC_COND_MANUAL[f.item_id]!==undefined;
+  return `<div style="display:flex;align-items:center;gap:3px">
+    <select data-idx="${idx}" class="ac-pub-cond" onchange="ayalaCorePubCondicionCambio(this)" style="background:var(--surface);border:1px solid ${esManual?'var(--yellow)':'var(--border)'};border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px" title="${esManual?'Corregida a mano -- no se pisa con nuevas corridas de ML':'Automática -- se actualiza en cada corrida'}">
+      ${AC_COND_ORDEN.map(c=>`<option value="${c}" ${String(c)===String(f.condicion_detectada)?'selected':''}>${ayalaCoreCondLabel(c)}</option>`).join('')}
+    </select>${esManual?`<button class="btn-xs" data-idx="${idx}" style="padding:1px 5px" onclick="ayalaCorePubCondRevertir(this)" title="Volver a automático">↺</button>`:''}
+  </div>`;
+}
+// Recalcula precio/diferencia/celdas dependientes de una fila para una
+// condición dada -- usado tanto por el cambio manual de <select> como por
+// "revertir a automático" (con `condicion=f.condicion_ml`), para no
+// duplicar la lógica de repintado.
+function ayalaCorePubAplicarCondicion(idx,condicion){
   const f=window._acPubOrdenadas[idx];
-  f.condicion_detectada=select.value;
-  const financiero=ayalaCoreFinancieroPct(f.condicion_detectada);
-  const rentaPct=ayalaCoreRentaPct(f.condicion_detectada);
-  const precio=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
+  f.condicion_detectada=condicion;
+  const financiero=ayalaCoreFinancieroPct(condicion);
+  const rentaPct=ayalaCoreRentaPct(condicion);
+  const precioMotor=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
+  const precio=ayalaCorePrecioEfectivo(f.sku,condicion,precioMotor);
   f.precio_calculado=precio;
   f.diferencia=f.precio_actual-precio;
   qs(`ac-pub-calc-${idx}`).textContent=ayalaCoreFmt(precio);
@@ -4190,6 +4286,22 @@ function ayalaCorePubCondicionCambio(select){
   window._acPubPrecioTachado[idx]=(ref&&ref.precio_tachado)?ref.precio_tachado:window._acPubPrecioTachado[idx];
   const tachadoInp=document.querySelector(`.ac-pub-tachado[data-idx="${idx}"]`);
   if(tachadoInp&&ref&&ref.precio_tachado)tachadoInp.value=ref.precio_tachado;
+  const condTd=qs(`ac-pub-cond-td-${idx}`);
+  if(condTd)condTd.innerHTML=ayalaCorePubCondCellHtml(f,idx);
+}
+function ayalaCorePubCondicionCambio(select){
+  const idx=Number(select.dataset.idx);
+  const f=window._acPubOrdenadas[idx];
+  AC_COND_MANUAL[f.item_id]=select.value;
+  acCondManualSave();
+  ayalaCorePubAplicarCondicion(idx,select.value);
+}
+function ayalaCorePubCondRevertir(btn){
+  const idx=Number(btn.dataset.idx);
+  const f=window._acPubOrdenadas[idx];
+  delete AC_COND_MANUAL[f.item_id];
+  acCondManualSave();
+  ayalaCorePubAplicarCondicion(idx,f.condicion_ml);
 }
 // ── Aplicar a ML -- Etapa 2, confirmada por Maxx 2026-09-03 ("me sirve
 // así el tilde"): tildar varias, un solo botón, pero SIEMPRE de a una
@@ -4243,14 +4355,12 @@ async function ayalaCoreCompararMLA(){
   const cont=qs('ac-mla-resultado');
   cont.style.display='block';cont.textContent='Buscando...';
   try{
-    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}`);
+    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}${ayalaCoreTcParam()}`);
     if(!res.ok){const e=await res.json().catch(()=>({}));cont.innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
     const d=await res.json();
     const it=d.item;
     if(!it){cont.innerHTML='Sin datos de publicación';return;}
     window._acMlaData=d;
-    const diff=(it.precio_actual||0)-(it.precio_calculado||0);
-    const color=Math.abs(diff)<50?'var(--green)':'var(--red)';
     // Corrección manual de condición -- pedido de Maxx 2026-09-04: la
     // detección automática (tag propio + eliminación dentro de la
     // familia, ver resolver_condicion_pago) no siempre tiene con qué
@@ -4258,23 +4368,46 @@ async function ayalaCoreCompararMLA(){
     // condición vive en un ítem con su propio user_product_id, ML no
     // agrupa ninguna familia real ahí) -- se puede corregir a mano acá
     // mismo, ya con las 6 precios calculados de antemano (`d.precios`),
-    // sin volver a pedirle nada al backend.
-    cont.innerHTML=`<b>${it.titulo}</b><br>Condición detectada: <select id="ac-mla-cond-fix" onchange="ayalaCoreMlaCondicionCambio(this)" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px">${AC_COND_ORDEN.map(c=>`<option value="${c}" ${String(c)===String(it.condicion_detectada)?'selected':''}>${ayalaCoreCondLabel(c)}</option>`).join('')}</select> · Precio actual: <b>${ayalaCoreFmt(it.precio_actual)}</b> · Precio calculado: <b id="ac-mla-calc">${ayalaCoreFmt(it.precio_calculado)}</b> · Diferencia: <b id="ac-mla-diff" style="color:${color}">${ayalaCoreFmt(diff)}</b><br>Tachado actual: <b>${it.precio_tachado_actual?ayalaCoreFmt(it.precio_tachado_actual):'sin tachado'}</b>`;
+    // sin volver a pedirle nada al backend. Desde 2026-09-15 esa
+    // corrección persiste (AC_COND_MANUAL, mismo mapa que "Detectar
+    // publicaciones") y se pinta con el mismo color amarillo.
+    it.condicion_ml=it.condicion_detectada;
     qs('ac-envio-real').value=d.envio_real;
     qs('ac-datos').style.display='block';
     qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}`;
     ayalaCoreRenderMotor(d);
+    ayalaCoreMlaAplicarCondicion(AC_COND_MANUAL[it.item_id]!==undefined?AC_COND_MANUAL[it.item_id]:it.condicion_detectada, cont);
   }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+// Repinta el panel "Comparar un MLA" para una condición dada -- usado al
+// cargar (con el override persistido si lo hay), al tildar manualmente el
+// <select>, y al "revertir a automático". Reconstruye el bloque de texto
+// entero (no solo precio/diferencia) porque el color del borde y el botón
+// ↺ del select dependen de si hay override o no.
+function ayalaCoreMlaAplicarCondicion(cond,cont){
+  const d=window._acMlaData;if(!d||!d.item)return;
+  cont=cont||qs('ac-mla-resultado');
+  const it=d.item;
+  it.condicion_detectada=cond;
+  const precioMotor=d.precios[cond];
+  const precio=ayalaCorePrecioEfectivo(d.sku,cond,precioMotor);
+  it.precio_calculado=precio;
+  const diff=(it.precio_actual||0)-precio;
+  const color=Math.abs(diff)<50?'var(--green)':'var(--red)';
+  const esManual=AC_COND_MANUAL[it.item_id]!==undefined;
+  cont.innerHTML=`<b>${it.titulo}</b><br>Condición detectada: <select id="ac-mla-cond-fix" onchange="ayalaCoreMlaCondicionCambio(this)" style="background:var(--surface);border:1px solid ${esManual?'var(--yellow)':'var(--border)'};border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px" title="${esManual?'Corregida a mano -- no se pisa con nuevas corridas de ML':'Automática -- se actualiza en cada corrida'}">${AC_COND_ORDEN.map(c=>`<option value="${c}" ${String(c)===String(cond)?'selected':''}>${ayalaCoreCondLabel(c)}</option>`).join('')}</select>${esManual?` <button class="btn-xs" style="padding:1px 5px" onclick="ayalaCoreMlaCondRevertir()" title="Volver a automático">↺</button>`:''} · Precio actual: <b>${ayalaCoreFmt(it.precio_actual)}</b> · Precio calculado: <b id="ac-mla-calc">${ayalaCoreFmt(precio)}</b> · Diferencia: <b id="ac-mla-diff" style="color:${color}">${ayalaCoreFmt(diff)}</b><br>Tachado actual: <b>${it.precio_tachado_actual?ayalaCoreFmt(it.precio_tachado_actual):'sin tachado'}</b>`;
 }
 function ayalaCoreMlaCondicionCambio(select){
   const d=window._acMlaData;if(!d||!d.item)return;
-  const cond=select.value;
-  const precio=d.precios[cond];
-  const diff=(d.item.precio_actual||0)-precio;
-  qs('ac-mla-calc').textContent=ayalaCoreFmt(precio);
-  const diffEl=qs('ac-mla-diff');
-  diffEl.textContent=ayalaCoreFmt(diff);
-  diffEl.style.color=Math.abs(diff)<50?'var(--green)':'var(--red)';
+  AC_COND_MANUAL[d.item.item_id]=select.value;
+  acCondManualSave();
+  ayalaCoreMlaAplicarCondicion(select.value);
+}
+function ayalaCoreMlaCondRevertir(){
+  const d=window._acMlaData;if(!d||!d.item)return;
+  delete AC_COND_MANUAL[d.item.item_id];
+  acCondManualSave();
+  ayalaCoreMlaAplicarCondicion(d.item.condicion_ml);
 }
 
 // ──────────────────────

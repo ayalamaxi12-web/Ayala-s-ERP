@@ -8,6 +8,7 @@ from ayala_core import (
     detectar_condicion_pago,
     resolver_competencia_por_producto,
     resolver_condicion_pago,
+    resolver_precio_real,
 )
 
 
@@ -32,9 +33,10 @@ class _MLFalso:
     par de métodos que usa `descubrir_publicaciones`. `familias` opcional
     (mapa `user_product_id` -> lista de hermanas) para los tests del
     fallback por eliminación en `resolver_condicion_pago`."""
-    def __init__(self, items_por_cuenta: dict, familias: dict | None = None):
+    def __init__(self, items_por_cuenta: dict, familias: dict | None = None, promos_por_item: dict | None = None):
         self._items = items_por_cuenta
         self._familias = familias or {}
+        self._promos = promos_por_item or {}
 
     def items_activos(self, cuenta):
         return [i["id"] for i in self._items.get(cuenta, [])]
@@ -53,6 +55,9 @@ class _MLFalso:
 
     def items_de_producto(self, product_id, cuenta):
         return self._familias.get(product_id, [])
+
+    def promociones_item(self, item_id, cuenta):
+        return self._promos.get(item_id, [])
 
 
 # ── Ejemplo congelado, AYALA_CORE.md A.3.1 (PLANCHA-SUB-26X26-PORT,
@@ -401,6 +406,74 @@ def test_descubrir_publicaciones_usa_envio_real_solo_si_es_gratis(monkeypatch):
     filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
 
     assert filas[0]["envio_real"] == Decimal("12000.0")
+
+
+def test_resolver_precio_real_sin_promo_activa_usa_price_del_item():
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 15000, "original_price": None}]})
+    d = {"id": "MLA1", "price": 15000, "original_price": None}
+
+    precio, tachado = resolver_precio_real(ml, "MLA1", "IT", d)
+
+    assert precio == Decimal("15000")
+    assert tachado is None
+
+
+def test_resolver_precio_real_con_promo_activa_usa_el_precio_de_la_promo():
+    # Bug real reportado por Maxx 2026-09-15: con una campaña/oferta activa,
+    # el `price` del item detail es el TACHADO, no lo que cobra el
+    # vendedor -- el precio real solo sale del objeto de la promoción.
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 15000, "original_price": None}]}, promos_por_item={
+        "MLA1": [{"type": "PRICE_DISCOUNT", "status": "started", "price": 11879, "original_price": 15839}],
+    })
+    d = {"id": "MLA1", "price": 15000, "original_price": None}
+
+    precio, tachado = resolver_precio_real(ml, "MLA1", "IT", d)
+
+    assert precio == Decimal("11879")
+    assert tachado == Decimal("15839")
+
+
+def test_resolver_precio_real_ignora_promos_candidatas_no_activas():
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 15000, "original_price": None}]}, promos_por_item={
+        "MLA1": [{"type": "PRICE_DISCOUNT", "status": "candidate", "price": 11879, "original_price": 15839}],
+    })
+    d = {"id": "MLA1", "price": 15000, "original_price": None}
+
+    precio, tachado = resolver_precio_real(ml, "MLA1", "IT", d)
+
+    assert precio == Decimal("15000")
+    assert tachado is None
+
+
+def test_resolver_precio_real_con_dos_promos_activas_gana_la_mas_barata():
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 15000, "original_price": None}]}, promos_por_item={
+        "MLA1": [
+            {"type": "SELLER_CAMPAIGN", "status": "started", "price": 12500, "original_price": 15839},
+            {"type": "PRICE_DISCOUNT", "status": "started", "price": 11879, "original_price": 15839},
+        ],
+    })
+    d = {"id": "MLA1", "price": 15000, "original_price": None}
+
+    precio, _ = resolver_precio_real(ml, "MLA1", "IT", d)
+
+    assert precio == Decimal("11879")
+
+
+def test_descubrir_publicaciones_usa_precio_real_no_el_tachado(monkeypatch):
+    _sin_envio(monkeypatch)
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "price": 15839, "original_price": None,
+         "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []},
+    ]}, promos_por_item={
+        "MLA1": [{"type": "PRICE_DISCOUNT", "status": "started", "price": 11879, "original_price": 15839}],
+    })
+    costo = _CostoProviderFalso({"PLANCHA-SUB-TERMO": Decimal(50)})
+    iva = _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")})
+
+    filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
+
+    assert filas[0]["precio_actual"] == Decimal("11879")
+    assert filas[0]["precio_tachado_actual"] == Decimal("15839")
 
 
 def test_descubrir_publicaciones_costo_envio_real_cero_si_no_es_gratis(monkeypatch):

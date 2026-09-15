@@ -2187,6 +2187,7 @@ def _ayala_core_renta_dict(
 def _ayala_core_motor_sync(
     sku: str, renta_por_condicion: dict[str | int, Decimal],
     envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
+    tc_override: Decimal | None = None,
 ) -> dict:
     costo_usd = CostoVigenteProvider().obtener(sku)
     if costo_usd is None:
@@ -2194,7 +2195,10 @@ def _ayala_core_motor_sync(
     iva_factor = IvaProvider().factor(sku)
     if iva_factor is None:
         raise HTTPException(status_code=404, detail=f"SIN_IVA_TACTICA para SKU {sku!r}")
-    tc = Decimal(str(obtener_tc_bna().get("tc") or 0))
+    # Pedido de Maxx 2026-09-15: poder pisar el TC de BNA a mano para
+    # simular con un valor propio -- sin `tc`, se sigue usando el TC en
+    # vivo como siempre.
+    tc = tc_override if tc_override is not None else Decimal(str(obtener_tc_bna().get("tc") or 0))
     costo_sin_iva = costo_usd * tc
 
     item_info = None
@@ -2212,10 +2216,14 @@ def _ayala_core_motor_sync(
             # Mismo bug/fix que ayala_core.descubrir_publicaciones: la clave
             # real es "costo_envio_real", no "list_cost".
             envio_usado = Decimal(str(envio_info["costo_envio_real"])) if envio_info else Decimal(0)
+        # Corregido 2026-09-15: ver ayala_core.resolver_precio_real -- con
+        # una campaña/oferta activa, d['price'] es el tachado, no lo que
+        # cobra el vendedor.
+        precio_actual, tachado_actual = ayala_core.resolver_precio_real(ml, d["id"], cuenta, d)
         item_info = {
-            "item_id": d["id"], "titulo": d.get("title", ""), "precio_actual": d.get("price"),
+            "item_id": d["id"], "titulo": d.get("title", ""), "precio_actual": precio_actual,
             "condicion_detectada": condicion_detectada,
-            "precio_tachado_actual": d.get("original_price"),
+            "precio_tachado_actual": tachado_actual,
         }
     if envio_usado is None:
         envio_usado = Decimal(0)
@@ -2249,11 +2257,13 @@ async def ayala_core_sku_motor(
     envio_full: bool = False,
     item_id: str | None = None,
     cuenta: str | None = None,
+    tc: float | None = None,
 ):
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
     return await run_in_threadpool(
         _ayala_core_motor_sync, sku, renta_por_condicion,
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
+        Decimal(str(tc)) if tc is not None else None,
     )
 
 
@@ -2266,13 +2276,16 @@ async def ayala_core_publicaciones_run(
     renta_6: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[6]),
     renta_9: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[9]),
     renta_12: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[12]),
+    tc: float | None = None,
 ):
     """Escaneo caro (recorre TODO el catálogo activo de las cuentas
     pedidas) -- por eso corre en background, mismo patrón que
     `/ml-ofertas/run`. `cuentas` y `skus` viajan como string separado por
-    comas; vacío = las dos cuentas / los 5 SKU piloto."""
+    comas; vacío = las dos cuentas / los 5 SKU piloto. `tc` opcional --
+    pedido de Maxx 2026-09-15: pisar el TC de BNA a mano, sin el parámetro
+    sigue siendo el TC en vivo."""
     job_id = f"ayalacore_pub_{int(time.time())}"
-    tc = obtener_tc_bna().get("tc") or 0
+    tc = tc if tc is not None else (obtener_tc_bna().get("tc") or 0)
     lista_cuentas = [c for c in cuentas.split(",") if c] or None
     lista_skus = [s for s in skus.split(",") if s] or None
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
