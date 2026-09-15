@@ -3803,6 +3803,25 @@ function acCondManualSave(){try{localStorage.setItem('ac_condicion_manual',JSON.
 // que Renta %/Envío real, que tampoco sobreviven a un refresh).
 let AC_PRECIO_OVERRIDE={};
 function ayalaCorePrecioOverrideKey(sku,condicion){return `${sku}::${condicion}`;}
+// Bug real reportado por Maxx 2026-09-16: escribió "$407.839,00" (formato
+// AR normal) en el campo de precio forzado -- `Number()` sobre eso da NaN
+// (no entiende "$", el punto de miles ni la coma decimal), así que el
+// tilde "Usar" quedaba apuntando a un valor inválido y se caía en
+// silencio al calculado, sin avisar nada. Admite "$407.839,00", "407.839"
+// (puntos de miles, sin parte decimal) y "407839" (plano) por igual --
+// el punto se trata como separador de miles SALVO que la cadena termine
+// en ",NN" (coma decimal explícita), único caso real donde hay que
+// distinguirlo.
+function ayalaCoreParsearNumero(v){
+  if(v==null)return null;
+  let s=String(v).trim();
+  if(!s)return null;
+  s=s.replace(/\$/g,'').replace(/\s/g,'');
+  if(/,\d{1,2}$/.test(s))s=s.replace(/\./g,'').replace(',', '.');
+  else s=s.replace(/[.,]/g,'');
+  const n=Number(s);
+  return isNaN(n)?null:n;
+}
 function ayalaCorePrecioEfectivo(sku,condicion,calculado){
   const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,condicion)];
   return (o&&o.usar&&o.valor!=null&&!isNaN(o.valor))?o.valor:calculado;
@@ -3976,9 +3995,14 @@ function ayalaCoreRenderMotorMulti(resultados){
 }
 function ayalaCorePrecioManualCambio(input){
   const sku=input.dataset.sku,c=input.dataset.cond,v=(input.value||'').trim();
+  const parsed=ayalaCoreParsearNumero(v);
+  if(v&&parsed==null){
+    toast('No entendí ese precio -- escribí solo números (podés usar puntos de miles y coma decimal, ej. 407.839 o 407.839,50)','error');
+  }
   const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]||{};
-  o.valor=v?Number(v):null;
+  o.valor=parsed;
   AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,c)]=o;
+  input.value=parsed!=null?parsed:'';
   ayalaCorePropagarOverride(sku,c);
 }
 function ayalaCorePrecioUsarCambio(input){
