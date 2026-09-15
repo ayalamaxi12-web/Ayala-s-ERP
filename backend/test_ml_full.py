@@ -12,6 +12,7 @@ from ml_full import (
     ItemFullML,
     MLFullClient,
     ResultadoConciliacion,
+    _ahora_ar,
     _col_letra,
     conciliar,
     extraer_items_full,
@@ -646,6 +647,15 @@ def test_conciliar_variante_sin_match_en_ecom_deja_incidencia_propia():
 
 
 # ── Historial de conciliación en Sheets (pedido de Maxx 2026-09-15) ──
+
+def test_ahora_ar_es_utc_menos_3_no_la_hora_del_contenedor():
+    # Bug real reportado por Maxx 2026-09-16: el encabezado del historial
+    # salía en UTC (la del contenedor de Railway), 3 horas adelantado.
+    from datetime import timezone
+    ahora = _ahora_ar()
+    assert ahora.utcoffset().total_seconds() == -3 * 3600
+    assert ahora.astimezone(timezone.utc).hour == (ahora.hour + 3) % 24
+
 
 def test_col_letra():
     assert _col_letra(1) == "A"

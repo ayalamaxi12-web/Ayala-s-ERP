@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import requests
@@ -812,6 +812,19 @@ HIST_CONCILIACION_COMPARTIR_CON = [
 ]
 
 
+_TZ_AR = timezone(timedelta(hours=-3))
+
+
+def _ahora_ar() -> datetime:
+    """Hora de Argentina (UTC-3 fijo, no tiene horario de verano) --
+    bug real reportado por Maxx 2026-09-16: el encabezado del historial
+    salía en UTC (la hora del contenedor de Railway), 3 horas adelantado
+    de la hora real. `timezone` con offset fijo en vez de `zoneinfo` +
+    tzdata IANA para no depender de que la imagen de Docker tenga el
+    paquete de zonas horarias instalado."""
+    return datetime.now(_TZ_AR)
+
+
 def _col_letra(n: int) -> str:
     """1 -> 'A', 26 -> 'Z', 27 -> 'AA', ..."""
     letra = ""
@@ -880,7 +893,7 @@ def registrar_historial_conciliacion(resultado: ResultadoConciliacion) -> str:
     # Columna nueva de esta corrida, en el mismo orden de filas que A.
     col_idx = (len(existentes[0]) if existentes else 1) + 1
     col_letra = _col_letra(col_idx)
-    encabezado = datetime.now().strftime("%d/%m/%Y %H:%M")
+    encabezado = _ahora_ar().strftime("%d/%m/%Y %H:%M")
     columna = [encabezado]
     for fila in filas_actuales:
         dif = diferencia_por_sku.get(fila[0])
