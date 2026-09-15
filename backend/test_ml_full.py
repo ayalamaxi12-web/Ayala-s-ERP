@@ -786,6 +786,30 @@ def test_registrar_historial_columna_a_y_columna_nueva_alineadas_por_sku(monkeyp
     assert "/" in col_b["values"][0][0]  # encabezado con fecha
 
 
+def test_registrar_historial_nunca_pisa_la_columna_a_aunque_el_encabezado_venga_corto(monkeypatch):
+    # Bug real reportado por Maxx 2026-09-16: le apareció una sola columna
+    # con diferencias y ningún SKU -- pasaba si la fila de encabezado
+    # llegaba más corta que las filas de datos (acá, directamente vacía),
+    # porque el índice de la columna nueva se calculaba solo a partir de
+    # esa fila y podía caer en la A, pisando los SKU recién escritos.
+    fake_gs = _FakeGS()
+    existente = _FakeWorksheet(
+        valores=[[], ["SKU-A", "5", "7"], ["SKU-B", "-1", "2"]],
+        title="Historial",
+    )
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_SPREADSHEET_ID)
+    ss._hojas = [existente]
+    fake_gs._por_id[ml_full.HIST_CONCILIACION_SPREADSHEET_ID] = ss
+    monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
+
+    registrar_historial_conciliacion(_resultado(("SKU-A", 9)))
+
+    rangos = [u["range_name"] for u in existente.updates]
+    assert "A1:A3" in rangos  # columna de SKU, siempre escrita
+    columna_nueva = [r for r in rangos if r != "A1:A3"]
+    assert columna_nueva and columna_nueva[0].startswith("D1:D")  # nunca A/B/C (ya ocupadas)
+
+
 def test_registrar_historial_reusa_filas_existentes_y_agrega_nuevos_skus_al_final(monkeypatch):
     fake_gs = _FakeGS()
     existente = _FakeWorksheet(

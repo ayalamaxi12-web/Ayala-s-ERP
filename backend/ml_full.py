@@ -891,7 +891,17 @@ def registrar_historial_conciliacion(resultado: ResultadoConciliacion) -> str:
     ws.update(values=[[v] for v in col_a], range_name=f"A1:A{len(col_a)}")
 
     # Columna nueva de esta corrida, en el mismo orden de filas que A.
-    col_idx = (len(existentes[0]) if existentes else 1) + 1
+    # Corregido 2026-09-16 (bug real, encontrado con Maxx: le apareció una
+    # sola columna de diferencias y ningún SKU): si la fila de encabezado
+    # venía más corta de lo esperado (p.ej. `existentes[0] == []`, un
+    # estado real que puede darse si dos corridas escriben casi al mismo
+    # tiempo), `len(existentes[0])+1` daba columna A -- la escritura de la
+    # diferencia pisaba justo la columna de SKU que se acababa de escribir
+    # arriba. Se toma el ancho MÁXIMO entre TODAS las filas (no solo la de
+    # encabezado) y nunca menos que 1, así el próximo índice de columna
+    # nunca puede caer en la A.
+    ancho_actual = max((len(f) for f in existentes), default=1)
+    col_idx = max(ancho_actual, 1) + 1
     col_letra = _col_letra(col_idx)
     encabezado = _ahora_ar().strftime("%d/%m/%Y %H:%M")
     columna = [encabezado]
