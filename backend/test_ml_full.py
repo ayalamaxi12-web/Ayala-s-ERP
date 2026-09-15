@@ -672,11 +672,12 @@ class _FakeWorksheet:
 
 
 class _FakeSpreadsheet:
-    def __init__(self, title):
+    def __init__(self, title, ya_compartido_con=None):
         self.title = title
         self.url = f"https://sheets.example/{title}"
         self._hojas = [_FakeWorksheet(title="Sheet1")]
-        self.compartido_con = []
+        self.permisos = list(ya_compartido_con or [])  # emails con acceso YA, antes de esta corrida
+        self.compartido_esta_corrida = []  # solo lo que share() agregó ahora (para chequear que no reenvía)
 
     def worksheet(self, nombre):
         for h in self._hojas:
@@ -688,8 +689,12 @@ class _FakeSpreadsheet:
     def sheet1(self):
         return self._hojas[0]
 
+    def list_permissions(self):
+        return [{"emailAddress": e} for e in self.permisos]
+
     def share(self, email, perm_type, role, notify):
-        self.compartido_con.append(email)
+        self.permisos.append(email)
+        self.compartido_esta_corrida.append(email)
 
 
 class _FakeGS:
@@ -716,7 +721,7 @@ def _resultado(*filas):
     )
 
 
-def test_registrar_historial_crea_el_sheet_y_lo_comparte_la_primera_vez(monkeypatch):
+def test_registrar_historial_crea_el_sheet_y_lo_comparte_con_todos_la_primera_vez(monkeypatch):
     fake_gs = _FakeGS()
     monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
 
@@ -724,8 +729,39 @@ def test_registrar_historial_crea_el_sheet_y_lo_comparte_la_primera_vez(monkeypa
 
     assert ml_full.HIST_CONCILIACION_TITULO in fake_gs.creados
     ss = fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO]
-    assert ss.compartido_con == [ml_full.HIST_CONCILIACION_COMPARTIR_CON]
+    assert ss.permisos == ml_full.HIST_CONCILIACION_COMPARTIR_CON
     assert ss.sheet1.title == "Historial"
+
+
+def test_registrar_historial_comparte_con_un_mail_agregado_despues_a_un_sheet_ya_existente(monkeypatch):
+    # Pedido real de Maxx 2026-09-16: agregó un segundo mail a la lista
+    # DESPUES de que el Sheet ya existía (compartido solo con el primero) --
+    # la corrida siguiente tiene que sumarle acceso al nuevo sin re-avisar
+    # al que ya lo tenía.
+    fake_gs = _FakeGS()
+    existente = _FakeWorksheet(valores=[["SKU"]], title="Historial")
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_TITULO, ya_compartido_con=[ml_full.HIST_CONCILIACION_COMPARTIR_CON[0]])
+    ss._hojas = [existente]
+    fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO] = ss
+    monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
+
+    registrar_historial_conciliacion(_resultado(("SKU-A", 1)))
+
+    assert ss.compartido_esta_corrida == [ml_full.HIST_CONCILIACION_COMPARTIR_CON[1]]
+    assert set(ss.permisos) == set(ml_full.HIST_CONCILIACION_COMPARTIR_CON)
+
+
+def test_registrar_historial_no_reshare_si_ya_estan_todos(monkeypatch):
+    fake_gs = _FakeGS()
+    existente = _FakeWorksheet(valores=[["SKU"]], title="Historial")
+    ss = _FakeSpreadsheet(ml_full.HIST_CONCILIACION_TITULO, ya_compartido_con=list(ml_full.HIST_CONCILIACION_COMPARTIR_CON))
+    ss._hojas = [existente]
+    fake_gs._por_titulo[ml_full.HIST_CONCILIACION_TITULO] = ss
+    monkeypatch.setattr(ml_full.gsheets, "get_client", lambda: fake_gs)
+
+    registrar_historial_conciliacion(_resultado(("SKU-A", 1)))
+
+    assert ss.compartido_esta_corrida == []
 
 
 def test_registrar_historial_columna_a_y_columna_nueva_alineadas_por_sku(monkeypatch):

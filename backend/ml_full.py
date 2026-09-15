@@ -787,7 +787,17 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
 # para no acoplar este módulo a main.py, mismo criterio que el resto del
 # archivo (ver el comentario de `_jobs` más abajo).
 HIST_CONCILIACION_TITULO = "Ayala ERP -- Historial Conciliación Full"
-HIST_CONCILIACION_COMPARTIR_CON = "maximilianoayala@globalecom.ar"
+# Lista, no un solo mail -- pedido de Maxx 2026-09-16: sumar un segundo
+# destinatario. `_asegurar_compartido` converge esta lista contra los
+# permisos reales del Sheet en cada corrida (no solo al crearlo), para que
+# un mail agregado después de que el Sheet ya existía también reciba
+# acceso -- sin volver a notificar a quien ya lo tenía (chequea permisos
+# existentes antes de compartir, `ss.share()` sin ese chequeo reenviaría
+# el mail de "se compartió con vos" en cada corrida).
+HIST_CONCILIACION_COMPARTIR_CON = [
+    "maximilianoayala@globalecom.ar",
+    "maximilianoingleseit@gmail.com",
+]
 
 
 def _col_letra(n: int) -> str:
@@ -799,19 +809,38 @@ def _col_letra(n: int) -> str:
     return letra
 
 
+def _asegurar_compartido(ss) -> None:
+    """Comparte con todo mail de HIST_CONCILIACION_COMPARTIR_CON que
+    todavía no tenga acceso -- se llama en CADA corrida (no solo al crear
+    el Sheet) para que un mail agregado después converja solo, incluso
+    sobre un Sheet que ya existía. Chequea permisos reales primero para no
+    reenviar el mail de "se compartió con vos" a quien ya lo tiene. Nunca
+    debe tumbar la corrida por un permiso que no se pudo otorgar."""
+    try:
+        ya_compartido = {p.get("emailAddress") for p in ss.list_permissions()}
+    except Exception:
+        ya_compartido = set()
+    for email in HIST_CONCILIACION_COMPARTIR_CON:
+        if email in ya_compartido:
+            continue
+        try:
+            ss.share(email, perm_type="user", role="writer", notify=True)
+        except Exception:
+            pass
+
+
 def _hist_conciliacion_worksheet(gs):
     """Primera vez: no existe ningún Sheet para esto todavía (confirmado
     con Maxx 2026-09-15, "no tengo ninguno destinado a esto") -- se crea
-    por título (no hay un ID que hardcodear de entrada) y se comparte con
-    su cuenta para que le llegue el link. Corridas siguientes: se abre por
-    el mismo título, sin necesidad de persistir el ID en ningún lado --
-    Drive del service account ES la persistencia."""
+    por título (no hay un ID que hardcodear de entrada). Corridas
+    siguientes: se abre por el mismo título, sin necesidad de persistir el
+    ID en ningún lado -- Drive del service account ES la persistencia."""
     import gspread
     try:
         ss = gs.open(HIST_CONCILIACION_TITULO)
     except gspread.SpreadsheetNotFound:
         ss = gs.create(HIST_CONCILIACION_TITULO)
-        ss.share(HIST_CONCILIACION_COMPARTIR_CON, perm_type="user", role="writer", notify=True)
+    _asegurar_compartido(ss)
     try:
         ws = ss.worksheet("Historial")
     except gspread.WorksheetNotFound:
