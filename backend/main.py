@@ -2187,11 +2187,20 @@ def _ayala_core_renta_dict(
 def _ayala_core_motor_sync(
     sku: str, renta_por_condicion: dict[str | int, Decimal],
     envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
-    tc_override: Decimal | None = None,
+    tc_override: Decimal | None = None, costo_override: Decimal | None = None,
 ) -> dict:
-    costo_usd = CostoVigenteProvider().obtener(sku)
-    if costo_usd is None:
-        raise HTTPException(status_code=404, detail=f"SIN_COSTO_TACTICA para SKU {sku!r}")
+    # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
+    # pisar el costo sin IVA (USD) de Táctica a mano para simular. Sin
+    # `costo`, sigue viniendo de Táctica como siempre (y sigue fallando
+    # SIN_COSTO_TACTICA si el SKU no está ahí). Con `costo`, ni siquiera se
+    # consulta Táctica -- también sirve para simular un SKU que todavía no
+    # tiene costo cargado ahí.
+    if costo_override is not None:
+        costo_usd = costo_override
+    else:
+        costo_usd = CostoVigenteProvider().obtener(sku)
+        if costo_usd is None:
+            raise HTTPException(status_code=404, detail=f"SIN_COSTO_TACTICA para SKU {sku!r}")
     iva_factor = IvaProvider().factor(sku)
     if iva_factor is None:
         raise HTTPException(status_code=404, detail=f"SIN_IVA_TACTICA para SKU {sku!r}")
@@ -2258,12 +2267,14 @@ async def ayala_core_sku_motor(
     item_id: str | None = None,
     cuenta: str | None = None,
     tc: float | None = None,
+    costo: float | None = None,
 ):
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
     return await run_in_threadpool(
         _ayala_core_motor_sync, sku, renta_por_condicion,
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
         Decimal(str(tc)) if tc is not None else None,
+        Decimal(str(costo)) if costo is not None else None,
     )
 
 
