@@ -398,6 +398,42 @@ def descubrir_publicaciones_base(
     return filas
 
 
+def precio_vivo_mlas(ml, item_ids: list[str], cuenta: str) -> list[dict]:
+    """Precio real EN VIVO (no tachado, ver `resolver_precio_real`) de una
+    lista puntual de publicaciones -- pedido de Maxx 2026-09-16 para el
+    control de planchas de sublimación en su Excel. A propósito acepta
+    una LISTA (no un solo item_id): sirve igual para "traer el precio de
+    la que elegiste" (una lista de 1) que para "ver todas las de esta
+    condición" (una lista de N) -- el llamador (Apps Script, ya tiene el
+    filtro SKU+condición+cuenta contra la pestaña "Base MLA") decide
+    cuántas pedir, este endpoint no conoce SKUs ni condiciones, solo
+    resuelve MLA puntuales. Un ítem que falla (no encontrado en esa
+    cuenta, error de red) no aborta el resto -- se corre uno por uno y
+    ese ítem queda con 'error' en su propia entrada, útil para que Apps
+    Script marque solo esa fila en vez de perder toda la consulta."""
+    resultados = []
+    for item_id in item_ids:
+        try:
+            d = ml.detalle_item_completo(item_id, cuenta) or {}
+            if not d.get("id"):
+                resultados.append({"item_id": item_id, "error": "No encontrado en esa cuenta"})
+                continue
+            precio_actual, tachado = resolver_precio_real(ml, item_id, cuenta, d)
+            condicion = resolver_condicion_pago(ml, d, cuenta)
+            descuento_pct = None
+            if tachado and tachado > 0:
+                descuento_pct = float((tachado - precio_actual) / tachado * 100)
+            resultados.append({
+                "item_id": item_id, "precio_actual": float(precio_actual),
+                "precio_tachado": float(tachado) if tachado else None,
+                "descuento_pct": round(descuento_pct, 1) if descuento_pct is not None else None,
+                "condicion_detectada": str(condicion),
+            })
+        except Exception as e:
+            resultados.append({"item_id": item_id, "error": str(e)})
+    return resultados
+
+
 def resolver_competencia_por_producto(ml, product_id: str, cuenta: str = "IT") -> list[dict]:
     """Pedido de Maxx 2026-09-03: encontró un competidor vendiendo casi al
     mismo precio que él pero en 9 cuotas -- eso lo deja afuera de las

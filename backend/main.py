@@ -2325,6 +2325,25 @@ async def ayala_core_base_mla_run(background_tasks: BackgroundTasks, cuentas: st
 async def ayala_core_base_mla_status(job_id: str):
     return ayala_core.estado_job(job_id) or {"status": "not_found"}
 
+def _ayala_core_precio_vivo_sync(item_ids: list[str], cuenta: str) -> dict:
+    ml = ml_ofertas.MLOfertasClient()
+    return {"resultados": ayala_core.precio_vivo_mlas(ml, item_ids, cuenta)}
+
+@app.get("/ayala-core/mla/precio-vivo")
+async def ayala_core_mla_precio_vivo(item_ids: str, cuenta: str):
+    """Precio real en vivo (no tachado) de una o varias publicaciones
+    puntuales -- pedido de Maxx 2026-09-16 (control de planchas de
+    sublimación en su Excel vía Apps Script). `item_ids` separados por
+    coma: sirve tanto para "una sola" (el MLA que elegiste en el
+    desplegable) como para "ver todas" (todos los MLA de una condición+
+    cuenta). Síncrono, no background job -- pensado para listas chicas
+    (una publicación puntual, o a lo sumo las ~14 de una condición),
+    nunca el catálogo completo (eso es /ayala-core/base-mla/run)."""
+    ids = [i.strip() for i in item_ids.split(",") if i.strip()]
+    if not ids:
+        raise HTTPException(status_code=422, detail="Falta 'item_ids'")
+    return await run_in_threadpool(_ayala_core_precio_vivo_sync, ids, cuenta)
+
 def _ayala_core_competencia_sync(product_id: str, cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()
     return {"ofertas": ayala_core.resolver_competencia_por_producto(ml, product_id, cuenta)}

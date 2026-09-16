@@ -7,6 +7,7 @@ from ayala_core import (
     descubrir_publicaciones,
     descubrir_publicaciones_base,
     detectar_condicion_pago,
+    precio_vivo_mlas,
     resolver_competencia_por_producto,
     resolver_condicion_pago,
     resolver_precio_real,
@@ -588,3 +589,51 @@ def test_descubrir_publicaciones_base_recorre_las_dos_cuentas():
     filas = descubrir_publicaciones_base(ml, ["IT", "MT"], skus_filtro=["PLANCHA-SUB-TERMO"])
 
     assert sorted((f["cuenta"], f["item_id"]) for f in filas) == [("IT", "MLA1"), ("MT", "MLA2")]
+
+
+# ── precio_vivo_mlas -- consulta puntual de una o varias publicaciones,
+# pedido de Maxx 2026-09-16 (control de sublimación, Parte 2). ──
+
+def test_precio_vivo_mlas_sin_promo_activa():
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 100000, "original_price": None, "tags": ["cuota-simple-6"]}]})
+
+    r = precio_vivo_mlas(ml, ["MLA1"], "IT")
+
+    assert r == [{
+        "item_id": "MLA1", "precio_actual": 100000.0, "precio_tachado": None,
+        "descuento_pct": None, "condicion_detectada": "6",
+    }]
+
+
+def test_precio_vivo_mlas_con_promo_activa_calcula_descuento_pct():
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 15000, "original_price": None, "tags": []}]}, promos_por_item={
+        "MLA1": [{"type": "PRICE_DISCOUNT", "status": "started", "price": 11879, "original_price": 15839}],
+    })
+
+    r = precio_vivo_mlas(ml, ["MLA1"], "IT")
+
+    assert r[0]["precio_actual"] == 11879.0
+    assert r[0]["precio_tachado"] == 15839.0
+    assert r[0]["descuento_pct"] == round((15839 - 11879) / 15839 * 100, 1)
+
+
+def test_precio_vivo_mlas_lista_varias_para_ver_todas():
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "price": 100000, "original_price": None, "tags": []},
+        {"id": "MLA2", "price": 200000, "original_price": None, "tags": ["cuota-simple-3"]},
+    ]})
+
+    r = precio_vivo_mlas(ml, ["MLA1", "MLA2"], "IT")
+
+    assert [x["item_id"] for x in r] == ["MLA1", "MLA2"]
+    assert r[0]["condicion_detectada"] == "contado"
+    assert r[1]["condicion_detectada"] == "3"
+
+
+def test_precio_vivo_mlas_uno_no_encontrado_no_aborta_los_demas():
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 100000, "original_price": None, "tags": []}]})
+
+    r = precio_vivo_mlas(ml, ["MLA-INEXISTENTE", "MLA1"], "IT")
+
+    assert r[0] == {"item_id": "MLA-INEXISTENTE", "error": "No encontrado en esa cuenta"}
+    assert r[1]["item_id"] == "MLA1" and r[1]["precio_actual"] == 100000.0
