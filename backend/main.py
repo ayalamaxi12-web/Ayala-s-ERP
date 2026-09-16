@@ -2309,6 +2309,22 @@ async def ayala_core_publicaciones_run(
 async def ayala_core_publicaciones_status(job_id: str):
     return ayala_core.estado_job(job_id) or {"status": "not_found"}
 
+@app.post("/ayala-core/base-mla/run")
+async def ayala_core_base_mla_run(background_tasks: BackgroundTasks, cuentas: str = "", skus: str = ""):
+    """Job liviano (sin Táctica) para la pestaña "Base MLA" del Excel de
+    Matías -- pedido de Maxx 2026-09-16, ver ayala_core.descubrir_
+    publicaciones_base. Mismo formato de cuentas/skus separados por coma
+    que /ayala-core/publicaciones/run."""
+    job_id = f"ayalacore_basemla_{int(time.time())}"
+    lista_cuentas = [c for c in cuentas.split(",") if c] or None
+    lista_skus = [s for s in skus.split(",") if s] or None
+    background_tasks.add_task(ayala_core.iniciar_job_base_mla, job_id, lista_cuentas, lista_skus)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ayala-core/base-mla/status/{job_id}")
+async def ayala_core_base_mla_status(job_id: str):
+    return ayala_core.estado_job(job_id) or {"status": "not_found"}
+
 def _ayala_core_competencia_sync(product_id: str, cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()
     return {"ofertas": ayala_core.resolver_competencia_por_producto(ml, product_id, cuenta)}

@@ -5,6 +5,7 @@ from ayala_core import (
     calcular_precio_condicion,
     calcular_precios_todas_condiciones,
     descubrir_publicaciones,
+    descubrir_publicaciones_base,
     detectar_condicion_pago,
     resolver_competencia_por_producto,
     resolver_condicion_pago,
@@ -546,3 +547,44 @@ def test_resolver_competencia_por_producto_excluye_cuentas_propias():
 def test_resolver_competencia_por_producto_sin_competidores():
     ml = _MLProductoFalso([{"item_id": "MLA1", "seller_id": 115764017, "price": 77719, "tags": []}])
     assert resolver_competencia_por_producto(ml, "MLA68609606", "IT") == []
+
+
+# ── descubrir_publicaciones_base -- pestaña "Base MLA", pedido de Maxx
+# 2026-09-16. Sin Táctica: ni siquiera se le pasa un costo/iva provider. ──
+
+def test_descubrir_publicaciones_base_trae_solo_sku_condicion_cuenta_mla_link():
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "T", "permalink": "https://x/MLA1", "price": 100000,
+         "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": ["cuota-simple-6"]},
+    ]})
+
+    filas = descubrir_publicaciones_base(ml, ["IT"], skus_filtro=["PLANCHA-SUB-TERMO"])
+
+    assert filas == [{
+        "sku": "PLANCHA-SUB-TERMO", "condicion": 6, "cuenta": "IT",
+        "item_id": "MLA1", "permalink": "https://x/MLA1",
+    }]
+
+
+def test_descubrir_publicaciones_base_filtra_por_sku_piloto_y_no_pide_costo():
+    ml = _MLFalso({"IT": [
+        {"id": "MLA1", "title": "Plancha", "price": 100000, "seller_custom_field": "PLANCHA-SUB-GORRA", "tags": []},
+        {"id": "MLA2", "title": "Otra cosa", "price": 20000, "seller_custom_field": "TONER-XYZ", "tags": []},
+    ]})
+
+    filas = descubrir_publicaciones_base(ml, ["IT"], skus_filtro=["PLANCHA-SUB-GORRA"])
+
+    assert len(filas) == 1
+    assert filas[0]["item_id"] == "MLA1"
+    assert filas[0]["condicion"] == "contado"
+
+
+def test_descubrir_publicaciones_base_recorre_las_dos_cuentas():
+    ml = _MLFalso({
+        "IT": [{"id": "MLA1", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []}],
+        "MT": [{"id": "MLA2", "title": "T", "price": 100000, "seller_custom_field": "PLANCHA-SUB-TERMO", "tags": []}],
+    })
+
+    filas = descubrir_publicaciones_base(ml, ["IT", "MT"], skus_filtro=["PLANCHA-SUB-TERMO"])
+
+    assert sorted((f["cuenta"], f["item_id"]) for f in filas) == [("IT", "MLA1"), ("MT", "MLA2")]

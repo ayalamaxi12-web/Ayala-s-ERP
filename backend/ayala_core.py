@@ -362,6 +362,42 @@ def descubrir_publicaciones(
     return filas, incidencias
 
 
+def descubrir_publicaciones_base(
+    ml, cuentas: list[str], skus_filtro: list[str] | None = None,
+    progreso_cb: Callable[[int, int, str], None] | None = None,
+) -> list[dict]:
+    """Igual que `descubrir_publicaciones` pero SOLO el mapeo SKU↔MLA (sin
+    costo/IVA/envío/precio) -- pedido de Maxx 2026-09-16 para poblar la
+    pestaña "Base MLA" de su Excel (control de planchas de sublimación en
+    "VENTAS POR CANALES MATIAS"). A propósito NO pide `costo_provider`/
+    `iva_provider` (Táctica): esta pestaña no necesita ningún dato de
+    Táctica, así que no tiene sentido que dependa del túnel Tailscale
+    (inestable, ver [[project_tactica-tailscale-tunnel]]) para algo que no
+    lo usa -- más rápido y más robusto que reusar la función completa y
+    tirar los campos de costo."""
+    skus_validos = skus_filtro or SKUS_PILOTO
+    filas: list[dict] = []
+    cache_familias: dict[str, list[dict]] = {}
+    for cuenta in cuentas:
+        ids = ml.items_activos(cuenta)
+
+        def _progreso(actual, total, fase, cuenta=cuenta):
+            if progreso_cb:
+                progreso_cb(actual, total, f"Trayendo catálogo ({cuenta})")
+
+        detalles = ml.detalle_items_ofertas(ids, cuenta, _progreso if progreso_cb else None)
+        for d in detalles:
+            sku = _sku_de_item(d)
+            if sku not in skus_validos:
+                continue
+            condicion = resolver_condicion_pago(ml, d, cuenta, cache_familias)
+            filas.append({
+                "sku": sku, "condicion": condicion, "cuenta": cuenta,
+                "item_id": d.get("id"), "permalink": d.get("permalink"),
+            })
+    return filas
+
+
 def resolver_competencia_por_producto(ml, product_id: str, cuenta: str = "IT") -> list[dict]:
     """Pedido de Maxx 2026-09-03: encontró un competidor vendiendo casi al
     mismo precio que él pero en 9 cuotas -- eso lo deja afuera de las
@@ -442,6 +478,36 @@ def iniciar_job_publicaciones(
         }
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["log"].append(f"Listo: {len(filas)} publicaciones de los SKU piloto encontradas.")
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["log"].append(f"Error: {e}")
+
+
+def iniciar_job_base_mla(
+    job_id: str, cuentas: list[str] | None = None, skus: list[str] | None = None,
+) -> None:
+    """Job liviano para la pestaña "Base MLA" del Excel de Matías -- mismo
+    patrón que `iniciar_job_publicaciones`, pero sin Táctica (ver docstring
+    de `descubrir_publicaciones_base`), así que corre más rápido y no
+    depende del túnel Tailscale."""
+    _jobs[job_id] = {"status": "running", "log": ["Escaneando publicaciones activas..."], "result": None, "progress": None}
+    try:
+        from ml_ofertas import MLOfertasClient
+
+        ml = MLOfertasClient()
+
+        def _progreso(actual, total, label):
+            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": label}
+
+        filas = descubrir_publicaciones_base(
+            ml, cuentas or list(SELLERS.keys()), skus_filtro=skus, progreso_cb=_progreso,
+        )
+        _jobs[job_id]["progress"] = None
+        _jobs[job_id]["result"] = {"filas": [
+            {**f, "condicion": str(f["condicion"])} for f in filas
+        ]}
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["log"].append(f"Listo: {len(filas)} publicaciones encontradas.")
     except Exception as e:
         _jobs[job_id]["status"] = "error"
         _jobs[job_id]["log"].append(f"Error: {e}")
