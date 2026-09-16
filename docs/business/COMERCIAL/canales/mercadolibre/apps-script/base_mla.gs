@@ -1,12 +1,14 @@
 /**
  * Control de planchas de sublimación (Ayala Core) para "VENTAS POR
- * CANALES MATIAS", pestaña "ERP AYALA" -- Parte 1, paso 1 (pedido de
- * Maxx 2026-09-16).
+ * CANALES MATIAS", pestaña "ERP AYALA" -- Parte 1 (base MLA +
+ * desplegables) y Parte 2 (precio en vivo puntual), pedido de Maxx
+ * 2026-09-16.
  *
  * Este script NO tiene credenciales de Mercado Libre. Todo lo que
  * necesita de ML le llega vía HTTP al backend del ERP (Railway), que ya
  * tiene los tokens y ya resuelve la detección de condición / precio real
- * -- ver `ayala_core.descubrir_publicaciones_base` en el repo del ERP.
+ * -- ver `ayala_core.descubrir_publicaciones_base` y `ayala_core.
+ * precio_vivo_mlas` en el repo del ERP.
  *
  * Instalación (una sola vez):
  *   1. En el Sheet "VENTAS POR CANALES MATIAS" -> Extensiones -> Apps
@@ -23,6 +25,16 @@
  * De ahí en más, elegir una Condición en la columna M de una fila
  * MT/IT ya filtra solo los MLA correspondientes en la columna N de al
  * lado.
+ *
+ * Precio en vivo (Parte 2), parado en cualquier fila MT/IT con MLA ya
+ * elegido en N:
+ *   - Menú "Ayala Core" -> "Traer precio en vivo (fila actual)": escribe
+ *     precio actual / tachado / descuento % de ESE MLA en O/P/Q.
+ *   - Menú "Ayala Core" -> "Ver todos los precios de esta condición":
+ *     popup con el precio en vivo de TODOS los MLA de esa SKU+Condición+
+ *     Cuenta (sin escribir nada en la hoja).
+ * No se dispara solo al elegir en el desplegable -- Apps Script no deja
+ * que un simple trigger llame al backend, así que es siempre por menú.
  */
 
 // ── Configuración ──
@@ -32,6 +44,9 @@ var HOJA_ERP = 'ERP AYALA';
 var HOJA_BASE = 'Base MLA';
 var COL_CONDICION = 13; // M
 var COL_MLA = 14;       // N
+var COL_PRECIO_ACTUAL = 15; // O -- Parte 2
+var COL_TACHADO = 16;       // P -- Parte 2
+var COL_DESCUENTO = 17;     // Q -- Parte 2
 
 // Traduce el valor crudo que devuelve el backend ("contado","reducida",
 // "3","6","9","12") a la misma etiqueta que ya usan los encabezados de
@@ -48,6 +63,9 @@ function onOpen() {
     .createMenu('Ayala Core')
     .addItem('Actualizar base MLA', 'actualizarBaseMLA')
     .addItem('Configurar desplegables', 'configurarDesplegables')
+    .addSeparator()
+    .addItem('Traer precio en vivo (fila actual)', 'traerPrecioVivoFilaActual')
+    .addItem('Ver todos los precios de esta condición', 'verTodosPreciosCondicion')
     .addToUi();
 }
 
@@ -203,4 +221,88 @@ function _mlasFiltrados(sku, condicionEtiqueta, cuenta) {
     }
   }
   return resultado;
+}
+
+// ── Parte 2: precio en vivo puntual ──
+//
+// Nunca se dispara solo -- Apps Script no deja que un simple trigger
+// (onEdit) llame a UrlFetchApp, aunque el script ya esté autorizado, así
+// que esto va por menú, no por elegir en el desplegable. Las dos
+// acciones ("una fila" / "ver todas") comparten `_fetchPrecioVivo`, que
+// es el mismo endpoint (`/ayala-core/mla/precio-vivo`) aceptando una
+// lista de 1 o de N -- ver `precio_vivo_mlas` en el backend.
+
+/**
+ * Trae el precio en vivo del MLA que ya está elegido en la columna N de
+ * la fila donde tenés el cursor, y lo escribe en O (Precio actual), P
+ * (Tachado) y Q (Descuento %) de esa misma fila.
+ */
+function traerPrecioVivoFilaActual() {
+  var ui = SpreadsheetApp.getUi();
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (hoja.getName() !== HOJA_ERP) { ui.alert('Parate en una fila de "' + HOJA_ERP + '" primero.'); return; }
+
+  var fila = SpreadsheetApp.getActiveSpreadsheet().getActiveRange().getRow();
+  var mla = String(hoja.getRange(fila, COL_MLA).getValue()).trim();
+  if (!/^MLA/i.test(mla)) { ui.alert('La columna N de esta fila no tiene un MLA elegido todavía.'); return; }
+
+  try {
+    var cuenta = hoja.getRange(fila, 2).getValue();
+    var resultados = _fetchPrecioVivo([mla], cuenta);
+    var r = resultados[0];
+    if (!r || r.error) { ui.alert('No se pudo traer el precio: ' + (r ? r.error : 'sin respuesta')); return; }
+    hoja.getRange(fila, COL_PRECIO_ACTUAL).setValue(r.precio_actual);
+    hoja.getRange(fila, COL_TACHADO).setValue(r.precio_tachado || '');
+    hoja.getRange(fila, COL_DESCUENTO).setValue(r.descuento_pct !== null && r.descuento_pct !== undefined ? r.descuento_pct / 100 : '');
+  } catch (e) {
+    ui.alert('Error trayendo el precio en vivo: ' + e.message);
+  }
+}
+
+/**
+ * Junta TODOS los MLA de la SKU + Condición + Cuenta de la fila actual
+ * (mismo filtro que ya arma la columna N, vía `_mlasFiltrados`) y
+ * muestra el precio en vivo de cada uno en un popup -- son 2-3 publicaciones
+ * como mucho, no hace falta escribir nada en la hoja para compararlas.
+ */
+function verTodosPreciosCondicion() {
+  var ui = SpreadsheetApp.getUi();
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (hoja.getName() !== HOJA_ERP) { ui.alert('Parate en una fila de "' + HOJA_ERP + '" primero.'); return; }
+
+  var fila = SpreadsheetApp.getActiveSpreadsheet().getActiveRange().getRow();
+  var sku = _skuDelBloque(hoja, fila);
+  var cuenta = hoja.getRange(fila, 2).getValue();
+  var condicion = hoja.getRange(fila, COL_CONDICION).getValue();
+  if (!sku || !cuenta || !condicion) { ui.alert('Esta fila no tiene SKU/Cuenta/Condición completos.'); return; }
+
+  var mlas = _mlasFiltrados(sku, condicion, cuenta);
+  if (!mlas.length) { ui.alert('No hay MLA para ' + sku + ' / ' + condicion + ' / ' + cuenta + '.'); return; }
+
+  try {
+    var resultados = _fetchPrecioVivo(mlas, cuenta);
+    var lineas = resultados.map(function (r) {
+      if (r.error) return r.item_id + ': error -- ' + r.error;
+      var linea = r.item_id + ': ' + _formatoPesos(r.precio_actual);
+      if (r.precio_tachado) linea += ' (tachado ' + _formatoPesos(r.precio_tachado) + ', -' + r.descuento_pct + '%)';
+      linea += ' -- condición detectada: ' + r.condicion_detectada;
+      return linea;
+    });
+    ui.alert(sku + ' / ' + condicion + ' / ' + cuenta, lineas.join('\n'), ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Error trayendo los precios en vivo: ' + e.message);
+  }
+}
+
+function _fetchPrecioVivo(itemIds, cuenta) {
+  var url = BACKEND_URL + '/ayala-core/mla/precio-vivo?item_ids=' + encodeURIComponent(itemIds.join(','))
+    + '&cuenta=' + encodeURIComponent(cuenta);
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('Backend respondió ' + res.getResponseCode() + ': ' + res.getContentText());
+  var body = JSON.parse(res.getContentText());
+  return body.resultados || [];
+}
+
+function _formatoPesos(valor) {
+  return '$' + Math.round(valor).toLocaleString('es-AR');
 }
