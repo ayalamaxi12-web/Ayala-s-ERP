@@ -54,6 +54,11 @@ def _rentabilidad_startup():
         print(f"Rentabilidad: no se pudo migrar/sembrar en el arranque: {e}")
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
+# "VENTAS POR CANALES MATIAS" -- Excel real de Matías donde vive el control
+# de precios de las planchas de sublimación (Ayala Core), pestaña "ERP
+# AYALA". Ver ayala_core_precios_excel más abajo.
+EXCEL_MATIAS_ID = '1aCQx9iQoLDoT0G-P0vRfRJ-MV9rH7hBeRxXyacWtdXk'
+EXCEL_MATIAS_TAB = 'ERP AYALA'
 
 job_status = {}
 
@@ -2343,6 +2348,25 @@ async def ayala_core_mla_precio_vivo(item_ids: str, cuenta: str):
     if not ids:
         raise HTTPException(status_code=422, detail="Falta 'item_ids'")
     return await run_in_threadpool(_ayala_core_precio_vivo_sync, ids, cuenta)
+
+def _leer_precios_excel_matias() -> dict:
+    """Precios por SKU+condición que Maxx define a mano en el Excel real
+    ("VENTAS POR CANALES MATIAS", pestaña "ERP AYALA") -- pedido 2026-09-16:
+    mientras maneje los precios ahí en vez del motor de Ayala Core, la
+    pantalla "Motor de Precios" los precarga en el campo "Manual" (sin
+    tildar "Usar" -- eso lo sigue decidiendo él, mismo mecanismo de
+    "precio forzado" que ya existía). El parseo en sí (puro, testeable) vive
+    en `ayala_core.parsear_precios_excel_matias` -- acá solo la lectura."""
+    ss = get_gs().open_by_key(EXCEL_MATIAS_ID)
+    ws = ss.worksheet(EXCEL_MATIAS_TAB)
+    return ayala_core.parsear_precios_excel_matias(ws.get_all_values())
+
+@app.get("/ayala-core/precios-excel")
+async def ayala_core_precios_excel():
+    try:
+        return {"precios": await run_in_threadpool(_leer_precios_excel_matias)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error leyendo el Excel: {e}")
 
 def _ayala_core_competencia_sync(product_id: str, cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()

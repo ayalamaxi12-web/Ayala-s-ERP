@@ -7,6 +7,7 @@ from ayala_core import (
     descubrir_publicaciones,
     descubrir_publicaciones_base,
     detectar_condicion_pago,
+    parsear_precios_excel_matias,
     precio_vivo_mlas,
     resolver_competencia_por_producto,
     resolver_condicion_pago,
@@ -677,3 +678,60 @@ def test_precio_vivo_mlas_uno_no_encontrado_no_aborta_los_demas():
 
     assert r[0] == {"item_id": "MLA-INEXISTENTE", "error": "No encontrado en esa cuenta"}
     assert r[1]["item_id"] == "MLA1" and r[1]["precio_actual"] == 100000.0
+
+
+# ── parsear_precios_excel_matias -- precios definidos a mano en el Excel de
+# Matías ("ERP AYALA"), pedido de Maxx 2026-09-16 para precargar el campo
+# "Manual" del Motor de Precios. Fixture con los valores REALES de una
+# captura suya (PLANCHA-SUB-26X26-PORT y PLANCHA-SUB-30X38-5EN1).
+
+def _fila_sku_excel(sku, precio_web, contado, reducida, c3, c6, c9, c12):
+    return ["SKU", sku, precio_web, contado, reducida, c3, c6, c9, c12]
+
+
+def test_parsear_precios_excel_lee_las_6_condiciones_de_un_sku():
+    filas = [
+        ["-", "SKU", "Precio Web", "Contado", "Reducida", "3 cuotas", "6 cuotas", "9 cuotas", "12 cuotas"],
+        _fila_sku_excel("PLANCHA-SUB-26X26-PORT", "182962", "201258", "230046", "239645", "254029", "265784", "279649"),
+        ["Publicaciones", "MT"],
+        ["", "IT"],
+    ]
+    precios = parsear_precios_excel_matias(filas)
+    assert precios["PLANCHA-SUB-26X26-PORT"] == {
+        "contado": Decimal("201258"), "reducida": Decimal("230046"),
+        "3": Decimal("239645"), "6": Decimal("254029"), "9": Decimal("265784"), "12": Decimal("279649"),
+    }
+
+
+def test_parsear_precios_excel_ignora_precio_web_no_es_una_condicion():
+    filas = [_fila_sku_excel("PLANCHA-SUB-GORRA", "208615", "229476", "256187", "268044", "285425", "304372", "320320")]
+    precios = parsear_precios_excel_matias(filas)
+    assert "precio_web" not in precios["PLANCHA-SUB-GORRA"]
+    assert set(precios["PLANCHA-SUB-GORRA"]) == {"contado", "reducida", "3", "6", "9", "12"}
+
+
+def test_parsear_precios_excel_admite_formato_argentino_con_signo_y_separadores():
+    filas = [_fila_sku_excel("PLANCHA-SUB-TERMO", "", "$188.365,00", "207.201", "232498", "", "", "")]
+    precios = parsear_precios_excel_matias(filas)
+    assert precios["PLANCHA-SUB-TERMO"]["contado"] == Decimal("188365")
+    assert precios["PLANCHA-SUB-TERMO"]["reducida"] == Decimal("207201")
+    assert precios["PLANCHA-SUB-TERMO"]["3"] == Decimal("232498")
+
+
+def test_parsear_precios_excel_ignora_filas_que_no_son_header_de_bloque():
+    # Filas MT/IT (columna A != "SKU") y filas vacías se ignoran solas.
+    filas = [
+        ["Publicaciones", "MT", "", "", "", "", "", "", ""],
+        ["", "IT", "", "", "", "", "", "", ""],
+        [],
+    ]
+    assert parsear_precios_excel_matias(filas) == {}
+
+
+def test_parsear_precios_excel_ignora_condicion_sin_precio_cargado():
+    # SKU real pero con alguna condición todavía sin definir (celda vacía)
+    # -- no debe aparecer con precio None/0 en el resultado.
+    filas = [_fila_sku_excel("PLANCHA-SUB-PORTATIL", "66715", "73387", "", "89693", "97545", "106497", "114368")]
+    precios = parsear_precios_excel_matias(filas)
+    assert "reducida" not in precios["PLANCHA-SUB-PORTATIL"]
+    assert precios["PLANCHA-SUB-PORTATIL"]["contado"] == Decimal("73387")

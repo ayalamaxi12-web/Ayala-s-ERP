@@ -13,6 +13,7 @@ AYALA_CORE.md A.3.1 al peso exacto (ver test_ayala_core.py).
 """
 from __future__ import annotations
 
+import re
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable
 
@@ -567,3 +568,61 @@ def iniciar_job_base_mla(
 
 def estado_job(job_id: str):
     return _jobs.get(job_id)
+
+
+def _parsear_numero_ar(valor) -> Decimal | None:
+    """Mismo criterio que `ayalaCoreParsearNumero` (docs/index.html, fix
+    2026-09-15): admite "$407.839,00", "407.839" y "407839" por igual
+    (punto = separador de miles, salvo que la cadena termine en ",NN",
+    coma decimal explícita)."""
+    if valor is None:
+        return None
+    s = str(valor).strip()
+    if not s:
+        return None
+    s = s.replace("$", "").replace(" ", "")
+    if re.search(r",\d{1,2}$", s):
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        s = re.sub(r"[.,]", "", s)
+    try:
+        return Decimal(s)
+    except Exception:
+        return None
+
+
+# Columnas C..I de "ERP AYALA" (0-based, A=0/B=1 son "-"/SKU) -- layout
+# confirmado por captura de Maxx 2026-09-16. C ("Precio Web") no es una
+# condición de Ayala Core, se ignora acá a propósito.
+_EXCEL_MATIAS_COL_CONDICION = {3: "contado", 4: "reducida", 5: "3", 6: "6", 7: "9", 8: "12"}
+
+
+def parsear_precios_excel_matias(filas: list[list[str]]) -> dict[str, dict[str, Decimal]]:
+    """Precios por SKU+condición que Maxx define a mano en el Excel real
+    ("VENTAS POR CANALES MATIAS", pestaña "ERP AYALA") -- pedido 2026-09-16:
+    mientras maneje los precios ahí en vez del motor de Ayala Core, la
+    pantalla "Motor de Precios" del ERP online los precarga en el campo
+    "Manual" (sin tildar "Usar" -- eso lo sigue decidiendo él, mismo
+    mecanismo de "precio forzado" que ya existía para simular).
+
+    `filas` es el resultado crudo de `worksheet.get_all_values()` -- función
+    pura (sin llamar a Sheets acá) para poder testearla con datos fijos,
+    mismo criterio que el resto del módulo. Cada bloque de SKU tiene una
+    fila con columna A = "SKU" y en B el SKU (mismo layout que ya usa el
+    Apps Script de la Parte 1, `_skuDelBloque`); las filas MT/IT del bloque
+    no tienen "SKU" en A, se ignoran solas."""
+    precios: dict[str, dict[str, Decimal]] = {}
+    for fila in filas:
+        if len(fila) < 2 or fila[0].strip() != "SKU":
+            continue
+        sku = fila[1].strip()
+        if not sku:
+            continue
+        precios_sku = {}
+        for col, condicion in _EXCEL_MATIAS_COL_CONDICION.items():
+            valor = _parsear_numero_ar(fila[col]) if len(fila) > col else None
+            if valor:
+                precios_sku[condicion] = valor
+        if precios_sku:
+            precios[sku] = precios_sku
+    return precios
