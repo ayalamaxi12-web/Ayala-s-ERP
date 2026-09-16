@@ -18,6 +18,9 @@ class _CostoProviderFalso:
     def __init__(self, costos: dict):
         self._costos = costos
 
+    def precargar(self):
+        pass
+
     def obtener(self, sku):
         return self._costos.get(sku)
 
@@ -25,6 +28,9 @@ class _CostoProviderFalso:
 class _IvaProviderFalso:
     def __init__(self, factores: dict):
         self._factores = factores
+
+    def precargar(self):
+        pass
 
     def factor(self, sku):
         return self._factores.get(sku)
@@ -312,6 +318,40 @@ def test_descubrir_publicaciones_usa_resolver_condicion_pago(monkeypatch):
     filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
 
     assert filas[0]["condicion_detectada"] == 6
+
+
+def test_descubrir_publicaciones_precarga_tactica_antes_de_escanear_ml(monkeypatch):
+    # Corregido 2026-09-16: la consulta a Táctica (costo/IVA) tiene que
+    # dispararse ANTES de tocar el catálogo de ML, no en medio -- si no,
+    # queda invisible para el progreso mostrado en pantalla y expuesta a
+    # que el túnel a Táctica se corte varios minutos después de arrancar
+    # el job (ver [[project_tactica-tailscale-tunnel]] / lo que Maxx
+    # describía como "se cuelga pasando a MT").
+    _sin_envio(monkeypatch)
+    eventos = []
+
+    class _CostoProviderEspia(_CostoProviderFalso):
+        def precargar(self):
+            eventos.append("precargar_costo")
+            super().precargar()
+
+    class _IvaProviderEspia(_IvaProviderFalso):
+        def precargar(self):
+            eventos.append("precargar_iva")
+            super().precargar()
+
+    class _MLEspia(_MLFalso):
+        def items_activos(self, cuenta):
+            eventos.append(f"items_activos_{cuenta}")
+            return super().items_activos(cuenta)
+
+    ml = _MLEspia({"IT": [], "MT": []})
+    costo = _CostoProviderEspia({})
+    iva = _IvaProviderEspia({})
+
+    descubrir_publicaciones(ml, costo, iva, ["IT", "MT"], Decimal(1000))
+
+    assert eventos == ["precargar_costo", "precargar_iva", "items_activos_IT", "items_activos_MT"]
 
 
 # ── SKUs piloto ──

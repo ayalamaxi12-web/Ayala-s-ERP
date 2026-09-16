@@ -77,6 +77,38 @@ def test_costo_vigente_sin_configurar_levanta_error_claro():
         prov.obtener("SKU1")
 
 
+def test_costo_vigente_precargar_dispara_la_consulta_una_sola_vez():
+    # Pedido de Maxx 2026-09-16 (Ayala Core): forzar la consulta ANTES del
+    # primer `obtener()`, para no dispararla en medio de un escaneo largo.
+    # `precargar()` es idempotente -- llamarlo de nuevo (o llamar `obtener`
+    # después) no repite la consulta.
+    llamadas = []
+
+    def consultar():
+        llamadas.append(1)
+        return [_fila_catalogo("SKU1", costo="2.65")]
+
+    prov = CostoVigenteProvider(consultar=consultar)
+    prov.precargar()
+    prov.precargar()
+    assert prov.obtener("SKU1") == Decimal("2.65")
+    assert len(llamadas) == 1
+
+
+def test_iva_precargar_dispara_la_consulta_una_sola_vez():
+    llamadas = []
+
+    def consultar():
+        llamadas.append(1)
+        return [_fila_catalogo("SKU1", iva_descripcion="IVA Debito 21%")]
+
+    prov = IvaProvider(consultar=consultar)
+    prov.precargar()
+    prov.precargar()
+    assert prov.factor("SKU1") == Decimal("1.21")
+    assert len(llamadas) == 1
+
+
 # ── `_consultar_catalogo_tactica_real` — reintento ante corte de conexión.
 # Bug real 2026-08-27: el link a Táctica cortó a mitad de consulta durante
 # una corrida real de Ofertas ML ("DB-Lib error 20017: Unexpected EOF from

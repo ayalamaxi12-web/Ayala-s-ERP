@@ -305,11 +305,27 @@ def descubrir_publicaciones(
     las dos cuentas) -- pensado para correr como job de background, no en
     cada carga de pantalla (mismo criterio que `ofertas_propias_activas`).
     `progreso_cb(procesados, total, fase)` opcional, mismo patrón que el
-    resto de los escaneos largos de este módulo."""
+    resto de los escaneos largos de este módulo.
+
+    Corregido 2026-09-16: `costo_provider`/`iva_provider` se precargan ACÁ,
+    antes de tocar ML -- antes cada uno disparaba su única consulta SQL
+    recién al procesar el primer SKU piloto encontrado, en medio del
+    escaneo de una cuenta, sin ninguna fase de progreso propia (invisible
+    para quien mira la pantalla) y expuesto a que el corte de red del túnel
+    Tailscale a Táctica apareciera varios minutos después de arrancar el
+    job -- Maxx lo veía como "se cuelga pasando a MT" porque coincidía con
+    el hueco silencioso entre terminar de bajar el catálogo de una cuenta y
+    empezar el de la siguiente."""
     skus_validos = skus_filtro or SKUS_PILOTO
     filas: list[dict] = []
     incidencias: list[dict] = []
     cache_familias: dict[str, list[dict]] = {}
+    if progreso_cb:
+        progreso_cb(0, 1, "Consultando costos en Táctica...")
+    costo_provider.precargar()
+    if progreso_cb:
+        progreso_cb(0, 1, "Consultando IVA en Táctica...")
+    iva_provider.precargar()
     for cuenta in cuentas:
         ids = ml.items_activos(cuenta)
 

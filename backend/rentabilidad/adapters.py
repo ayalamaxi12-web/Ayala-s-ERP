@@ -167,6 +167,17 @@ class CostoVigenteProvider:
             self._catalogo = {fila["sku"].strip(): fila for fila in self._consultar()}
         return self._catalogo
 
+    def precargar(self) -> None:
+        """Fuerza la única consulta SQL de esta instancia ahora mismo (no-op
+        si ya está cacheada) -- pedido de Maxx 2026-09-16: en Ayala Core
+        `descubrir_publicaciones` esta consulta se disparaba sola, recién en
+        el primer SKU piloto encontrado, en medio del escaneo largo de
+        Mercado Libre -- invisible para el progreso mostrado en pantalla y
+        expuesta de lleno a un corte de red del túnel Tailscale a Táctica
+        que puede aparecer varios minutos después de arrancar el job.
+        Llamarlo al principio del job, antes de escanear ML."""
+        self._obtener_catalogo()
+
     def obtener(self, sku: str) -> Decimal | None:
         return self.obtener_con_origen(sku)[0]
 
@@ -206,6 +217,11 @@ class IvaProvider:
             # docstring, corregido 2026-08-18) — misma fuente, mismo fix.
             self._catalogo = {fila["sku"].strip(): fila for fila in self._consultar()}
         return self._catalogo
+
+    def precargar(self) -> None:
+        """Ver `CostoVigenteProvider.precargar` -- misma razón, instancia
+        (y consulta SQL) separada."""
+        self._obtener_catalogo()
 
     def factor(self, sku: str) -> Decimal | None:
         fila = self._obtener_catalogo().get(sku)
