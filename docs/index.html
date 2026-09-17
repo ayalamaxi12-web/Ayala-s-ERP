@@ -975,7 +975,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
   <div class="card" style="margin-bottom:14px">
     <div class="card-title">🔎 Conciliación de stock (ML vs Ecom)</div>
-    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (IT/MT), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (Group/Arg), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn primary" onclick="runFullConciliar()" id="btn-full-conciliar">▶ Ejecutar conciliación</button>
       <span id="full-conciliar-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Listo</span>
@@ -1167,8 +1167,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
   <!-- Tabs por cuenta -->
   <div style="display:flex;gap:6px;margin-bottom:4px">
-    <button class="btn" id="oferta-tab-IT" onclick="ofertasTab('IT')">📦 Catálogo IT</button>
-    <button class="btn btn-secondary" id="oferta-tab-MT" onclick="ofertasTab('MT')">📦 Catálogo MT</button>
+    <button class="btn" id="oferta-tab-IT" onclick="ofertasTab('IT')">📦 Catálogo Group</button>
+    <button class="btn btn-secondary" id="oferta-tab-MT" onclick="ofertasTab('MT')">📦 Catálogo Arg</button>
   </div>
 
   <!-- Stats -->
@@ -1229,7 +1229,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
     <div>
       <div class="section-hdr" style="margin-bottom:4px">📊 Ofertas ML — Margen real</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Campañas propias + de ML, IT y MT · margen con costo/IVA de Táctica (nunca del PM) · simulá, activá y sacá ofertas desde acá</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Campañas propias + de ML, Group y Arg · margen con costo/IVA de Táctica (nunca del PM) · simulá, activá y sacá ofertas desde acá</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace">Operador:
@@ -1248,8 +1248,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div id="ofm-panel" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
 
   <div style="display:flex;gap:6px;margin-bottom:4px">
-    <button class="btn" id="ofm-tab-IT" onclick="ofmTab('IT')">📦 IT</button>
-    <button class="btn btn-secondary" id="ofm-tab-MT" onclick="ofmTab('MT')">📦 MT</button>
+    <button class="btn" id="ofm-tab-IT" onclick="ofmTab('IT')">📦 Group</button>
+    <button class="btn btn-secondary" id="ofm-tab-MT" onclick="ofmTab('MT')">📦 Arg</button>
   </div>
 
   <div class="stats-row" id="ofm-stats-wrap" style="display:none;grid-template-columns:repeat(4,1fr)">
@@ -1290,7 +1290,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">La tabla de arriba solo trae MLAs que YA tienen algo activo. Para activar una oferta nueva en uno que hoy no tiene nada, buscalo acá.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <input type="text" id="ofm-buscar-mla" placeholder="MLA (ej: MLA123456789)" onkeydown="if(event.key==='Enter')ofmBuscarMLA()" style="width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none">
-      <select id="ofm-buscar-cuenta" class="fi"><option value="IT">IT</option><option value="MT">MT</option></select>
+      <select id="ofm-buscar-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select>
       <button class="btn" onclick="ofmBuscarMLA()">🔎 Buscar</button>
     </div>
     <div id="ofm-busqueda-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px"></div>
@@ -1301,8 +1301,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
       <span style="display:flex;gap:4px;align-items:center">Ventas mínimas <input type="text" id="ofm-alertas-minventas" value="5" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"></span>
       <span style="display:flex;gap:4px;align-items:center">en <input type="text" id="ofm-alertas-dias" value="30" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"> días</span>
-      <button class="btn" onclick="ofmAlertasRun('IT')" id="btn-ofm-alertas-IT">Buscar candidatos IT</button>
-      <button class="btn" onclick="ofmAlertasRun('MT')" id="btn-ofm-alertas-MT">Buscar candidatos MT</button>
+      <button class="btn" onclick="ofmAlertasRun('IT')" id="btn-ofm-alertas-IT">Buscar candidatos Group</button>
+      <button class="btn" onclick="ofmAlertasRun('MT')" id="btn-ofm-alertas-MT">Buscar candidatos Arg</button>
       <span id="ofm-alertas-status" style="color:var(--text3)"></span>
     </div>
     <div id="ofm-alertas-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
@@ -1388,7 +1388,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <select id="ac-ref-sku" class="fi"></select>
       <input type="text" id="ac-ref-producto" placeholder="ID de producto (ej. MLA68609606)..." class="fi" style="width:200px">
-      <select id="ac-ref-cuenta" class="fi"><option value="IT">IT</option><option value="MT">MT</option></select>
+      <select id="ac-ref-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select>
       <button class="btn" onclick="ayalaCoreRefBuscar()">🔎 Buscar competencia</button>
     </div>
     <div id="ac-ref-candidatos" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);margin-bottom:8px"></div>
@@ -1397,7 +1397,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
   <div style="margin-top:24px">
     <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 Publicaciones de los SKU piloto — real vs. calculado</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Escanea TODAS las publicaciones activas de las dos cuentas (IT + MT), se queda con las de los SKU tildados, y compara el precio actual en vivo contra el que el motor calcula para la condición de pago detectada. Tarda unos minutos (recorre el catálogo completo) -- no escribe nada a ML.</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Escanea TODAS las publicaciones activas de las dos cuentas (Group + Arg), se queda con las de los SKU tildados, y compara el precio actual en vivo contra el que el motor calcula para la condición de pago detectada. Tarda unos minutos (recorre el catálogo completo) -- no escribe nada a ML.</div>
     <div id="ac-publicaciones-skus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn primary" onclick="ayalaCorePublicacionesRun()" id="btn-ac-publicaciones">🔄 Detectar publicaciones</button>
@@ -1428,7 +1428,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 O comparar un solo MLA</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <input type="text" id="ac-mla" placeholder="MLA..." class="fi" style="width:140px">
-      <select id="ac-cuenta" class="fi"><option value="IT">IT</option><option value="MT">MT</option></select>
+      <select id="ac-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select>
       <button class="btn" onclick="ayalaCoreCompararMLA()">Comparar</button>
     </div>
     <div id="ac-mla-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"></div>
@@ -1491,6 +1491,14 @@ let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;
 
 // ── UTILS ──
 function qs(id){return document.getElementById(id);}
+// Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
+// verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
+// internas (S.mlToken/mlToken2, ids de DOM, parámetros ?cuenta=IT al
+// backend, etc.) siguen siendo "IT"/"MT" sin tocar, a propósito (alcance
+// que Maxx eligió: solo visual, no un rename de fondo). Mismo casing
+// ("Group"/"Arg", no "GROUP"/"ARG") que ya usaban los botones de Full ML
+// Reposición desde antes de este cambio.
+function etiquetaCuenta(c){return c==='IT'?'Group':(c==='MT'?'Arg':c);}
 
 // ── Encabezados clickeables — genérico, para el RESTO de las tablas del
 // ERP. 4 tablas (ecom-table/ml-table/tactica-table/comp-table) ya tenían
@@ -2842,7 +2850,7 @@ function renderFullConciliar(result){
   qs('full-conciliar-tbody').innerHTML=filas.map(f=>{
     const dif=f.diferencia;
     const difColor=!dif?'var(--text2)':(dif>0?'var(--green)':'var(--red)');
-    const pubs=(f.publicaciones||[]).map(p=>`${p.cuenta}:${p.item_id} (${p.disponible}${p.factor>1?'×'+p.factor:''}${p.vinculado?'':' ⚠no-vinc'})`).join('<br>');
+    const pubs=(f.publicaciones||[]).map(p=>`${etiquetaCuenta(p.cuenta)}:${p.item_id} (${p.disponible}${p.factor>1?'×'+p.factor:''}${p.vinculado?'':' ⚠no-vinc'})`).join('<br>');
     return `<tr>
       <td>${f.sku}</td>
       <td style="text-align:right">${f.stock_ml}</td>
@@ -3736,13 +3744,13 @@ async function ofmAlertasRun(cuenta){
   const btn=qs('btn-ofm-alertas-'+cuenta),status=qs('ofm-alertas-status'),logEl=qs('ofm-alertas-log');
   const minVentas=qs('ofm-alertas-minventas').value||5, dias=qs('ofm-alertas-dias').value||30;
   const itemIds=ofmResult.filas.filter(f=>f.cuenta===cuenta).map(f=>f.item_id).join(',');
-  btn.disabled=true;btn.textContent='● corriendo...';status.textContent=`Iniciando (${cuenta})...`;logEl.style.display='block';logEl.innerHTML='';
+  btn.disabled=true;btn.textContent='● corriendo...';status.textContent=`Iniciando (${etiquetaCuenta(cuenta)})...`;logEl.style.display='block';logEl.innerHTML='';
   try{
     const res=await fetch(`${url}/ml-ofertas/alertas/run?cuenta=${cuenta}&item_ids_con_oferta=${encodeURIComponent(itemIds)}&dias_ventas=${dias}&min_ventas=${minVentas}`,{method:'POST'});
     const{job_id}=await res.json();
     status.textContent='Job: '+job_id;
-    pollFullJob(`${url}/ml-ofertas/alertas/status/${job_id}`,logEl,status,btn,`Buscar candidatos ${cuenta}`,r=>ofmAlertasOnResult(r,cuenta));
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent=`Buscar candidatos ${cuenta}`;}
+    pollFullJob(`${url}/ml-ofertas/alertas/status/${job_id}`,logEl,status,btn,`Buscar candidatos ${etiquetaCuenta(cuenta)}`,r=>ofmAlertasOnResult(r,cuenta));
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent=`Buscar candidatos ${etiquetaCuenta(cuenta)}`;}
 }
 // ── Costo real de envío -- pedido de Maxx 2026-09-01. "Congela" el
 // shipping_id de la última venta de cada MLA (ambas cuentas) del lado
@@ -3768,7 +3776,7 @@ function ofmAlertasOnResult(result,cuenta){
   const todos=[...ofmAlertasCandidatos.IT,...ofmAlertasCandidatos.MT].sort((a,b)=>b.ventas_periodo-a.ventas_periodo);
   qs('ofm-alertas-wrap').style.display='block';
   qs('ofm-alertas-tbody').innerHTML=todos.map(c=>`<tr>
-    <td>${c.cuenta}</td>
+    <td>${etiquetaCuenta(c.cuenta)}</td>
     <td><a href="${c.permalink||`https://articulo.mercadolibre.com.ar/${c.item_id}`}" target="_blank" style="color:var(--accent)">${c.item_id}</a></td>
     <td>${c.sku||'<span style="color:var(--red)">sin SKU</span>'}</td>
     <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.titulo||''}</td>
@@ -4172,7 +4180,7 @@ function ayalaCorePublicacionesRepintar(){
     const colCompetencia=ayalaCorePubColCompetenciaHtml(f,idx);
     return `<tr>
       <td><input type="checkbox" class="ac-pub-chk" data-idx="${idx}"></td>
-      <td>${f.cuenta}</td>
+      <td>${etiquetaCuenta(f.cuenta)}</td>
       <td><a href="${f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
       <td>${f.sku}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
@@ -4385,7 +4393,7 @@ function ayalaCoreRevisarSeleccion(){
   const filas=idxs.map(i=>({f:window._acPubOrdenadas[i],precio:window._acPubPrecioDefinido[i],tachado:window._acPubPrecioTachado[i]}));
   qs('ac-aplicar-confirmar').style.display='block';
   qs('ac-aplicar-confirmar').innerHTML=`⚠️ Vas a escribir precio en <b>${filas.length}</b> publicación(es) real(es) de ML:<br>${
-    filas.map(({f,precio,tachado})=>`${f.cuenta} · ${f.item_id} · ${f.sku} (${ayalaCoreCondLabel(f.condicion_detectada)}): ${ayalaCoreFmt(f.precio_actual)} → <b>${ayalaCoreFmt(precio)}</b>${tachado?` · tachado → <b>${ayalaCoreFmt(tachado)}</b> <span style="color:var(--text3)">(ML puede no aplicarlo -- reputación no verde, ítem no nuevo, descuento fuera de 5%-80%, etc., el log de abajo lo va a confirmar por publicación)</span>`:''}`).join('<br>')
+    filas.map(({f,precio,tachado})=>`${etiquetaCuenta(f.cuenta)} · ${f.item_id} · ${f.sku} (${ayalaCoreCondLabel(f.condicion_detectada)}): ${ayalaCoreFmt(f.precio_actual)} → <b>${ayalaCoreFmt(precio)}</b>${tachado?` · tachado → <b>${ayalaCoreFmt(tachado)}</b> <span style="color:var(--text3)">(ML puede no aplicarlo -- reputación no verde, ítem no nuevo, descuento fuera de 5%-80%, etc., el log de abajo lo va a confirmar por publicación)</span>`:''}`).join('<br>')
   }<br><button class="btn primary" style="margin-top:8px" onclick="ayalaCoreConfirmarAplicar()">Confirmar y aplicar ${filas.length}</button> <button class="btn" style="margin-top:8px" onclick="qs('ac-aplicar-confirmar').style.display='none'">Cancelar</button>`;
 }
 async function ayalaCoreConfirmarAplicar(){
@@ -4398,7 +4406,7 @@ async function ayalaCoreConfirmarAplicar(){
     const f=window._acPubOrdenadas[idx];
     const precio=window._acPubPrecioDefinido[idx];
     const tachado=window._acPubPrecioTachado[idx];
-    logEl.innerHTML+=`<div>${f.cuenta} · ${f.item_id} · ${f.sku} -- aplicando ${ayalaCoreFmt(precio)}${tachado?` (tachado ${ayalaCoreFmt(tachado)})`:''}...</div>`;
+    logEl.innerHTML+=`<div>${etiquetaCuenta(f.cuenta)} · ${f.item_id} · ${f.sku} -- aplicando ${ayalaCoreFmt(precio)}${tachado?` (tachado ${ayalaCoreFmt(tachado)})`:''}...</div>`;
     logEl.scrollTop=logEl.scrollHeight;
     try{
       const res=await fetch(`${url}/ayala-core/item/${f.item_id}/aplicar-precio`,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -5331,13 +5339,13 @@ async function autoConnectML(){
       // Fill input field
       const inp=qs('ml-token');
       if(inp)inp.value=d.token;
-      const st=qs('ml-status');if(st){st.className='conn-status connected';st.textContent='● IT conectado';}
+      const st=qs('ml-status');if(st){st.className='conn-status connected';st.textContent='● Group conectado';}
       console.log('ML IT auto-conectado');}}
     if(r2.ok){const d=await r2.json();if(d.token){S.mlToken2=d.token;
       // Fill input field 2
       const inp2=qs('ml-token2');
       if(inp2)inp2.value=d.token;
-      const st=qs('ml-status2');if(st){st.className='conn-status ok';st.textContent='● MT conectado';}
+      const st=qs('ml-status2');if(st){st.className='conn-status ok';st.textContent='● Arg conectado';}
       console.log('ML MT auto-conectado');}}     saveStor();
   }catch(e){console.warn('ML auto-connect:',e);}
   // Fetch TC BNA
@@ -5712,9 +5720,9 @@ async function ofertasLoad(){
     // Load both tabs
     for(const tab of OFERTAS_TABS){
       const cuenta = tab.includes('IT') ? 'IT' : 'MT';
-      toast(`Cargando ${tab}...`);
+      toast(`Cargando ${etiquetaCuenta(cuenta)}...`);
       const rows = await fetchSheet(OFERTAS_ID, `${tab}!A1:Z3000`);
-      if(!rows || rows.length < 2){ toast(`Sin datos en ${tab}`, 'warning'); continue; }
+      if(!rows || rows.length < 2){ toast(`Sin datos en ${etiquetaCuenta(cuenta)}`, 'warning'); continue; }
       
       const hdrs = rows[0].map(h=>String(h||'').trim());
       const hm = hdrMap(hdrs);
@@ -5786,7 +5794,7 @@ async function ofertasLoad(){
         const p=mlPricesMap[r.mlaFull]||{};
         return{...r,precioML:r.precioOferta||0,tachadoML:r.precioTachado||0,cuotasML:p.cuotasML||r.cuotas||''};
       });
-      toast(`${ofertasData[cuenta].length} ofertas cargadas (${cuenta})`);
+      toast(`${ofertasData[cuenta].length} ofertas cargadas (${etiquetaCuenta(cuenta)})`);
     }
     qs('ofertas-stats-wrap').style.display='grid';
     qs('ofertas-filters').style.display='flex';
