@@ -33,6 +33,11 @@
  *   - Menú "Ayala Core" -> "Ver todos los precios de esta condición":
  *     popup con el precio en vivo de TODOS los MLA de esa SKU+Condición+
  *     Cuenta (sin escribir nada en la hoja).
+ *   - Menú "Ayala Core" -> "Actualizar precios en Base MLA (todas)":
+ *     trae el precio en vivo de TODA la pestaña "Base MLA" (las ~109
+ *     publicaciones, no una fila puntual) y lo escribe ahí mismo en
+ *     columnas F-I. Tarda más (llama a ML una vez por publicación) --
+ *     pensado para correr de vez en cuando, no en cada edición.
  * No se dispara solo al elegir en el desplegable -- Apps Script no deja
  * que un simple trigger llame al backend, así que es siempre por menú.
  */
@@ -47,6 +52,20 @@ var COL_MLA = 14;       // N
 var COL_PRECIO_ACTUAL = 15; // O -- Parte 2
 var COL_TACHADO = 16;       // P -- Parte 2
 var COL_DESCUENTO = 17;     // Q -- Parte 2
+
+// Columnas F-I de "Base MLA" -- Parte 2b (2026-09-17): precio en vivo de
+// TODAS las publicaciones de la base, no solo la fila que estás mirando en
+// "ERP AYALA". A/B/C/D/E (SKU/Condición/Cuenta/MLA/Link) ya las escribe
+// _escribirBaseMLA -- estas se agregan aparte, en una pasada propia.
+var COL_BASE_PRECIO_ACTUAL = 6; // F
+var COL_BASE_TACHADO = 7;       // G
+var COL_BASE_DESCUENTO = 8;     // H
+var COL_BASE_CONDICION_LIVE = 9;// I
+// El endpoint de precio en vivo hace una llamada a ML por publicación, en
+// serie -- de a lotes de a lo sumo esto por pedido, para que ningún HTTP
+// individual quede tan largo que arriesgue timeout, y para no perder TODO
+// el progreso si un lote falla a mitad de camino.
+var TAMANO_LOTE_PRECIO_VIVO = 25;
 
 // Traduce el valor crudo que devuelve el backend ("contado","reducida",
 // "3","6","9","12") a la misma etiqueta que ya usan los encabezados de
@@ -66,6 +85,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Traer precio en vivo (fila actual)', 'traerPrecioVivoFilaActual')
     .addItem('Ver todos los precios de esta condición', 'verTodosPreciosCondicion')
+    .addItem('Actualizar precios en Base MLA (todas)', 'actualizarPreciosBaseMLA')
     .addToUi();
 }
 
@@ -292,6 +312,73 @@ function verTodosPreciosCondicion() {
   } catch (e) {
     ui.alert('Error trayendo los precios en vivo: ' + e.message);
   }
+}
+
+/**
+ * Trae el precio en vivo de TODAS las publicaciones que ya están en "Base
+ * MLA" (no una fila puntual) y lo escribe ahí mismo, en columnas F (Precio
+ * actual), G (Tachado), H (Descuento %), I (Condición detectada) --
+ * pedido de Maxx 2026-09-17: "necesitamos uno que ponga todos los datos
+ * que necesitamos en las celdas, pero en la pestaña de Base MLA" (a
+ * diferencia de "Ver todos los precios de esta condición", que solo
+ * muestra un popup de una SKU+Condición+Cuenta puntual, sin persistir
+ * nada). No vuelve a pedir el mapeo SKU/MLA -- reusa lo que ya haya en A-E
+ * (correlo después de "Actualizar base MLA" si querés la lista más
+ * fresca posible).
+ */
+function actualizarPreciosBaseMLA() {
+  var ui = SpreadsheetApp.getUi();
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_BASE);
+  if (!hoja) { ui.alert('No encontré la pestaña "' + HOJA_BASE + '" -- corré primero "Actualizar base MLA".'); return; }
+  var datos = hoja.getDataRange().getValues(); // [SKU, Condición, Cuenta, MLA, Link, ...]
+  if (datos.length < 2) { ui.alert('"' + HOJA_BASE + '" está vacía -- corré primero "Actualizar base MLA".'); return; }
+
+  // El endpoint pide una sola cuenta por llamada -- agrupamos los MLA por
+  // cuenta acá, no por SKU/Condición (a este endpoint no le importan).
+  var mlasPorCuenta = {};
+  for (var i = 1; i < datos.length; i++) {
+    var mla = datos[i][3], cuenta = datos[i][2];
+    if (!mla || !cuenta) continue;
+    (mlasPorCuenta[cuenta] = mlasPorCuenta[cuenta] || []).push(mla);
+  }
+
+  var resultadoPorMLA = {};
+  try {
+    for (var cuenta in mlasPorCuenta) {
+      var ids = mlasPorCuenta[cuenta];
+      for (var i = 0; i < ids.length; i += TAMANO_LOTE_PRECIO_VIVO) {
+        var lote = ids.slice(i, i + TAMANO_LOTE_PRECIO_VIVO);
+        var resultados = _fetchPrecioVivo(lote, cuenta);
+        resultados.forEach(function (r) { resultadoPorMLA[r.item_id] = r; });
+      }
+    }
+  } catch (e) {
+    ui.alert('Error trayendo precios (se cortó a mitad de camino, nada se escribió todavía): ' + e.message);
+    return;
+  }
+
+  var encabezado = datos[0].slice(0, 5).concat(['Precio actual', 'Tachado', 'Descuento %', 'Condición detectada']);
+  var filasSalida = [];
+  var errores = 0;
+  for (var i = 1; i < datos.length; i++) {
+    var base = datos[i].slice(0, 5);
+    var r = resultadoPorMLA[datos[i][3]];
+    if (!r || r.error) {
+      errores += r ? 1 : 0;
+      filasSalida.push(base.concat(['', '', '', r ? ('Error: ' + r.error) : '']));
+      continue;
+    }
+    filasSalida.push(base.concat([
+      r.precio_actual,
+      r.precio_tachado || '',
+      r.descuento_pct != null ? r.descuento_pct / 100 : '',
+      ETIQUETA_CONDICION[String(r.condicion_detectada)] || r.condicion_detectada,
+    ]));
+  }
+
+  hoja.getRange(1, 1, 1, encabezado.length).setValues([encabezado]);
+  hoja.getRange(2, 1, filasSalida.length, encabezado.length).setValues(filasSalida);
+  ui.alert('Precios actualizados en "' + HOJA_BASE + '": ' + filasSalida.length + ' publicaciones' + (errores ? (', ' + errores + ' con error (ver columna "Condición detectada")') : '') + '.');
 }
 
 function _fetchPrecioVivo(itemIds, cuenta) {
