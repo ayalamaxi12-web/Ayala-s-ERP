@@ -680,7 +680,10 @@ class ResultadoConciliacion:
     skus_no_en_ecom: list[str]
 
 
-def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None = None) -> ResultadoConciliacion:
+def conciliar(
+    ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None = None,
+    progreso_cb: Callable[[int, int, str], None] | None = None,
+) -> ResultadoConciliacion:
     """Orquesta todo el módulo (puntos 1 a 4 de `03_MODULO_FULL.md` §10):
     traer publicaciones Full de las DOS cuentas, deduplicar por
     `inventory_id` (§3.3 — dos publicaciones de la misma variación
@@ -689,7 +692,14 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
     packs, publicaciones simples vinculadas, Y variaciones reales de ML
     vinculadas por variante -- ver `_resolver_vinculacion`), sumar por SKU
     (el SKU real de la variante cuando aplica, nunca el "SKU madre"), y
-    comparar contra el depósito Full de Ecom."""
+    comparar contra el depósito Full de Ecom.
+
+    `progreso_cb(procesados, total, fase)` opcional -- pedido de Maxx
+    2026-08-27 (barra de % real en vez de "corriendo..." indeterminado,
+    mismo criterio que `ofertas_propias_activas` en `ml_ofertas.py`). Las
+    dos fases que reportan son las que pegan una llamada por ítem único
+    (`stock_fulfillment`/`factor_pack`) -- el resto de este pipeline es
+    trabajo en memoria, no vale la pena instrumentarlo."""
     cuentas = cuentas or list(SELLERS.keys())
 
     filas_ml: list[ItemFullML] = []
@@ -713,19 +723,27 @@ def conciliar(ml: MLFullClient, ecom: EcomFullAdapter, cuentas: list[str] | None
 
     # Stock por inventory_id (una llamada por inventario único).
     stock_por_inventory: dict[str, dict] = {}
-    for fila in filas_dedup:
+    for i, fila in enumerate(filas_dedup):
         if not fila.inventory_id:
             continue
+        if progreso_cb:
+            progreso_cb(i, len(filas_dedup), "Consultando stock Full")
         stock_por_inventory[fila.inventory_id] = ml.stock_fulfillment(fila.inventory_id, fila.cuenta)
+    if progreso_cb:
+        progreso_cb(len(filas_dedup), len(filas_dedup), "Consultando stock Full")
 
     # Factor real por item_id único (una llamada por publicación única) --
     # `factor_pack` ya cubre packs Y publicaciones simples vinculadas, con
     # el mismo mecanismo (`mlListings.read(id).productListings`), y ahora
     # también variaciones reales de ML (`productVariantListings`).
     factor_por_item: dict[str, FactorPack | None] = {}
-    for fila in filas_dedup:
+    for i, fila in enumerate(filas_dedup):
         if fila.item_id not in factor_por_item:
+            if progreso_cb:
+                progreso_cb(i, len(filas_dedup), "Consultando vinculación Ecom")
             factor_por_item[fila.item_id] = ecom.factor_pack(fila.item_id)
+    if progreso_cb:
+        progreso_cb(len(filas_dedup), len(filas_dedup), "Consultando vinculación Ecom")
 
     # Sumar por SKU. Si Ecom confirma vinculación (a nivel ítem o a nivel
     # variante), se usa SU sku+factor (autoritativo). Si no está vinculada
@@ -969,11 +987,16 @@ _jobs: dict[str, dict] = {}
 
 
 def iniciar_job(job_id: str, ecom_email: str | None = None, ecom_password: str | None = None) -> None:
-    _jobs[job_id] = {"status": "running", "log": ["Iniciando conciliación Full..."], "result": None}
+    _jobs[job_id] = {"status": "running", "log": ["Iniciando conciliación Full..."], "result": None, "progress": None}
     try:
         ml = MLFullClient()
         ecom = EcomFullAdapter(EcomApiClient(email=ecom_email, password=ecom_password))
-        resultado = conciliar(ml, ecom)
+
+        def _progreso(actual, total, fase):
+            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": fase}
+
+        resultado = conciliar(ml, ecom, progreso_cb=_progreso)
+        _jobs[job_id]["progress"] = None
         _jobs[job_id]["result"] = {
             "filas": [
                 {"sku": f.sku, "stock_ml": f.stock_ml, "stock_ecom": f.stock_ecom,

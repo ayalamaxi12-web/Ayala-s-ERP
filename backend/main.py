@@ -366,8 +366,10 @@ def tracker_job(job_id):
             sheet = ss.add_worksheet('ML Competencia', 500, 10)
             sheet.append_row(['Link ML','Título','Vendedor','Precio Real ($)','Precio Tachado ($)','Descuento %','Cuotas','Último Update'])
         all_values = sheet.get_all_values()
+        filas_datos = all_values[1:]
         ok = errors = 0; batch = []
-        for i, row in enumerate(all_values[1:]):
+        for i, row in enumerate(filas_datos):
+            job_status[job_id]["progress"] = {"current": i, "total": len(filas_datos), "label": "Consultando links"}
             url = row[0].strip() if row else ''
             if not url: continue
             row_num = i + 2
@@ -548,7 +550,8 @@ def vendedor_job(job_id):
                 except: pass
             return False
         try:
-            for v in vendedores:
+            for idx_v, v in enumerate(vendedores):
+                job_status[job_id]["progress"] = {"current": idx_v, "total": len(vendedores), "label": f"Escaneando {v['nombre']}"}
                 log.append(f"Procesando: {v['nombre']}")
                 all_items = []; page = 1; seen = set()
                 driver.get(v['url']); time.sleep(2.5)
@@ -818,7 +821,8 @@ def refresh_job(job_id, ml_token):
         all_items = []
         id_stats = {'sin_link': 0, 'sin_identificador': 0, 'product_id_excluido': 0, 'item_id_usado': 0}
         id_examples = {'sin_identificador': [], 'product_id_excluido': []}
-        for ws in vendor_sheets:
+        for idx_ws, ws in enumerate(vendor_sheets):
+            job_status[job_id]["progress"] = {"current": idx_ws, "total": len(vendor_sheets), "label": "Leyendo competidores"}
             vendedor = ws.title[3:]
             try:
                 rows = ws.get_all_values()
@@ -868,6 +872,7 @@ def refresh_job(job_id, ml_token):
         mla_prices = {}
         mlas = list(set(item['mla'] for item in all_items))
         for i in range(0, len(mlas), 20):
+            job_status[job_id]["progress"] = {"current": i, "total": len(mlas), "label": "Consultando precios ML"}
             batch = mlas[i:i+20]
             try:
                 r = requests.get(f"https://api.mercadolibre.com/items?ids={','.join(batch)}&attributes=id,price,original_price,title,installments",

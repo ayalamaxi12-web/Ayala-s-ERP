@@ -133,6 +133,32 @@ def test_replica_el_ejemplo_de_la_planilla_sin_censura():
     assert fila.envio_pendiente_ids == []
 
 
+def test_calcular_reposicion_mla_reporta_progreso_de_sus_tres_fases():
+    # Pedido de Maxx 2026-08-27: barra de % real. Este job encadena
+    # `conciliar()` (que ya reporta sus propias 2 fases) más 2 fases
+    # propias (ventas Full por cuenta, stock Ecom/Táctica por SKU).
+    ml = _armar_ml(
+        items_por_cuenta={"IT": [_item_simple("MLA1", "SKU-A", "INV-1")]},
+        stock_por_inventory={"INV-1": {"available_quantity": 1}},
+        ventas_por_cuenta={"IT": {"INV-1": {"unidades": 30, "primera": "2026-07-20", "ultima": "2026-08-18"}}},
+    )
+    ecom = _ecom_simple(stock_full={"SKU-A": 1}, stock_pitec={"SKU-A": 100})
+    tactica = _tactica_simple({"SKU-A": 0})
+    eventos = []
+
+    calcular_reposicion_mla(
+        ml, ecom, tactica, cuentas=["IT"], dias_ventas=30, semanas_objetivo=3,
+        fecha_llegada=date(2026, 8, 19), hoy=date(2026, 8, 19),
+        progreso_cb=lambda actual, total, fase: eventos.append((actual, total, fase)),
+    )
+
+    fases = {fase for _, _, fase in eventos}
+    assert fases == {
+        "Consultando stock Full", "Consultando vinculación Ecom",
+        "Consultando ventas Full (IT)", "Consultando stock Ecom/Táctica por SKU",
+    }
+
+
 def test_envio_pendiente_real_llega_a_la_fila():
     # Pedido de Maxx 2026-09-01: "Envíos pendientes" ya no es un campo que
     # la persona tipea a mano -- viene resuelto en vivo por inventory_id,

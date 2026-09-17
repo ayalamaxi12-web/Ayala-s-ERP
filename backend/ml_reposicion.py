@@ -113,6 +113,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import Callable
 
 from ml_auth import SELLERS
 from ml_full import EcomFullAdapter, MLFullClient, TacticaStockSheetAdapter, conciliar
@@ -202,12 +203,17 @@ def calcular_reposicion_mla(
     ml: MLFullClient, ecom: EcomFullAdapter, tactica: TacticaStockSheetAdapter,
     cuentas: list[str] | None = None, dias_ventas: int = 30, semanas_objetivo: float = 3,
     fecha_llegada: date | None = None, hoy: date | None = None,
+    progreso_cb: Callable[[int, int, str], None] | None = None,
 ) -> ResultadoReposicionMLA:
     """Orquesta el simulador por publicación: reutiliza `conciliar()` para
     el stock/factor de pack ya resuelto de las dos cuentas (sin volver a
     pegarle a ML ni a la vinculación de Ecom), y en vez de sumar por SKU
     calcula cada publicación por separado -- ver el docstring del módulo
-    para las fórmulas exactas."""
+    para las fórmulas exactas.
+
+    `progreso_cb(procesados, total, fase)` opcional -- pedido de Maxx
+    2026-08-27, mismo criterio que `conciliar()` (que ya recibe el mismo
+    callback, así sus dos fases se ven acá también)."""
     cuentas = cuentas or list(SELLERS.keys())
     hoy = hoy or date.today()
     fecha_llegada = fecha_llegada or hoy
@@ -220,11 +226,13 @@ def calcular_reposicion_mla(
     desde = (hoy - timedelta(days=dias_ventas)).isoformat()
     hasta = hoy.isoformat()
 
-    resultado_conciliacion = conciliar(ml, ecom, cuentas)
+    resultado_conciliacion = conciliar(ml, ecom, cuentas, progreso_cb=progreso_cb)
 
     ventas_por_inventory: dict[str, dict] = {}
     envios_pendientes_por_inventory: dict[str, dict] = {}
-    for cuenta in cuentas:
+    for idx_cuenta, cuenta in enumerate(cuentas):
+        if progreso_cb:
+            progreso_cb(idx_cuenta, len(cuentas), f"Consultando ventas Full ({cuenta})")
         # inventory_id es único globalmente (no solo por cuenta) -- no hay
         # colisión al combinar los diccionarios de las dos cuentas.
         inventory_ids = sorted({
@@ -246,7 +254,10 @@ def calcular_reposicion_mla(
             )
 
     filas: list[FilaReposicionMLA] = []
-    for fila_sku in resultado_conciliacion.filas:
+    total_skus = len(resultado_conciliacion.filas)
+    for idx_sku, fila_sku in enumerate(resultado_conciliacion.filas):
+        if progreso_cb:
+            progreso_cb(idx_sku, total_skus, "Consultando stock Ecom/Táctica por SKU")
         stock_ecom = ecom.stock_disponible_por_sku(fila_sku.sku, fila_sku.parent_sku)
         stock_tactica = tactica.stock_por_sku(fila_sku.sku)
         for pub in fila_sku.publicaciones:
@@ -291,6 +302,9 @@ def calcular_reposicion_mla(
                 envio_pendiente_ids=envio_pend["inbound_ids"] if envio_pend else [],
             ))
 
+    if progreso_cb and total_skus:
+        progreso_cb(total_skus, total_skus, "Consultando stock Ecom/Táctica por SKU")
+
     _repartir_sugerido(filas)
     _convertir_a_paquetes(filas)
 
@@ -313,15 +327,20 @@ def iniciar_job(
 ) -> None:
     from rentabilidad.ingesta_ecom_api import EcomApiClient
 
-    _jobs[job_id] = {"status": "running", "log": ["Iniciando simulación de reposición..."], "result": None}
+    _jobs[job_id] = {"status": "running", "log": ["Iniciando simulación de reposición..."], "result": None, "progress": None}
     try:
         ml = MLFullClient()
         ecom = EcomFullAdapter(EcomApiClient(email=ecom_email, password=ecom_password))
         tactica = TacticaStockSheetAdapter()
+
+        def _progreso(actual, total, fase):
+            _jobs[job_id]["progress"] = {"current": actual, "total": total, "label": fase}
+
         resultado = calcular_reposicion_mla(
             ml, ecom, tactica, dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo,
-            fecha_llegada=fecha_llegada,
+            fecha_llegada=fecha_llegada, progreso_cb=_progreso,
         )
+        _jobs[job_id]["progress"] = None
         _jobs[job_id]["result"] = {
             "filas": [f.__dict__ for f in resultado.filas],
             "incidencias_sku": resultado.incidencias_sku,

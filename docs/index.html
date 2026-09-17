@@ -5266,7 +5266,6 @@ async function compRefreshHistorial(){
       try{
         const res=await fetch(`${bu}/competidores/refresh/status/${job_id}`);
         const data=await res.json();
-        if(data.log&&data.log.length)status.textContent=data.log[data.log.length-1];
         if(data.status==='done'){
           clearInterval(interval);
           btn.disabled=false;btn.textContent='⚡ Refrescar historial de precios';
@@ -5277,6 +5276,8 @@ async function compRefreshHistorial(){
           btn.disabled=false;btn.textContent='⚡ Refrescar historial de precios';
           status.innerHTML=`<span style="color:var(--red)">❌ ${data.message}</span>`;
           toast('Error al refrescar: '+data.message,'error');
+        }else{
+          status.innerHTML=jobStatusHtml(data);
         }
       }catch(e){console.warn(e);}
     },3000);

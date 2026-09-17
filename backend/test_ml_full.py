@@ -490,6 +490,54 @@ def test_conciliar_deduplica_por_inventory_id_y_aplica_factor_de_ecom():
     assert resultado.incidencias_sin_vincular == []
 
 
+def test_conciliar_reporta_progreso_en_las_dos_fases_de_llamadas_por_item():
+    # Pedido de Maxx 2026-08-27: barra de % real en vez de "corriendo..."
+    # indeterminado. Mismo fixture que el test de arriba -- una sola
+    # publicación única (deduplicada), así que cada fase reporta un solo
+    # avance más el cierre en 100%.
+    def fake_get(url, params, headers):
+        if "items/search" in url:
+            if "scroll_id" not in params:
+                return {"results": ["MLA1", "MLA2"], "scroll_id": "SCROLL-1"}
+            return {"results": []}
+        if url.endswith("/items"):
+            return [
+                {"body": {"id": "MLA1", "title": "Pack x2", "shipping": {"logistic_type": "fulfillment"},
+                          "seller_custom_field": "PACK-SKU-ML", "inventory_id": "INV-SHARED", "variations": []}},
+                {"body": {"id": "MLA2", "title": "Pack x2 otra cuenta", "shipping": {"logistic_type": "fulfillment"},
+                          "seller_custom_field": "PACK-SKU-ML", "inventory_id": "INV-SHARED", "variations": []}},
+            ]
+        if "stock/fulfillment" in url:
+            return {"available_quantity": 50}
+        raise AssertionError(url)
+
+    ml = MLFullClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
+    cliente = _ClienteGraphQLFalso({
+        "getAllWarehouses": {"productWarehouses": {"getAllWarehouses": [
+            {"id": "4023", "title": "ML Full", "typeFull": True},
+        ]}},
+        "mlListings": {"mlListings": {"read": {
+            "linked": True,
+            "productListings": [{"qty": 2, "productId": "P1", "product": {"id": "P1", "sku": "SKU-COMPONENTE"}}],
+        }}},
+        "readBySku": {"products": {"readBySku": {"id": "1", "variants": [
+            {"id": "v1", "variantWarehouses": [{"warehouse_id": "4023", "warehouse_title": "ML Full", "warehouse_qty": 90}]},
+        ]}}},
+    })
+    ecom = EcomFullAdapter(cliente)
+    eventos = []
+
+    conciliar(ml, ecom, cuentas=["IT"], progreso_cb=lambda actual, total, fase: eventos.append((actual, total, fase)))
+
+    fases = {fase for _, _, fase in eventos}
+    assert fases == {"Consultando stock Full", "Consultando vinculación Ecom"}
+    # cada fase cierra reportando 100% (actual==total) antes de pasar a la siguiente
+    eventos_stock = [e for e in eventos if e[2] == "Consultando stock Full"]
+    eventos_vinc = [e for e in eventos if e[2] == "Consultando vinculación Ecom"]
+    assert eventos_stock[-1] == (1, 1, "Consultando stock Full")
+    assert eventos_vinc[-1] == (1, 1, "Consultando vinculación Ecom")
+
+
 def test_conciliar_sin_vincular_cae_al_sku_de_ml_y_deja_incidencia():
     def fake_get(url, params, headers):
         if "items/search" in url:
