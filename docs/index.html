@@ -3870,7 +3870,22 @@ async function ayalaCoreLoad(){
   }catch(e){}
   try{
     const resP=await fetch(`${url}/ayala-core/precios-excel`);
-    if(resP.ok)AC_PRECIOS_EXCEL=(await resP.json()).precios||{};
+    if(resP.ok){
+      AC_PRECIOS_EXCEL=(await resP.json()).precios||{};
+      // Pedido de Maxx 2026-09-21: con el túnel Táctica caído, SKU nuevos
+      // que todavía no están en SKUS_PILOTO (backend) pero SÍ tienen
+      // precio cargado a mano en "ERP AYALA" también tienen que poder
+      // tildarse en "Publicaciones de los SKU piloto" -- se agregan
+      // aparte, destildados por default (a diferencia de los piloto) y
+      // marcados "(Excel)", con data-excel="1" para que
+      // ayalaCorePublicacionesRun() los mande por el camino sin Táctica
+      // (descubrir_publicaciones_base + precio-vivo) en vez de
+      // /ayala-core/publicaciones/run (que rompe si el túnel está caído).
+      const nuevos=Object.keys(AC_PRECIOS_EXCEL).filter(s=>!AC_SKUS.includes(s));
+      if(nuevos.length){
+        qs('ac-publicaciones-skus').innerHTML+=nuevos.map(s=>`<label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Sin datos de Táctica -- precio fijo tomado de 'ERP AYALA', no recalcula fórmula"><input type="checkbox" class="ac-pub-sku-chk" value="${s}" data-excel="1">${s} <span style="color:var(--yellow);font-size:9px">(Excel)</span></label>`).join('');
+      }
+    }
   }catch(e){} // si falla, el campo "Manual" queda vacío como hasta ahora -- no bloquea el resto
 }
 // ── Referencias de competencia (pedido 2026-09-03) -- AC_REFERENCIAS[sku]
@@ -4144,23 +4159,113 @@ async function ayalaCoreCalcular(){
     ayalaCoreRenderMotor(d);
   }catch(e){qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
+// Pedido de Maxx 2026-09-21: túnel Táctica caído -- separa los SKU
+// tildados en "motor" (piloto, van por /ayala-core/publicaciones/run de
+// siempre) y "Excel" (data-excel="1", agregados en ayalaCoreLoad() para
+// los que no tienen costo/IVA en Táctica pero sí precio a mano en "ERP
+// AYALA"). Los de Excel corren por un camino Táctica-free aparte
+// (descubrir_publicaciones_base + precio-vivo, ambos ya existentes) y se
+// mergean en la misma tabla -- ver ayalaCoreAplicarOverrides/
+// ayalaCorePubAplicarCondicion para el resto del manejo especial que
+// necesitan esas filas (sin fórmula, precio fijo del Excel).
 async function ayalaCorePublicacionesRun(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const btn=qs('btn-ac-publicaciones'),status=qs('ac-publicaciones-status'),logEl=qs('ac-publicaciones-log');
-  const skus=[...document.querySelectorAll('.ac-pub-sku-chk:checked')].map(c=>c.value);
-  if(!skus.length){toast('Tildá al menos un SKU','error');return;}
-  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando (recorre el catálogo completo, puede tardar)...';logEl.style.display='block';logEl.innerHTML='';
+  const chks=[...document.querySelectorAll('.ac-pub-sku-chk:checked')];
+  const skusMotor=chks.filter(c=>!c.dataset.excel).map(c=>c.value);
+  const skusExcel=chks.filter(c=>c.dataset.excel).map(c=>c.value);
+  if(!skusMotor.length&&!skusExcel.length){toast('Tildá al menos un SKU','error');return;}
+  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
   qs('ac-publicaciones-wrap').style.display='none';
+  AC_PUB_FILAS_ST=[];
   try{
-    const res=await fetch(`${url}/ayala-core/publicaciones/run?${ayalaCoreRentaQueryParams()}&skus=${skus.join(',')}${ayalaCoreTcParam()}`,{method:'POST'});
-    const{job_id}=await res.json();
-    status.textContent='Job: '+job_id;
-    pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones',ayalaCorePublicacionesOnResult);
+    if(skusExcel.length){
+      status.textContent=`Buscando publicaciones de ${skusExcel.length} SKU sin Táctica (Excel)...`;
+      const base=await ayalaCoreDescubrirSinTacticaJob(url,skusExcel,logEl);
+      status.textContent='Trayendo precio en vivo de esas publicaciones...';
+      AC_PUB_FILAS_ST=await ayalaCoreEnriquecerSinTactica(url,base);
+      // Pinta ya lo encontrado -- si después el job de motor (Táctica)
+      // falla, pollFullJob NO llama a onDone en su rama de error, así que
+      // esto no debe quedar esperando un resultado que nunca llega.
+      ayalaCorePublicacionesOnResult(null);
+    }
+    if(skusMotor.length){
+      status.textContent='Iniciando motor (recorre el catálogo completo, puede tardar)...';
+      const res=await fetch(`${url}/ayala-core/publicaciones/run?${ayalaCoreRentaQueryParams()}&skus=${skusMotor.join(',')}${ayalaCoreTcParam()}`,{method:'POST'});
+      const{job_id}=await res.json();
+      status.textContent='Job: '+job_id;
+      pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones',ayalaCorePublicacionesOnResult);
+      return; // pollFullJob se encarga de reactivar el botón y de mergear AC_PUB_FILAS_ST via ayalaCorePublicacionesOnResult
+    }
+    // Solo SKU "Excel" tildados -- no hay job de motor que correr (ya se
+    // pintó arriba, dentro del if(skusExcel.length)), solo cerrar el botón.
+    btn.disabled=false;btn.textContent='🔄 Detectar publicaciones';
+    status.innerHTML='<span style="color:var(--green)">✅ Listo</span> (solo Excel, sin Táctica)';
   }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Detectar publicaciones';}
 }
-let AC_PUB_FILAS=[];
+// Descubrimiento SKU↔MLA Táctica-free -- mismo job que ya usa el Apps
+// Script del Excel de Matías (descubrir_publicaciones_base, sin costo/IVA
+// a propósito). Devuelve [{sku,condicion,cuenta,item_id,permalink}].
+function ayalaCoreDescubrirSinTacticaJob(url,skus,logEl){
+  return new Promise((resolve,reject)=>{
+    fetch(`${url}/ayala-core/base-mla/run?skus=${skus.join(',')}`,{method:'POST'})
+      .then(r=>r.json())
+      .then(({job_id})=>{
+        const interval=setInterval(async()=>{
+          try{
+            const res=await fetch(`${url}/ayala-core/base-mla/status/${job_id}`);
+            const data=await res.json();
+            if(logEl&&data.log&&data.log.length)logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');
+            if(data.status==='done'){clearInterval(interval);resolve((data.result&&data.result.filas)||[]);}
+            else if(data.status==='error'){clearInterval(interval);reject(new Error((data.log||[]).slice(-1)[0]||'Error buscando publicaciones (Excel)'));}
+          }catch(e){/* red momentánea -- sigue reintentando en el próximo tick */}
+        },3000);
+      }).catch(reject);
+  });
+}
+// Trae precio real en vivo (Táctica-free, /ayala-core/mla/precio-vivo) de
+// cada MLA encontrado y arma filas con la MISMA forma que usa la tabla de
+// "Publicaciones", pero con precio_calculado = precio del Excel (NO una
+// fórmula) y costo_sin_iva_ars/iva_factor en null -- _sinTactica:true
+// marca estas filas para que ayalaCoreAplicarOverrides/
+// ayalaCorePubAplicarCondicion/el render no intenten recalcularlas con el
+// motor (rompería: no hay costo/IVA reales acá).
+async function ayalaCoreEnriquecerSinTactica(url,filasBase){
+  const porCuenta={};
+  filasBase.forEach(f=>{(porCuenta[f.cuenta]=porCuenta[f.cuenta]||[]).push(f.item_id);});
+  const vivo={};
+  for(const cuenta in porCuenta){
+    const ids=[...new Set(porCuenta[cuenta])];
+    for(let i=0;i<ids.length;i+=25){ // precio-vivo pensado para listas chicas -- trocear por las dudas
+      const lote=ids.slice(i,i+25);
+      try{
+        const res=await fetch(`${url}/ayala-core/mla/precio-vivo?item_ids=${lote.join(',')}&cuenta=${cuenta}`);
+        if(res.ok){const{resultados}=await res.json();(resultados||[]).forEach(r=>{vivo[r.item_id]=r;});}
+      }catch(e){}
+    }
+  }
+  return filasBase.map(f=>{
+    const pv=vivo[f.item_id]||{};
+    const condicion=pv.condicion_detectada||f.condicion;
+    const precioExcel=(AC_PRECIOS_EXCEL[f.sku]&&AC_PRECIOS_EXCEL[f.sku][condicion]!=null)?AC_PRECIOS_EXCEL[f.sku][condicion]:null;
+    const precioCalculado=ayalaCorePrecioEfectivo(f.sku,condicion,precioExcel);
+    const precioActual=pv.precio_actual!=null?pv.precio_actual:null;
+    return{
+      cuenta:f.cuenta,item_id:f.item_id,sku:f.sku,titulo:'',permalink:f.permalink,
+      condicion_detectada:condicion,condicion_ml:condicion,
+      precio_actual:precioActual,precio_tachado_actual:pv.precio_tachado||null,
+      precio_calculado:precioCalculado,
+      diferencia:(precioActual!=null&&precioCalculado!=null)?precioActual-precioCalculado:null,
+      envio_real:0,costo_sin_iva_ars:null,iva_factor:null,
+      _sinTactica:true,
+      _error:pv.error||(precioExcel==null?`Sin precio cargado en "ERP AYALA" para "${ayalaCoreCondLabel(condicion)}"`:null),
+    };
+  });
+}
+let AC_PUB_FILAS=[],AC_PUB_FILAS_ST=[];
 function ayalaCorePublicacionesOnResult(result){
-  AC_PUB_FILAS=(result&&result.filas)||[];
+  const motorFilas=(result&&result.filas)||[];
+  AC_PUB_FILAS=[...AC_PUB_FILAS_ST,...motorFilas];
   AC_PUB_FILAS.forEach(ayalaCoreAplicarOverrides);
   const inc=(result&&result.incidencias)||[];
   if(inc.length)qs('ac-publicaciones-status').innerHTML+=` · <span style="color:var(--yellow)">${inc.length} sin costo/IVA en Táctica</span>`;
@@ -4173,6 +4278,12 @@ function ayalaCorePublicacionesOnResult(result){
 // después sin perder ese dato).
 function ayalaCoreAplicarOverrides(f){
   f.condicion_ml=f.condicion_detectada;
+  // Filas _sinTactica ya traen precio_calculado resuelto (Excel/override,
+  // ver ayalaCoreEnriquecerSinTactica) -- no hay fórmula/costo real para
+  // recalcular acá, ni sentido en la corrección de condición automática
+  // vs. detectada (eso lo maneja ayalaCorePubAplicarCondicion para estas
+  // filas también, con su propia rama).
+  if(f._sinTactica)return;
   const condManual=AC_COND_MANUAL[f.item_id];
   const condicion=condManual!==undefined?condManual:f.condicion_detectada;
   f.condicion_detectada=condicion;
@@ -4211,19 +4322,20 @@ function ayalaCorePublicacionesRepintar(){
     return (ref&&ref.precio_tachado)?ref.precio_tachado:null;
   });
   qs('ac-publicaciones-tbody').innerHTML=ordenadas.map((f,idx)=>{
-    const color=Math.abs(f.diferencia)<50?'var(--green)':'var(--red)';
+    const color=f.diferencia==null?'var(--text3)':(Math.abs(f.diferencia)<50?'var(--green)':'var(--red)');
     const colCompetencia=ayalaCorePubColCompetenciaHtml(f,idx);
+    // Filas _sinTactica sin precio resuelto (ver _error, ej. condición
+    // sin ese renglón en "ERP AYALA") no se pueden tildar para aplicar --
+    // aplicaría "null" como precio y rompería la escritura a ML.
+    const sinPrecio=f.precio_calculado==null;
     return `<tr>
-      <td><input type="checkbox" class="ac-pub-chk" data-idx="${idx}"></td>
+      <td><input type="checkbox" class="ac-pub-chk" data-idx="${idx}" ${sinPrecio?'disabled title="Sin precio resuelto -- ver aviso en Título"':''}></td>
       <td>${etiquetaCuenta(f.cuenta)}</td>
       <td><a href="${f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`}" target="_blank" style="color:var(--accent)">${f.item_id}</a></td>
       <td>${f.sku}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.titulo||''}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f._sinTactica?'<span style="color:var(--yellow);font-size:8px">EXCEL · SIN TÁCTICA</span> ':''}${f._error?`<span style="color:var(--red)" title="${f._error}">⚠ </span>`:''}${f.titulo||''}</td>
       <td id="ac-pub-cond-td-${idx}">${ayalaCorePubCondCellHtml(f,idx)}</td>
-      <td style="text-align:right">
-        <input type="text" data-idx="${idx}" class="ac-pub-envio" value="${Math.round(f.envio_real)}" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubRecalcularEnvio(this)">
-        ${f.envio_real?'':'<span style="color:var(--text3)" title="Sin venta reciente registrada para este MLA -- se usó $0, corregilo a mano si lo sabés">(sin dato)</span>'}
-      </td>
+      <td style="text-align:right">${ayalaCorePubEnvioCellHtml(f,idx)}</td>
       <td style="text-align:right">${ayalaCoreFmt(f.precio_actual)}</td>
       <td style="text-align:right" id="ac-pub-calc-${idx}">${ayalaCoreFmt(f.precio_calculado)}</td>
       <td style="text-align:right;color:${color}" id="ac-pub-dif-${idx}">${ayalaCoreFmt(f.diferencia)}</td>
@@ -4233,9 +4345,16 @@ function ayalaCorePublicacionesRepintar(){
       <td style="text-align:right">
         <input type="text" data-idx="${idx}" class="ac-pub-tachado" placeholder="sin tocar" value="${window._acPubPrecioTachado[idx]||''}" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubTachadoCambio(this)">
       </td>
-      <td style="text-align:center"><button class="btn-xs" data-idx="${idx}" onclick="ayalaCoreAbrirOferta(this)">⚙ Gestionar</button></td>
+      <td style="text-align:center">${f._sinTactica?'<span style="color:var(--text3)" title="Sin datos de costo/Táctica -- no se puede simular campaña acá, usá \'Aplicar tildadas\' de abajo para el precio simple">—</span>':`<button class="btn-xs" data-idx="${idx}" onclick="ayalaCoreAbrirOferta(this)">⚙ Gestionar</button>`}</td>
     </tr>`;
   }).join('');
+}
+// Celda de envío -- las filas _sinTactica no tienen fórmula que dependa
+// del envío (precio fijo del Excel), así que no se renderiza el input
+// editable (evita que Maxx la toque pensando que recalcula algo).
+function ayalaCorePubEnvioCellHtml(f,idx){
+  if(f._sinTactica)return '<span style="color:var(--text3)" title="Precio fijo del Excel -- no depende del envío">— (sin Táctica)</span>';
+  return `<input type="text" data-idx="${idx}" class="ac-pub-envio" value="${Math.round(f.envio_real)}" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="ayalaCorePubRecalcularEnvio(this)">${f.envio_real?'':'<span style="color:var(--text3)" title="Sin venta reciente registrada para este MLA -- se usó $0, corregilo a mano si lo sabés">(sin dato)</span>'}`;
 }
 // ── "Ofertas" dentro de Ayala Core -- pedido de Maxx 2026-09-04: "quiero
 // que sea igual que como se ven en Ofertas ML, que me deje desglosar por
@@ -4348,6 +4467,11 @@ function ayalaCorePubColCompetenciaHtml(f,idx){
     const diffRef=f.precio_actual-ref.precio;
     return `Competencia <b>${ayalaCoreFmt(ref.precio)}</b>${ref.precio_tachado?` (tachado ${ayalaCoreFmt(ref.precio_tachado)})`:''} · dif. <b style="color:${Math.abs(diffRef)<50?'var(--green)':'var(--red)'}">${ayalaCoreFmt(diffRef)}</b>`;
   }
+  // Filas _sinTactica no tienen costo/IVA real -- el "Margen %" editable
+  // de acá abajo llama a una fórmula que necesita esos datos, así que no
+  // tiene sentido mostrarlo (rompería con NaN). El precio ya es el del
+  // Excel, fijo.
+  if(f._sinTactica)return `<span style="color:var(--text3)">Precio de "ERP AYALA" -- sin fórmula, Táctica no disponible</span>`;
   return `Margen % <input type="text" data-idx="${idx}" class="ac-pub-margen" value="32" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center" onchange="ayalaCorePubRecalcularFila(this)">`;
 }
 // Corrección manual de la condición detectada -- pedido de Maxx
@@ -4383,16 +4507,29 @@ function ayalaCorePubCondCellHtml(f,idx){
 function ayalaCorePubAplicarCondicion(idx,condicion){
   const f=window._acPubOrdenadas[idx];
   f.condicion_detectada=condicion;
-  const financiero=ayalaCoreFinancieroPct(condicion);
-  const rentaPct=ayalaCoreRentaPct(condicion);
-  const precioMotor=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
-  const precio=ayalaCorePrecioEfectivo(f.sku,condicion,precioMotor);
+  let precio;
+  if(f._sinTactica){
+    // Sin fórmula -- cada condición tiene su propio precio fijo en el
+    // Excel, no se deriva de costo/envío/renta.
+    const precioExcel=(AC_PRECIOS_EXCEL[f.sku]&&AC_PRECIOS_EXCEL[f.sku][condicion]!=null)?AC_PRECIOS_EXCEL[f.sku][condicion]:null;
+    precio=ayalaCorePrecioEfectivo(f.sku,condicion,precioExcel);
+    f._error=precio==null?`Sin precio cargado en "ERP AYALA" para "${ayalaCoreCondLabel(condicion)}"`:null;
+  }else{
+    const financiero=ayalaCoreFinancieroPct(condicion);
+    const rentaPct=ayalaCoreRentaPct(condicion);
+    const precioMotor=ayalaCoreCalcularPrecioJS(f.costo_sin_iva_ars,f.iva_factor,f.envio_real,financiero,rentaPct);
+    precio=ayalaCorePrecioEfectivo(f.sku,condicion,precioMotor);
+  }
   f.precio_calculado=precio;
-  f.diferencia=f.precio_actual-precio;
+  f.diferencia=precio!=null?f.precio_actual-precio:null;
   qs(`ac-pub-calc-${idx}`).textContent=ayalaCoreFmt(precio);
   const dif=qs(`ac-pub-dif-${idx}`);
   dif.textContent=ayalaCoreFmt(f.diferencia);
-  dif.style.color=Math.abs(f.diferencia)<50?'var(--green)':'var(--red)';
+  dif.style.color=f.diferencia==null?'var(--text3)':(Math.abs(f.diferencia)<50?'var(--green)':'var(--red)');
+  // Sin precio resuelto para la condición nueva -- no se puede tildar
+  // esta fila para aplicar (aplicaría "null"), destildar si ya lo estaba.
+  const chk=document.querySelector(`.ac-pub-chk[data-idx="${idx}"]`);
+  if(chk){chk.disabled=(precio==null);if(precio==null)chk.checked=false;}
   qs(`ac-pub-comp-${idx}`).innerHTML=ayalaCorePubColCompetenciaHtml(f,idx);
   const ref=ayalaCoreRefParaFila(f);
   const precioDefinido=ref?ref.precio:precio;
