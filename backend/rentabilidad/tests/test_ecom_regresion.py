@@ -33,6 +33,7 @@ def test_e1_ml_carrito_iva_10_5(db_session):
         precio_sin_iva=Decimal("620053.636"),
         precio_final=Decimal("682059"),
         tc=Decimal(1500),
+        costo_operacion=Decimal(0),  # período relevado (Jul-Ago), previo a OP
     )
     r = calc.calcular(linea)
     assert _cerca(r.imp_cheque, "8184.708")
@@ -60,6 +61,7 @@ def test_e2_ml_carrito_iva_21(db_session):
         precio_sin_iva=Decimal("24387.603"),
         precio_final=Decimal("29509"),
         tc=Decimal(1500),
+        costo_operacion=Decimal(0),  # período relevado (Jul-Ago), previo a OP
     )
     r = calc.calcular(linea)
     assert _cerca(r.imp_cheque, "354.108")
@@ -83,6 +85,7 @@ def test_e3_fravega_sin_retenciones_deducidas_igual_que_siempre(db_session):
         precio_sin_iva=Decimal("12395.868"),
         precio_final=Decimal("14999"),
         tc=Decimal(1500),
+        costo_operacion=Decimal(0),  # período relevado (Jul-Ago), previo a OP
     )
     r = calc.calcular(linea)
     assert _cerca(r.imp_cheque, "179.988")

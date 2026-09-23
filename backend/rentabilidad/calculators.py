@@ -156,18 +156,23 @@ class LineaEcomInput:
     precio_sin_iva: Decimal  # Q — neto, dato del origen, nunca se recalcula (§7.2)
     precio_final: Decimal  # U — bruto, dato del origen
     tc: Decimal  # AM
+    # OP — costo fijo de Ecom por orden (§7.7, desde 23/08/2026). None = el
+    # vigente sembrado en `parametro_tasa`; los casos históricos (E-1..E-3,
+    # layout sin OP) pasan 0 explícito.
+    costo_operacion: Decimal | None = None
 
 
 @dataclass
 class ResultadoEcom:
     imp_cheque: Decimal  # S = U * 1,2%
     iibb: Decimal  # T = Q * 5%
-    neto: Decimal  # Z = Q - M - O - S - T
+    neto: Decimal  # Z = Q - M - O - S - T - OP
     costo_total: Decimal  # AA = G * AM
     rentabilidad: Decimal  # AB = Z - AA — resultado del motor
     rentabilidad_usd: Decimal  # AE = AB / AM
     facturacion_usd: Decimal  # AF = U / AM
     pct_rentabilidad: Decimal  # AV = 1 - (AA/Z), 0 ante error (§7.1 paso 7, literal)
+    costo_operacion: Decimal = Decimal(0)  # OP efectivamente descontado
 
 
 class RentabilidadEcomCalculator:
@@ -180,12 +185,13 @@ class RentabilidadEcomCalculator:
 
         Q, U, G = linea.precio_sin_iva, linea.precio_final, linea.costo_sin_iva
         M, O, AM = linea.comision_venta, linea.costo_envio, linea.tc
+        OP = linea.costo_operacion if linea.costo_operacion is not None else _tasa(self.db, "costo_operacion_ecom")
 
         # Paso 2-3
         S = U * imp_cheque_tasa
         T = Q * iibb_tasa
         # Paso 4
-        Z = Q - M - O - S - T
+        Z = Q - M - O - S - T - OP
         # Paso 5
         AA = G * AM
         # Paso 6 — resultado del motor
@@ -198,6 +204,7 @@ class RentabilidadEcomCalculator:
         return ResultadoEcom(
             imp_cheque=S, iibb=T, neto=Z, costo_total=AA, rentabilidad=AB,
             rentabilidad_usd=AE, facturacion_usd=AF, pct_rentabilidad=AV,
+            costo_operacion=OP,
         )
 
 

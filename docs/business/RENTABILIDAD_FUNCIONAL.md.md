@@ -2,7 +2,7 @@
 
 ## Especificación Funcional Oficial — Módulo de Rentabilidad · ERP Ayala
 
-**Versión 2.0** · 29/07/2026
+**Versión 2.0** · 29/07/2026 · *Actualización 23/09/2026: ECOM incorpora `OP` Costo por Operación Ecom (§7.1, §7.7, O-08)*
 **Estado: LISTO PARA CONGELAR — sujeto a 3 verificaciones contra el libro (§16)**
 
 **Origen del relevamiento:** libro *Nuevo Reporte Facturacion* (Google Sheets, ID `1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc`), hojas vigentes al 29/07/2026.
@@ -312,10 +312,10 @@ Hoja `Julio - Agosto ECOM`. **Una fila = una orden.** El campo `Sku's Vendidos` 
 
 | Paso | Acción |
 |---|---|
-| 1 | Tomar del origen: `Q` (neto), `U` (bruto), `G` (costo USD total de la orden), `M` (comisión venta), `O` (costo envío), `AM` (TC) |
+| 1 | Tomar del origen: `Q` (neto), `U` (bruto), `G` (costo USD total de la orden), `M` (comisión venta), `O` (costo envío), `OP` (costo por operación Ecom), `AM` (TC) |
 | 2 | `S = U * 1,2%` (positivo) |
 | 3 | `T = Q * 5%` (positivo) |
-| 4 | `Z = Q - M - O - S - T` |
+| 4 | `Z = Q - M - O - S - T - OP` |
 | 5 | `AA = G * AM` |
 | 6 | `AB = Z - AA` ← **resultado del motor** |
 | 7 | `AE = AB / AM` · `AF = U / AM` · `AV = 1 - (AA / Z)`, con 0 ante error |
@@ -375,6 +375,7 @@ Resultado: cae automáticamente bajo el régimen de **pérdida definitiva** (§6
 | P | Impuestos (retenciones) | D | Informado por el origen y **NO deducido** — observación O-03 |
 | Q | Precio SIN IVA | D | **Neto de la orden. Base del cálculo. Dato del origen, no se recalcula** (§7.2) |
 | R | Total Impuestos | D | IVA contenido (`= U - Q` en el origen) |
+| OP | Costo por Operacion Ecom | D | Costo fijo de Ecom por cada orden creada, en pesos ($149,12 por orden en el período 23/08–22/09/2026). **Se deduce íntegro en `Z`**. Regla nueva confirmada por Maxx el 23/09/2026 (incorporada por la dirección) y vigente desde ese período. En el libro se inserta entre `R` y `S`, así que desde ese período las columnas siguientes se corren una posición. Las letras de este diccionario corresponden al layout anterior |
 | S | imp ch | F | `= U * 1,2%` (base bruta) |
 | T | IIBB | F | `= Q * 5%` (base neta) |
 | U | Precio Final | D | Precio bruto cobrado |
@@ -382,7 +383,7 @@ Resultado: cae automáticamente bajo el régimen de **pérdida definitiva** (§6
 | W | Cash | I | Informativo del origen — pendiente P-02 |
 | X | Utilidad Venta | I | Informativo del origen, en % — pendiente P-02 |
 | Y | Utilidad Costo | I | Informativo del origen, en % — pendiente P-02 |
-| Z | Neto | F | `= Q - M - O - S - T` |
+| Z | Neto | F | `= Q - M - O - S - T - OP` |
 | AA | Costo Total | F | `= G * AM` |
 | AB | **Rentabilidad** | F | `= Z - AA` ← **resultado del motor** |
 | AC / AD / AH / AI | PM / Subcategoria / Categoria / Subcategoria2 | F | Lookups de clasificación (§8.1) |
@@ -635,6 +636,7 @@ Inconsistencias detectadas durante el relevamiento. **Documentadas, no corregida
 | O-05 | El neto (`Q`) y el bruto (`U`) del origen no guardan la relación del factor de IVA del SKU: 242 órdenes al 10,5 % traen ratio 1,10 y 137 órdenes multi-SKU traen ratios mixtos entre 1,1011 y 1,1941 | ECOM `Q` / `U` |
 | O-06 | El bloque AGIN excluye las líneas sin responsable resuelto, produciendo una descuadratura de `1.351.636,55` respecto del bloque TACTICA en el período relevado | §8.2 y §11.3 |
 | O-07 | El TC no es función de la fecha: se fija por lote de carga, por lo que una misma fecha puede registrar dos TC distintos | §5.5 |
+| O-08 | Al incorporar `OP` en `Agosto - Septiembre ECOM`, el `Neto` del libro quedó sin recalcular en 5.353 de 11.194 filas. La fórmula `=Q-M-O-T-U-S` era correcta en todas, pero el valor almacenado no descontaba `OP` (+$149,12 por fila, $798.239,36 en total). Causa: resultados de Sheets sin recalcular, no el importador (el valor en base era idéntico al del libro). Se resolvió el 23/09/2026 re-arrastrando la fórmula en toda la columna y recargando el período, con 0 filas trabadas después. **Control a repetir en cada cierre:** verificar que `Z = Q - M - O - S - T - OP` en todas las filas antes de importar | ECOM `OP` / `Z` |
 
 *El relevamiento original numeraba observaciones hasta O-13. Las siete anteriores son las descritas con evidencia en el informe recibido; las restantes no fueron entregadas y no se reconstruyen.*
 

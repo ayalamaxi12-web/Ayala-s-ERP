@@ -222,7 +222,7 @@ class VentaEcom(Base):
     utilidad_venta: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     # Y · Utilidad Costo · INFORMATIVO — pendiente P-02
     utilidad_costo: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
-    # Z · Neto · CALCULADO = Q - M - O - S - T
+    # Z · Neto · CALCULADO = Q - M - O - S - T - OP (OP = Costo por Operación Ecom, §7.7)
     neto: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     # AA · Costo Total · CALCULADO = G * AM
     costo_total: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)

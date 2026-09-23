@@ -30,6 +30,7 @@ from .models import (
 TASAS = [
     dict(nombre="imp_cheque", valor="0.012", motor="AMBOS", descripcion="Impuesto al cheque — 1,2%"),
     dict(nombre="iibb", valor="0.05", motor="AMBOS", descripcion="Retenciones IIBB — 5%"),
+    dict(nombre="costo_operacion_ecom", valor="149.12", motor="ECOM", descripcion="Costo por Operación Ecom — monto fijo en pesos por orden (§7.7, OP), vigente desde 23/08/2026"),
     dict(nombre="cf1", valor="0.03", motor="TACTICA", descripcion="Costo financiero 1 — 3%, base bruta"),
     dict(nombre="cf2", valor="0.03", motor="TACTICA", descripcion="Costo financiero 2 — 3%, base neta"),
     dict(nombre="agin_1", valor="0.009", motor="TACTICA", descripcion="Tasa AGIN 1 — 0,90% (§11.3, reportes)"),
