@@ -2,19 +2,27 @@
 
 Lee solo endpoints de lectura de `/rentabilidad/*` del backend (que a su vez
 leen el Postgres de Railway), así que no necesita VPN ni la SQL de Táctica.
-Pensado para correr desde una Rutina en la nube: stdlib pura, sin dependencias.
+Pensado para correr desde una Rutina en la nube: stdlib pura, salvo el gráfico
+de evolución diaria, que usa matplotlib (si no está instalado, lo instala con pip;
+si no puede, el informe sale sin gráfico).
 
 Uso:
     python3 backend/scripts/informe_rentabilidad.py [--periodo 2026-08-23_2026-09-22] \
         [--backend https://ayala-s-erp-production.up.railway.app] \
-        [--html informe.html] [--txt informe.txt] [--meta informe.json]
+        [--html informe.html] [--txt informe.txt] [--meta informe.json] [--png evolucion.png]
 
 Sin --periodo toma el cierre más reciente que tenga ECOM y Táctica guardados.
-`--meta` escribe un JSON con {periodo, asunto} para armar el mail.
+`--meta` escribe un JSON con {periodo, asunto, png, png_b64} para armar el mail:
+el HTML referencia el gráfico como `cid:<nombre del png>`, así que se manda como
+adjunto inline con ese mismo nombre de archivo, con el base64 de `png_b64`.
 """
 import argparse
+import base64
 import collections
 import json
+import os
+import subprocess
+import sys
 import urllib.request
 from datetime import date
 from decimal import Decimal as D
@@ -46,15 +54,76 @@ def ratio(a, b):
 
 
 def red(s):
-    return f'<font color="{ROJO}">{s}</font>' if str(s).startswith("-") else str(s)
+    return f"<font color={ROJO}>{s}</font>" if str(s).startswith("-") else str(s)
 
 
 def table(hdr, rows, right=()):
-    o = ['<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;border-color:#ddd;font-size:13px">',
-         "<tr>" + "".join(f'<th bgcolor="#f0f2f5" align="left">{h}</th>' for h in hdr) + "</tr>"]
+    # Estilos en el <style> del encabezado (ESTILO): mantiene el HTML chico, que
+    # la Rutina lo tiene que pasar entero a la herramienta de mail.
+    o = ['<table class=t border=1 cellspacing=0>', "<tr>" + "".join(f"<th>{h}</th>" for h in hdr) + "</tr>"]
     for row in rows:
-        o.append("<tr>" + "".join(f'<td align="right">{c}</td>' if i in right else f"<td>{c}</td>" for i, c in enumerate(row)) + "</tr>")
+        o.append("<tr>" + "".join(f"<td class=r>{c}</td>" if i in right else f"<td>{c}</td>" for i, c in enumerate(row)) + "</tr>")
     return "".join(o) + "</table>"
+
+
+ESTILO = ("<style>.t{border-collapse:collapse;border-color:#ddd;font-size:13px}.t th{background:#f0f2f5;text-align:left;padding:4px}"
+          ".t td{padding:4px}.t .r{text-align:right}h4{margin:12px 0 4px}</style>")
+
+
+def grafico(dias, path):
+    """PNG con la facturación sin IVA y la rentabilidad $ por día (ECOM + Táctica).
+    Devuelve False si no hay matplotlib y no se puede instalar."""
+    try:
+        import matplotlib
+    except ImportError:
+        if subprocess.call([sys.executable, "-m", "pip", "install", "-q", "matplotlib"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+            return False
+        import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+
+    xs = sorted(dias)
+    fact = [float(dias[d][0]) / 1e6 for d in xs]
+    rent = [float(dias[d][1]) / 1e6 for d in xs]
+    tinta, tinta2, grilla = "#0b0b0b", "#52514e", "#e6e5e0"
+    fig, ax = plt.subplots(figsize=(7.6, 3.2), dpi=100)
+    fig.patch.set_facecolor("#ffffff")
+    ax.set_facecolor("#ffffff")
+    for serie, color, nombre in ((fact, "#2a78d6", "Facturación sin IVA"), (rent, "#eb6834", "Rentabilidad $")):
+        ax.plot(xs, serie, color=color, linewidth=2, solid_joinstyle="round", solid_capstyle="round", label=nombre)
+        ax.annotate(f"{serie[-1]:,.1f} M".replace(",", "X").replace(".", ",").replace("X", "."), (xs[-1], serie[-1]),
+                    xytext=(6, 0), textcoords="offset points", va="center", fontsize=8, color=tinta2)
+    ax.grid(axis="y", color=grilla, linewidth=1)
+    ax.set_axisbelow(True)
+    for lado in ("top", "right", "left"):
+        ax.spines[lado].set_visible(False)
+    ax.spines["bottom"].set_color(grilla)
+    ax.tick_params(colors=tinta2, labelsize=8, length=0)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"$ {v:,.0f} M".replace(",", ".")))
+    paso = max(1, len(xs) // 8)
+    ax.set_xticks(xs[::paso])
+    ax.set_xticklabels([f"{d:%d/%m}" for d in xs[::paso]])
+    ax.set_ylim(bottom=min(0, min(rent) * 1.1))
+    ax.set_title("Evolución diaria — ECOM + Táctica (millones de $)", loc="left", fontsize=10, color=tinta)
+    ax.legend(loc="upper left", frameon=False, fontsize=8, labelcolor=tinta2, ncol=2)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    try:  # Paleta de 32 colores: el PNG queda ~3 veces más chico.
+        from PIL import Image
+        Image.open(path).convert("RGB").quantize(32).save(path, optimize=True)
+    except Exception:
+        pass
+    return True
+
+
+def por_dia(filas, fact, rent, dias):
+    for x in filas:
+        a = dias[date.fromisoformat(x["fecha"])]
+        a[0] += D(x[fact] or 0)
+        a[1] += D(x[rent] or 0)
 
 
 def agrupar(filas, clave, fact, rent):
@@ -135,34 +204,34 @@ def seccion_ecom(base, P, a):
     a(f'<p style="font-size:12px;color:#555">{len(canal)} canales, ninguno omitido.</p>')
     ms = [sum(D(x[k] or 0) for x in multi) for k in ("precio_sin_iva", "rentabilidad")]
     a("<h3>3. Ganadores por facturación (top 10, fact. sin IVA)</h3>")
-    a('<h4 style="margin:12px 0 4px">Por SKU (solo órdenes de un único SKU)</h4>' + top(sku, 0, "SKU", "Órdenes"))
+    a('<h4>Por SKU (solo órdenes de un único SKU)</h4>' + top(sku, 0, "SKU", "Órdenes"))
     a(f"<p>Órdenes multi-SKU, contadas aparte y fuera del ranking por SKU: <b>{n(len(multi))} órdenes</b>, "
       f"{m(ms[0])} de facturación sin IVA y {m(ms[1])} de rentabilidad ({pc(ratio(ms[1], ms[0]))}).</p>")
-    a('<h4 style="margin:12px 0 4px">Por categoría</h4>' + top(cat, 0, "Categoría", "Órdenes"))
-    a('<h4 style="margin:12px 0 4px">Por PM</h4>' + top(pm, 0, "PM", "Órdenes"))
+    a('<h4>Por categoría</h4>' + top(cat, 0, "Categoría", "Órdenes"))
+    a('<h4>Por PM</h4>' + top(pm, 0, "PM", "Órdenes"))
     a("<h3>4. Ganadores por rentabilidad $ (top 10)</h3>")
-    a('<h4 style="margin:12px 0 4px">Por SKU (solo órdenes de un único SKU)</h4>' + top(sku, 1, "SKU", "Órdenes"))
-    a('<h4 style="margin:12px 0 4px">Por categoría</h4>' + top(cat, 1, "Categoría", "Órdenes"))
-    a('<h4 style="margin:12px 0 4px">Por PM</h4>' + top(pm, 1, "PM", "Órdenes"))
+    a('<h4>Por SKU (solo órdenes de un único SKU)</h4>' + top(sku, 1, "SKU", "Órdenes"))
+    a('<h4>Por categoría</h4>' + top(cat, 1, "Categoría", "Órdenes"))
+    a('<h4>Por PM</h4>' + top(pm, 1, "PM", "Órdenes"))
     a("<h3>5. Alertas ECOM</h3>")
     if extra:
-        a('<h4 style="margin:12px 0 4px">Órdenes duplicadas (se cuentan dos veces en los totales)</h4>')
+        a('<h4>Órdenes duplicadas (se cuentan dos veces en los totales)</h4>')
         a(table(["Orden", "Fecha", "Canal", "SKU", "PM", "Fact. sin IVA (por fila)", "Rentab. $ (por fila)"],
                 [[x["numero_orden"], x["fecha"], x["canal_de_venta"], x["skus_vendidos"], x["pm"], m(x["precio_sin_iva"] or 0),
                   red(m(x["rentabilidad"] or 0))] for x in extra], {5, 6}))
     can_d = desde_agregacion(canal, "(sin canal)")
     for titulo, d, et in (("Canales", can_d, "Canal"), ("PM", pm, "PM"), ("Categorías", cat, "Categoría"), ("Subcategorías", sub, "Subcategoría")):
-        a(f'<h4 style="margin:12px 0 4px">{titulo} con rentabilidad negativa</h4>' + negativos(d, et, "Órdenes")[0])
+        a(f'<h4>{titulo} con rentabilidad negativa</h4>' + negativos(d, et, "Órdenes")[0])
     html, neg = negativos(sku, "SKU", "Órdenes", 20)
-    a(f'<h4 style="margin:12px 0 4px">SKU con rentabilidad negativa (órdenes de un único SKU)</h4>'
+    a(f'<h4>SKU con rentabilidad negativa (órdenes de un único SKU)</h4>'
       f"<p><b>{len(neg)} SKU</b> con rentabilidad negativa, que suman {m(sum(v[1] for _, v in neg))}. Los 20 que más pierden:</p>" + html)
-    a(f'<h4 style="margin:12px 0 4px">Incidencias ECOM, resumen por tipo ({n(len(inc))} en total)</h4>' + resumen_incidencias(inc))
+    a(f'<h4>Incidencias ECOM, resumen por tipo ({n(len(inc))} en total)</h4>' + resumen_incidencias(inc))
     # Mapa subcategoría -> categoría para Táctica, que no trae categoría propia.
     mapa = collections.Counter((x["subcategoria"], x["categoria"]) for x in filas if x["subcategoria"] and x["categoria"])
     sub_cat = {}
     for (s, c), _ in mapa.most_common():
         sub_cat.setdefault(s, c)
-    return {"con_iva": D(tot["suma_1"]), "sin_iva": T2, "rent": R, "lineas": tot["cantidad_lineas"]}, sub_cat
+    return {"con_iva": D(tot["suma_1"]), "sin_iva": T2, "rent": R, "lineas": tot["cantidad_lineas"], "filas": filas}, sub_cat
 
 
 def seccion_tactica(base, P, a, sub_cat):
@@ -199,26 +268,26 @@ def seccion_tactica(base, P, a, sub_cat):
             {1, 2, 3, 4, 5}))
     a("<h3>3. Ganadores por facturación (top 10, fact. sin IVA)</h3>")
     for et, d in (("SKU", sku), ("Categoría", cat), ("PM", pm), ("Cliente", cli)):
-        a(f'<h4 style="margin:12px 0 4px">Por {et if et == "SKU" else et.lower()}</h4>' + top(d, 0, et, "Líneas"))
+        a(f'<h4>Por {et if et == "SKU" else et.lower()}</h4>' + top(d, 0, et, "Líneas"))
     a("<h3>4. Ganadores por rentabilidad $ (top 10)</h3>")
     for et, d in (("SKU", sku), ("Categoría", cat), ("PM", pm), ("Cliente", cli)):
-        a(f'<h4 style="margin:12px 0 4px">Por {et if et == "SKU" else et.lower()}</h4>' + top(d, 1, et, "Líneas"))
+        a(f'<h4>Por {et if et == "SKU" else et.lower()}</h4>' + top(d, 1, et, "Líneas"))
     a("<h3>5. Alertas Táctica</h3>")
     if extra:
-        a('<h4 style="margin:12px 0 4px">Líneas duplicadas (se cuentan dos veces en los totales)</h4>')
+        a('<h4>Líneas duplicadas (se cuentan dos veces en los totales)</h4>')
         a(table(["Comprobante", "Fecha", "Cliente", "SKU", "Fact. sin IVA (por fila)", "Rentab. $ (por fila)"],
                 [[x["nro_factura"], x["fecha"], x["empresa"], x["codigo"], m(x["precio_venta"] or 0), red(m(x["margen_real"] or 0))]
                  for x in extra], {4, 5}))
     resp_d = desde_agregacion(resp, "(sin responsable)")
     for titulo, d, et in (("Vendedores", resp_d, "Responsable"), ("PM", pm, "PM"), ("Categorías", cat, "Categoría"), ("Subcategorías", sub, "Subcategoría")):
-        a(f'<h4 style="margin:12px 0 4px">{titulo} con rentabilidad negativa</h4>' + negativos(d, et, "Líneas")[0])
+        a(f'<h4>{titulo} con rentabilidad negativa</h4>' + negativos(d, et, "Líneas")[0])
     html, neg = negativos(sku, "SKU", "Líneas", 20)
-    a(f'<h4 style="margin:12px 0 4px">SKU con rentabilidad negativa</h4>'
+    a(f'<h4>SKU con rentabilidad negativa</h4>'
       f"<p><b>{len(neg)} SKU</b> con rentabilidad negativa, que suman {m(sum(v[1] for _, v in neg))}. Los 20 que más pierden:</p>" + html)
-    a(f'<h4 style="margin:12px 0 4px">Incidencias Táctica, resumen por tipo ({n(len(inc))} en total)</h4>' + resumen_incidencias(inc))
+    a(f'<h4>Incidencias Táctica, resumen por tipo ({n(len(inc))} en total)</h4>' + resumen_incidencias(inc))
     if any(x["severidad"] == "BLOQUEANTE" for x in inc):
         a('<p style="font-size:13px;color:#c0392b">Hay incidencias BLOQUEANTES: esas líneas pueden tener la rentabilidad mal calculada.</p>')
-    return {"con_iva": D(tot["suma_1"]), "sin_iva": T2, "rent": R, "lineas": tot["cantidad_lineas"]}
+    return {"con_iva": D(tot["suma_1"]), "sin_iva": T2, "rent": R, "lineas": tot["cantidad_lineas"], "filas": filas}
 
 
 def main():
@@ -228,6 +297,7 @@ def main():
     ap.add_argument("--html", default="informe_rentabilidad.html")
     ap.add_argument("--txt", default="informe_rentabilidad.txt")
     ap.add_argument("--meta", default="informe_rentabilidad.json")
+    ap.add_argument("--png", default="evolucion_diaria.png")
     args = ap.parse_args()
     base = args.backend.rstrip("/")
 
@@ -245,7 +315,12 @@ def main():
     tac = seccion_tactica(base, P, cuerpo.append, sub_cat)
 
     tot = {k: ecom[k] + tac[k] for k in ("con_iva", "sin_iva", "rent")}
-    head = [f'<div style="font-family:Arial,Helvetica,sans-serif;color:#222;max-width:860px">'
+    dias = collections.defaultdict(lambda: [D(0), D(0)])
+    por_dia(ecom["filas"], "precio_sin_iva", "rentabilidad", dias)
+    por_dia(tac["filas"], "precio_venta", "margen_real", dias)
+    png = os.path.basename(args.png)
+    hay_grafico = grafico(dias, args.png)
+    head = [ESTILO + f'<div style="font-family:Arial,Helvetica,sans-serif;color:#222;max-width:860px">'
             f'<h1 style="margin-bottom:4px;font-size:22px">Rentabilidad ECOM + Táctica — {rango}</h1>'
             f'<p style="color:#555;font-size:13px;margin-top:0">Período <code>{P}</code> · Cierre generado {cierre["generado_en"][:10]} '
             f'(origen ECOM: {cierre["ecom_origen"]}) · Consultado {date.today():%Y-%m-%d}. Excluye líneas marcadas como excluidas. '
@@ -256,6 +331,9 @@ def main():
                 ["Táctica", m(tac["con_iva"]), m(tac["sin_iva"]), m(tac["rent"]), pc(ratio(tac["rent"], tac["sin_iva"]))],
                 ["<b>Total</b>", f'<b>{m(tot["con_iva"])}</b>', f'<b>{m(tot["sin_iva"])}</b>', f'<b>{m(tot["rent"])}</b>',
                  f'<b>{pc(ratio(tot["rent"], tot["sin_iva"]))}</b>']], {1, 2, 3, 4})]
+    if hay_grafico:
+        head.append(f'<h3>Evolución día a día</h3><img src="cid:{png}" width="760" alt="Facturación sin IVA y rentabilidad por día, '
+                    f'ECOM + Táctica" style="max-width:100%;height:auto">')
     pie = ['<p style="font-size:11px;color:#888;margin-top:24px">Generado automáticamente con Claude Code a partir de los endpoints '
            f"/rentabilidad/* de {base.split('//')[-1]}.</p></div>"]
     with open(args.html, "w") as f:
@@ -269,7 +347,11 @@ def main():
     with open(args.txt, "w") as f:
         f.write(txt)
     with open(args.meta, "w") as f:
-        json.dump({"periodo": P, "asunto": f"Rentabilidad ECOM + Táctica — {rango}"}, f, ensure_ascii=False)
+        meta = {"periodo": P, "asunto": f"Rentabilidad ECOM + Táctica — {rango}", "png": None, "png_b64": None}
+        if hay_grafico:
+            with open(args.png, "rb") as g:
+                meta.update(png=png, png_b64=base64.b64encode(g.read()).decode())
+        json.dump(meta, f, ensure_ascii=False)
     print(txt)
 
 

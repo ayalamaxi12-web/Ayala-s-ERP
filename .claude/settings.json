@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Gmail__send_message",
+      "Bash(python3 backend/scripts/informe_rentabilidad.py:*)"
+    ]
+  }
+}
