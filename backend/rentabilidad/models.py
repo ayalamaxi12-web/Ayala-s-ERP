@@ -271,6 +271,17 @@ class VentaEcom(Base):
     # AV · % Rentabilidad · CALCULADO = 1 - (AA/Z), equivalente a AB/Z
     pct_rentabilidad: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
 
+    # Sin columna en la planilla — solo los completa el adaptador de la API
+    # (2026-09-27). `orden_externa`: número de orden del canal (Frávega:
+    # `v90781066frvg-01`, clave de cruce con su liquidación).
+    # `origen_comision`: API | ESTIMADO_FRAVEGA | LIQUIDACION_FRAVEGA
+    # (ver `ingesta_ecom.ORIGEN_COMISION_*`). `observacion`: algo a revisar
+    # a mano que no frena el cálculo (ej. cancelada en Frávega pero cobrada
+    # en Ecom — posible desync, no se fuerza).
+    orden_externa: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    origen_comision: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    observacion: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
 
 # ── Tablas paramétricas (§1.3) — ninguna tasa/prefijo/régimen vive en código ──
 
@@ -371,3 +382,42 @@ class CierreRentabilidad(Base):
     tactica_guardado: Mapped[bool] = mapped_column(Boolean, default=False)
     ecom_guardado: Mapped[bool] = mapped_column(Boolean, default=False)
     ecom_origen: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "excel" | "api"
+
+
+class LiquidacionFravega(Base):
+    """Una fila = una orden de Frávega en UNA liquidación quincenal (Seller
+    Center → "Detalle de Operaciones"), neta de las devoluciones de esa
+    misma liquidación.
+
+    Es la fuente real de comisión y fee logístico de Frávega — la API de
+    Ecom no los trae. Mientras la liquidación de la quincena no se cargó, las
+    órdenes de Frávega de `venta_ecom` quedan con la comisión base estimada
+    (`origen_comision=ESTIMADO_FRAVEGA`); al cargarla se reemplazan por estos
+    valores y se recalcula la rentabilidad (decisión de Maxx, 2026-09-27).
+    Se guarda aparte (no solo se aplica) para que volver a guardar el cierre
+    de un día ya liquidado siga usando el real y no vuelva al estimado.
+
+    Una orden puede aparecer en más de una liquidación (vendida en una
+    quincena, devuelta en la siguiente): el valor de la orden es la SUMA de
+    todas sus filas (`persistencia.liquidacion_neta_fravega`). Si esa suma
+    no deja venta neta, está cancelada en Frávega — no se fuerza nada sobre
+    la venta de Ecom, se marca como observación (posible desync).
+    """
+
+    __tablename__ = "liquidacion_fravega"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # "Orden" de la liquidación, ej. `v90781066frvg-01`
+    orden: Mapped[str] = mapped_column(String(64), index=True)
+    # Σ "Valor del sku" de esta liquidación, neto de sus devoluciones
+    valor_sku: Mapped[Decimal] = mapped_column(MONEY)
+    # Σ "Valor total Comisiones" (base + comercial + financiera), sin IVA
+    comision: Mapped[Decimal] = mapped_column(MONEY)
+    # Σ "Fee logistico", sin IVA
+    fee_logistico: Mapped[Decimal] = mapped_column(MONEY)
+    # Período de la liquidación — junto con `orden`, la clave de reemplazo
+    # al volver a cargar el mismo archivo.
+    liquidacion_desde: Mapped[date] = mapped_column(Date)
+    liquidacion_hasta: Mapped[date] = mapped_column(Date)
+    archivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

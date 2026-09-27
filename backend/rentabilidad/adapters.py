@@ -236,31 +236,42 @@ class ClasificacionProvider(_AdaptadorBase):
     def __init__(self, sheet_id: str | None = None, fetch_fn: FetchFn | None = None):
         super().__init__(sheet_id or config.SHEET_CATEGORIAS_ID, fetch_fn, "RENT_SHEET_CATEGORIAS_ID")
 
-    def _buscar(self, filas: list[list[str]], sku: str, col_inicio: int) -> tuple[str | None, str | None]:
+    def _buscar(
+        self, filas: list[list[str]], sku: str, col_inicio: int, desplazamiento_pm: int, desplazamiento_subcat: int,
+    ) -> tuple[str | None, str | None]:
+        """BUSCARV exacto de Sheets: no distingue mayúsculas/minúsculas y el
+        valor buscado se compara recortado."""
+        buscado = sku.strip().lower()
         for fila in filas:
-            if gsheets.valor(fila, col_inicio) == sku:
-                pm = gsheets.valor(fila, col_inicio + 3) or None  # "col. 4" relativa
-                subcat = gsheets.valor(fila, col_inicio + 4) or None  # "col. 5" relativa
+            if gsheets.valor(fila, col_inicio).strip().lower() == buscado:
+                pm = gsheets.valor(fila, col_inicio + desplazamiento_pm) or None
+                subcat = gsheets.valor(fila, col_inicio + desplazamiento_subcat) or None
                 return pm, subcat
         return None, None
 
     def pm_y_subcategoria(self, sku: str) -> tuple[str | None, str | None]:
+        """Cascada literal de la fórmula real de la planilla ECOM (col. PM /
+        Subcategoria, leída 2026-09-27 del libro del 01/06/2026):
+        `BUSCARV(B; A:D; 4)` → `BUSCARV(primer SKU; A:D; 4)` →
+        `BUSCARV(primer SKU; U:V; 2)` (PM) / `U:W; 3` (subcategoría). El
+        rango alternativo U tiene PM en V y subcategoría en W, no en la
+        "col. 4/5 relativa" del rango A — se leía mal (U+3/U+4)."""
         if not sku:
             return "SIN PM", None
 
         filas = self._filas(config.TAB_CATEGORIAS)
         col_a = _letra_a_indice("A")
-        pm, subcat = self._buscar(filas, sku, col_a)
+        pm, subcat = self._buscar(filas, sku, col_a, 3, 4)  # A:D col 4, A:E col 5
         if pm is not None:
             return pm, subcat
 
         primer_sku = sku.split(",")[0].strip()
-        pm, subcat = self._buscar(filas, primer_sku, col_a)
+        pm, subcat = self._buscar(filas, primer_sku, col_a, 3, 4)
         if pm is not None:
             return pm, subcat
 
         col_u = _letra_a_indice("U")
-        pm, subcat = self._buscar(filas, primer_sku, col_u)
+        pm, subcat = self._buscar(filas, primer_sku, col_u, 1, 2)  # U:V col 2, U:W col 3
         if pm is not None:
             return pm, subcat
 

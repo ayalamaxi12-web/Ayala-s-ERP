@@ -229,9 +229,28 @@ def test_clasificacion_fallback_primer_sku_de_lista():
 def test_clasificacion_fallback_rango_alternativo_u():
     fila = [""] * 30
     idx_u = ord("U") - ord("A")
-    fila[idx_u], fila[idx_u + 3], fila[idx_u + 4] = "SKU1", "Cristian", "Perifericos"
+    # Fórmula real: BUSCARV(primer SKU; U:V; 2) para PM y U:W; 3 para
+    # subcategoría — PM en V (U+1) y subcategoría en W (U+2).
+    fila[idx_u], fila[idx_u + 1], fila[idx_u + 2] = "SKU1", "Cristian", "Perifericos"
     prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: [fila])
     assert prov.pm_y_subcategoria("SKU1") == ("Cristian", "Perifericos")
+
+
+def test_clasificacion_busca_primero_la_lista_completa_de_skus():
+    # Paso 2 de §8.1: la lista completa en A gana sobre el primer SKU.
+    completa = [""] * 10
+    completa[0], completa[3] = "SKU1, SKU2", "Laura"
+    primero = [""] * 10
+    primero[0], primero[3] = "SKU1", "Matias"
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: [primero, completa])
+    assert prov.pm_y_subcategoria("SKU1, SKU2")[0] == "Laura"
+
+
+def test_clasificacion_no_distingue_mayusculas_como_buscarv():
+    fila = [""] * 10
+    fila[0], fila[3] = "CF283XCOMP", "Veronica"
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: [fila])
+    assert prov.pm_y_subcategoria("cf283xcomp ")[0] == "Veronica"
 
 
 def test_clasificacion_no_encuentra_nada():

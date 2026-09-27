@@ -18,6 +18,7 @@ TABLAS_ESPERADAS = {
     "regimen_comprobante",
     "sku_excluido",
     "sku_auxiliar",
+    "liquidacion_fravega",
 }
 
 

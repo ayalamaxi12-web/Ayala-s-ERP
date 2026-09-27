@@ -284,6 +284,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="display:flex;gap:8px">
       <button class="btn primary" id="rent-btn-consultar" onclick="rentConsultar()">🔍 Consultar</button>
       <button class="btn" id="rent-btn-guardar-cierre" onclick="rentGuardarCierre()" style="display:none">💾 Guardar Cierre</button>
+      <button class="btn" id="rent-btn-liq-fravega" onclick="document.getElementById('rent-liq-fravega-file').click()" title="Liquidación quincenal de Seller Center (.xlsx): reemplaza la comisión estimada de Frávega por la real">📄 Cargar liquidación Frávega</button>
+      <input type="file" id="rent-liq-fravega-file" accept=".xlsx" style="display:none" onchange="rentCargarLiquidacionFravega(this)">
     </div>
   </div>
   <div id="rent-status" style="font-size:10px;color:var(--text3);margin-top:8px;font-family:'DM Mono',monospace"></div>
@@ -7041,6 +7043,32 @@ function ofertasExport(){
     goVentasTab('hist');
     await loadDashboard();
   };
+  // Frávega: la API de Ecom no trae comisión ni fee logístico; se estiman hasta
+  // que se carga la liquidación quincenal, que los reemplaza por los reales.
+  window.rentCargarLiquidacionFravega = async function(input){
+    const archivo=input.files&&input.files[0]; input.value='';
+    if(!archivo) return;
+    const bu=getBackendUrl();
+    const statusEl=document.getElementById('rent-status');
+    const btn=document.getElementById('rent-btn-liq-fravega');
+    statusEl.textContent='Cargando liquidación de Frávega...';
+    btn.disabled=true;
+    try{
+      const fd=new FormData(); fd.append('archivo',archivo);
+      const r=await fetch(`${bu}/rentabilidad/fravega/liquidacion`,{method:'POST',body:fd});
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.detail||`status ${r.status}`);
+      let msg=`Liquidación Frávega ${d.desde} → ${d.hasta}: ${d.ventas_actualizadas} ventas pasaron a comisión real · ${d.fravega_pendientes} siguen estimadas`;
+      if(d.canceladas_observadas.length) msg+=` · ⚠ canceladas en Frávega pero cobradas en Ecom (revisar): ${d.canceladas_observadas.join(', ')}`;
+      statusEl.textContent=msg;
+      toast('Liquidación de Frávega aplicada');
+      dashLoaded=false;
+    }catch(e){
+      statusEl.textContent='Liquidación Frávega: error — '+e.message;
+      toast('Error cargando la liquidación: '+e.message,'error');
+    }finally{ btn.disabled=false; }
+  };
+
   // ── HISTÓRICOS ──
 
   window.rentToggleHistoricos = function(){

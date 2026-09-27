@@ -254,4 +254,44 @@ El paso 5 es la primera puerta real: **si T-1 a T-8 no pasan al centavo, no se a
 
 ---
 
+## 11. Ingesta ECOM por API — reglas aprobadas (Maxx, 2026-09-27)
+
+Fuente operativa de ECOM: la API GraphQL de EcomExperts
+(`ingesta_ecom_api.py`), no el Excel. Validado el 01/06/2026 contra la
+planilla terminada de Maxx (pestaña "16"): mismas 560 órdenes, facturación
+idéntica al centavo ($28.782.141,66) y rentabilidad explicada orden por
+orden.
+
+| Regla | Implementación |
+|---|---|
+| Órdenes | Tab `closed`, por `MtOrder.created` (hora Argentina). Participan `Cobrado`/`Cobro Parcial`; `Sin Cobro` (Uso Interno) y `Reembolsado` se excluyen. |
+| Costo | `Variant.cost` × cantidad — costo **vigente al correr** (la API no guarda costo histórico por orden). Costo 0 = incidencia (casi siempre SKU madre): no se calcula ni se inventa, se lista para revisar. |
+| Precio SIN IVA | Σ `subtotalSinImpuestos` por línea: IVA real de cada línea (21 / 10,5), no el 1,10 fijo del export de Ecom. |
+| Comisión ML / Woocommerce | Cargos `fee` que MP le cobra al vendedor (`charges_details`, `from=collector`). En Woocommerce incluye el costo de cuotas que absorbe el vendedor; el `financing_fee` del comprador no cuenta. |
+| Envío ML | Cargo `shipping` de MP − lo que pagó el comprador; sin cargo: 0 en Full, `listCost − cost` fuera de Full (coincide en las 527 órdenes ML del día). |
+| Envío Woocommerce | 0: lo que paga el comprador no es ingreso ni costo; la mensajería se paga por mes. |
+| Frávega | Comisión base estimada (`fravega_comision_base` = 15% × Precio Final, fee 0) hasta cargar la liquidación quincenal; al cargarla se reemplaza por comisión + fee logístico reales y se recalcula (`origen_comision`: `ESTIMADO_FRAVEGA` → `LIQUIDACION_FRAVEGA`). Cruce por el número de orden de Frávega que guarda Ecom (`ownerData.ownerId` sin `FVG-`). |
+| Cancelada en Frávega, cobrada en Ecom | No se fuerza: queda estimada con `observacion` (posible desync Ecom↔Frávega). |
+| Posventa | Precio final y sin IVA en 0, se conserva el costo. |
+| PM | Cascada de la fórmula real: SKUs completos en `A:D` → primer SKU en `A:D` → primer SKU en `U:V` (sin distinguir mayúsculas, como BUSCARV). |
+| TC / costo por operación | Parámetro de la corrida (manual o BNA) / `costo_operacion_ecom` ($149,12). |
+
+**Liquidación de Frávega** (`liquidacion_fravega.py`, tabla
+`liquidacion_fravega`): se sube el .xlsx de Seller Center
+(`POST /rentabilidad/fravega/liquidacion`, o el botón "Cargar liquidación
+Frávega" de la página de Rentabilidad). Antes de aplicar se verifica que
+el detalle reconstruya los totales de la propia liquidación; si no cuadra,
+no se aplica. Se guarda una fila por orden y por liquidación (una venta y
+su devolución pueden caer en quincenas distintas; el valor de la orden es
+la suma). `GET /rentabilidad/fravega/pendientes` lista las ventas que
+siguen estimadas.
+
+**Corrida diaria** (`cierre_ecom_diario.py`, CLI `backend/scripts/ecom_diario.py`):
+recalcula el ciclo en curso (23 → 22) desde el día 23 hasta ayer y lo guarda
+bajo la etiqueta del ciclo completo (`2026-09-23_2026-10-22`), reemplazando
+lo anterior de ese ciclo: sin períodos solapados ni órdenes duplicadas. Corre
+en proceso (un ciclo completo no entra en el timeout de un request HTTP).
+
+---
+
 *Fin del diseño técnico.*

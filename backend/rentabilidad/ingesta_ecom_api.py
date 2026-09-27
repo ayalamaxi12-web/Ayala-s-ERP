@@ -38,9 +38,9 @@ de memoria, mandato de `docs/00_LEEME_PRIMERO.md` §4):
   especificar `tab`, la API usa `active` por defecto** — es la causa
   confirmada de que una consulta sin `tab` traía solo un puñado de órdenes
   (las abiertas del momento) en vez del universo real del período. Para
-  Rentabilidad participan `active` + `closed` (decisión de Maxx,
-  2026-08-12: son las órdenes que representan una venta real, en curso o
-  cerrada); `draft`/`inactive`/`trash` no participan.
+  Rentabilidad participa **solo `closed`** (decisión de Maxx, 2026-09-27,
+  al validar el 01/06/2026 contra su planilla — antes eran `active` +
+  `closed`); `active`/`draft`/`inactive`/`trash` no participan.
 - **Paginación engañosa pasado un techo**: confirmado contra la API real
   (2026-08-12, rango 2026-06-10..2026-08-10, tab=`closed`, sin filtrar
   cuenta): de la página 1 a la 9, `pageInfo` repite siempre
@@ -105,21 +105,13 @@ de memoria, mandato de `docs/00_LEEME_PRIMERO.md` §4):
   → `"Mercadolibre Carrito"` — que es la que aparece en el Excel. Se
   resuelve **en vivo contra `findSettings`**, no hardcodeada (mandato de
   Maxx: nunca asumir un mapeo de canal).
-- **Costo de envío**: `Shipping.cost` casi siempre viene en `0` en la
-  muestra real. `Shipping.listCost` por sí solo NO alcanza — corrección
-  2026-08-13, contra un Excel real (2026-01-01): `listCost` es el costo de
-  catálogo del método de envío, pero solo lo paga el vendedor (y por lo
-  tanto solo cuenta como "Costo Envío" en el Excel) cuando
-  `Shipping.freeShipping` es `true` (el vendedor ofreció envío gratis al
-  comprador — práctica real de MercadoLibre — y por eso absorbe el costo
-  él mismo). Cuando `freeShipping` es `false` (el comprador paga su propio
-  envío), "Costo Envío" es `0` para el vendedor sin importar cuánto diga
-  `listCost`. Confirmado sin excepciones contra 19 órdenes reales de una
-  muestra del 2026-01-01: `costo_envio = listCost if freeShipping else 0`.
-  (La afirmación anterior, de que `listCost` solo bastaba, se apoyaba en
-  una única coincidencia de valor —7821— que resultó ser, por casualidad,
-  un caso con `freeShipping=true`; no estaba mal el valor, sí la regla
-  general que se infirió de un solo dato.)
+- **Costo de envío** (regla vigente desde 2026-09-27, ver
+  `_costo_envio_mercadolibre`): el cargo `shipping` que MP le cobra al
+  vendedor en `Payment.details.charges_details`, menos lo que pagó el
+  comprador (`Shipping.cost`); sin ese cargo, 0 en Full y `listCost - cost`
+  fuera de Full. Las reglas anteriores (`listCost` si `freeShipping`, y
+  después el umbral de $33.000 por unidad en Full) quedan reemplazadas:
+  la nueva coincide con la planilla en las 527 órdenes ML del 01/06/2026.
 - **Precio Sin IVA con IVA real por línea, no un % fijo**: confirmado
   2026-08-13 contra un Excel real (orden 1307526, un kit) — cada
   `OrderList` trae su propio `taxTag` (ej. `"10.5"`, `"21"`) y
@@ -139,13 +131,16 @@ de memoria, mandato de `docs/00_LEEME_PRIMERO.md` §4):
   `taxSubtotalPrice` real que trae la propia API para esa línea). No
   comparar "Precio Sin IVA" 1:1 contra esos exports de Ecom esperando que
   coincida — es una divergencia esperada, no un bug de este adaptador.
-- **Comisión de venta**: no hay un campo único — se resuelve como
-  `sum(payments[].totalFeeAmount)`. Confirmado por Maxx (2026-08-10): la
-  fórmula real de la planilla toma comisión de venta + envío y descuenta el
-  costo total, además de imp. cheque/IIBB — coincide con esta suma. Los
-  "impuestos informativos" que trae Ecom (`Payment.retenciones`) son parte
-  de lo que ya cubren el 1,2%/5% calculados por el motor — no se suman
-  aparte, mismo criterio que ya regía para el Excel.
+- **Comisión de venta** (regla vigente desde 2026-09-27, ver
+  `_comision_mercado_pago`/`_cargos_del_vendedor`): los cargos tipo `fee`
+  que MP le cobra al vendedor (`accounts.from == "collector"`) en
+  `Payment.details.charges_details` — en ML equivale a
+  `sum(payments[].totalFeeAmount)` (fallback si no hay `details`); en
+  Woocommerce con MP es la comisión real que la planilla no tenía (Maxx la
+  verificó contra el panel de MP). Frávega no trae comisión en la API de
+  Ecom: se estima y se reemplaza por la liquidación (ver
+  `liquidacion_fravega.py`). Los "impuestos informativos"
+  (`Payment.retenciones`) no se suman: ya los cubren el 1,2%/5% del motor.
 - **Postventa/RMA**: la API usa `"Posventa"` (sin "t"), el Excel
   `"Postventa"` (con "t") — **Maxx confirmó (2026-08-10) que son el mismo
   concepto.** Se detecta con `owner == "Posventa"` (valor real de la API).
@@ -173,7 +168,13 @@ from decimal import Decimal
 from typing import Callable
 
 from . import config
-from .ingesta_ecom import ESTADOS_PAGO_QUE_PARTICIPAN, FilaEcom, ResultadoIngestaEcom
+from .ingesta_ecom import (
+    ESTADOS_PAGO_QUE_PARTICIPAN,
+    ORIGEN_COMISION_API,
+    ORIGEN_COMISION_ESTIMADO_FRAVEGA,
+    FilaEcom,
+    ResultadoIngestaEcom,
+)
 
 # `ingesta_ecom.CANAL_POSVENTA` ("Postventa", con "t") es el valor
 # verificado por Maxx contra el Excel real. El filtro `owner` de la API
@@ -353,10 +354,12 @@ query BuscarOrdenes($page: Int, $start: Int!, $end: Int!, $tab: ID) {
       data {
         id
         customOrderId
+        created
         owner
         paymentStatus
         shipping { listCost cost }
-        payments { totalFeeAmount }
+        payments { totalFeeAmount details }
+        ownerData { ... on ChChannelOrder { owner ownerId } }
         orderLists {
           quantity
           subtotal
@@ -394,20 +397,15 @@ query BuscarIds($page: Int, $start: Int!, $end: Int!, $tab: ID, $filters: [FindF
 
 _LOGISTIC_TYPE_FULFILLMENT = "fulfillment"
 
-# Regla de negocio de Maxx (2026-08-13): por encima de este precio UNITARIO
-# de publicación, ML da envío gratis al comprador y el vendedor lo absorbe
-# — es por precio de la publicación, no por total de carrito (confirmado
-# sin excepciones sobre 14 órdenes reales, ver docstring de
-# `_fila_desde_orden`). Si cambia, lo confirma Maxx, no se reinterpreta.
-_UMBRAL_ENVIO_GRATIS_FULL = Decimal(33000)
-
 # `findSettings.tabs.options` real (2026-08-12): active/closed/draft/
-# inactive/trash. Para Rentabilidad participan las órdenes activas
-# (en curso) y cerradas (ya facturadas) — draft/inactive/trash no son
-# ventas reales (decisión de Maxx, 2026-08-12).
+# inactive/trash.
 TAB_ACTIVE = "active"
 TAB_CLOSED = "closed"
-_TABS_QUE_PARTICIPAN = (TAB_ACTIVE, TAB_CLOSED)
+# Solo `closed` desde 2026-09-27 (decisión de Maxx al validar el 01/06/2026
+# contra su planilla: "órdenes CERRADAS, por fecha de creación"). Las 2
+# `active` de ese día no estaban en la planilla; las 586 `closed` menos las
+# excluidas por estado de pago eran exactamente sus 560 órdenes.
+_TABS_QUE_PARTICIPAN = (TAB_CLOSED,)
 
 # Techo a partir del cual `pageInfo.count`/`pageCount` de `orders.find` dejan
 # de ser confiables como total real (ver docstring del módulo — confirmado
@@ -517,7 +515,7 @@ def _ids_fulfillment_de_tab(cliente: EcomApiClient, desde: date, hasta: date, ta
 
 
 def ids_fulfillment(cliente: EcomApiClient, desde: date, hasta: date, limite_dias: int) -> set[str]:
-    """Ids Full de ambos tabs (`active`+`closed`) del período — se consulta
+    """Ids Full de los tabs que participan del período — se consulta
     una sola vez por período en `EcomApiAdapter.periodo()`, no por orden."""
     ids: set[str] = set()
     for tab in _TABS_QUE_PARTICIPAN:
@@ -526,8 +524,8 @@ def ids_fulfillment(cliente: EcomApiClient, desde: date, hasta: date, limite_dia
 
 
 def buscar_ordenes(cliente: EcomApiClient, desde: date, hasta: date) -> list[dict]:
-    """Universo completo de órdenes del período para Rentabilidad: `active`
-    + `closed` (`draft`/`inactive`/`trash` no participan), siempre filtrado
+    """Universo completo de órdenes del período para Rentabilidad: los tabs
+    de `_TABS_QUE_PARTICIPAN` (hoy solo `closed`), siempre filtrado
     por `MtOrder.created`, sin límite artificial de resultados ni de rango
     de fechas — se parte el período automáticamente cuando hace falta.
     Deduplica por id (una orden no debería aparecer en dos tabs a la vez,
@@ -568,107 +566,180 @@ def _decimal(v) -> Decimal:
     return Decimal(str(v)) if v not in (None, "") else Decimal(0)
 
 
-def _supera_umbral_envio_gratis_full(lineas: list[dict]) -> bool:
-    """Precio unitario de CUALQUIER línea (`subtotal/quantity`) por encima
-    de `_UMBRAL_ENVIO_GRATIS_FULL` — es por publicación, no por total del
-    carrito (ver docstring de `_fila_desde_orden`: una orden de 5 unidades
-    a $9.899 c/u no absorbe envío aunque el total supere el umbral)."""
-    for l in lineas:
-        cantidad = _decimal(l.get("quantity"))
-        if cantidad <= 0:
+# `ownerData.owner` de un `ChChannelOrder` → etiqueta de "Canal De Venta"
+# del Excel. La tabla `owner` de `findSettings` solo da "Ventas por
+# integraciones" para `ChChannelOrder` (no distingue la integración); el
+# canal real está en `ownerData.owner`. Mapeo verificado 2026-09-27 contra
+# la planilla real del 01/06/2026 (32 órdenes: 18 `ChWoocommerce` →
+# "Woocommerce", 14 `ChFravega` → "Fravega", sin excepciones). Una
+# integración nueva no listada acá cae a la etiqueta genérica de Ecom.
+_CANAL_DE_INTEGRACION = {"ChWoocommerce": "Woocommerce", "ChFravega": "Fravega"}
+_OWNER_INTEGRACION_FRAVEGA = "ChFravega"
+# `ownerData.ownerId` de Frávega viene como `FVG-v90781066frvg-01`; sin el
+# prefijo es exactamente la columna "Orden" de la liquidación de Frávega
+# (verificado 2026-09-27: las 14 órdenes del 01/06/2026 cruzaron 1:1).
+_PREFIJO_ORDEN_FRAVEGA = "FVG-"
+
+_OWNERS_MERCADOLIBRE = ("MlShipping", "MlOrder")
+
+
+def _detalles_de_pago(pago: dict) -> dict:
+    """`Payment.details` es un `Json` — la API lo devuelve a veces ya
+    parseado y a veces como string (ambas formas vistas en la muestra real
+    del 2026-09-27). `null` para pagos que no son de Mercado Pago (Frávega,
+    transferencia)."""
+    detalles = pago.get("details")
+    if isinstance(detalles, str):
+        import json
+
+        try:
+            detalles = json.loads(detalles)
+        except ValueError:
+            return {}
+    return detalles if isinstance(detalles, dict) else {}
+
+
+def _cargos_del_vendedor(orden: dict, tipo: str) -> Decimal | None:
+    """Suma los `charges_details` de Mercado Pago de un `tipo` (`fee`,
+    `shipping`) que paga el vendedor (`accounts.from == "collector"`), neto
+    de lo reembolsado. `None` si ningún pago de la orden trae el detalle
+    (para distinguir "MP no cobró nada de este tipo" de "no hay dato").
+
+    Contrato verificado contra la API real (2026-09-27, 586 órdenes del
+    01/06/2026, y confirmado por Maxx contra el panel de Mercado Pago):
+    - `fee` del vendedor = `meli_percentage_fee` + `flat_fee` +
+      `financing_add_on_fee` (ML) o `mercadopago_fee` + `financing_fee` con
+      `from=collector` (Woocommerce con MP). El `financing_fee` con
+      `from=payer` son intereses que paga el comprador — NO es costo.
+    - `shipping` = `shp_cross_docking` / `shp_fulfillment`: lo que ML le
+      cobra al vendedor por el envío, incluida la parte que pagó el
+      comprador (ver `_costo_envio_mercadolibre`)."""
+    hay_detalle = False
+    total = Decimal(0)
+    for pago in orden.get("payments") or []:
+        cargos = _detalles_de_pago(pago).get("charges_details")
+        if cargos is None:
             continue
-        precio_unitario = _decimal(l.get("subtotal")) / cantidad
-        if precio_unitario >= _UMBRAL_ENVIO_GRATIS_FULL:
-            return True
-    return False
+        hay_detalle = True
+        for cargo in cargos:
+            if cargo.get("type") != tipo or (cargo.get("accounts") or {}).get("from") != "collector":
+                continue
+            montos = cargo.get("amounts") or {}
+            total += _decimal(montos.get("original")) - _decimal(montos.get("refunded"))
+    return total if hay_detalle else None
+
+
+def _comision_mercado_pago(orden: dict) -> Decimal:
+    """Comisión real cobrada por MP/ML al vendedor. Sin `details` (no
+    debería pasar en órdenes ML, visto 0 veces el 2026-09-27) cae a
+    `sum(totalFeeAmount)`, que coincide con los cargos del vendedor en ML
+    (521 de 527 órdenes; las 6 restantes difieren solo por `financing_fee`
+    del comprador, que `totalFeeAmount` ya excluye)."""
+    cargos = _cargos_del_vendedor(orden, "fee")
+    if cargos is not None:
+        return cargos
+    return sum((_decimal(p.get("totalFeeAmount")) for p in (orden.get("payments") or [])), Decimal(0))
+
+
+def _costo_envio_mercadolibre(orden: dict, es_full: bool) -> Decimal:
+    """Lo que realmente paga el vendedor por el envío (decisión de Maxx,
+    2026-09-27: "lo que realmente paga el cliente o yo"):
+
+    1. Si MP cobró envío al vendedor (`charges_details` tipo `shipping`):
+       ese cargo menos lo que pagó el comprador (`Shipping.cost`) — ML le
+       cobra al vendedor el envío completo y le reintegra dentro del pago
+       la parte del comprador. Ej. real: 1387297 cargo 11748,89, comprador
+       5608,89 → 6140, igual a la planilla.
+    2. Si MP no cobró envío y es Full: 0 (ML no le cobró nada al vendedor).
+    3. Si no, `listCost - cost` (el envío se factura aparte de MP).
+
+    Verificado 2026-09-27: coincide con la planilla de Maxx en las 527
+    órdenes ML del 01/06/2026. Reemplaza al umbral de $33.000 por unidad
+    en Full (regla anterior), que fallaba en 1387192: 6 × $6.002,50 en Full
+    donde MP sí cobró `shp_fulfillment` $10.050."""
+    shipping = orden.get("shipping") or {}
+    pagado_por_comprador = _decimal(shipping.get("cost"))
+    cargo_envio = _cargos_del_vendedor(orden, "shipping")
+    if cargo_envio:
+        return max(cargo_envio - pagado_por_comprador, Decimal(0))
+    if es_full:
+        return Decimal(0)
+    return max(_decimal(shipping.get("listCost")) - pagado_por_comprador, Decimal(0))
+
+
+def _fecha_creacion(created: str | None) -> date | None:
+    """`Order.created` viene como `"2026-06-01 16:45:15"`, en hora
+    Argentina (mismo huso con el que la API filtra `MtOrder.created`, ver
+    docstring del módulo) — la fecha es directamente la parte `YYYY-MM-DD`."""
+    if not created:
+        return None
+    try:
+        return date.fromisoformat(created[:10])
+    except ValueError:
+        return None
 
 
 def _fila_desde_orden(
     orden: dict, tc: Decimal, canales: dict[str, str], estados_pago: dict[str, str], ids_full: set[str] = frozenset()
 ) -> FilaEcom:
-    """Traduce un `Order` de la API a `FilaEcom` — mismas 3 reglas que
+    """Traduce un `Order` de la API a `FilaEcom` — mismas reglas que
     `ingesta_ecom._fila_desde_row` (Postventa fuerza precios a 0, costo <=0
-    es incidencia), sobre datos de otra fuente. No se re-decide la regla,
-    solo se re-implementa la traducción de campos.
+    es incidencia), sobre datos de otra fuente.
 
-    `numero_orden` usa `Order.customOrderId`, NO `Order.id` — bug real
-    encontrado al cruzar contra un Excel real (2026-08-13, período
-    2026-01-01): `id` es la clave interna de la API (única mismo entre
-    cuentas, útil para el dedupe de `buscar_ordenes()`, pero de una escala
-    de números totalmente distinta — ~71 millones — a la que Ecom muestra
-    como "Número Orden" al usuario). `customOrderId` sí coincide
-    exactamente con la columna "Número Orden" del Excel real (confirmado:
-    `id=71583764` → `customOrderId='1307639'`, primera fila del Excel de
-    ese período). Si falta (no debería, según la muestra real), cae a `id`
-    antes que dejar el campo vacío.
+    `numero_orden` usa `Order.customOrderId`, NO `Order.id` (bug real
+    2026-08-13): `id` es la clave interna de la API (~71 millones), útil
+    para el dedupe de `buscar_ordenes()`; `customOrderId` es el "Número
+    Orden" que muestra Ecom. Si falta, cae a `id`.
 
-    `costo_sin_iva` usa `Variant.cost`, NO `Variant.costUsd` — segundo bug
-    real encontrado en el mismo cruce (2026-08-13): `costUsd` da valores
-    minúsculos (0.001-0.016) que NO coinciden con la columna "Costo Sin
-    Iva" del Excel bajo ninguna conversión de TC consistente (la
-    proporción variaba orden a orden, entre 1290 y 1910, nunca el TC real
-    de 1495). `Variant.cost` sí coincide EXACTO con esa columna en 6 de 9
-    órdenes de una muestra real (ej. costo unitario `4.1` × cantidad `2` =
-    `8.2`, igual al Excel al centavo). Las 3 que no coincidieron
-    exactamente compartían un patrón distinto: el costo actual del
-    catálogo (consultado en vivo, 7 meses después) ya no es el mismo que
-    regía el 2026-01-01 — `Variant.cost`/`costUsd` son el costo VIGENTE
-    HOY, no un valor histórico congelado por orden; no se encontró ningún
-    campo de costo a nivel de `OrderList` ni datos útiles en
-    `variantCostLogs` para reconstruir el costo histórico (ver hallazgo
-    completo reportado a Maxx el 2026-08-13). Para períodos recientes esto
-    no debería importar (poca ventana para que el costo cambie); para
-    reprocesar períodos viejos, es una limitación real de la API, no de
-    este adaptador.
+    `costo_sin_iva` usa `Variant.cost` × cantidad, NO `Variant.costUsd`
+    (bug real 2026-08-13: `costUsd` da valores minúsculos que no coinciden
+    con nada). Es el costo VIGENTE al correr, no el de la fecha de la
+    orden — la API no guarda costo histórico por orden (`variantCostLogs`
+    arranca recién el 2026-08-25). Decisión de Maxx (2026-09-27): "siempre
+    tomamos el dato actual del costo".
 
-    `costo_envio = Shipping.listCost - Shipping.cost`, salvo Full — tercera
-    corrección real (2026-08-13, cruce contra el Excel real del
-    2026-08-12): la primera versión (`listCost` si `freeShipping`, si no
-    0) fallaba en ambos sentidos contra datos reales (Maxx lo confirmó
-    revisando órdenes en vivo: por encima de cierto monto ML da envío
-    gratis al comprador y el vendedor lo absorbe, tenga o no marcado
-    `freeShipping`). `listCost` es la tarifa de lista; `cost` es lo que
-    realmente paga el comprador; la diferencia es lo que absorbe el
-    vendedor — confirmado contra 315 órdenes reales (2026-08-12): coincide
-    en 296 (94%) sin ningún tratamiento especial. Las 12 que no coincidían
-    (todas mostraban Costo Envío=0 en el Excel) eran, las 12, órdenes
-    `logistic_type=fulfillment` (ML Full).
+    `precio_sin_iva` suma `subtotalSinImpuestos` por línea: usa el IVA real
+    de cada línea (`taxTag` 21 / 10.5), no el divisor fijo de 1,10 que usa
+    el export de Ecom para productos al 10,5% (decisión de Maxx,
+    2026-09-27).
 
-    Dentro de Full, el envío absorbido depende del **precio unitario de la
-    publicación** (regla de negocio de Maxx: por encima de $33.000 ML da
-    envío gratis al comprador y el vendedor lo absorbe), no del total del
-    carrito ni de un umbral fijo por SKU. Confirmado 2026-08-13 revisando
-    en vivo Ecom/ML/Excel, sin excepciones sobre 14 órdenes reales del
-    2026-08-12: las 12 con Costo Envío=0 tenían precio unitario
-    (`subtotal/quantity` de la línea) por debajo de $33.000, incluida la
-    orden `1409779` (5 unidades a $9.899 c/u = $49.495 de total — supera
-    los $33.000 en total pero NO por unidad, y no absorbe envío: el
-    umbral es por publicación, no por carrito). Las 2 con Costo Envío
-    real (`1409820`, `1409866`, ambas `PLANCHA-SUB-AUTO-GORRA`, 1 unidad a
-    $320.999) superan los $33.000 por unidad. `_UMBRAL_ENVIO_GRATIS_FULL`
-    es ese corte; si Maxx confirma que cambió, se actualiza acá, no se
-    reinterpreta.
-
-    `logistic_type=fulfillment` no es un campo legible por orden (solo
-    existe como filtro de búsqueda, confirmado por introspección) — por
-    eso se arma el set `ids_fulfillment` aparte (`ids_fulfillment()`, una
-    consulta por período, no por orden) y se pasa acá."""
+    Comisión y envío por canal (reglas aprobadas por Maxx, 2026-09-27):
+    - MercadoLibre: `_comision_mercado_pago` / `_costo_envio_mercadolibre`.
+    - Integraciones con cobro por MP (Woocommerce): comisión = cargos de MP
+      al vendedor (incluye el costo de cuotas que absorbe el vendedor);
+      envío = 0 — lo que pagó el comprador por el envío no entra ni como
+      ingreso (no está en `subtotal`) ni como costo, y la mensajería se
+      paga por mes, no por orden.
+    - Frávega: la API de Ecom no trae comisión ni fee logístico (el pago
+      viene sin `details`). Se deja `comision=0`, `envio=0` y
+      `origen_comision=ESTIMADO_FRAVEGA`; `persistencia` aplica la
+      comisión base estimada o, si ya se cargó, la liquidación real."""
     lineas = orden.get("orderLists") or []
 
     costo = sum(
         (_decimal(l["variant"]["cost"]) * _decimal(l["quantity"]) for l in lineas if l.get("variant")),
         Decimal(0),
     )
-    comision = sum((_decimal(p.get("totalFeeAmount")) for p in (orden.get("payments") or [])), Decimal(0))
-    shipping = orden.get("shipping") or {}
-    if orden["id"] in ids_full and not _supera_umbral_envio_gratis_full(lineas):
-        costo_envio = Decimal(0)
-    else:
-        costo_envio = _decimal(shipping.get("listCost")) - _decimal(shipping.get("cost"))
 
     owner_code = orden.get("owner") or ""
-    canal = canales.get(owner_code, owner_code) or None
+    integracion = (orden.get("ownerData") or {}).get("owner") or ""
+    canal = _CANAL_DE_INTEGRACION.get(integracion) or canales.get(owner_code, owner_code) or None
     es_postventa = owner_code == _OWNER_POSVENTA_API
+    orden_externa = None
+
+    if owner_code in _OWNERS_MERCADOLIBRE:
+        comision = _comision_mercado_pago(orden)
+        costo_envio = _costo_envio_mercadolibre(orden, orden["id"] in ids_full)
+        origen_comision = ORIGEN_COMISION_API
+    elif integracion == _OWNER_INTEGRACION_FRAVEGA:
+        comision = Decimal(0)
+        costo_envio = Decimal(0)
+        origen_comision = ORIGEN_COMISION_ESTIMADO_FRAVEGA
+        orden_externa = ((orden.get("ownerData") or {}).get("ownerId") or "").removeprefix(_PREFIJO_ORDEN_FRAVEGA) or None
+    else:
+        comision = _cargos_del_vendedor(orden, "fee") or Decimal(0)
+        costo_envio = Decimal(0)
+        origen_comision = ORIGEN_COMISION_API
 
     if es_postventa:
         precio_sin_iva = Decimal(0)
@@ -693,6 +764,9 @@ def _fila_desde_orden(
         precio_final=precio_final,
         tc=tc,
         incidencia="COSTO_NO_RESUELTO" if costo <= 0 else None,
+        orden_externa=orden_externa,
+        origen_comision=origen_comision,
+        fecha_creacion=_fecha_creacion(orden.get("created")),
     )
 
 

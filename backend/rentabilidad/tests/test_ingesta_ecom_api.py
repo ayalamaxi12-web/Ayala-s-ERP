@@ -318,7 +318,7 @@ def test_limite_dias_de_rango_lee_customrangelimit_de_findsettings():
     assert _limite_dias_de_rango(cliente) == 100
 
 
-def test_buscar_ordenes_combina_active_y_closed_sin_pedir_draft_inactive_trash():
+def test_buscar_ordenes_pide_solo_closed():
     tabs_pedidos = []
 
     def post(url, json_body, cookie):
@@ -336,13 +336,14 @@ def test_buscar_ordenes_combina_active_y_closed_sin_pedir_draft_inactive_trash()
 
     cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
     ordenes = buscar_ordenes(cliente, date(2026, 7, 1), date(2026, 7, 31))
-    # nunca se pide draft/inactive/trash -- solo los dos tabs que representan
-    # ventas reales (decisión de Maxx, 2026-08-12).
-    assert set(tabs_pedidos) == {TAB_ACTIVE, TAB_CLOSED}
-    assert sorted(o["id"] for o in ordenes) == ["active-1", "closed-1"]
+    # Solo órdenes cerradas (decisión de Maxx, 2026-09-27, al validar el
+    # 01/06/2026 contra su planilla) — antes eran active + closed.
+    assert set(tabs_pedidos) == {TAB_CLOSED}
+    assert TAB_ACTIVE not in tabs_pedidos
+    assert [o["id"] for o in ordenes] == ["closed-1"]
 
 
-def test_buscar_ordenes_deduplica_por_id_si_aparece_en_mas_de_un_tab():
+def test_buscar_ordenes_deduplica_por_id():
     def post(url, json_body, cookie):
         if url.endswith("doLogin.json"):
             return _Respuesta(200, {"set-cookie": "CAKEPHP=abc"}, {"success": True})
@@ -350,21 +351,21 @@ def test_buscar_ordenes_deduplica_por_id_si_aparece_en_mas_de_un_tab():
         if "customRangeLimit" in query:
             return _Respuesta(200, {}, {"data": {"orders": {"findSettings": {"dateRange": {"customRangeLimit": 100}}}}})
         v = json_body["variables"]
-        datos = [_orden(id="99")] if v["page"] == 1 else []
+        datos = [_orden(id="99"), _orden(id="99")] if v["page"] == 1 else []
         return _Respuesta(200, {}, {"data": {"orders": {"find": {
             "pageInfo": {"page": v["page"], "pageCount": 1, "count": 1}, "data": datos,
         }}}})
 
     cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
     ordenes = buscar_ordenes(cliente, date(2026, 7, 1), date(2026, 7, 31))
-    assert [o["id"] for o in ordenes] == ["99"]  # una sola vez, no dos aunque haya salido de ambos tabs
+    assert [o["id"] for o in ordenes] == ["99"]  # una sola vez aunque la API la repita
 
 
 # ── ids_fulfillment — logistic_type=fulfillment no es un campo legible por
 # orden, solo un filtro de búsqueda (confirmado por introspección,
 # 2026-08-13) — se arma un set aparte para poder forzar Costo Envío=0. ──
 
-def test_ids_fulfillment_filtra_por_logistic_type_y_combina_ambos_tabs():
+def test_ids_fulfillment_filtra_por_logistic_type_en_closed():
     filtros_pedidos = []
 
     def post(url, json_body, cookie):
@@ -384,10 +385,10 @@ def test_ids_fulfillment_filtra_por_logistic_type_y_combina_ambos_tabs():
     limite_dias = _limite_dias_de_rango(cliente)
     ids = ids_fulfillment(cliente, date(2026, 7, 1), date(2026, 7, 31), limite_dias)
 
-    assert ids == {"active-1", "closed-1"}
+    assert ids == {"closed-1"}
     for tab, filtros in filtros_pedidos:
         assert filtros == [{"filter": "logistic_type", "values": ["fulfillment"]}]
-    assert {f[0] for f in filtros_pedidos} == {TAB_ACTIVE, TAB_CLOSED}
+    assert {f[0] for f in filtros_pedidos} == {TAB_CLOSED}
 
 
 # ── _tabla_de_filtro — traducción código->etiqueta en vivo, sin hardcodear ──
@@ -452,12 +453,20 @@ def test_fila_desde_orden_traduce_estado_de_pago_y_le_quita_el_espacio():
     assert fila.estado_pago == "Cobro Parcial"
 
 
-def test_fila_desde_orden_costo_envio_es_listcost_menos_cost():
-    # Segunda corrección real 2026-08-13 (la primera, basada en
-    # freeShipping, fallaba en ambos sentidos contra órdenes reales del
-    # 2026-08-12 -- ver docstring del módulo): listCost es la tarifa de
-    # lista, cost es lo que paga el comprador, la diferencia es lo que
-    # absorbe el vendedor. Confirmado en 296 de 315 órdenes reales.
+def _cargo(tipo, nombre, monto, desde="collector", reembolsado=0):
+    """Forma real de un `charges_details` de `Payment.details` (muestra del
+    01/06/2026, 2026-09-27)."""
+    return {"type": tipo, "name": nombre, "amounts": {"original": monto, "refunded": reembolsado},
+            "accounts": {"from": desde, "to": "ml"}}
+
+
+def _pago(*cargos, total_fee=0):
+    return {"totalFeeAmount": total_fee, "details": {"charges_details": list(cargos)}}
+
+
+def test_fila_desde_orden_costo_envio_sin_cargo_de_mp_es_listcost_menos_cost():
+    # Fuera de Full y sin cargo `shipping` en MP (el envío se factura aparte):
+    # listCost - cost.
     fila = _fila_desde_orden(
         _orden(shipping={"listCost": 11173.09, "cost": 3943.09}),
         Decimal(1500), _CANALES, _ESTADOS_PAGO,
@@ -465,42 +474,118 @@ def test_fila_desde_orden_costo_envio_es_listcost_menos_cost():
     assert fila.costo_envio == Decimal("7230.00")
 
 
-def test_fila_desde_orden_costo_envio_es_cero_si_es_fulfillment_bajo_el_umbral():
-    # Dentro de Full, con precio unitario bajo el umbral de envío gratis
-    # ($33.000, regla de negocio de Maxx) el vendedor no absorbe nada.
-    orden = _orden(id="99", shipping={"listCost": 18251.87, "cost": 0}, orderLists=[{
-        "quantity": 1, "subtotal": 9899, "subtotalSinImpuestos": 8000,
-        "variant": {"sku": "X", "cost": 1, "product": {"sku": None}},
-    }])
-    fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
+def test_fila_desde_orden_costo_envio_es_el_cargo_de_mp_menos_lo_que_pago_el_comprador():
+    # Caso real 1387297 (01/06/2026): MP cobró shp_cross_docking 11748,89,
+    # el comprador pagó 5608,89 → el vendedor paga 6140 (igual a la planilla).
+    orden = _orden(
+        shipping={"listCost": 11748.89, "cost": 5608.89},
+        payments=[_pago(_cargo("fee", "meli_percentage_fee", 1000), _cargo("shipping", "shp_cross_docking", 11748.89))],
+    )
+    fila = _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO)
+    assert fila.costo_envio == Decimal("6140.00")
+
+
+def test_fila_desde_orden_envio_pagado_entero_por_el_comprador_es_cero():
+    # Caso real 1387420: cargo 7240 y el comprador pagó 7240 → 0 para el vendedor.
+    orden = _orden(
+        id="99", shipping={"listCost": 7240, "cost": 7240},
+        payments=[_pago(_cargo("shipping", "shp_fulfillment", 7240))],
+    )
+    fila = _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
     assert fila.costo_envio == Decimal(0)
 
 
-def test_fila_desde_orden_costo_envio_no_es_cero_si_es_fulfillment_supera_el_umbral():
-    # Corrección real 2026-08-13: la excepción de Full no es "siempre 0" --
-    # 1409820/1409866 (PLANCHA-SUB-AUTO-GORRA, $320.999 c/u) SÍ absorbían
-    # envío real dentro de Full. El corte es el precio UNITARIO de la
-    # publicación (Maxx: por encima de $33.000 ML da envío gratis al
-    # comprador y el vendedor lo absorbe), no el total del carrito --
-    # confirmado sin excepciones sobre 14 órdenes reales del 2026-08-12.
-    orden = _orden(id="99", shipping={"listCost": 21420, "cost": 0}, orderLists=[{
-        "quantity": 1, "subtotal": 320999, "subtotalSinImpuestos": 290000,
-        "variant": {"sku": "PLANCHA-SUB-AUTO-GORRA", "cost": 100, "product": {"sku": None}},
-    }])
-    fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
-    assert fila.costo_envio == Decimal(21420)
+def test_fila_desde_orden_full_con_cargo_de_mp_cobra_el_envio_aunque_sea_barato():
+    # Caso real 1387192: Full, 6 × $6.002,50 (bajo el viejo umbral de
+    # $33.000 por unidad) y MP igual cobró shp_fulfillment $10.050 — la
+    # planilla lo tenía bien; el umbral quedó descartado (2026-09-27).
+    orden = _orden(id="99", shipping={"listCost": 10050, "cost": 0}, orderLists=[{
+        "quantity": 6, "subtotal": 36015, "subtotalSinImpuestos": 29764.46,
+        "variant": {"sku": "CB435A-436A-CE285AUNIVCOMP", "cost": 2, "product": {"sku": None}},
+    }], payments=[_pago(_cargo("fee", "meli_percentage_fee", 5582.34), _cargo("shipping", "shp_fulfillment", 10050))])
+    fila = _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
+    assert fila.costo_envio == Decimal(10050)
 
 
-def test_fila_desde_orden_umbral_de_envio_gratis_es_por_unidad_no_por_carrito():
-    # 1409779 real: 5 unidades a $9.899 c/u = $49.495 de total -- supera
-    # los $33.000 en TOTAL pero no por unidad, y no absorbe envío. El
-    # umbral es por precio de la publicación, no por total del carrito.
-    orden = _orden(id="99", shipping={"listCost": 18251.87, "cost": 0}, orderLists=[{
-        "quantity": 5, "subtotal": 49495, "subtotalSinImpuestos": 40000,
-        "variant": {"sku": "X", "cost": 1, "product": {"sku": None}},
-    }])
-    fila = _fila_desde_orden(orden, Decimal(1500), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
+def test_fila_desde_orden_full_sin_cargo_de_mp_es_cero():
+    # 33 órdenes Full reales del 01/06/2026 sin cargo `shipping`: la planilla
+    # tiene 0 en todas.
+    orden = _orden(id="99", shipping={"listCost": 7000, "cost": 0},
+                   payments=[_pago(_cargo("fee", "meli_percentage_fee", 1000))])
+    fila = _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO, ids_full={"99"})
     assert fila.costo_envio == Decimal(0)
+
+
+def test_fila_desde_orden_comision_suma_solo_los_cargos_del_vendedor():
+    # 1386961 real: `financing_fee` con from=payer son intereses del
+    # comprador, no costo del vendedor; `financing_add_on_fee` sí lo es.
+    orden = _orden(payments=[_pago(
+        _cargo("fee", "meli_percentage_fee", 88242.02),
+        _cargo("fee", "financing_add_on_fee", 1000),
+        _cargo("fee", "financing_fee", 399036.49, desde="payer"),
+        _cargo("tax", "tax_withholding_collector-debitos_creditos", 500),
+        _cargo("fee", "flat_fee", 100, reembolsado=100),
+        total_fee=89242.02,
+    )])
+    fila = _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO)
+    assert fila.comision_venta == Decimal("89242.02")
+
+
+def test_fila_desde_orden_details_como_string_json_se_parsea():
+    import json
+    orden = _orden(payments=[{"totalFeeAmount": 0, "details": json.dumps(
+        {"charges_details": [_cargo("fee", "meli_percentage_fee", 321.5)]})}])
+    fila = _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO)
+    assert fila.comision_venta == Decimal("321.5")
+
+
+def test_fila_desde_orden_sin_details_la_comision_cae_a_totalfeeamount():
+    fila = _fila_desde_orden(_orden(), Decimal(1500), _CANALES, _ESTADOS_PAGO)
+    assert fila.comision_venta == Decimal(str(7392.8 + 122.94))
+
+
+def _orden_integracion(integracion, owner_id, **overrides):
+    return _orden(
+        owner="ChChannelOrder", ownerData={"owner": integracion, "ownerId": owner_id},
+        shipping={"listCost": 0, "cost": 34000}, **overrides,
+    )
+
+
+def test_fila_desde_orden_woocommerce_comision_es_la_de_mp_y_envio_cero():
+    # Caso real 1387324: cobrado en MP $405.000 = $371.000,57 de producto +
+    # $34.000 de envío que pagó el comprador. La comisión de MP (7,61%) es
+    # sobre los $405.000 y es costo real; el envío del comprador no entra ni
+    # como ingreso ni como costo.
+    orden = _orden_integracion("ChWoocommerce", "68890", orderLists=[{
+        "quantity": 1, "subtotal": 371000.57, "subtotalSinImpuestos": 335086.24,
+        "variant": {"sku": "PLANCHA-SUB-30X38-5EN1", "cost": 90, "product": {"sku": None}},
+    }], payments=[_pago(_cargo("fee", "mercadopago_fee", 30820.5), total_fee=30820.5)])
+    fila = _fila_desde_orden(orden, Decimal(1540), {"ChChannelOrder": "Ventas por integraciones"}, _ESTADOS_PAGO)
+    assert fila.canal_de_venta == "Woocommerce"
+    assert fila.comision_venta == Decimal("30820.5")
+    assert fila.costo_envio == Decimal(0)
+    assert fila.precio_final == Decimal("371000.57")
+    assert fila.orden_externa is None
+    assert fila.origen_comision == "API"
+
+
+def test_fila_desde_orden_fravega_queda_estimada_con_su_numero_de_orden():
+    orden = _orden_integracion(
+        "ChFravega", "FVG-v90781066frvg-01",
+        payments=[{"totalFeeAmount": 0, "details": None}],
+    )
+    fila = _fila_desde_orden(orden, Decimal(1540), {"ChChannelOrder": "Ventas por integraciones"}, _ESTADOS_PAGO)
+    assert fila.canal_de_venta == "Fravega"
+    assert fila.orden_externa == "v90781066frvg-01"
+    assert fila.origen_comision == "ESTIMADO_FRAVEGA"
+    # La comisión estimada la aplica persistencia (tasa en la base); acá 0.
+    assert fila.comision_venta == Decimal(0)
+    assert fila.costo_envio == Decimal(0)
+
+
+def test_fila_desde_orden_toma_la_fecha_de_creacion():
+    fila = _fila_desde_orden(_orden(created="2026-06-01 16:45:15"), Decimal(1540), _CANALES, _ESTADOS_PAGO)
+    assert fila.fecha_creacion == date(2026, 6, 1)
 
 
 def test_fila_desde_orden_postventa_fuerza_precios_a_cero_conserva_costo():

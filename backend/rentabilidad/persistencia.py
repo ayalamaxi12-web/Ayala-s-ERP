@@ -32,7 +32,7 @@ GAP señalado a Maxx, no resuelto acá: `MotivoExclusion` no tiene un valor
 para "excluido por estado de pago" (Reembolsado/Sin cobro/Mediación) — se
 usa `MANUAL` como placeholder hasta que confirme si agrega un valor dedicado
 (requeriría una migración de Alembic chica)."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -58,9 +58,24 @@ from .calculators import (
     resolver_ao_orden,
 )
 from .config import ConfiguracionFaltante
-from .ingesta_ecom import FilaEcom, ResultadoIngestaEcom
+from .ingesta_ecom import (
+    ORIGEN_COMISION_ESTIMADO_FRAVEGA,
+    ORIGEN_COMISION_LIQUIDACION_FRAVEGA,
+    FilaEcom,
+    ResultadoIngestaEcom,
+)
 from .ingesta_tactica import FilaTactica
-from .models import CierreRentabilidad, MotivoExclusion, SkuExcluido, VentaEcom, VentaTactica
+from .liquidacion_fravega import LiquidacionFravega as ArchivoLiquidacionFravega
+from .liquidacion_fravega import OrdenLiquidada
+from .models import (
+    CierreRentabilidad,
+    LiquidacionFravega,
+    MotivoExclusion,
+    ParametroTasa,
+    SkuExcluido,
+    VentaEcom,
+    VentaTactica,
+)
 
 
 def _primer_sku(skus_vendidos: str) -> str:
@@ -268,7 +283,7 @@ def construir_venta_ecom(
         motivo_exclusion=motivo_exclusion,
         numero_orden=fila.numero_orden,
         skus_vendidos=fila.skus_vendidos,
-        fecha_creacion_venta=None,
+        fecha_creacion_venta=fila.fecha_creacion,
         estado_venta=None,
         fecha_pago=None,
         estado_pago=fila.estado_pago,
@@ -314,6 +329,82 @@ def construir_venta_ecom(
         precio_de_venta_roto=None,
         rentabilidad_real=rentabilidad_real_num,
         pct_rentabilidad=resultado.pct_rentabilidad if resultado else None,
+        orden_externa=fila.orden_externa,
+        origen_comision=fila.origen_comision,
+        observacion=fila.observacion,
+    )
+
+
+# ── Frávega: estimado hasta la liquidación, real después (Maxx, 2026-09-27) ──
+
+OBSERVACION_CANCELADA_EN_FRAVEGA = (
+    "Cancelada en Frávega según la liquidación pero cobrada en Ecom — posible desync Ecom↔Frávega, revisar a mano"
+)
+OBSERVACION_FRAVEGA_SIN_ORDEN = "Frávega sin número de orden del canal — no se puede cruzar con la liquidación"
+
+
+def liquidacion_neta_fravega(db: Session, orden: str) -> OrdenLiquidada | None:
+    """Suma de todas las liquidaciones cargadas para una orden de Frávega
+    (una venta y su devolución pueden caer en quincenas distintas). `None`
+    si ninguna liquidación la trae todavía."""
+    filas = db.query(LiquidacionFravega).filter(LiquidacionFravega.orden == orden).all()
+    if not filas:
+        return None
+    neta = OrdenLiquidada(orden=orden)
+    for f in filas:
+        neta.valor_sku += f.valor_sku
+        neta.comision += f.comision
+        neta.fee_logistico += f.fee_logistico
+    return neta
+
+
+@dataclass
+class ComisionFravega:
+    comision: Decimal
+    costo_envio: Decimal
+    origen: str
+    observacion: str | None
+
+
+def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decimal) -> ComisionFravega:
+    """Única regla de comisión/fee de Frávega — la usan tanto el armado de
+    filas (`resolver_comision_fravega`) como la carga de una liquidación
+    sobre ventas ya guardadas (`aplicar_liquidacion_fravega`), para que
+    ambos caminos den siempre el mismo número:
+
+    - Liquidada (suma de todas las liquidaciones cargadas deja venta neta):
+      comisión y fee logístico reales → `LIQUIDACION_FRAVEGA`.
+    - Sin liquidación todavía: comisión base estimada
+      (`fravega_comision_base` × Precio Final), fee 0 → `ESTIMADO_FRAVEGA`,
+      hasta que llegue la liquidación de la quincena.
+    - Cancelada en Frávega (la liquidación la revierte entera) pero cobrada
+      en Ecom: no se fuerza nada — sigue estimada y lleva una observación
+      para revisarla a mano (caso real: 1387291 del 01/06/2026)."""
+    liquidada = liquidacion_neta_fravega(db, orden_externa) if orden_externa else None
+    if liquidada is not None and not liquidada.cancelada:
+        return ComisionFravega(liquidada.comision, liquidada.fee_logistico, ORIGEN_COMISION_LIQUIDACION_FRAVEGA, None)
+    if liquidada is not None:
+        observacion = OBSERVACION_CANCELADA_EN_FRAVEGA
+    elif not orden_externa:
+        observacion = OBSERVACION_FRAVEGA_SIN_ORDEN
+    else:
+        observacion = None
+    tasa = db.get(ParametroTasa, "fravega_comision_base")
+    if tasa is None:
+        raise ValueError("Falta sembrar el parámetro de tasa 'fravega_comision_base' (ver seed.py).")
+    return ComisionFravega(precio_final * tasa.valor, Decimal(0), ORIGEN_COMISION_ESTIMADO_FRAVEGA, observacion)
+
+
+def resolver_comision_fravega(db: Session, fila: FilaEcom) -> FilaEcom:
+    """La API de Ecom no trae comisión ni fee logístico de Frávega (llega
+    `origen_comision=ESTIMADO_FRAVEGA` con ambos en 0): se resuelven con
+    `comision_fravega`. Cualquier otra fila pasa sin cambios."""
+    if fila.origen_comision not in (ORIGEN_COMISION_ESTIMADO_FRAVEGA, ORIGEN_COMISION_LIQUIDACION_FRAVEGA):
+        return fila
+    c = comision_fravega(db, fila.orden_externa, fila.precio_final)
+    return replace(
+        fila, comision_venta=c.comision, costo_envio=c.costo_envio,
+        origen_comision=c.origen, observacion=c.observacion or fila.observacion,
     )
 
 
@@ -333,6 +424,7 @@ def _clasificar_fila_ecom(
     margen_provider: MargenObjetivoProvider,
     excluido_por_estado: bool,
 ) -> VentaEcom:
+    fila = resolver_comision_fravega(db, fila)
     primer_sku = _primer_sku(fila.skus_vendidos)
 
     # Costo/IVA del motor son mandatorios (§7): si no resuelven, se propaga
@@ -344,7 +436,10 @@ def _clasificar_fila_ecom(
         precio_sin_iva=fila.precio_sin_iva, precio_final=fila.precio_final, tc=fila.tc,
     ))
 
-    pm, subcategoria = _opcional(lambda: clasificacion_provider.pm_y_subcategoria(primer_sku), (None, None))
+    # §8.1 paso 2: la cascada arranca por la lista COMPLETA de SKUs (la
+    # fórmula real de la planilla es BUSCARV(B2; A:D; 4)); el provider ya
+    # cae solo al primer SKU (paso 3) y al rango U (paso 4).
+    pm, subcategoria = _opcional(lambda: clasificacion_provider.pm_y_subcategoria(fila.skus_vendidos), (None, None))
     vinculacion = _opcional(lambda: vinculacion_provider.estado(fila.numero_orden), "OK")
     ao = _opcional(lambda: resolver_ao_orden(iva_provider, fila.skus_vendidos), None)
     facturacion_iva = calcular_facturacion_iva(fila.precio_final, ao)
@@ -452,3 +547,82 @@ def registrar_cierre(
     if ecom_origen is not None:
         cierre.ecom_origen = ecom_origen
     return cierre
+
+
+@dataclass
+class ResultadoLiquidacionFravega:
+    ordenes_en_liquidacion: int = 0
+    ventas_actualizadas: list[str] = field(default_factory=list)  # numero_orden Ecom → real
+    canceladas_observadas: list[str] = field(default_factory=list)  # numero_orden Ecom
+    sin_venta_en_ecom: int = 0  # órdenes de la liquidación sin venta_ecom guardada (otros días / aún no cerradas)
+
+
+def recalcular_venta_ecom(db: Session, venta: VentaEcom) -> None:
+    """Vuelve a correr el motor sobre una venta ya guardada con sus propios
+    datos (precio, costo, TC) y la comisión/envío que tenga ahora — mismo
+    `RentabilidadEcomCalculator`, sin fórmula paralela."""
+    r = RentabilidadEcomCalculator(db).calcular(LineaEcomInput(
+        numero_orden=venta.numero_orden, costo_sin_iva=venta.costo_sin_iva,
+        comision_venta=venta.comision_venta, costo_envio=venta.costo_envio,
+        precio_sin_iva=venta.precio_sin_iva, precio_final=venta.precio_final, tc=venta.tc,
+    ))
+    venta.imp_cheque, venta.iibb, venta.neto = r.imp_cheque, r.iibb, r.neto
+    venta.costo_total, venta.rentabilidad = r.costo_total, r.rentabilidad
+    venta.rentabilidad_usd, venta.facturacion_usd = r.rentabilidad_usd, r.facturacion_usd
+    venta.pct_rentabilidad = r.pct_rentabilidad
+
+
+def aplicar_liquidacion_fravega(
+    db: Session, liquidacion: ArchivoLiquidacionFravega, archivo: str | None = None,
+) -> ResultadoLiquidacionFravega:
+    """Guarda la liquidación (reemplaza las filas de ese mismo período de
+    liquidación, así cargar el mismo archivo dos veces no duplica) y
+    reemplaza el estimado por el real en las ventas de Frávega ya guardadas
+    en `venta_ecom`, recalculando su rentabilidad. Idempotente.
+
+    Misma regla que el armado de filas (`comision_fravega`): las canceladas
+    en Frávega quedan con el estimado y una observación (posible desync
+    Ecom↔Frávega), no se fuerzan. Las ventas que se guarden después (el cierre de un día
+    ya liquidado) toman el real solas vía `resolver_comision_fravega`,
+    porque la liquidación queda en la base."""
+    if liquidacion.desde is None or liquidacion.hasta is None:
+        raise ValueError("La liquidación no trae su período (Liquidación desde/hasta).")
+    resultado = ResultadoLiquidacionFravega(ordenes_en_liquidacion=len(liquidacion.ordenes))
+    db.query(LiquidacionFravega).filter(
+        LiquidacionFravega.liquidacion_desde == liquidacion.desde,
+        LiquidacionFravega.liquidacion_hasta == liquidacion.hasta,
+    ).delete(synchronize_session=False)
+    for orden in liquidacion.ordenes.values():
+        db.add(LiquidacionFravega(
+            orden=orden.orden, valor_sku=orden.valor_sku, comision=orden.comision,
+            fee_logistico=orden.fee_logistico, liquidacion_desde=liquidacion.desde,
+            liquidacion_hasta=liquidacion.hasta, archivo=archivo,
+        ))
+    db.flush()
+
+    ventas = db.query(VentaEcom).filter(VentaEcom.orden_externa.in_(list(liquidacion.ordenes))).all()
+    con_venta = set()
+    for venta in ventas:
+        con_venta.add(venta.orden_externa)
+        c = comision_fravega(db, venta.orden_externa, venta.precio_final)
+        venta.comision_venta, venta.costo_envio = c.comision, c.costo_envio
+        venta.origen_comision, venta.observacion = c.origen, c.observacion
+        if venta.rentabilidad is not None:  # las incidencias de costo no se calculan
+            recalcular_venta_ecom(db, venta)
+        if c.observacion == OBSERVACION_CANCELADA_EN_FRAVEGA:
+            resultado.canceladas_observadas.append(venta.numero_orden)
+        else:
+            resultado.ventas_actualizadas.append(venta.numero_orden)
+    resultado.sin_venta_en_ecom = len(set(liquidacion.ordenes) - con_venta)
+    return resultado
+
+
+def ventas_fravega_estimadas(db: Session) -> list[VentaEcom]:
+    """Ventas de Frávega guardadas que siguen con comisión estimada — las
+    que todavía esperan su liquidación (o están observadas)."""
+    return (
+        db.query(VentaEcom)
+        .filter(VentaEcom.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA)
+        .order_by(VentaEcom.periodo, VentaEcom.numero_orden)
+        .all()
+    )

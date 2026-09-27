@@ -47,6 +47,7 @@ reportes personales) queda deliberadamente fuera — Maxx fue explícito en
 que este adaptador solo entrega líneas listas para el motor.
 """
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Callable
 
@@ -57,6 +58,14 @@ from .calculators import LineaEcomInput
 ESTADOS_PAGO_QUE_PARTICIPAN = {"Cobrado", "Cobro Parcial"}
 
 CANAL_POSVENTA = "Posventa"
+
+# De dónde salió `comision_venta`/`costo_envio` de una fila — se persiste en
+# `venta_ecom.origen_comision` para que Frávega estimado sea reconocible y se
+# reemplace por el real cuando llega la liquidación (decisión de Maxx,
+# 2026-09-27: "Frávega estimado → real al llegar la liquidación").
+ORIGEN_COMISION_API = "API"  # cargos reales de Mercado Pago / Shipping de la orden
+ORIGEN_COMISION_ESTIMADO_FRAVEGA = "ESTIMADO_FRAVEGA"  # comisión base %, fee 0
+ORIGEN_COMISION_LIQUIDACION_FRAVEGA = "LIQUIDACION_FRAVEGA"  # comisión + fee reales
 
 # Candidatos de título de columna — el Excel crudo de ECOM usa "Precio Neto"
 # para lo que el diccionario de datos (RENTABILIDAD_FUNCIONAL.md §7.7) llama
@@ -90,6 +99,15 @@ class FilaEcom:
     precio_final: Decimal
     tc: Decimal
     incidencia: str | None = None
+    # Solo los completa el adaptador de la API (el Excel no los trae):
+    # número de orden del canal externo (Frávega: `v90781066frvg-01`, la
+    # misma clave que la columna "Orden" de su liquidación), de dónde salió
+    # la comisión (`ORIGEN_COMISION_*`) y una observación para revisar a
+    # mano que no frena el cálculo (ej. posible desync Ecom↔Frávega).
+    orden_externa: str | None = None
+    origen_comision: str | None = None
+    observacion: str | None = None
+    fecha_creacion: date | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(
