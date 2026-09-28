@@ -318,7 +318,7 @@ def test_limite_dias_de_rango_lee_customrangelimit_de_findsettings():
     assert _limite_dias_de_rango(cliente) == 100
 
 
-def test_buscar_ordenes_pide_solo_closed():
+def test_buscar_ordenes_pide_abiertas_y_cerradas_nunca_presupuestos_ni_eliminadas():
     tabs_pedidos = []
 
     def post(url, json_body, cookie):
@@ -336,11 +336,10 @@ def test_buscar_ordenes_pide_solo_closed():
 
     cliente = EcomApiClient(email="x@x.com", password="s", post_fn=post)
     ordenes = buscar_ordenes(cliente, date(2026, 7, 1), date(2026, 7, 31))
-    # Solo órdenes cerradas (decisión de Maxx, 2026-09-27, al validar el
-    # 01/06/2026 contra su planilla) — antes eran active + closed.
-    assert set(tabs_pedidos) == {TAB_CLOSED}
-    assert TAB_ACTIVE not in tabs_pedidos
-    assert [o["id"] for o in ordenes] == ["closed-1"]
+    # Abiertas + cerradas (Maxx, 2026-09-28): el filtro es el estado de pago,
+    # no el de la orden. Nunca draft/inactive/trash.
+    assert set(tabs_pedidos) == {TAB_ACTIVE, TAB_CLOSED}
+    assert sorted(o["id"] for o in ordenes) == ["active-1", "closed-1"]
 
 
 def test_buscar_ordenes_deduplica_por_id():
@@ -365,7 +364,7 @@ def test_buscar_ordenes_deduplica_por_id():
 # orden, solo un filtro de búsqueda (confirmado por introspección,
 # 2026-08-13) — se arma un set aparte para poder forzar Costo Envío=0. ──
 
-def test_ids_fulfillment_filtra_por_logistic_type_en_closed():
+def test_ids_fulfillment_filtra_por_logistic_type_en_abiertas_y_cerradas():
     filtros_pedidos = []
 
     def post(url, json_body, cookie):
@@ -385,10 +384,10 @@ def test_ids_fulfillment_filtra_por_logistic_type_en_closed():
     limite_dias = _limite_dias_de_rango(cliente)
     ids = ids_fulfillment(cliente, date(2026, 7, 1), date(2026, 7, 31), limite_dias)
 
-    assert ids == {"closed-1"}
+    assert ids == {"active-1", "closed-1"}
     for tab, filtros in filtros_pedidos:
         assert filtros == [{"filter": "logistic_type", "values": ["fulfillment"]}]
-    assert {f[0] for f in filtros_pedidos} == {TAB_CLOSED}
+    assert {f[0] for f in filtros_pedidos} == {TAB_ACTIVE, TAB_CLOSED}
 
 
 # ── _tabla_de_filtro — traducción código->etiqueta en vivo, sin hardcodear ──

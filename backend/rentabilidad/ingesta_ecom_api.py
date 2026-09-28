@@ -38,9 +38,9 @@ de memoria, mandato de `docs/00_LEEME_PRIMERO.md` §4):
   especificar `tab`, la API usa `active` por defecto** — es la causa
   confirmada de que una consulta sin `tab` traía solo un puñado de órdenes
   (las abiertas del momento) en vez del universo real del período. Para
-  Rentabilidad participa **solo `closed`** (decisión de Maxx, 2026-09-27,
-  al validar el 01/06/2026 contra su planilla — antes eran `active` +
-  `closed`); `active`/`draft`/`inactive`/`trash` no participan.
+  Rentabilidad participan `active` + `closed` y el filtro real es el
+  estado de pago (Cobrado / Cobro Parcial), por fecha de creación
+  (decisión de Maxx, 2026-09-28); `draft`/`inactive`/`trash` no participan.
 - **Paginación engañosa pasado un techo**: confirmado contra la API real
   (2026-08-12, rango 2026-06-10..2026-08-10, tab=`closed`, sin filtrar
   cuenta): de la página 1 a la 9, `pageInfo` repite siempre
@@ -407,11 +407,15 @@ _LOGISTIC_TYPE_FULFILLMENT = "fulfillment"
 # inactive/trash.
 TAB_ACTIVE = "active"
 TAB_CLOSED = "closed"
-# Solo `closed` desde 2026-09-27 (decisión de Maxx al validar el 01/06/2026
-# contra su planilla: "órdenes CERRADAS, por fecha de creación"). Las 2
-# `active` de ese día no estaban en la planilla; las 586 `closed` menos las
-# excluidas por estado de pago eran exactamente sus 560 órdenes.
-_TABS_QUE_PARTICIPAN = (TAB_CLOSED,)
+# Abiertas + cerradas (decisión de Maxx, 2026-09-28): el estado de la orden no
+# es el filtro — una orden abierta ya cobrada es plata real vendida ese día
+# (ej. 1387431/1387360, creadas el 01/06/2026, cobradas y entregadas, nunca
+# cerradas en Ecom). El filtro es el estado de PAGO (Cobrado / Cobro
+# Parcial, `ESTADOS_PAGO_QUE_PARTICIPAN`), siempre por fecha de CREACIÓN.
+# `draft` (presupuestos), `inactive` y `trash` (eliminadas) no participan.
+# Ciclo 23→27/09/2026: +368 órdenes abiertas cobradas (casi todas del 26 y
+# 27, aún sin despachar), sin solaparse con las cerradas.
+_TABS_QUE_PARTICIPAN = (TAB_ACTIVE, TAB_CLOSED)
 
 # Techo a partir del cual `pageInfo.count`/`pageCount` de `orders.find` dejan
 # de ser confiables como total real (ver docstring del módulo — confirmado
@@ -818,7 +822,7 @@ class EcomApiAdapter:
         self._log("API Ecom: login y tablas de canal / estado de pago")
         canales = _tabla_de_filtro(self._cliente, "owner")
         estados_pago = _tabla_de_filtro(self._cliente, "payment")
-        self._log(f"API Ecom: trayendo órdenes cerradas {desde} → {hasta}")
+        self._log(f"API Ecom: trayendo órdenes abiertas y cerradas creadas {desde} → {hasta}")
         ordenes = buscar_ordenes(self._cliente, desde, hasta, self._log)
         limite_dias = _limite_dias_de_rango(self._cliente)
         fulfillment = ids_fulfillment(self._cliente, desde, hasta, limite_dias)
