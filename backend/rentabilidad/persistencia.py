@@ -441,7 +441,10 @@ def _clasificar_fila_ecom(
     # cae solo al primer SKU (paso 3) y al rango U (paso 4).
     pm, subcategoria = _opcional(lambda: clasificacion_provider.pm_y_subcategoria(fila.skus_vendidos), (None, None))
     vinculacion = _opcional(lambda: vinculacion_provider.estado(fila.numero_orden), "OK")
-    ao = _opcional(lambda: resolver_ao_orden(iva_provider, fila.skus_vendidos), None)
+    # Factor de IVA: el que trae la API de Ecom; si no vino (Excel), Táctica.
+    ao = fila.factor_iva if fila.factor_iva is not None else _opcional(
+        lambda: resolver_ao_orden(iva_provider, fila.skus_vendidos), None,
+    )
     facturacion_iva = calcular_facturacion_iva(fila.precio_final, ao)
     stock = _opcional(lambda: stock_provider.stock(primer_sku), None)
     ventas_30d = _opcional(lambda: stock_provider.ventas_30d(primer_sku), None)
@@ -466,6 +469,7 @@ def construir_filas_ecom(
     vinculacion_provider: VinculacionProvider,
     stock_provider: StockProvider,
     margen_provider: MargenObjetivoProvider,
+    log=None,
 ) -> ResultadoPersistenciaEcom:
     """Igual que `construir_filas_tactica`: devuelve `VentaEcom` en memoria,
     sin agregarlas a la sesión. Cubre las tres listas que ya separa el
@@ -478,7 +482,9 @@ def construir_filas_ecom(
         + [(f, False) for f in resultado_ingesta.incidencias_costo]
     )
 
-    for fila, excluido_por_estado in todas:
+    for n, (fila, excluido_por_estado) in enumerate(todas, start=1):
+        if log and n % 250 == 0:
+            log(f"Calculando: {n} de {len(todas)} órdenes")
         try:
             venta = _clasificar_fila_ecom(
                 db, fila, iva_provider, clasificacion_provider,
@@ -501,14 +507,17 @@ def guardar_cierre_ecom(
     vinculacion_provider: VinculacionProvider,
     stock_provider: StockProvider,
     margen_provider: MargenObjetivoProvider,
+    log=None,
 ) -> ResultadoPersistenciaEcom:
     """**Única función que escribe `venta_ecom`.** Construye igual que
     `construir_filas_ecom` y reemplaza el período completo, para que la
     conciliación con el Excel siga siendo demostrable."""
     resultado = construir_filas_ecom(
         db, resultado_ingesta, iva_provider, clasificacion_provider,
-        vinculacion_provider, stock_provider, margen_provider,
+        vinculacion_provider, stock_provider, margen_provider, log,
     )
+    if log:
+        log(f"Guardando {len(resultado.filas)} filas del período {periodo}")
     db.query(VentaEcom).filter(VentaEcom.periodo == periodo).delete(synchronize_session=False)
     for venta in resultado.filas:
         venta.periodo = periodo

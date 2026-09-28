@@ -3,6 +3,9 @@ FROM tailscale/tailscale:stable AS tailscale
 FROM python:3.11-slim
 
 WORKDIR /app
+# Logs de Python sin buffer: sin esto, lo que imprime un proceso sin TTY
+# (el Cron de Railway) no aparece en el log hasta que termina.
+ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

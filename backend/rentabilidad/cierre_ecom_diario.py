@@ -109,6 +109,7 @@ def correr(
     guardar: bool = True,
     dia_corte: int = DIA_CORTE,
     tc_origen: str = "",
+    log=None,
 ) -> ResumenCorrida:
     """Trae de la API las órdenes `[desde, hasta]` (por defecto, del inicio
     del ciclo de `hasta` hasta `hasta`) y, si `guardar`, reemplaza el
@@ -127,13 +128,19 @@ def correr(
         )
     periodo = periodo_de_rango(inicio_ciclo, fin_ciclo) if desde == inicio_ciclo else periodo_de_rango(desde, hasta)
 
+    log = log or (lambda _msg: None)
+    log(f"Período {periodo}: datos {desde} → {hasta}, TC {tc}")
     ingesta = adaptador.periodo(desde, hasta, tc)
+    total = len(ingesta.lineas) + len(ingesta.excluidas_por_estado_pago) + len(ingesta.incidencias_costo)
+    log(f"Calculando {total} órdenes ({len(ingesta.incidencias_costo)} con costo 0, "
+        f"{len(ingesta.excluidas_por_estado_pago)} excluidas por estado de pago)")
     if guardar:
-        resultado = guardar_cierre_ecom(db, periodo, ingesta, iva_provider, **providers)
+        resultado = guardar_cierre_ecom(db, periodo, ingesta, iva_provider, **providers, log=log)
         registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="api",
                          tc_ecom=tc, tc_ecom_origen=tc_origen or None)
     else:
-        resultado = construir_filas_ecom(db, ingesta, iva_provider, **providers)
+        resultado = construir_filas_ecom(db, ingesta, iva_provider, **providers, log=log)
+    log("Cálculo terminado" + (" — falta el commit a la base" if guardar else " (solo consulta, no se guarda)"))
     resumen = _resumir(periodo, desde, hasta, tc, guardar, ingesta, resultado)
     resumen.tc_origen = tc_origen
     return resumen

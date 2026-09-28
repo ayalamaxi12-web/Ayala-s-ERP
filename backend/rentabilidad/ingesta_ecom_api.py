@@ -211,6 +211,10 @@ PostFn = Callable[[str, dict, str | None], _Respuesta]
 
 
 _REINTENTOS_TRANSPORTE = 3
+# (conexión, lectura) en segundos. Sin límite de lectura, un servidor que
+# acepta la conexión y no responde dejaba el Cron diario esperando para
+# siempre (2026-09-28). Una página de 30 órdenes con `details` tarda ~1s.
+_TIMEOUT_REQUEST = (10, 60)
 
 # Falla real observada (2026-08-12): al paginar un rango con muchas órdenes
 # (~190 requests seguidos, sin filtrar cuenta) la conexión se corta a mitad
@@ -230,15 +234,16 @@ def _post_real(url: str, json_body: dict, cookie: str | None) -> _Respuesta:
     if cookie:
         headers["Cookie"] = cookie
 
-    ultimo_error = None
     for intento in range(_REINTENTOS_TRANSPORTE):
         try:
-            resp = requests.post(url, json=json_body, headers=headers, timeout=30)
+            resp = requests.post(url, json=json_body, headers=headers, timeout=_TIMEOUT_REQUEST)
             break
-        except requests.exceptions.ConnectionError as error:
-            ultimo_error = error
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as error:
             if intento == _REINTENTOS_TRANSPORTE - 1:
-                raise EcomApiError(f"Fallo de conexión persistente contra EcomExperts: {error}") from error
+                raise EcomApiError(
+                    f"EcomExperts no respondió tras {_REINTENTOS_TRANSPORTE} intentos "
+                    f"(timeout {_TIMEOUT_REQUEST[0]}s conexión / {_TIMEOUT_REQUEST[1]}s lectura): {error}"
+                ) from error
             _time.sleep(1.5 * (intento + 1))
     try:
         body = resp.json()
@@ -364,6 +369,7 @@ query BuscarOrdenes($page: Int, $start: Int!, $end: Int!, $tab: ID) {
           quantity
           subtotal
           subtotalSinImpuestos
+          taxTag
           variant { sku cost product { sku } }
         }
       }
@@ -441,7 +447,9 @@ def _mitad_de_rango(desde: date, hasta: date) -> date:
     return desde + timedelta(days=(hasta - desde).days // 2)
 
 
-def _buscar_ordenes_de_tab(cliente: EcomApiClient, desde: date, hasta: date, tab: str, limite_dias: int) -> list[dict]:
+def _buscar_ordenes_de_tab(
+    cliente: EcomApiClient, desde: date, hasta: date, tab: str, limite_dias: int, log: Callable[[str], None] | None = None,
+) -> list[dict]:
     """Trae TODAS las órdenes de un `tab` en `[desde, hasta]`, partiendo el
     rango recursivamente cuando: (a) excede el límite duro de días de la
     API, o (b) la página 1 reporta un `count` que puede estar truncado
@@ -450,8 +458,8 @@ def _buscar_ordenes_de_tab(cliente: EcomApiClient, desde: date, hasta: date, tab
     lo hace hasta que la API devuelve una página vacía."""
     if (hasta - desde).days + 1 > limite_dias:
         mitad = _mitad_de_rango(desde, hasta)
-        return _buscar_ordenes_de_tab(cliente, desde, mitad, tab, limite_dias) + _buscar_ordenes_de_tab(
-            cliente, mitad + timedelta(days=1), hasta, tab, limite_dias
+        return _buscar_ordenes_de_tab(cliente, desde, mitad, tab, limite_dias, log) + _buscar_ordenes_de_tab(
+            cliente, mitad + timedelta(days=1), hasta, tab, limite_dias, log
         )
 
     variables = {"start": _unix(desde), "end": _unix_fin_de_dia(hasta), "tab": tab, "page": 1}
@@ -461,8 +469,8 @@ def _buscar_ordenes_de_tab(cliente: EcomApiClient, desde: date, hasta: date, tab
 
     if resultado["pageInfo"]["count"] >= _TECHO_CONTEO_CONFIABLE and desde != hasta:
         mitad = _mitad_de_rango(desde, hasta)
-        return _buscar_ordenes_de_tab(cliente, desde, mitad, tab, limite_dias) + _buscar_ordenes_de_tab(
-            cliente, mitad + timedelta(days=1), hasta, tab, limite_dias
+        return _buscar_ordenes_de_tab(cliente, desde, mitad, tab, limite_dias, log) + _buscar_ordenes_de_tab(
+            cliente, mitad + timedelta(days=1), hasta, tab, limite_dias, log
         )
 
     ordenes = primera_pagina
@@ -473,7 +481,11 @@ def _buscar_ordenes_de_tab(cliente: EcomApiClient, desde: date, hasta: date, tab
         if not lote:
             break
         ordenes.extend(lote)
+        if log and pagina % 10 == 0:
+            log(f"API Ecom {tab} {desde}→{hasta}: página {pagina}, {len(ordenes)} órdenes")
         pagina += 1
+    if log:
+        log(f"API Ecom {tab} {desde}→{hasta}: {len(ordenes)} órdenes en {pagina - 1} páginas")
     return ordenes
 
 
@@ -523,7 +535,9 @@ def ids_fulfillment(cliente: EcomApiClient, desde: date, hasta: date, limite_dia
     return ids
 
 
-def buscar_ordenes(cliente: EcomApiClient, desde: date, hasta: date) -> list[dict]:
+def buscar_ordenes(
+    cliente: EcomApiClient, desde: date, hasta: date, log: Callable[[str], None] | None = None,
+) -> list[dict]:
     """Universo completo de órdenes del período para Rentabilidad: los tabs
     de `_TABS_QUE_PARTICIPAN` (hoy solo `closed`), siempre filtrado
     por `MtOrder.created`, sin límite artificial de resultados ni de rango
@@ -534,7 +548,7 @@ def buscar_ordenes(cliente: EcomApiClient, desde: date, hasta: date) -> list[dic
     vistos: set[str] = set()
     ordenes: list[dict] = []
     for tab in _TABS_QUE_PARTICIPAN:
-        for orden in _buscar_ordenes_de_tab(cliente, desde, hasta, tab, limite_dias):
+        for orden in _buscar_ordenes_de_tab(cliente, desde, hasta, tab, limite_dias, log):
             id_orden = orden["id"]
             if id_orden in vistos:
                 continue
@@ -667,6 +681,25 @@ def _costo_envio_mercadolibre(orden: dict, es_full: bool) -> Decimal:
     return max(_decimal(shipping.get("listCost")) - pagado_por_comprador, Decimal(0))
 
 
+# `OrderList.taxTag` real (muestra del 01/06/2026) → factor de "Facturación +
+# IVA". Mismos dos valores que `IvaProvider.FACTORES`; cualquier otro queda
+# sin factor (igual que un régimen no reconocido en Táctica).
+_FACTOR_POR_TAX_TAG = {"21": Decimal("1.21"), "10.5": Decimal("1.105")}
+
+
+def _factor_iva(lineas: list[dict]) -> Decimal | None:
+    """Factor del PRIMER SKU de la orden (mismo criterio que
+    `calculators.resolver_ao_orden`), desde la API de Ecom en vez de la SQL
+    de Táctica — pedido de Maxx (2026-09-28): Ecom no debe depender de
+    Táctica. Verificado contra la planilla del 01/06/2026: coincide en 472
+    de 473 órdenes con factor (la restante, 1387224, tiene el IVA cargado
+    distinto en Ecom y en Táctica) y completa 93 que la planilla dejaba
+    vacías porque el SKU no estaba en Táctica."""
+    if not lineas:
+        return None
+    return _FACTOR_POR_TAX_TAG.get(str(lineas[0].get("taxTag") or "").strip())
+
+
 def _fecha_creacion(created: str | None) -> date | None:
     """`Order.created` viene como `"2026-06-01 16:45:15"`, en hora
     Argentina (mismo huso con el que la API filtra `MtOrder.created`, ver
@@ -767,6 +800,7 @@ def _fila_desde_orden(
         orden_externa=orden_externa,
         origen_comision=origen_comision,
         fecha_creacion=_fecha_creacion(orden.get("created")),
+        factor_iva=_factor_iva(lineas),
     )
 
 
@@ -776,15 +810,19 @@ class EcomApiAdapter:
     de persistencia (`persistencia.py`) no necesita saber si el origen fue
     la API o el Excel."""
 
-    def __init__(self, cliente: EcomApiClient | None = None):
+    def __init__(self, cliente: EcomApiClient | None = None, log: Callable[[str], None] | None = None):
         self._cliente = cliente or EcomApiClient()
+        self._log = log or (lambda _msg: None)
 
     def periodo(self, desde: date, hasta: date, tc: Decimal) -> ResultadoIngestaEcom:
+        self._log("API Ecom: login y tablas de canal / estado de pago")
         canales = _tabla_de_filtro(self._cliente, "owner")
         estados_pago = _tabla_de_filtro(self._cliente, "payment")
-        ordenes = buscar_ordenes(self._cliente, desde, hasta)
+        self._log(f"API Ecom: trayendo órdenes cerradas {desde} → {hasta}")
+        ordenes = buscar_ordenes(self._cliente, desde, hasta, self._log)
         limite_dias = _limite_dias_de_rango(self._cliente)
         fulfillment = ids_fulfillment(self._cliente, desde, hasta, limite_dias)
+        self._log(f"API Ecom: {len(ordenes)} órdenes, {len(fulfillment)} de ellas Full")
 
         lineas: list[FilaEcom] = []
         excluidas: list[FilaEcom] = []

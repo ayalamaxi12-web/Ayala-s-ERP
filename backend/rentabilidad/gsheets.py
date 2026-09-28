@@ -12,6 +12,10 @@ from typing import Sequence
 
 from .config import ConfiguracionFaltante
 
+# (conexión, lectura) en segundos; una pestaña grande (GRAL CATEGORIAS,
+# ~2.600 filas) se lee en 1-2s.
+_TIMEOUT_SHEETS = (10, 60)
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -44,7 +48,11 @@ def get_client():
         raise ConfiguracionFaltante(
             "Falta 'GOOGLE_CREDENTIALS_JSON' o el archivo 'credentials.json' para leer Google Sheets."
         ) from e
-    return gspread.authorize(creds)
+    cliente = gspread.authorize(creds)
+    # Sin timeout, gspread espera indefinidamente una respuesta de Google
+    # (visto al diagnosticar el Cron diario "colgado", 2026-09-28).
+    cliente.set_timeout(_TIMEOUT_SHEETS)
+    return cliente
 
 
 def leer_valores(spreadsheet_id: str, tab: str) -> list[list[str]]:

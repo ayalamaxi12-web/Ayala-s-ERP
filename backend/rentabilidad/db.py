@@ -18,7 +18,12 @@ class Base(DeclarativeBase):
 
 def crear_engine(database_url: str | None = None):
     url = database_url or config.DATABASE_URL
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+    if url.startswith("sqlite"):
+        connect_args = {"check_same_thread": False}
+    else:
+        # Postgres: que una base inalcanzable falle en segundos en vez de
+        # colgar el proceso (Cron diario, 2026-09-28).
+        connect_args = {"connect_timeout": 10}
     return create_engine(url, connect_args=connect_args, future=True)
 
 

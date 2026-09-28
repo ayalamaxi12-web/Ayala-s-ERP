@@ -17,6 +17,7 @@ arquitectura pedido por Maxx, 2026-08-10):
   hechos; queda registrado en `cierre_rentabilidad` con cuándo se guardó.
 """
 import tempfile
+import time
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -84,31 +85,66 @@ def migrar_y_sembrar() -> None:
         seed.seed(db)
 
 
-def _fetch_fn_con_cache():
-    """Una sola lectura de red por (sheet_id, tab) para todo el request."""
+def _fetch_fn_con_cache(log=None):
+    """Una sola lectura de red por (sheet_id, tab) para todo el request.
+
+    Si una lectura falla, se recuerda el error y se vuelve a levantar al
+    instante para esa misma pestaña: sin esto, cada orden del período
+    reintentaba la lectura (cada lookup de clasificación la pide), y un
+    Sheets caído o lento multiplicaba su demora por miles de órdenes."""
     cache: dict[tuple[str, str], list[list[str]]] = {}
+    errores: dict[tuple[str, str], Exception] = {}
 
     def fetch(spreadsheet_id: str, tab: str) -> list[list[str]]:
         clave = (spreadsheet_id, tab)
+        if clave in errores:
+            raise errores[clave]
         if clave not in cache:
-            cache[clave] = gsheets.leer_valores(spreadsheet_id, tab)
+            inicio = time.monotonic()
+            try:
+                cache[clave] = gsheets.leer_valores(spreadsheet_id, tab)
+            except Exception as e:
+                errores[clave] = e
+                if log:
+                    log(f"Sheets '{tab}': falló en {time.monotonic() - inicio:.1f}s ({type(e).__name__}: {e}) — sigo sin ese dato")
+                raise
+            if log:
+                log(f"Sheets '{tab}': {len(cache[clave])} filas en {time.monotonic() - inicio:.1f}s")
         return cache[clave]
 
     return fetch
 
 
-def _consultar_catalogo_tactica_con_cache():
+def _consultar_catalogo_tactica_con_cache(log=None):
     """Una sola consulta SQL a Táctica para todo el request — sin esto,
     `CostoVigenteProvider`/`IvaProvider` (cada uno con su propia instancia)
     releerían el catálogo completo por separado. Mismo principio que
     `_fetch_fn_con_cache`, para la fuente SQL de costo/IVA (ver
-    adapters.py, cambio de fuente 2026-08-14)."""
+    adapters.py, cambio de fuente 2026-08-14).
+
+    El error también se recuerda (bug real, 2026-09-28: el Cron diario
+    quedaba "colgado" sin túnel a Táctica — cada orden volvía a intentar la
+    conexión con 5 reintentos y ~30s de espera, horas en total sin un solo
+    error visible). Tras el primer fallo, las siguientes llamadas levantan
+    el mismo error al instante."""
     cache: list[dict] | None = None
+    error: Exception | None = None
 
     def consultar() -> list[dict]:
-        nonlocal cache
+        nonlocal cache, error
+        if error is not None:
+            raise error
         if cache is None:
-            cache = _consultar_catalogo_tactica_real()
+            inicio = time.monotonic()
+            try:
+                cache = _consultar_catalogo_tactica_real()
+            except Exception as e:
+                error = e
+                if log:
+                    log(f"Táctica SQL: falló en {time.monotonic() - inicio:.1f}s ({type(e).__name__}) — sigo sin ese dato")
+                raise
+            if log:
+                log(f"Táctica SQL: {len(cache)} productos en {time.monotonic() - inicio:.1f}s")
         return cache
 
     return consultar

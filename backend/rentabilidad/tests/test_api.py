@@ -355,3 +355,62 @@ def test_historico_tactica_de_ordena_por_fecha_y_no_filtra_periodo(db_session):
     db_session.commit()
     out = api.historico_tactica_de(db_session)
     assert [o.codigo for o in out] == ["SKU-MAY", "SKU-JUN"]
+
+
+# ── Caches que recuerdan el error (Cron diario "colgado", 2026-09-28): sin
+# esto, cada orden reintentaba la fuente caída con sus esperas. ──
+
+def test_cache_de_tactica_no_reintenta_por_cada_orden_si_ya_fallo(monkeypatch):
+    llamadas = []
+
+    def falla():
+        llamadas.append(1)
+        raise RuntimeError("sin túnel")
+
+    monkeypatch.setattr(api, "_consultar_catalogo_tactica_real", falla)
+    consultar = api._consultar_catalogo_tactica_con_cache()
+    for _ in range(50):
+        with pytest.raises(RuntimeError):
+            consultar()
+    assert len(llamadas) == 1
+
+
+def test_cache_de_sheets_no_reintenta_la_misma_pestana_si_ya_fallo(monkeypatch):
+    llamadas = []
+
+    def falla(sid, tab):
+        llamadas.append(tab)
+        raise TimeoutError("Sheets no responde")
+
+    monkeypatch.setattr(api.gsheets, "leer_valores", falla)
+    mensajes = []
+    fetch = api._fetch_fn_con_cache(log=mensajes.append)
+    for _ in range(20):
+        with pytest.raises(TimeoutError):
+            fetch("id", "GRAL CATEGORIAS")
+    assert llamadas == ["GRAL CATEGORIAS"]
+    assert "falló" in mensajes[0]
+
+
+def test_ecom_con_factor_de_la_api_no_consulta_tactica(db_session):
+    from rentabilidad.adapters import StockProvider, VinculacionProvider
+    from rentabilidad.ingesta_ecom import FilaEcom, ResultadoIngestaEcom
+    from rentabilidad.persistencia import construir_filas_ecom
+
+    def tactica_no(*a):
+        raise AssertionError("Ecom no debe consultar Táctica")
+
+    fila = FilaEcom(
+        numero_orden="1", skus_vendidos="SKU-1", canal_de_venta="Mercadolibre", estado_pago="Cobrado",
+        costo_sin_iva=Decimal("10"), comision_venta=Decimal("100"), costo_envio=Decimal(0),
+        precio_sin_iva=Decimal("1000"), precio_final=Decimal("1210"), tc=Decimal("1540"),
+        origen_comision="API", factor_iva=Decimal("1.21"),
+    )
+    r = construir_filas_ecom(
+        db_session, ResultadoIngestaEcom(lineas=[fila], excluidas_por_estado_pago=[], incidencias_costo=[]),
+        IvaProvider(consultar=tactica_no), ClasificacionProvider(sheet_id=None), VinculacionProvider(sheet_id=None),
+        StockProvider(sheet_id=None), MargenObjetivoProvider(sheet_ids={}, sheet_master_id=None),
+    )
+    [venta] = r.filas
+    assert venta.iva == Decimal("1.21")
+    assert venta.facturacion_iva == Decimal("1210") * Decimal("1.21")
