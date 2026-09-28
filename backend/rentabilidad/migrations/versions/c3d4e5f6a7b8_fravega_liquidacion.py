@@ -1,4 +1,4 @@
-"""venta_ecom: orden_externa/origen_comision/observacion + liquidacion_fravega
+"""venta_ecom: orden_externa/origen_comision/observacion + liquidacion_fravega + TC del cierre
 
 Revision ID: c3d4e5f6a7b8
 Revises: b2c3d4e5f6a7
@@ -46,8 +46,17 @@ def upgrade() -> None:
     )
     op.create_index('ix_liquidacion_fravega_orden', 'liquidacion_fravega', ['orden'])
 
+    # TC usado en el último guardado de Ecom (y su origen), para mostrarlo en
+    # el informe (pedido de Maxx, 2026-09-28).
+    with op.batch_alter_table('cierre_rentabilidad') as batch_op:
+        batch_op.add_column(sa.Column('tc_ecom', sa.Numeric(18, 6), nullable=True))
+        batch_op.add_column(sa.Column('tc_ecom_origen', sa.String(length=64), nullable=True))
+
 
 def downgrade() -> None:
+    with op.batch_alter_table('cierre_rentabilidad') as batch_op:
+        batch_op.drop_column('tc_ecom_origen')
+        batch_op.drop_column('tc_ecom')
     op.drop_index('ix_liquidacion_fravega_orden', table_name='liquidacion_fravega')
     op.drop_table('liquidacion_fravega')
     with op.batch_alter_table('venta_ecom') as batch_op:

@@ -61,6 +61,7 @@ class ResumenCorrida:
     hasta: date
     tc: Decimal
     guardado: bool
+    tc_origen: str = ""
     ordenes: int = 0
     excluidas_por_estado_pago: int = 0
     # Costo 0 = casi siempre SKU madre en vez de variante (Maxx, 2026-09-27):
@@ -107,6 +108,7 @@ def correr(
     desde: date | None = None,
     guardar: bool = True,
     dia_corte: int = DIA_CORTE,
+    tc_origen: str = "",
 ) -> ResumenCorrida:
     """Trae de la API las órdenes `[desde, hasta]` (por defecto, del inicio
     del ciclo de `hasta` hasta `hasta`) y, si `guardar`, reemplaza el
@@ -128,10 +130,13 @@ def correr(
     ingesta = adaptador.periodo(desde, hasta, tc)
     if guardar:
         resultado = guardar_cierre_ecom(db, periodo, ingesta, iva_provider, **providers)
-        registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="api")
+        registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="api",
+                         tc_ecom=tc, tc_ecom_origen=tc_origen or None)
     else:
         resultado = construir_filas_ecom(db, ingesta, iva_provider, **providers)
-    return _resumir(periodo, desde, hasta, tc, guardar, ingesta, resultado)
+    resumen = _resumir(periodo, desde, hasta, tc, guardar, ingesta, resultado)
+    resumen.tc_origen = tc_origen
+    return resumen
 
 
 def formatear(resumen: ResumenCorrida) -> str:
@@ -157,4 +162,7 @@ def formatear(resumen: ResumenCorrida) -> str:
         lineas.append(f"Sin PM ({len(resumen.sin_pm)}): {muestra}")
     if resumen.config_faltante:
         lineas.append(f"Sin calcular por configuración faltante ({len(resumen.config_faltante)}): {', '.join(resumen.config_faltante)}")
+    # Al pie, a propósito (pedido de Maxx, 2026-09-28): para verificar que el
+    # TC con que se calculó todo el ciclo fue el correcto.
+    lineas.append(f"TC usado: {m(resumen.tc)}" + (f" — {resumen.tc_origen}" if resumen.tc_origen else ""))
     return "\n".join(lineas)

@@ -382,6 +382,12 @@ class CierreRentabilidad(Base):
     tactica_guardado: Mapped[bool] = mapped_column(Boolean, default=False)
     ecom_guardado: Mapped[bool] = mapped_column(Boolean, default=False)
     ecom_origen: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "excel" | "api"
+    # TC con que se calculó el último guardado de Ecom y de dónde salió
+    # ("BNA dólar billete venta, consultado 2026-09-28 06:00 ART" / "manual")
+    # — pedido de Maxx (2026-09-28): que el informe muestre qué TC se usó
+    # para poder verificar que fue el correcto.
+    tc_ecom: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    tc_ecom_origen: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class LiquidacionFravega(Base):

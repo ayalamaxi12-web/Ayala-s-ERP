@@ -112,3 +112,14 @@ def test_guardar_un_rango_parcial_se_rechaza_para_no_duplicar(db_session):
     with pytest.raises(ValueError, match="rango parcial"):
         correr(db_session, _AdaptadorFake(_ingesta()), Decimal("1540"), IvaProvider(), _providers(),
                hasta=date(2026, 9, 26), desde=date(2026, 9, 25))
+
+
+def test_el_cierre_guarda_el_tc_y_su_origen_y_el_resumen_lo_muestra_al_pie(db_session):
+    origen = "BNA dólar billete venta, consultado 2026-09-28 06:00 ART"
+    resumen = correr(db_session, _AdaptadorFake(_ingesta()), Decimal("1443.10"), IvaProvider(), _providers(),
+                     hasta=date(2026, 9, 27), tc_origen=origen)
+    db_session.flush()
+    cierre = db_session.get(CierreRentabilidad, "2026-09-23_2026-10-22")
+    assert cierre.tc_ecom == Decimal("1443.10")
+    assert cierre.tc_ecom_origen == origen
+    assert formatear(resumen).splitlines()[-1] == f"TC usado: $ 1.443,10 — {origen}"

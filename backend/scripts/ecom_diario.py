@@ -10,7 +10,7 @@ RENT_ECOM_PASSWORD, GOOGLE_CREDENTIALS_JSON y los RENT_SHEET_* (y la SQL de
 Táctica para el factor de IVA informativo; si no está, ese dato queda vacío).
 
 Uso (desde backend/):
-    python scripts/ecom_diario.py                      # ciclo en curso hasta ayer, TC del BNA
+    python scripts/ecom_diario.py                      # ciclo en curso hasta ayer, TC del BNA del día
     python scripts/ecom_diario.py --tc 1540            # TC manual
     python scripts/ecom_diario.py --hasta 2026-06-01 --desde 2026-06-01 --solo-consulta
 """
@@ -40,7 +40,11 @@ def main() -> int:
     args = ap.parse_args()
 
     api.migrar_y_sembrar()
+    # TC: siempre el del BNA del día (decisión de Maxx, 2026-09-28); --tc
+    # queda para correr a mano un caso puntual. El origen sale al pie del
+    # resumen y del informe para poder verificarlo.
     tc = Decimal(args.tc) if args.tc else obtener_tc_bna()
+    tc_origen = api.origen_tc(args.tc)
     hasta = args.hasta or ayer_en_argentina()
     fetch = api._fetch_fn_con_cache()
     try:
@@ -49,7 +53,7 @@ def main() -> int:
                 db, EcomApiAdapter(), tc,
                 IvaProvider(consultar=api._consultar_catalogo_tactica_con_cache()),
                 api._providers_ecom(fetch), hasta=hasta, desde=args.desde,
-                guardar=not args.solo_consulta, dia_corte=args.dia_corte,
+                guardar=not args.solo_consulta, dia_corte=args.dia_corte, tc_origen=tc_origen,
             )
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)

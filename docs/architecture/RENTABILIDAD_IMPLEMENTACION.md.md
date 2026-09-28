@@ -271,10 +271,11 @@ orden.
 | Envío ML | Cargo `shipping` de MP − lo que pagó el comprador; sin cargo: 0 en Full, `listCost − cost` fuera de Full (coincide en las 527 órdenes ML del día). |
 | Envío Woocommerce | 0: lo que paga el comprador no es ingreso ni costo; la mensajería se paga por mes. |
 | Frávega | Comisión base estimada (`fravega_comision_base` = 15% × Precio Final, fee 0) hasta cargar la liquidación quincenal; al cargarla se reemplaza por comisión + fee logístico reales y se recalcula (`origen_comision`: `ESTIMADO_FRAVEGA` → `LIQUIDACION_FRAVEGA`). Cruce por el número de orden de Frávega que guarda Ecom (`ownerData.ownerId` sin `FVG-`). |
-| Cancelada en Frávega, cobrada en Ecom | No se fuerza: queda estimada con `observacion` (posible desync Ecom↔Frávega). |
+| Cancelada en Frávega, cobrada en Ecom | Suma como venta, tal como la trae Ecom (Maxx, 2026-09-28), con la comisión estimada y una `observacion` informativa (posible desync). Cuando se conecte la API de Frávega, las canceladas se descuentan en el cierre de mes con el detalle real. |
 | Posventa | Precio final y sin IVA en 0, se conserva el costo. |
 | PM | Cascada de la fórmula real: SKUs completos en `A:D` → primer SKU en `A:D` → primer SKU en `U:V` (sin distinguir mayúsculas, como BUSCARV). |
-| TC / costo por operación | Parámetro de la corrida (manual o BNA) / `costo_operacion_ecom` ($149,12). |
+| TC | Siempre el BNA del día (dólar billete, venta) al correr (Maxx, 2026-09-28); un solo TC para todo el período. Se guarda en el cierre (`cierre_rentabilidad.tc_ecom` + `tc_ecom_origen`) y sale al pie del resumen de la corrida y del informe, para verificarlo. |
+| Costo por operación | `costo_operacion_ecom` ($149,12 por orden). |
 
 **Liquidación de Frávega** (`liquidacion_fravega.py`, tabla
 `liquidacion_fravega`): se sube el .xlsx de Seller Center
@@ -291,6 +292,19 @@ recalcula el ciclo en curso (23 → 22) desde el día 23 hasta ayer y lo guarda
 bajo la etiqueta del ciclo completo (`2026-09-23_2026-10-22`), reemplazando
 lo anterior de ese ciclo: sin períodos solapados ni órdenes duplicadas. Corre
 en proceso (un ciclo completo no entra en el timeout de un request HTTP).
+
+**Programación en Railway**: servicio Cron aparte, del mismo repo, con
+`backend/railway.cron.json` como config (`startCommand`
+`./entrypoint.sh python scripts/ecom_diario.py`, `cronSchedule` `0 9 * * *`
+= 06:00 ART) y las mismas variables que el backend. `entrypoint.sh` con
+argumentos levanta el túnel de Tailscale (factor de IVA desde la SQL de
+Táctica) y corre el comando en vez de uvicorn; el nodo queda efímero.
+
+**Pendiente conocido — notas de crédito y cancelaciones**: hoy una nota de
+crédito entra en Ecom como Posventa (precio 0, conserva el costo) para
+netear la venta original. Cuando se conecten los canales directos (API de
+Frávega, ML, etc.), la cancelación / NC se va a manejar con el dato real de
+cada canal — no cambiar la regla de Posventa antes de eso.
 
 ---
 

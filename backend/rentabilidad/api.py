@@ -261,6 +261,8 @@ class VentaTacticaOut(BaseModel):
     margen_real: Decimal | None = None
     margen_pct: Decimal | None = None
     precio_venta_iva: Decimal | None = None
+    # TC de la factura (cotización de Táctica) — para el pie del informe.
+    tc: Decimal | None = None
 
 
 class ConsultarTacticaOut(BaseModel):
@@ -282,6 +284,7 @@ def _venta_tactica_a_out(v: VentaTactica) -> VentaTacticaOut:
         imp_cheque=v.imp_cheque, iibb=v.iibb, costo_total_pesos=v.costo_total_pesos,
         costo_financiero_1=v.costo_financiero_1, costo_financiero_2=v.costo_financiero_2,
         margen_real=v.margen_real, margen_pct=v.margen_pct, precio_venta_iva=v.precio_venta_iva,
+        tc=v.tc,
     )
 
 
@@ -350,6 +353,16 @@ def calcular_tactica_periodo(payload: CalcularTacticaPeriodoIn) -> ConsultarTact
 # sigue pidiéndolo a mano a propósito: ahí se reproduce el proceso manual
 # de Maxx para comparar contra el mismo TC que él usó ese día. ──
 
+def origen_tc(tc_manual: str | None) -> str:
+    """Texto que queda guardado junto al TC del cierre y sale en el informe."""
+    if tc_manual:
+        return "manual"
+    from datetime import datetime, timedelta, timezone
+
+    ahora = datetime.now(timezone(timedelta(hours=-3)))
+    return f"BNA dólar billete venta, consultado {ahora:%Y-%m-%d %H:%M} ART"
+
+
 def _resolver_tc(tc: str | None) -> Decimal:
     if tc:
         try:
@@ -400,6 +413,7 @@ class ResultadoEcomOut(BaseModel):
     origen_comision: str | None = None
     orden_externa: str | None = None
     observacion: str | None = None
+    tc: Decimal | None = None
 
 
 class ConsultarEcomOut(BaseModel):
@@ -433,6 +447,7 @@ def _venta_ecom_a_out(v: VentaEcom) -> ResultadoEcomOut:
         origen_comision=v.origen_comision,
         orden_externa=v.orden_externa,
         observacion=v.observacion,
+        tc=v.tc,
     )
 
 
@@ -541,7 +556,8 @@ async def cerrar_ecom_excel(
             ClasificacionProvider(fetch_fn=fetch), VinculacionProvider(fetch_fn=fetch),
             StockProvider(fetch_fn=fetch), MargenObjetivoProvider(fetch_fn=fetch),
         )
-        registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="excel")
+        registrar_cierre(db, periodo, desde, hasta, ecom_guardado=True, ecom_origen="excel",
+                         tc_ecom=tc_decimal, tc_ecom_origen="manual")
     return GuardarCierreEcomOut(
         periodo=periodo, total_lineas=len(resultado.filas),
         excluidas=sum(1 for f in resultado.filas if f.excluido),
@@ -576,7 +592,8 @@ def cerrar_ecom_api(payload: GuardarCierreEcomIn) -> GuardarCierreEcomOut:
         resultado = guardar_cierre_ecom(
             db, periodo, resultado_ingesta, IvaProvider(consultar=_consultar_catalogo_tactica_con_cache()), **_providers_ecom(fetch),
         )
-        registrar_cierre(db, periodo, payload.desde, payload.hasta, ecom_guardado=True, ecom_origen="api")
+        registrar_cierre(db, periodo, payload.desde, payload.hasta, ecom_guardado=True, ecom_origen="api",
+                         tc_ecom=tc, tc_ecom_origen=origen_tc(payload.tc))
     return GuardarCierreEcomOut(
         periodo=periodo, total_lineas=len(resultado.filas),
         excluidas=sum(1 for f in resultado.filas if f.excluido),
@@ -652,6 +669,8 @@ class CierreOut(BaseModel):
     tactica_guardado: bool
     ecom_guardado: bool
     ecom_origen: str | None
+    tc_ecom: Decimal | None = None
+    tc_ecom_origen: str | None = None
 
 
 @router.get("/cierres", response_model=list[CierreOut])
@@ -666,7 +685,7 @@ def listar_cierres() -> list[CierreOut]:
                 periodo=c.periodo, desde=c.desde, hasta=c.hasta,
                 generado_en=c.generado_en.isoformat(),
                 tactica_guardado=c.tactica_guardado, ecom_guardado=c.ecom_guardado,
-                ecom_origen=c.ecom_origen,
+                ecom_origen=c.ecom_origen, tc_ecom=c.tc_ecom, tc_ecom_origen=c.tc_ecom_origen,
             )
             for c in cierres
         ]

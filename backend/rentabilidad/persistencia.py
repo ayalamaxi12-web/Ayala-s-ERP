@@ -526,6 +526,8 @@ def registrar_cierre(
     tactica_guardado: bool | None = None,
     ecom_guardado: bool | None = None,
     ecom_origen: str | None = None,
+    tc_ecom: Decimal | None = None,
+    tc_ecom_origen: str | None = None,
 ) -> CierreRentabilidad:
     """Upsert por `periodo`: Táctica y Ecom pueden guardarse en llamadas
     separadas (Ecom hoy vía Excel, API pendiente) sin perder lo ya
@@ -546,6 +548,9 @@ def registrar_cierre(
         cierre.ecom_guardado = ecom_guardado
     if ecom_origen is not None:
         cierre.ecom_origen = ecom_origen
+    if tc_ecom is not None:
+        cierre.tc_ecom = tc_ecom
+        cierre.tc_ecom_origen = tc_ecom_origen
     return cierre
 
 

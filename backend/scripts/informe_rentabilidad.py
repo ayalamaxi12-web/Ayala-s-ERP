@@ -290,6 +290,30 @@ def seccion_tactica(base, P, a, sub_cat):
     return {"con_iva": D(tot["suma_1"]), "sin_iva": T2, "rent": R, "lineas": tot["cantidad_lineas"], "filas": filas}
 
 
+def texto_tc(cierre, filas_ecom, filas_tactica):
+    """Pie del informe (pedido de Maxx, 2026-09-28): con qué TC se calculó,
+    para poder verificar que fue el correcto. ECOM usa un solo TC para todo
+    el período (guardado en el cierre con su origen; si el cierre es viejo y
+    no lo tiene, se toma de las filas). Táctica usa la cotización de cada
+    factura, así que se informa el rango."""
+    def tc(v):
+        return f"$ {D(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    if cierre.get("tc_ecom") is not None:
+        ecom = tc(cierre["tc_ecom"]) + (f" ({cierre['tc_ecom_origen']})" if cierre.get("tc_ecom_origen") else "")
+    else:
+        valores = sorted({D(x["tc"]) for x in filas_ecom if x.get("tc") is not None})
+        ecom = " / ".join(tc(v) for v in valores) if valores else "sin dato"
+    valores_t = sorted({D(x["tc"]) for x in filas_tactica if x.get("tc") is not None})
+    if not valores_t:
+        tactica = "sin dato"
+    elif len(valores_t) == 1:
+        tactica = f"{tc(valores_t[0])} (cotización de las facturas)"
+    else:
+        tactica = f"entre {tc(valores_t[0])} y {tc(valores_t[-1])} (cotización de cada factura)"
+    return ecom, tactica
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--periodo")
@@ -334,7 +358,10 @@ def main():
     if hay_grafico:
         head.append(f'<h3>Evolución día a día</h3><img src="cid:{png}" width="760" alt="Facturación sin IVA y rentabilidad por día, '
                     f'ECOM + Táctica" style="max-width:100%;height:auto">')
-    pie = ['<p style="font-size:11px;color:#888;margin-top:24px">Generado automáticamente con Claude Code a partir de los endpoints '
+    tc_ecom, tc_tactica = texto_tc(cierre, ecom["filas"], tac["filas"])
+    pie = [f'<p style="font-size:12px;color:#555;margin-top:24px"><b>Tipo de cambio usado</b> — ECOM: {tc_ecom} · '
+           f"Táctica: {tc_tactica}.</p>",
+           '<p style="font-size:11px;color:#888;margin-top:8px">Generado automáticamente con Claude Code a partir de los endpoints '
            f"/rentabilidad/* de {base.split('//')[-1]}.</p></div>"]
     with open(args.html, "w") as f:
         f.write("".join(head + cuerpo + pie))
@@ -343,7 +370,8 @@ def main():
            f"ECOM: fact. sin IVA {m(ecom['sin_iva'])}, rentabilidad {m(ecom['rent'])} ({pc(ratio(ecom['rent'], ecom['sin_iva']))}).\n"
            f"Táctica: fact. sin IVA {m(tac['sin_iva'])}, rentabilidad {m(tac['rent'])} ({pc(ratio(tac['rent'], tac['sin_iva']))}).\n"
            f"Total: fact. sin IVA {m(tot['sin_iva'])}, rentabilidad {m(tot['rent'])} ({pc(ratio(tot['rent'], tot['sin_iva']))}).\n\n"
-           "El informe completo, con tablas por canal, SKU, categoría, PM y alertas, está en la versión HTML de este mail.\n")
+           "El informe completo, con tablas por canal, SKU, categoría, PM y alertas, está en la versión HTML de este mail.\n\n"
+           f"Tipo de cambio usado — ECOM: {tc_ecom} · Táctica: {tc_tactica}.\n")
     with open(args.txt, "w") as f:
         f.write(txt)
     with open(args.meta, "w") as f:
