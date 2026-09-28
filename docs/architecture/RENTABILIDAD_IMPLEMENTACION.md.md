@@ -297,8 +297,23 @@ en proceso (un ciclo completo no entra en el timeout de un request HTTP).
 `backend/railway.cron.json` como config (`startCommand`
 `./entrypoint.sh python scripts/ecom_diario.py`, `cronSchedule` `0 9 * * *`
 = 06:00 ART) y las mismas variables que el backend. `entrypoint.sh` con
-argumentos levanta el túnel de Tailscale (factor de IVA desde la SQL de
-Táctica) y corre el comando en vez de uvicorn; el nodo queda efímero.
+argumentos corre el comando en vez de uvicorn.
+
+**ECOM no depende de Táctica** (Maxx, 2026-09-28): el factor de IVA de
+"Facturación + IVA" sale del `taxTag` de la propia API de Ecom (coincide
+con Táctica en 472/473 órdenes del 01/06/2026 y completa las que Táctica no
+encontraba), así que el Cron no levanta el túnel de Tailscale salvo
+`TS_EN_JOB=1`. El túnel es siempre opcional y acotado (`TS_UP_TIMEOUT`,
+default 20s): si no levanta, se sigue sin él.
+
+**Diagnóstico del Cron "colgado" (2026-09-28)**: sin túnel, cada orden
+reintentaba la SQL de Táctica (5 intentos, ~30s de espera) porque el cache
+solo guardaba los aciertos — horas sin un error. Ahora los caches de
+Táctica y de Sheets recuerdan el error, todas las conexiones tienen timeout
+(Ecom 10s/60s, Sheets 10s/60s, Postgres 10s de conexión y 60s de lock) y la
+corrida tiene un tope total (`--max-minutos`, default 45). Cada paso deja
+una línea con hora en stderr sin buffer (el `fileConfig` de Alembic apaga
+los loggers, por eso antes no se veía nada después de las migraciones).
 
 **Pendiente conocido — notas de crédito y cancelaciones**: hoy una nota de
 crédito entra en Ecom como Posventa (precio 0, conserva el costo) para

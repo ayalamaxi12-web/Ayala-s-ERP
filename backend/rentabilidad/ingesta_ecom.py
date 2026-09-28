@@ -108,6 +108,11 @@ class FilaEcom:
     origen_comision: str | None = None
     observacion: str | None = None
     fecha_creacion: date | None = None
+    # Factor de IVA (1,21 / 1,105) del primer SKU de la orden, desde el
+    # `taxTag` que trae la propia API de Ecom — para "Facturación + IVA"
+    # (informativo) sin depender de la SQL de Táctica. None = lo resuelve
+    # `IvaProvider` (camino del Excel, que no trae el dato).
+    factor_iva: Decimal | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(

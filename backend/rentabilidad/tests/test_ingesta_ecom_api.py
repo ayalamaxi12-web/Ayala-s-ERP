@@ -665,3 +665,41 @@ def test_adapter_periodo_devuelve_resultadoingestaecom_compatible_con_persistenc
     adaptador = EcomApiAdapter(EcomApiClient(email="x@x.com", password="s", post_fn=_post_adapter([_orden()])))
     resultado = adaptador.periodo(date(2026, 7, 1), date(2026, 7, 31), Decimal(1500))
     assert isinstance(resultado, ResultadoIngestaEcom)
+
+
+# ── Factor de IVA desde la API (Ecom no depende de Táctica, 2026-09-28) ──
+
+def test_fila_desde_orden_toma_el_factor_de_iva_del_primer_sku():
+    orden = _orden(orderLists=[
+        {"quantity": 1, "subtotal": 100, "subtotalSinImpuestos": 90.5, "taxTag": "10.5",
+         "variant": {"sku": "A", "cost": 1, "product": {"sku": None}}},
+        {"quantity": 1, "subtotal": 100, "subtotalSinImpuestos": 82.6, "taxTag": "21",
+         "variant": {"sku": "B", "cost": 1, "product": {"sku": None}}},
+    ])
+    assert _fila_desde_orden(orden, Decimal(1540), _CANALES, _ESTADOS_PAGO).factor_iva == Decimal("1.105")
+
+
+def test_fila_desde_orden_sin_taxtag_reconocido_no_inventa_factor():
+    fila = _fila_desde_orden(_orden(), Decimal(1540), _CANALES, _ESTADOS_PAGO)  # fixture sin taxTag
+    assert fila.factor_iva is None
+
+
+# ── Timeouts: un servidor que no responde no puede colgar la corrida ──
+
+def test_post_real_timeout_se_reintenta_y_termina_en_error_claro(monkeypatch):
+    import requests
+
+    from rentabilidad import ingesta_ecom_api as mod
+
+    llamadas = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        llamadas.append(timeout)
+        raise requests.exceptions.ReadTimeout("sin respuesta")
+
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    with pytest.raises(EcomApiError, match="no respondió"):
+        mod._post_real("https://x/graphql", {}, None)
+    assert len(llamadas) == mod._REINTENTOS_TRANSPORTE
+    assert all(t == mod._TIMEOUT_REQUEST for t in llamadas)  # siempre con límite de conexión y lectura
