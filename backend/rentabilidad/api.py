@@ -22,7 +22,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -47,6 +47,7 @@ from .ingesta_tactica import TacticaSqlAdapter
 from .liquidacion_fravega import LiquidacionFravegaAdapter, LiquidacionFravegaInvalida
 from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
 from .importar_historico import guardar_historico, importar
+from .reporte_diario import reporte_diario
 from .persistencia import (
     aplicar_liquidacion_fravega,
     construir_filas_ecom,
@@ -695,6 +696,35 @@ def fravega_pendientes() -> list[ResultadoEcomOut]:
     Frávega pero cobradas en Ecom)."""
     with sesion() as db:
         return [_venta_ecom_a_out(v) for v in ventas_fravega_estimadas(db)]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# REPORTE DIARIO — solo lectura, para n8n (mail diario). Resume lo que la
+# corrida diaria ya guardó; no recalcula nada.
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/reporte/ecom/diario")
+def reporte_ecom_diario(
+    fecha: date | None = None,
+    top: int = 5,
+    token: str | None = None,
+    x_reporte_token: str | None = Header(default=None),
+) -> dict:
+    """Reporte del ciclo en curso (23 → 22) al día `fecha` (default: ayer,
+    hora Argentina): ayer, acumulado del ciclo, por PM, top / pérdidas,
+    alertas, Full y marketplaces (Frávega, OnCity, Megatone).
+
+    Si está configurada `RENT_REPORTE_TOKEN`, exige ese token (header
+    `X-Reporte-Token` o `?token=`)."""
+    import os
+
+    esperado = os.environ.get("RENT_REPORTE_TOKEN")
+    if esperado and (x_reporte_token or token) != esperado:
+        raise HTTPException(401, "Token de reporte inválido o ausente.")
+    if not 1 <= top <= 50:
+        raise HTTPException(422, "'top' debe estar entre 1 y 50.")
+    with sesion() as db:
+        return reporte_diario(db, fecha, top)
 
 
 class CierreOut(BaseModel):

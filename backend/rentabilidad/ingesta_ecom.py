@@ -66,6 +66,10 @@ CANAL_POSVENTA = "Posventa"
 ORIGEN_COMISION_API = "API"  # cargos reales de Mercado Pago / Shipping de la orden
 ORIGEN_COMISION_ESTIMADO_FRAVEGA = "ESTIMADO_FRAVEGA"  # comisión base %, fee 0
 ORIGEN_COMISION_LIQUIDACION_FRAVEGA = "LIQUIDACION_FRAVEGA"  # comisión + fee reales
+# OnCity: canal manual en Ecom, sin dato de comisión del marketplace. Se
+# estima con `oncity_comision_estimada` × Precio Final para no inflar la
+# rentabilidad (Maxx, 2026-09-29: "15%, igual que Frávega", editable).
+ORIGEN_COMISION_ESTIMADO_ONCITY = "ESTIMADO_ONCITY"
 
 # Candidatos de título de columna — el Excel crudo de ECOM usa "Precio Neto"
 # para lo que el diccionario de datos (RENTABILIDAD_FUNCIONAL.md §7.7) llama
@@ -113,6 +117,9 @@ class FilaEcom:
     # (informativo) sin depender de la SQL de Táctica. None = lo resuelve
     # `IvaProvider` (camino del Excel, que no trae el dato).
     factor_iva: Decimal | None = None
+    # Orden despachada por ML Full (logistic_type=fulfillment). None = no se
+    # sabe (Excel). Para el reporte diario "Full" (2026-09-29).
+    es_full: bool | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(

@@ -60,6 +60,7 @@ from .calculators import (
 from .config import ConfiguracionFaltante
 from .ingesta_ecom import (
     ORIGEN_COMISION_ESTIMADO_FRAVEGA,
+    ORIGEN_COMISION_ESTIMADO_ONCITY,
     ORIGEN_COMISION_LIQUIDACION_FRAVEGA,
     FilaEcom,
     ResultadoIngestaEcom,
@@ -334,6 +335,7 @@ def construir_venta_ecom(
         orden_externa=fila.orden_externa,
         origen_comision=fila.origen_comision,
         observacion=fila.observacion,
+        es_full=fila.es_full,
     )
 
 
@@ -400,7 +402,14 @@ def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decim
 def resolver_comision_fravega(db: Session, fila: FilaEcom) -> FilaEcom:
     """La API de Ecom no trae comisión ni fee logístico de Frávega (llega
     `origen_comision=ESTIMADO_FRAVEGA` con ambos en 0): se resuelven con
-    `comision_fravega`. Cualquier otra fila pasa sin cambios."""
+    `comision_fravega`. OnCity (canal manual, sin comisión en Ecom) toma la
+    comisión estimada `oncity_comision_estimada` × Precio Final. Cualquier
+    otra fila pasa sin cambios."""
+    if fila.origen_comision == ORIGEN_COMISION_ESTIMADO_ONCITY:
+        tasa = db.get(ParametroTasa, "oncity_comision_estimada")
+        if tasa is None:
+            raise ValueError("Falta sembrar el parámetro de tasa 'oncity_comision_estimada' (ver seed.py).")
+        return replace(fila, comision_venta=fila.precio_final * tasa.valor)
     if fila.origen_comision not in (ORIGEN_COMISION_ESTIMADO_FRAVEGA, ORIGEN_COMISION_LIQUIDACION_FRAVEGA):
         return fila
     c = comision_fravega(db, fila.orden_externa, fila.precio_final)

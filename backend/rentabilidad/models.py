@@ -281,6 +281,9 @@ class VentaEcom(Base):
     orden_externa: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     origen_comision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     observacion: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Orden despachada por ML Full — para el reporte diario (2026-09-29).
+    # None en filas importadas de la planilla o del Excel (no traen el dato).
+    es_full: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
 
 # ── Tablas paramétricas (§1.3) — ninguna tasa/prefijo/régimen vive en código ──

@@ -31,6 +31,7 @@ TASAS = [
     dict(nombre="imp_cheque", valor="0.012", motor="AMBOS", descripcion="Impuesto al cheque — 1,2%"),
     dict(nombre="iibb", valor="0.05", motor="AMBOS", descripcion="Retenciones IIBB — 5%"),
     dict(nombre="costo_operacion_ecom", valor="149.12", motor="ECOM", descripcion="Costo por Operación Ecom — monto fijo en pesos por orden (§7.7, OP), vigente desde 23/08/2026"),
+    dict(nombre="oncity_comision_estimada", valor="0.15", motor="ECOM", descripcion="Comisión estimada OnCity — 15% sobre Precio Final (canal manual en Ecom, sin dato real de comisión; 2026-09-29)"),
     dict(nombre="fravega_comision_base", valor="0.15", motor="ECOM", descripcion="Comisión base Frávega — 15% sobre Precio Final, estimado hasta cargar la liquidación quincenal (2026-09-27)"),
     dict(nombre="cf1", valor="0.03", motor="TACTICA", descripcion="Costo financiero 1 — 3%, base bruta"),
     dict(nombre="cf2", valor="0.03", motor="TACTICA", descripcion="Costo financiero 2 — 3%, base neta"),

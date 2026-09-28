@@ -702,3 +702,11 @@ def test_post_real_timeout_se_reintenta_y_termina_en_error_claro(monkeypatch):
         mod._post_real("https://x/graphql", {}, None)
     assert len(llamadas) == mod._REINTENTOS_TRANSPORTE
     assert all(t == mod._TIMEOUT_REQUEST for t in llamadas)  # siempre con límite de conexión y lectura
+
+
+def test_fila_desde_orden_oncity_queda_para_comision_estimada():
+    fila = _fila_desde_orden(_orden(owner="OnCity", payments=[{"totalFeeAmount": 0, "details": None}]),
+                             Decimal(1540), {"OnCity": "OnCity"}, _ESTADOS_PAGO)
+    assert fila.canal_de_venta == "OnCity"
+    assert fila.origen_comision == "ESTIMADO_ONCITY"
+    assert fila.comision_venta == 0 and fila.costo_envio == 0

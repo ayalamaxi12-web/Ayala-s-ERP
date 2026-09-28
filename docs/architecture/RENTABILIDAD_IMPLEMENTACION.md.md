@@ -272,6 +272,7 @@ orden.
 | Envío Woocommerce | 0: lo que paga el comprador no es ingreso ni costo; la mensajería se paga por mes. |
 | Frávega | Comisión base estimada (`fravega_comision_base` = 15% × Precio Final, fee 0) hasta cargar la liquidación quincenal; al cargarla se reemplaza por comisión + fee logístico reales y se recalcula (`origen_comision`: `ESTIMADO_FRAVEGA` → `LIQUIDACION_FRAVEGA`). Cruce por el número de orden de Frávega que guarda Ecom (`ownerData.ownerId` sin `FVG-`). |
 | Cancelada en Frávega, cobrada en Ecom | Suma como venta, tal como la trae Ecom (Maxx, 2026-09-28), con la comisión estimada y una `observacion` informativa (posible desync). Cuando se conecte la API de Frávega, las canceladas se descuentan en el cierre de mes con el detalle real. |
+| OnCity | Canal manual en Ecom (`owner = "OnCity"`), sin dato de comisión: se descuenta una comisión estimada `oncity_comision_estimada` (15% × Precio Final, editable) — `origen_comision=ESTIMADO_ONCITY` (Maxx, 2026-09-29). |
 | Posventa | Precio final y sin IVA en 0, se conserva el costo. |
 | PM | Cascada de la fórmula real: SKUs completos en `A:D` → primer SKU en `A:D` → primer SKU en `U:V` (sin distinguir mayúsculas, como BUSCARV). |
 | TC | Siempre el BNA del día (dólar billete, venta) al correr (Maxx, 2026-09-28); un solo TC para todo el período. Se guarda en el cierre (`cierre_rentabilidad.tc_ecom` + `tc_ecom_origen`) y sale al pie del resumen de la corrida y del informe, para verificarlo. |
@@ -314,6 +315,19 @@ Táctica y de Sheets recuerdan el error, todas las conexiones tienen timeout
 corrida tiene un tope total (`--max-minutos`, default 45). Cada paso deja
 una línea con hora en stderr sin buffer (el `fileConfig` de Alembic apaga
 los loggers, por eso antes no se veía nada después de las migraciones).
+
+**Reporte diario para mail (n8n)** — `GET /rentabilidad/reporte/ecom/diario`
+(`reporte_diario.py`), **solo lectura**: resume lo que la corrida ya guardó
+para el ciclo en curso, sin recalcular. Parámetros: `fecha` (default ayer,
+hora Argentina), `top` (default 5). Si está `RENT_REPORTE_TOKEN`, exige el
+header `X-Reporte-Token` (o `?token=`). Devuelve ayer / acumulado del ciclo,
+por PM (con sus 2 SKU que más facturaron), top y pérdidas del día, alertas
+(costo 0 / sin SKU, Frávega estimadas, observaciones, TC usado) y el bloque
+Full + marketplaces (Frávega, OnCity, Megatone). Facturación = Precio Final
+con IVA; rentabilidad % sobre facturación sin IVA; SKU = los de la orden (un
+kit cuenta como su combinación, no se guarda el importe por línea). Full se
+lee de `venta_ecom.es_full` (migración `d4e5f6a7b8c9`, lo completa la
+corrida desde 2026-09-29).
 
 **Pendiente conocido — notas de crédito y cancelaciones**: hoy una nota de
 crédito entra en Ecom como Posventa (precio 0, conserva el costo) para
