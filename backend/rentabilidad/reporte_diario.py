@@ -22,7 +22,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
-from .ingesta_ecom import ORIGEN_COMISION_ESTIMADO_FRAVEGA
+from .ingesta_ecom import ORIGEN_COMISION_ESTIMADO_FRAVEGA, ORIGEN_COMISION_ESTIMADO_ONCITY
 from .models import CierreRentabilidad, VentaEcom
 from .regimen import periodo_de_rango
 
@@ -132,7 +132,8 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA)
             bloque["nota"] = "Comisión estimada (15%) hasta cargar la liquidación quincenal; después pasa a la real."
         elif clave == "oncity":
-            bloque["nota"] = "Canal manual en Ecom: no trae comisión del marketplace, la rentabilidad no la descuenta."
+            bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_ONCITY)
+            bloque["nota"] = "Canal manual en Ecom sin dato de comisión: se descuenta una comisión estimada (15% del Precio Final)."
         elif clave == "megatone" and not vs:
             bloque["nota"] = "Sin órdenes de Megatone en Ecom en este ciclo."
         marketplaces[clave] = bloque

@@ -172,6 +172,7 @@ from .ingesta_ecom import (
     ESTADOS_PAGO_QUE_PARTICIPAN,
     ORIGEN_COMISION_API,
     ORIGEN_COMISION_ESTIMADO_FRAVEGA,
+    ORIGEN_COMISION_ESTIMADO_ONCITY,
     FilaEcom,
     ResultadoIngestaEcom,
 )
@@ -599,6 +600,9 @@ _OWNER_INTEGRACION_FRAVEGA = "ChFravega"
 _PREFIJO_ORDEN_FRAVEGA = "FVG-"
 
 _OWNERS_MERCADOLIBRE = ("MlShipping", "MlOrder")
+# OnCity se carga en Ecom como canal manual (`owner == "OnCity"`, verificado
+# 2026-09-29: 41 órdenes desde junio, ninguna por integración).
+_OWNER_ONCITY = "OnCity"
 
 
 def _detalles_de_pago(pago: dict) -> dict:
@@ -773,6 +777,12 @@ def _fila_desde_orden(
         costo_envio = Decimal(0)
         origen_comision = ORIGEN_COMISION_ESTIMADO_FRAVEGA
         orden_externa = ((orden.get("ownerData") or {}).get("ownerId") or "").removeprefix(_PREFIJO_ORDEN_FRAVEGA) or None
+    elif owner_code == _OWNER_ONCITY:
+        # Sin dato de comisión en Ecom: la estima `persistencia` con la tasa
+        # `oncity_comision_estimada` (en la base, editable).
+        comision = Decimal(0)
+        costo_envio = Decimal(0)
+        origen_comision = ORIGEN_COMISION_ESTIMADO_ONCITY
     else:
         comision = _cargos_del_vendedor(orden, "fee") or Decimal(0)
         costo_envio = Decimal(0)

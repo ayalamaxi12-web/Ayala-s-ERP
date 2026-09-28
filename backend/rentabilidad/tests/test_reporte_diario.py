@@ -31,7 +31,8 @@ def ciclo(db_session):
         _venta("3", d27, "6050", None, skus_vendidos=""),  # costo 0 sin SKU
         _venta("4", d26, "60500", "9000", skus_vendidos="TONER-1", canal_de_venta="Fravega",
                origen_comision="ESTIMADO_FRAVEGA", orden_externa="v1frvg-01"),
-        _venta("5", d27, "12100", "2000", canal_de_venta="OnCity", skus_vendidos="SOPORTE-1"),
+        _venta("5", d27, "12100", "2000", canal_de_venta="OnCity", skus_vendidos="SOPORTE-1",
+               origen_comision="ESTIMADO_ONCITY"),
         _venta("6", d27, "1", "1", excluido=True),  # excluida: no cuenta
         _venta("7", date(2026, 9, 28), "999", "9"),  # posterior a `dia`: no cuenta
     ])
@@ -82,6 +83,7 @@ def test_full_y_marketplaces(ciclo):
     assert fm["fravega"]["ciclo"]["facturacion"] == 60500.0 and fm["fravega"]["ayer"]["ordenes"] == 0
     assert fm["fravega"]["comision_estimada_ordenes"] == 1
     assert fm["oncity"]["ciclo"]["rentabilidad"] == 2000.0
+    assert fm["oncity"]["comision_estimada_ordenes"] == 1
     assert fm["megatone"]["ciclo"]["ordenes"] == 0 and "Sin órdenes" in fm["megatone"]["nota"]
 
 
