@@ -336,3 +336,69 @@ def test_dias_de_stock_sin_ventas_da_texto_literal():
     filas = [hdr, ["SKU1", "45", "0"]]
     prov = StockProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
     assert prov.dias_de_stock("SKU1") == "Sin ventas"
+
+
+# ── clasificacion_ecom: las 4 columnas de la planilla ECOM (PM, Subcategoria,
+# Categoria, Subcategoria2), validado 566/566 en PM/Subcat/Categoria contra
+# el libro del 01/06/2026. ──
+
+def _gral_categorias(*filas):
+    """Fila de GRAL CATEGORIAS: A=SKU, B=Categoria, C=Subcategoria 2, D=PM,
+    E=Subcategoria; U=SKU alternativo, V=PM, W=Subcategoria."""
+    out = []
+    for f in filas:
+        fila = [""] * 23
+        for letra, v in f.items():
+            fila[ord(letra) - ord("A")] = v
+        out.append(fila)
+    return out
+
+
+def test_clasificacion_ecom_trae_categoria_por_la_subcategoria():
+    filas = _gral_categorias(
+        {"A": "CF283XCOMP", "B": "Insumo De Impresion", "C": "Toner", "D": "Veronica", "E": "Cartucho De Toner"},
+        {"A": "OTRO", "B": "Insumo De Impresion", "E": "Cartucho De Toner"},
+    )
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    assert prov.clasificacion_ecom("CF283XCOMP") == {
+        "pm": "Veronica", "subcategoria": "Cartucho De Toner",
+        "categoria": "Insumo De Impresion", "subcategoria2": "Toner",
+    }
+
+
+def test_clasificacion_ecom_multi_sku_usa_el_primero_y_subcategoria2_cae_a_la_col_e():
+    filas = _gral_categorias({"A": "SKU1", "B": "Gráfica y Estampado", "C": "X", "D": "Matias", "E": "Planchas"})
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    c = prov.clasificacion_ecom("SKU1, SKU2")
+    assert c["pm"] == "Matias" and c["categoria"] == "Gráfica y Estampado"
+    assert c["subcategoria2"] == "Planchas"  # fórmula: 2º intento es A:E col 5, no A:C
+
+
+def test_clasificacion_ecom_rango_u():
+    filas = _gral_categorias(
+        {"U": "SKUALT", "V": "Cristian", "W": "Perifericos"},
+        {"A": "OTRO", "B": "Computación", "E": "Perifericos"},
+    )
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: filas)
+    c = prov.clasificacion_ecom("SKUALT")
+    assert (c["pm"], c["subcategoria"], c["categoria"]) == ("Cristian", "Perifericos", "Computación")
+
+
+def test_clasificacion_ecom_sin_match_categoria_es_sin_pm_como_la_formula():
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: _gral_categorias({"A": "OTRO"}))
+    c = prov.clasificacion_ecom("NOEXISTE")
+    assert c["pm"] is None and c["subcategoria"] is None and c["categoria"] == "SIN PM"
+
+
+def test_clasificacion_ecom_sku_vacio_es_sin_pm():
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: [])
+    assert set(prov.clasificacion_ecom("").values()) == {"SIN PM"}
+
+
+def test_clasificacion_ecom_lee_la_hoja_una_sola_vez():
+    lecturas = []
+    filas = _gral_categorias({"A": "A1", "D": "Laura", "E": "S", "B": "C"})
+    prov = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: lecturas.append(tab) or filas)
+    for _ in range(100):
+        prov.clasificacion_ecom("A1")
+    assert len(lecturas) == 1
