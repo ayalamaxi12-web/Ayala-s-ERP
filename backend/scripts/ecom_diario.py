@@ -97,13 +97,24 @@ def main() -> int:
         tc_origen = api.origen_tc(args.tc)
         hasta = args.hasta or ayer_en_argentina()
         fetch = api._fetch_fn_con_cache(log=log)
+        providers = api._providers_ecom(fetch)
+        # PM / subcategoría / CATEGORÍA salen de GRAL CATEGORIAS: la pantalla
+        # desglosa por categoría. Se prueba una vez al arrancar para que, si
+        # falta la configuración, el log lo diga en vez de guardar todo vacío.
+        log("Verificando GRAL CATEGORIAS (PM / subcategoría / categoría)")
+        try:
+            filas = providers["clasificacion_provider"]._indices()["A"]
+            log(f"GRAL CATEGORIAS OK: {len(filas)} SKUs")
+        except Exception as e:
+            log(f"AVISO: no se pudo leer GRAL CATEGORIAS ({type(e).__name__}: {e}) — PM, subcategoría y "
+                "categoría van a quedar vacíos. Revisar RENT_SHEET_CATEGORIAS_ID y GOOGLE_CREDENTIALS_JSON en el Cron.")
         # Ecom no depende de Táctica: el factor de IVA viene de la API de Ecom.
         # `IvaProvider` queda solo como respaldo y sin consultar la SQL.
         iva_sin_tactica = IvaProvider(consultar=lambda: [])
         with sesion() as db:
             resumen = correr(
                 db, EcomApiAdapter(log=log), tc, iva_sin_tactica,
-                api._providers_ecom(fetch), hasta=hasta, desde=args.desde,
+                providers, hasta=hasta, desde=args.desde,
                 guardar=not args.solo_consulta, dia_corte=args.dia_corte or DIA_CORTE,
                 tc_origen=tc_origen, log=log,
             )

@@ -289,3 +289,16 @@ def test_opcional_degrada_ante_cualquier_excepcion_del_proveedor_externo():
 
 def test_opcional_devuelve_el_valor_si_no_hay_error():
     assert _opcional(lambda: "valor real", "default") == "valor real"
+
+
+def test_ecom_guarda_categoria_y_subcategoria2_para_el_desglose(db_session):
+    fila = [""] * 23
+    fila[0], fila[1], fila[2], fila[3], fila[4] = "SKU-1", "Insumo De Impresion", "Toner", "Veronica", "Cartucho De Toner"
+    providers = _sin_clasificar_ecom()
+    providers["clasificacion_provider"] = ClasificacionProvider(sheet_id="x", fetch_fn=lambda sid, tab: [fila])
+    ingesta = ResultadoIngestaEcom(lineas=[_fila_ecom()], excluidas_por_estado_pago=[], incidencias_costo=[])
+    guardar_cierre_ecom(db_session, "2026-09-23_2026-10-22", ingesta, IvaProvider(), **providers)
+    [venta] = db_session.query(VentaEcom).all()
+    assert venta.categoria == "Insumo De Impresion"
+    assert venta.subcategoria2 == "Toner"
+    assert venta.pm == "Veronica" and venta.subcategoria == "Cartucho De Toner"

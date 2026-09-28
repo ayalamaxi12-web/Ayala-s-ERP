@@ -268,6 +268,8 @@ def construir_venta_ecom(
     rentabilidad_real,
     excluido: bool,
     motivo_exclusion: MotivoExclusion | None,
+    categoria: str | None = None,
+    subcategoria2: str | None = None,
 ) -> VentaEcom:
     """`resultado` es `None` para las líneas que el adaptador ya separó como
     `incidencias_costo` (costo no resuelto) — el motor nunca corrió sobre
@@ -314,8 +316,8 @@ def construir_venta_ecom(
         rentabilidad_usd=resultado.rentabilidad_usd if resultado else None,
         facturacion_usd=resultado.facturacion_usd if resultado else None,
         responsable_de_ventas=None,
-        categoria=None,
-        subcategoria2=None,
+        categoria=categoria,
+        subcategoria2=subcategoria2,
         periodo_excel=None,
         semana=None,
         sku_negativo=None,
@@ -439,7 +441,14 @@ def _clasificar_fila_ecom(
     # §8.1 paso 2: la cascada arranca por la lista COMPLETA de SKUs (la
     # fórmula real de la planilla es BUSCARV(B2; A:D; 4)); el provider ya
     # cae solo al primer SKU (paso 3) y al rango U (paso 4).
-    pm, subcategoria = _opcional(lambda: clasificacion_provider.pm_y_subcategoria(fila.skus_vendidos), (None, None))
+    # Mismas 4 columnas que la planilla (PM, Subcategoria, Categoria,
+    # Subcategoria2) — la pantalla desglosa por `categoria`, que antes quedaba
+    # vacía en los períodos cargados por el motor (2026-09-28).
+    clasificacion = _opcional(
+        lambda: clasificacion_provider.clasificacion_ecom(fila.skus_vendidos),
+        {"pm": None, "subcategoria": None, "categoria": None, "subcategoria2": None},
+    )
+    pm, subcategoria = clasificacion["pm"], clasificacion["subcategoria"]
     vinculacion = _opcional(lambda: vinculacion_provider.estado(fila.numero_orden), "OK")
     # Factor de IVA: el que trae la API de Ecom; si no vino (Excel), Táctica.
     ao = fila.factor_iva if fila.factor_iva is not None else _opcional(
@@ -458,6 +467,7 @@ def _clasificar_fila_ecom(
     return construir_venta_ecom(
         fila, resultado, "", pm, subcategoria, vinculacion, ao, facturacion_iva,
         stock, ventas_30d, dias_de_stock, rentabilidad_real, excluido, motivo,
+        categoria=clasificacion["categoria"], subcategoria2=clasificacion["subcategoria2"],
     )
 
 

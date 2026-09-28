@@ -277,6 +277,67 @@ class ClasificacionProvider(_AdaptadorBase):
 
         return None, None  # "todo falla → error / vacío" (§8.1, sin default textual documentado acá)
 
+    # ── Clasificación completa ECOM: PM, Subcategoria, Categoria, Subcategoria2 ──
+
+    def _indices(self) -> dict:
+        """Índices de `GRAL CATEGORIAS`, armados una sola vez por instancia
+        (una corrida son miles de órdenes × 4 búsquedas sobre ~2.600 filas).
+        Claves normalizadas como BUSCARV/COINCIDIR de Sheets (recortadas, sin
+        distinguir mayúsculas); ante claves repetidas gana la PRIMERA fila,
+        igual que BUSCARV exacto."""
+        if getattr(self, "_idx_cache", None) is None:
+            filas = self._filas(config.TAB_CATEGORIAS)
+            por_a, por_u, e_a_b = {}, {}, {}
+            col = {letra: _letra_a_indice(letra) for letra in "ABCDEUVW"}
+            for fila in filas:
+                a = gsheets.valor(fila, col["A"]).lower()
+                if a and a not in por_a:
+                    por_a[a] = fila
+                u = gsheets.valor(fila, col["U"]).lower()
+                if u and u not in por_u:
+                    por_u[u] = fila
+                e = gsheets.valor(fila, col["E"]).lower()
+                if e and e not in e_a_b:
+                    e_a_b[e] = gsheets.valor(fila, col["B"])
+            self._idx_cache = {"A": por_a, "U": por_u, "E→B": e_a_b, "col": col}
+        return self._idx_cache
+
+    def clasificacion_ecom(self, skus: str) -> dict[str, str | None]:
+        """Réplica literal de las 4 columnas de clasificación de la planilla
+        ECOM (fórmulas leídas del libro del 01/06/2026, pestaña "16") — la
+        misma fuente que ya traen los períodos importados de la planilla:
+
+        - PM (AD): BUSCARV(B; A:D; 4) → BUSCARV(primer SKU; A:D; 4) →
+          BUSCARV(primer SKU; U:V; 2).
+        - Subcategoria (AE): igual, con A:E col 5 → U:W col 3.
+        - Categoria (AI): SI.ERROR(INDICE(B:B; COINCIDIR(Subcategoria; E:E;
+          0)); "SIN PM").
+        - Subcategoria2 (AJ): BUSCARV(B; A:C; 3) → BUSCARV(primer SKU; A:E;
+          5) → BUSCARV(primer SKU; U:W; 3).
+        - B vacío → "SIN PM" en PM, Subcategoria y Subcategoria2.
+
+        Un PM / subcategoría no encontrado queda `None` (en la planilla es
+        #N/A), y por lo tanto la Categoria da "SIN PM", como en la fórmula."""
+        if not (skus or "").strip():
+            return {"pm": "SIN PM", "subcategoria": "SIN PM", "categoria": "SIN PM", "subcategoria2": "SIN PM"}
+        idx = self._indices()
+        col = idx["col"]
+        completo = skus.strip().lower()
+        primero = skus.split(",")[0].strip().lower()
+
+        def cascada(pasos):
+            for indice, clave, letra in pasos:
+                fila = idx[indice].get(clave)
+                if fila is not None:
+                    return gsheets.valor(fila, col[letra]) or None
+            return None
+
+        pm = cascada([("A", completo, "D"), ("A", primero, "D"), ("U", primero, "V")])
+        subcategoria = cascada([("A", completo, "E"), ("A", primero, "E"), ("U", primero, "W")])
+        subcategoria2 = cascada([("A", completo, "C"), ("A", primero, "E"), ("U", primero, "W")])
+        categoria = idx["E→B"].get((subcategoria or "").strip().lower()) or "SIN PM"
+        return {"pm": pm, "subcategoria": subcategoria, "categoria": categoria, "subcategoria2": subcategoria2}
+
 
 class ResponsableProvider(_AdaptadorBase):
     """Lookup directo por empresa. Las "búsquedas anidadas de respaldo" de
