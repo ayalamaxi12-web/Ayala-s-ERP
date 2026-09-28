@@ -113,6 +113,9 @@ class FilaEcom:
     # (informativo) sin depender de la SQL de Táctica. None = lo resuelve
     # `IvaProvider` (camino del Excel, que no trae el dato).
     factor_iva: Decimal | None = None
+    # Orden despachada por ML Full (logistic_type=fulfillment). None = no se
+    # sabe (Excel). Para el reporte diario "Full" (2026-09-29).
+    es_full: bool | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(

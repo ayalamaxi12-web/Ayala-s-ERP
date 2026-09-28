@@ -805,6 +805,7 @@ def _fila_desde_orden(
         origen_comision=origen_comision,
         fecha_creacion=_fecha_creacion(orden.get("created")),
         factor_iva=_factor_iva(lineas),
+        es_full=orden["id"] in ids_full,
     )
 
 

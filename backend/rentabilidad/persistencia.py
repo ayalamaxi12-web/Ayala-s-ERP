@@ -334,6 +334,7 @@ def construir_venta_ecom(
         orden_externa=fila.orden_externa,
         origen_comision=fila.origen_comision,
         observacion=fila.observacion,
+        es_full=fila.es_full,
     )
 
 

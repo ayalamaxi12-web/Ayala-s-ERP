@@ -315,6 +315,19 @@ corrida tiene un tope total (`--max-minutos`, default 45). Cada paso deja
 una línea con hora en stderr sin buffer (el `fileConfig` de Alembic apaga
 los loggers, por eso antes no se veía nada después de las migraciones).
 
+**Reporte diario para mail (n8n)** — `GET /rentabilidad/reporte/ecom/diario`
+(`reporte_diario.py`), **solo lectura**: resume lo que la corrida ya guardó
+para el ciclo en curso, sin recalcular. Parámetros: `fecha` (default ayer,
+hora Argentina), `top` (default 5). Si está `RENT_REPORTE_TOKEN`, exige el
+header `X-Reporte-Token` (o `?token=`). Devuelve ayer / acumulado del ciclo,
+por PM (con sus 2 SKU que más facturaron), top y pérdidas del día, alertas
+(costo 0 / sin SKU, Frávega estimadas, observaciones, TC usado) y el bloque
+Full + marketplaces (Frávega, OnCity, Megatone). Facturación = Precio Final
+con IVA; rentabilidad % sobre facturación sin IVA; SKU = los de la orden (un
+kit cuenta como su combinación, no se guarda el importe por línea). Full se
+lee de `venta_ecom.es_full` (migración `d4e5f6a7b8c9`, lo completa la
+corrida desde 2026-09-29).
+
 **Pendiente conocido — notas de crédito y cancelaciones**: hoy una nota de
 crédito entra en Ecom como Posventa (precio 0, conserva el costo) para
 netear la venta original. Cuando se conecten los canales directos (API de
