@@ -160,7 +160,7 @@ def formatear(resumen: ResumenCorrida) -> str:
     ]
     if resumen.costo_cero:
         lineas.append(f"COSTO 0 — probable SKU madre, revisar a mano ({len(resumen.costo_cero)}):")
-        lineas += [f"  {orden}  {skus}" for orden, skus in resumen.costo_cero]
+        lineas += [f"  {orden}  {skus or '(sin SKU: la línea no tiene variante cargada)'}" for orden, skus in resumen.costo_cero]
     if resumen.observaciones:
         lineas.append(f"OBSERVACIONES ({len(resumen.observaciones)}):")
         lineas += [f"  {orden}  {obs}" for orden, obs in resumen.observaciones]

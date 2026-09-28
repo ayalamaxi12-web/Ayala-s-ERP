@@ -264,7 +264,7 @@ orden.
 
 | Regla | Implementación |
 |---|---|
-| Órdenes | Tab `closed`, por `MtOrder.created` (hora Argentina). Participan `Cobrado`/`Cobro Parcial`; `Sin Cobro` (Uso Interno) y `Reembolsado` se excluyen. |
+| Órdenes | Abiertas + cerradas (tabs `active` + `closed`; nunca presupuestos ni eliminadas), siempre por **fecha de creación** (`MtOrder.created`, hora Argentina). El filtro es el estado de pago: participan `Cobrado`/`Cobro Parcial`; `Sin Cobro` (Uso Interno), `Reembolsado`, `En Mediación` se excluyen (Maxx, 2026-09-28). NC / devoluciones: siguen neteando vía Posventa. |
 | Costo | `Variant.cost` × cantidad — costo **vigente al correr** (la API no guarda costo histórico por orden). Costo 0 = incidencia (casi siempre SKU madre): no se calcula ni se inventa, se lista para revisar. |
 | Precio SIN IVA | Σ `subtotalSinImpuestos` por línea: IVA real de cada línea (21 / 10,5), no el 1,10 fijo del export de Ecom. |
 | Comisión ML / Woocommerce | Cargos `fee` que MP le cobra al vendedor (`charges_details`, `from=collector`). En Woocommerce incluye el costo de cuotas que absorbe el vendedor; el `financing_fee` del comprador no cuenta. |
