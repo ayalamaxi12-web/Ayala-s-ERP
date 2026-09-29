@@ -40,6 +40,7 @@ TASAS = [
     dict(nombre="costo_operacion_ecom", valor="149.12", motor="ECOM", descripcion="Costo por Operación Ecom — monto fijo en pesos por orden (§7.7, OP), vigente desde 23/08/2026"),
     dict(nombre="oncity_comision_estimada", valor="0.15", motor="ECOM", descripcion="Comisión estimada OnCity — 15% sobre Precio Final (canal manual en Ecom, sin dato real de comisión; 2026-09-29)"),
     dict(nombre="fravega_comision_base", valor="0.15", motor="ECOM", descripcion="Comisión base Frávega — 15% sobre Precio Final, estimado hasta cargar la liquidación quincenal (2026-09-27)"),
+    dict(nombre="oncity_iva_cargos", valor="0.21", motor="ECOM", descripcion="IVA sobre la comisión estimada de OnCity — se suma al costo, mismo criterio que Frávega (Maxx, 2026-09-29)"),
     dict(nombre="fravega_iva_cargos", valor="0.21", motor="ECOM", descripcion="IVA que Frávega factura aparte sobre comisión y fee logístico — se suma al costo (Maxx, 2026-09-29: mismo criterio que ML/MP, comisión completa)"),
     dict(nombre="cf1", valor="0.03", motor="TACTICA", descripcion="Costo financiero 1 — 3%, base bruta"),
     dict(nombre="cf2", valor="0.03", motor="TACTICA", descripcion="Costo financiero 2 — 3%, base neta"),

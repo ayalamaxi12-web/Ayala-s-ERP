@@ -348,6 +348,6 @@ def test_oncity_se_guarda_con_la_comision_estimada(db_session):
                          precio_sin_iva=Decimal("14447.11"), costo_sin_iva=Decimal("2.1"))
     _guardar(db_session, fila)
     venta = _venta(db_session, "1424588")
-    assert venta.comision_venta == Decimal("17481") * Decimal("0.15")
+    assert venta.comision_venta == Decimal("17481") * Decimal("0.15") * IVA_CARGOS
     assert venta.origen_comision == "ESTIMADO_ONCITY"
-    assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15"), 0, "2.1"))
+    assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15") * IVA_CARGOS, 0, "2.1"))
