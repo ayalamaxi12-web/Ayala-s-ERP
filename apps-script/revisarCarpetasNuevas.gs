@@ -11,7 +11,9 @@
  * Estrategia: recorrer ML GLOBAL por niveles con la API avanzada de Drive (v3), pidiendo los hijos de
  * hasta PADRES_POR_CONSULTA carpetas en UNA sola llamada ('a' in parents or 'b' in parents ...), solo
  * carpetas y solo los campos necesarios. Eso es 1 llamada por cada ~40 carpetas en vez de 1 por
- * carpeta como hacía DriveApp.getFolders(), y la profundidad está acotada por MAX_PROFUNDIDAD.
+ * carpeta como hacía DriveApp.getFolders(). Recorre todo el árbol (sin límite de profundidad, salvo
+ * que se fije MAX_PROFUNDIDAD); si el árbol es tan grande que no entra en una corrida, guarda lo que
+ * falta y sigue en la próxima, sin pasarse nunca de los 6 minutos.
  * Se filtra por createdTime para avisar solo las nuevas y se guardan los ids ya avisados para no
  * repetir mails.
  *
@@ -21,9 +23,9 @@
 
 const FOLDER_ID = '1Blsb4o2HSNcpYXag0cVSg3teFoPmChNY'; // ML GLOBAL
 const NOTIFICAR_A = 'CAMBIAR@globalecom.ar';           // varios: separados por coma
-const MAX_PROFUNDIDAD = 3;       // 1 = solo hijas directas de ML GLOBAL; 3 = hasta nietas de nietas
+const MAX_PROFUNDIDAD = 0;       // 0 = sin límite (todo el árbol); 1 = solo hijas directas de ML GLOBAL
 const MARGEN_MIN = 15;           // se re-mira este margen hacia atrás por demoras de indexado (no duplica: hay dedupe)
-const LIMITE_MS = 4.5 * 60 * 1000; // corta antes de los 6 min de Apps Script
+const LIMITE_MS = 4.5 * 60 * 1000; // corta antes de los 6 min de Apps Script y sigue en la próxima corrida
 const PADRES_POR_CONSULTA = 40;  // carpetas padre por llamada a Drive.Files.list
 const DIAS_RECORDAR = 7;         // cuánto tiempo se recuerdan los ids ya avisados
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -38,15 +40,21 @@ function revisarCarpetasNuevas() {
     const ultima = props.getProperty('ULTIMA_REVISION');
     if (!ultima) {
       props.setProperty('ULTIMA_REVISION', inicio.toISOString());
+      borrarPendiente_();
       console.log('Primera ejecución: se toma ' + inicio.toISOString() + ' como punto de partida (no se avisa lo existente).');
       return;
     }
+    // Si la corrida anterior no llegó a recorrer todo el árbol, se sigue desde donde quedó.
+    const pend = leerPendiente_();
     const desde = new Date(new Date(ultima).getTime() - MARGEN_MIN * 60000);
+    const cola = pend ? pend.cola : [{ id: FOLDER_ID, r: 'ML GLOBAL', d: 0 }];
+    const inicioBarrido = pend ? pend.inicio : inicio.toISOString();
     const avisadas = JSON.parse(props.getProperty('AVISADAS') || '{}'); // id -> ms en que se avisó
 
-    const r = buscarCarpetas_(desde, inicio.getTime());
+    const r = buscarCarpetas_(desde, inicio.getTime(), cola);
     const nuevas = r.carpetas.filter(c => !avisadas[c.id]);
-    console.log('Revisadas ' + r.revisadas + ' carpetas en ' + r.niveles + ' nivel(es), ' + r.llamadas + ' llamadas. Nuevas: ' + nuevas.length + (r.completo ? '' : ' (INCOMPLETO por tiempo)'));
+    console.log((pend ? 'Continuación: ' : '') + 'revisadas ' + r.revisadas + ' carpetas, ' + r.llamadas + ' llamadas. Nuevas: ' + nuevas.length +
+                (r.cola.length ? ' — quedan ' + r.cola.length + ' carpetas por revisar, sigue en la próxima corrida' : ''));
 
     if (nuevas.length) {
       enviarMail_(nuevas);
@@ -58,46 +66,74 @@ function revisarCarpetasNuevas() {
     const limpias = {}; ids.forEach(id => limpias[id] = avisadas[id]);
     props.setProperty('AVISADAS', JSON.stringify(limpias));
 
-    // Si no se llegó a recorrer todo, no se avanza la fecha: la próxima corrida vuelve a mirar
-    // desde el mismo punto y el dedupe evita avisar dos veces lo que ya salió.
-    if (r.completo) props.setProperty('ULTIMA_REVISION', inicio.toISOString());
+    if (r.cola.length) {
+      // No se avanza ULTIMA_REVISION hasta terminar el barrido. Si el pendiente se pierde (el caché
+      // expira), el barrido arranca de nuevo con la misma fecha: no se pierde nada, y el dedupe
+      // evita avisar dos veces.
+      guardarPendiente_({ inicio: inicioBarrido, cola: r.cola });
+    } else {
+      borrarPendiente_();
+      props.setProperty('ULTIMA_REVISION', inicioBarrido);
+    }
   } finally {
     lock.releaseLock();
   }
 }
 
-/** Recorre ML GLOBAL por niveles y devuelve las carpetas creadas desde `desde`. */
-function buscarCarpetas_(desde, t0) {
-  const rutas = {}; rutas[FOLDER_ID] = 'ML GLOBAL';
-  const vistas = {}; vistas[FOLDER_ID] = true;
+/** Recorre el árbol desde `cola` (FIFO de {id, r: ruta, d: profundidad}) y devuelve las carpetas creadas
+ *  desde `desde`, más lo que quedó sin revisar si se acabó el tiempo. */
+function buscarCarpetas_(desde, t0, cola) {
+  cola = cola.slice();
   const carpetas = [];
-  let nivel = [FOLDER_ID], niveles = 0, revisadas = 0, llamadas = 0, completo = true;
-  while (nivel.length && niveles < MAX_PROFUNDIDAD && completo) {
-    niveles++;
-    const siguiente = [];
-    for (let i = 0; i < nivel.length; i += PADRES_POR_CONSULTA) {
-      if (Date.now() - t0 > LIMITE_MS) { completo = false; break; }
-      const lote = nivel.slice(i, i + PADRES_POR_CONSULTA);
-      const q = '(' + lote.map(id => "'" + id + "' in parents").join(' or ') + ") and mimeType='" + FOLDER_MIME + "' and trashed=false";
-      const res = listarTodo_(q);
-      llamadas += res.llamadas;
-      res.files.forEach(f => {
-        if (vistas[f.id]) return;
-        vistas[f.id] = true; revisadas++;
-        const padre = (f.parents || []).find(p => lote.indexOf(p) >= 0) || lote[0];
-        rutas[f.id] = rutas[padre] + ' / ' + f.name;
-        siguiente.push(f.id);
-        if (new Date(f.createdTime) >= desde) {
-          const u = (f.owners && f.owners[0]) || f.lastModifyingUser || {}; // en unidades compartidas no hay owners
-          carpetas.push({ id: f.id, nombre: f.name, ruta: rutas[f.id], creada: new Date(f.createdTime),
-                          autor: u.displayName || u.emailAddress || '(desconocido)', email: u.emailAddress || '',
-                          link: f.webViewLink || ('https://drive.google.com/drive/folders/' + f.id) });
-        }
-      });
-    }
-    nivel = siguiente;
+  let revisadas = 0, llamadas = 0;
+  while (cola.length) {
+    if (Date.now() - t0 > LIMITE_MS) break;
+    const lote = cola.splice(0, PADRES_POR_CONSULTA);
+    const porId = {}; lote.forEach(p => porId[p.id] = p);
+    const q = '(' + lote.map(p => "'" + p.id + "' in parents").join(' or ') + ") and mimeType='" + FOLDER_MIME + "' and trashed=false";
+    let res;
+    try { res = listarTodo_(q); }
+    catch (e) { cola.unshift.apply(cola, lote); throw e; }
+    llamadas += res.llamadas;
+    res.files.forEach(f => {
+      const padre = porId[(f.parents || []).find(id => porId[id])] || lote[0];
+      const ruta = padre.r + ' / ' + f.name, d = padre.d + 1;
+      revisadas++;
+      if (!MAX_PROFUNDIDAD || d < MAX_PROFUNDIDAD) cola.push({ id: f.id, r: ruta, d: d });
+      if (new Date(f.createdTime) >= desde) {
+        const u = (f.owners && f.owners[0]) || f.lastModifyingUser || {}; // en unidades compartidas no hay owners
+        carpetas.push({ id: f.id, nombre: f.name, ruta: ruta, creada: new Date(f.createdTime),
+                        autor: u.displayName || u.emailAddress || '(desconocido)', email: u.emailAddress || '',
+                        link: f.webViewLink || ('https://drive.google.com/drive/folders/' + f.id) });
+      }
+    });
   }
-  return { carpetas, revisadas, niveles, llamadas, completo };
+  return { carpetas, cola, revisadas, llamadas };
+}
+
+// El barrido pendiente se guarda en CacheService (hasta 100 KB por clave, se parte en trozos).
+const PEND_KEY = 'RCN_PEND', PEND_TROZO = 90000, PEND_MAX_TROZOS = 50;
+
+function guardarPendiente_(p) {
+  const json = JSON.stringify(p), n = Math.ceil(json.length / PEND_TROZO);
+  if (n > PEND_MAX_TROZOS) { console.warn('Pendiente demasiado grande para guardar; la próxima corrida reinicia el barrido.'); borrarPendiente_(); return; }
+  const vals = {}; vals[PEND_KEY] = String(n);
+  for (let i = 0; i < n; i++) vals[PEND_KEY + '_' + i] = json.slice(i * PEND_TROZO, (i + 1) * PEND_TROZO);
+  CacheService.getScriptCache().putAll(vals, 21600); // 6 h
+}
+
+function leerPendiente_() {
+  const cache = CacheService.getScriptCache(), n = parseInt(cache.get(PEND_KEY), 10);
+  if (!n) return null;
+  const keys = []; for (let i = 0; i < n; i++) keys.push(PEND_KEY + '_' + i);
+  const vals = cache.getAll(keys);
+  if (keys.some(k => vals[k] == null)) return null; // se perdió un trozo: se reinicia el barrido
+  try { return JSON.parse(keys.map(k => vals[k]).join('')); } catch (e) { return null; }
+}
+
+function borrarPendiente_() {
+  const keys = [PEND_KEY]; for (let i = 0; i < PEND_MAX_TROZOS; i++) keys.push(PEND_KEY + '_' + i);
+  CacheService.getScriptCache().removeAll(keys);
 }
 
 /** Drive.Files.list paginado, incluyendo ítems de otros dueños y de unidades compartidas. */
@@ -159,13 +195,15 @@ function instalarTrigger() {
 function diagnostico(dias) {
   dias = dias || 7;
   const t0 = Date.now();
-  const r = buscarCarpetas_(new Date(t0 - dias * 86400000), t0);
-  console.log('Revisadas ' + r.revisadas + ' carpetas, ' + r.llamadas + ' llamadas, ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s' + (r.completo ? '' : ' (INCOMPLETO)'));
+  const r = buscarCarpetas_(new Date(t0 - dias * 86400000), t0, [{ id: FOLDER_ID, r: 'ML GLOBAL', d: 0 }]);
+  console.log('Revisadas ' + r.revisadas + ' carpetas, ' + r.llamadas + ' llamadas, ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s' +
+              (r.cola.length ? ' (INCOMPLETO: quedaron ' + r.cola.length + ' sin revisar; el trigger lo termina en varias corridas)' : ' — árbol completo'));
   r.carpetas.forEach(c => console.log(c.creada.toISOString() + ' | ' + c.autor + ' | ' + c.ruta));
 }
 
 /** Borra el estado guardado (la próxima corrida arranca de cero, sin avisar lo existente). */
 function resetearEstado() {
+  borrarPendiente_();
   PropertiesService.getScriptProperties().deleteProperty('ULTIMA_REVISION');
   PropertiesService.getScriptProperties().deleteProperty('AVISADAS');
 }
