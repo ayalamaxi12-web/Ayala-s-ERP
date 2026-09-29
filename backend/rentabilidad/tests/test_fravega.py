@@ -137,6 +137,11 @@ def _venta(db, numero_orden):
     return db.query(VentaEcom).filter_by(numero_orden=numero_orden).one()
 
 
+# IVA que Frávega factura aparte sobre comisión y fee: se suma al costo
+# (Maxx, 2026-09-29 — comisión completa, mismo criterio que ML/MP).
+IVA_CARGOS = Decimal("1.21")
+
+
 def _rentabilidad(precio_sin_iva, precio_final, comision, envio, costo_usd):
     q, v = Decimal(precio_sin_iva), Decimal(precio_final)
     return q - comision - envio - v * Decimal("0.012") - q * Decimal("0.05") - Decimal("149.12") - Decimal(costo_usd) * TC
@@ -146,10 +151,10 @@ def test_sin_liquidacion_fravega_se_guarda_con_la_comision_base_estimada(db_sess
     _guardar(db_session, _fila_fravega())
     venta = _venta(db_session, "1387346")
     assert venta.origen_comision == "ESTIMADO_FRAVEGA"
-    assert venta.comision_venta == Decimal("760537.19") * Decimal("0.15")
+    assert venta.comision_venta == Decimal("760537.19") * Decimal("0.15") * IVA_CARGOS
     assert venta.costo_envio == 0
     assert venta.orden_externa == "v90781066frvg-01"
-    assert _cerca(venta.rentabilidad, _rentabilidad("688268.95", "760537.19", Decimal("114080.5785"), 0, "96.34"))
+    assert _cerca(venta.rentabilidad, _rentabilidad("688268.95", "760537.19", Decimal("114080.5785") * IVA_CARGOS, 0, "96.34"))
     assert [v.numero_orden for v in ventas_fravega_estimadas(db_session)] == ["1387346"]
 
 
@@ -159,10 +164,12 @@ def test_al_cargar_la_liquidacion_se_reemplaza_por_el_real_y_se_recalcula(db_ses
 
     venta = _venta(db_session, "1387346")
     assert venta.origen_comision == "LIQUIDACION_FRAVEGA"
-    assert venta.comision_venta == Decimal("235766.5289")
-    assert venta.costo_envio == Decimal("14639")
-    # 245.810,81 — el número real del 01/06/2026 validado con Maxx
-    assert _cerca(venta.rentabilidad, Decimal("245810.81"), tol=Decimal("0.5"))
+    assert venta.comision_venta == Decimal("235766.5289") * IVA_CARGOS
+    assert venta.costo_envio == Decimal("14639") * IVA_CARGOS
+    # 245.810,81 — el número del 01/06/2026 validado con Maxx, con comisión y
+    # fee sin IVA — menos el 21% de IVA sobre ambos que ahora se descuenta:
+    # 245.810,81 − 0,21 × (235.766,53 + 14.639) = 193.225,65
+    assert _cerca(venta.rentabilidad, Decimal("193225.65"), tol=Decimal("0.5"))
     assert _cerca(venta.rentabilidad_usd, venta.rentabilidad / TC)
     assert resultado.ventas_actualizadas == ["1387346"]
     assert ventas_fravega_estimadas(db_session) == []
@@ -182,7 +189,7 @@ def test_un_cierre_guardado_despues_de_la_liquidacion_ya_toma_el_real(db_session
     _guardar(db_session, _fila_fravega())  # ej. se re-guarda el día ya liquidado
     venta = _venta(db_session, "1387346")
     assert venta.origen_comision == "LIQUIDACION_FRAVEGA"
-    assert venta.comision_venta == Decimal("235766.5289")
+    assert venta.comision_venta == Decimal("235766.5289") * IVA_CARGOS
 
 
 def test_cancelada_en_fravega_pero_cobrada_en_ecom_no_se_fuerza_se_observa(db_session):
@@ -341,6 +348,6 @@ def test_oncity_se_guarda_con_la_comision_estimada(db_session):
                          precio_sin_iva=Decimal("14447.11"), costo_sin_iva=Decimal("2.1"))
     _guardar(db_session, fila)
     venta = _venta(db_session, "1424588")
-    assert venta.comision_venta == Decimal("17481") * Decimal("0.15")
+    assert venta.comision_venta == Decimal("17481") * Decimal("0.15") * IVA_CARGOS
     assert venta.origen_comision == "ESTIMADO_ONCITY"
-    assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15"), 0, "2.1"))
+    assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15") * IVA_CARGOS, 0, "2.1"))

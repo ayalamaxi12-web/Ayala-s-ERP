@@ -221,6 +221,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="sidebar-section">
     <div class="sidebar-section-label">🚀 Ayala Core</div>
     <div class="sidebar-item" data-page="ayala-core" onclick="goPage('ayala-core',this)"><span class="icon">⚙️</span> Motor de Precios</div>
+    <div class="sidebar-item" data-page="pricing" onclick="goPage('pricing',this)"><span class="icon">📊</span> Precios &amp; Márgenes</div>
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
@@ -1328,6 +1329,46 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
 </div>
 
+<!-- Motor de precios, etapa 2 (2026-09-29): todos los SKU con el precio que
+cargó el PM y el margen proyectado por canal del motor unificado
+(backend/rentabilidad/pricing_pm.py). Margen = rentabilidad / venta sin IVA,
+igual que la rentabilidad real, que se muestra al lado. -->
+<div id="page-pricing" class="page">
+  <div style="margin-bottom:4px">
+    <div class="section-hdr" style="margin-bottom:4px">📊 Precios &amp; Márgenes — motor unificado</div>
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Margen proyectado por canal = rentabilidad / venta sin IVA (mismo criterio que la rentabilidad real). Costo e IVA de Táctica, TC BNA del día. "Real" = ventas del ciclo en curso, solo órdenes de un SKU.</div>
+  </div>
+  <div class="erp-filters" style="margin:10px 0">
+    <input type="text" id="pr-buscar" class="fi" placeholder="Buscar SKU..." style="width:160px" onkeydown="if(event.key==='Enter')pricingLoad()">
+    <select id="pr-pm" class="fi"><option value="">Todos los PM</option></select>
+    <select id="pr-cat" class="fi"><option value="">Todas las categorías</option></select>
+    <select id="pr-canal" class="fi"><option value="">Todos los canales</option><option value="WEB">Web</option><option value="ML">ML</option><option value="FRAVEGA">Frávega</option><option value="ONCITY">OnCity</option></select>
+    <label style="font-size:10px;color:var(--text2);display:flex;gap:4px;align-items:center"><input type="checkbox" id="pr-neg"> Margen negativo</label>
+    <label style="font-size:10px;color:var(--text2);display:flex;gap:4px;align-items:center">Margen &lt; <input type="text" id="pr-max" class="fi" style="width:44px" placeholder="%"></label>
+    <label style="font-size:10px;color:var(--text2);display:flex;gap:4px;align-items:center">Cambió desde <input type="date" id="pr-desde" class="fi"></label>
+    <button class="btn primary" onclick="pricingLoad()">🔍 Consultar</button>
+    <button class="btn" onclick="pricingExport()">⬇️ Excel</button>
+    <span style="flex:1"></span>
+    <label class="btn" style="cursor:pointer">📥 Cargar planilla PM<input type="file" accept=".xlsx" style="display:none" onchange="pricingUpload(this)"></label>
+  </div>
+  <div id="pr-info" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px"></div>
+  <div class="table-wrap">
+    <table id="pr-table">
+      <thead><tr>
+        <th onclick="pricingSort('sku')">SKU</th><th onclick="pricingSort('pm')">PM</th><th onclick="pricingSort('categoria')">Categoría</th>
+        <th onclick="pricingSort('costo_usd')">Costo USD</th>
+        <th onclick="pricingSort('WEB')">Web</th><th onclick="pricingSort('ML')">ML</th><th onclick="pricingSort('FRAVEGA')">Frávega</th><th onclick="pricingSort('ONCITY')">OnCity</th>
+        <th onclick="pricingSort('vigente_desde')">Vigente desde</th>
+      </tr></thead>
+      <tbody id="pr-tbody"><tr><td colspan="9" style="color:var(--text3)">Consultá para ver los SKU.</td></tr></tbody>
+    </table>
+  </div>
+  <div id="pr-pag" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
+  <div id="pr-ficha" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;overflow:auto" onclick="if(event.target===this)this.style.display='none'">
+    <div style="max-width:980px;margin:40px auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px" id="pr-ficha-body"></div>
+  </div>
+</div>
+
 <div id="page-ayala-core" class="page">
   <div style="margin-bottom:4px">
     <div class="section-hdr" style="margin-bottom:4px">🚀 Ayala Core — Motor de Precios</div>
@@ -1675,6 +1716,7 @@ function goPage(page,el){
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();}
   if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
+  if(page==='pricing'&&!PR.cargado)pricingLoad();
 }
 
 // ── MULTI-SELECT ──
@@ -3805,6 +3847,99 @@ function ofmAlertasOnResult(result,cuenta){
 // ── Ayala Core — motor de precios propio (Etapa 1, solo lectura). Ver
 // docs/business/COMERCIAL/canales/mercadolibre/AYALA_CORE.md -- el cálculo
 // vive en backend/ayala_core.py, acá solo se pide/muestra. ──
+// ── PRECIOS & MÁRGENES (motor de precios, etapa 2) ──
+const PR={filas:[],cargado:false,sort:{col:'sku',dir:1},page:1,pageSize:100};
+const PR_CANALES=['WEB','ML','FRAVEGA','ONCITY'];
+function prPct(m){return m==null?'—':(Number(m)*100).toFixed(1)+'%';}
+function prColor(m){if(m==null)return 'var(--text3)';const p=Number(m)*100;return p<0?'var(--red)':p<10?'var(--yellow)':'var(--green)';}
+function prCelda(c){
+  if(!c)return '<td style="color:var(--text3)">—</td>';
+  const av=(c.avisos||[]).filter(Boolean),tip=av.join(' · ').replace(/"/g,'&quot;');
+  const real=c.real!=null?`<div style="font-size:9px;color:var(--text3)">real ${prPct(c.real)} (${c.real_ordenes})</div>`:'';
+  return `<td title="${tip}"><div style="font-weight:700;color:${prColor(c.margen)}">${prPct(c.margen)}${av.length?' <span style="color:var(--yellow)">⚠</span>':''}</div><div style="font-size:9px;color:var(--text2)">${fmt$(c.precio)}</div>${real}</td>`;
+}
+async function pricingLoad(){
+  const url=getBackendUrl();if(!url){toast('Configurá la URL del backend','error');return;}
+  const p=new URLSearchParams();
+  const v=id=>(qs(id).value||'').trim();
+  if(v('pr-buscar'))p.set('buscar',v('pr-buscar'));
+  if(v('pr-pm'))p.set('pm',v('pr-pm'));
+  if(v('pr-cat'))p.set('categoria',v('pr-cat'));
+  if(v('pr-canal'))p.set('canal',v('pr-canal'));
+  if(qs('pr-neg').checked)p.set('solo_negativos','true');
+  if(v('pr-max'))p.set('margen_max',v('pr-max').replace(',','.'));
+  if(v('pr-desde'))p.set('cambiado_desde',v('pr-desde'));
+  qs('pr-info').textContent='Calculando...';
+  try{
+    const res=await fetch(`${url}/rentabilidad/pricing/skus?${p}`);
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.detail||res.status);
+    PR.filas=d.filas||[];PR.cargado=true;PR.page=1;
+    const sinFiltro=![...p.keys()].length;
+    if(sinFiltro){
+      const opts=(k,sel,todos)=>{const cur=qs(sel).value,vals=[...new Set(PR.filas.map(f=>f[k]).filter(Boolean))].sort();qs(sel).innerHTML=`<option value="">${todos}</option>`+vals.map(x=>`<option${x===cur?' selected':''}>${x}</option>`).join('');};
+      opts('pm','pr-pm','Todos los PM');opts('categoria','pr-cat','Todas las categorías');
+    }
+    qs('pr-info').innerHTML=`${d.total} SKU · TC ${Number(d.tc).toLocaleString('es-AR')} (${d.tc_origen}) · real: ciclo ${d.periodo_real}`+(d.avisos||[]).map(a=>`<div style="color:var(--yellow)">⚠ ${a}</div>`).join('');
+    pricingRender();
+  }catch(e){qs('pr-info').textContent='';toast('No se pudo calcular: '+e.message,'error');}
+}
+function prValor(f,col){if(PR_CANALES.includes(col)){const c=f.canales[col];return c&&c.margen!=null?Number(c.margen):null;}const x=f[col];return col==='costo_usd'?(x==null?null:Number(x)):(x||'');}
+function pricingSort(col){PR.sort=PR.sort.col===col?{col,dir:-PR.sort.dir}:{col,dir:1};pricingRender();}
+function pricingRender(){
+  const {col,dir}=PR.sort;
+  const filas=[...PR.filas].sort((a,b)=>{const x=prValor(a,col),y=prValor(b,col);if(x==null)return 1;if(y==null)return -1;return (x>y?1:x<y?-1:0)*dir;});
+  const pages=Math.max(1,Math.ceil(filas.length/PR.pageSize));PR.page=Math.min(PR.page,pages);
+  const vis=filas.slice((PR.page-1)*PR.pageSize,PR.page*PR.pageSize);
+  qs('pr-tbody').innerHTML=vis.length?vis.map(f=>`<tr style="cursor:pointer" onclick="pricingFicha('${f.sku.replace(/'/g,"\\'")}')"><td class="sku-cell">${f.sku}</td><td>${f.pm||'—'}</td><td style="font-size:10px">${f.categoria||'—'}</td><td class="mono">${f.costo_usd!=null?Number(f.costo_usd).toFixed(2):'<span style="color:var(--red)">sin costo</span>'}</td>${PR_CANALES.map(c=>prCelda(f.canales[c])).join('')}<td class="mono" style="font-size:10px">${f.vigente_desde}<div style="color:var(--text3)">${f.cargado_por||''}</div></td></tr>`).join(''):'<tr><td colspan="9" style="color:var(--text3)">Sin SKU para estos filtros.</td></tr>';
+  qs('pr-pag').innerHTML=pages>1?`<button class="btn-xs" onclick="PR.page=Math.max(1,PR.page-1);pricingRender()">◀</button> Página ${PR.page} de ${pages} <button class="btn-xs" onclick="PR.page=Math.min(${pages},PR.page+1);pricingRender()">▶</button>`:'';
+}
+const PR_CARGOS={comision:'Comisión',cuotas:'Cuotas',financiera:'Comisión financiera',costo_fijo:'Costo fijo ML',envio:'Envío',fee_logistico:'Fee logístico',imp_cheque:'Imp. cheque',iibb:'IIBB',costo:'Costo producto'};
+async function pricingFicha(sku){
+  const url=getBackendUrl();if(!url)return;
+  qs('pr-ficha').style.display='block';qs('pr-ficha-body').innerHTML='Cargando...';
+  try{
+    const res=await fetch(`${url}/rentabilidad/pricing/skus/${encodeURIComponent(sku)}`);
+    const d=await res.json();if(!res.ok)throw new Error(d.detail||res.status);
+    const cs=PR_CANALES.filter(c=>d.canales[c]);
+    const nombres=[...new Set(cs.flatMap(c=>Object.keys(d.canales[c].cargos||{})))];
+    const fila=(t,fn,b)=>`<tr><td${b?' style="font-weight:700"':''}>${t}</td>${cs.map(c=>`<td class="mono"${b?' style="font-weight:700"':''}>${fn(d.canales[c])}</td>`).join('')}</tr>`;
+    const m=v=>v==null?'—':fmt$(v);
+    let h=`<div style="display:flex;justify-content:space-between"><div class="section-hdr">${d.sku}</div><button class="btn-xs" onclick="qs('pr-ficha').style.display='none'">✕</button></div>`;
+    h+=`<div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px">${d.pm||'sin PM'} · ${d.categoria||'sin categoría'} · costo USD ${d.costo_usd!=null?Number(d.costo_usd).toFixed(2):'—'} · IVA ${d.iva_factor||'—'} · TC ${Number(d.tc).toLocaleString('es-AR')}</div>`;
+    h+=`<div class="table-wrap"><table><thead><tr><th>Precio → margen</th>${cs.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    h+=fila('Precio',c=>m(c.precio),true)+fila('Venta sin IVA',c=>m(c.venta_sin_iva));
+    h+=nombres.map(n=>fila('− '+(PR_CARGOS[n]||n),c=>c.cargos&&c.cargos[n]!=null?m(c.cargos[n]):'—')).join('');
+    h+=fila('= Rentabilidad',c=>m(c.rentabilidad),true)+fila('Margen',c=>`<span style="color:${prColor(c.margen)}">${prPct(c.margen)}</span>`,true);
+    h+=fila('Avisos',c=>(c.avisos||[]).filter(Boolean).map(a=>`<div style="font-size:9px;color:var(--yellow);white-space:normal;max-width:220px">⚠ ${a}</div>`).join(''));
+    h+='</tbody></table></div>';
+    h+=`<div class="section-hdr" style="margin-top:14px;font-size:12px">Historial de precios</div><div class="table-wrap"><table><thead><tr><th>Vigente desde</th><th>Quién</th><th>Web</th><th>Forma pago</th><th>% ML</th><th>Cond. ML</th><th>Frávega</th><th>OnCity</th><th>Motivo</th></tr></thead><tbody>`;
+    h+=(d.historial||[]).map(x=>`<tr><td class="mono">${x.vigente_desde}</td><td>${x.cargado_por}</td><td class="mono">${m(x.precio_web)}</td><td>${x.forma_pago_web||'—'}</td><td class="mono">${x.pct_ml!=null?Number(x.pct_ml).toFixed(4):'—'}</td><td>${x.condicion_ml||'—'}</td><td class="mono">${m(x.precio_fravega)}</td><td class="mono">${m(x.precio_oncity)}</td><td style="font-size:10px">${x.motivo||''}</td></tr>`).join('');
+    h+='</tbody></table></div>';
+    qs('pr-ficha-body').innerHTML=h;
+  }catch(e){qs('pr-ficha-body').innerHTML=`<div style="color:var(--red)">No se pudo abrir la ficha: ${e.message}</div>`;}
+}
+async function pricingUpload(inp){
+  const url=getBackendUrl(),file=inp.files[0];inp.value='';
+  if(!url||!file)return;
+  const quien=prompt('¿Quién hace la carga? (queda registrado en cada precio)',localStorage.getItem('ofm_operador')||'');
+  if(!quien)return;
+  const fd=new FormData();fd.append('archivo',file);fd.append('cargado_por',quien);
+  toast('Cargando '+file.name+'...');
+  try{
+    const res=await fetch(`${url}/rentabilidad/pricing/carga-pm`,{method:'POST',body:fd});
+    const d=await res.json();if(!res.ok)throw new Error(d.detail||res.status);
+    toast(`${file.name}: ${d.nuevos} nuevos, ${d.cambiados} cambiados, ${d.sin_cambios} sin cambios`+(d.duplicados.length?` · ${d.duplicados.length} duplicados ignorados`:''));
+    pricingLoad();
+  }catch(e){toast('No se pudo cargar: '+e.message,'error');}
+}
+function pricingExport(){
+  if(!PR.filas.length){toast('Consultá primero','error');return;}
+  const rows=[['SKU','PM','Categoría','Costo USD',...PR_CANALES.flatMap(c=>[c+' precio',c+' margen %',c+' real %',c+' avisos']),'Vigente desde','Cargado por']];
+  PR.filas.forEach(f=>rows.push([f.sku,f.pm||'',f.categoria||'',f.costo_usd??'',...PR_CANALES.flatMap(c=>{const x=f.canales[c];return x?[x.precio,x.margen!=null?(x.margen*100).toFixed(2):'',x.real!=null?(x.real*100).toFixed(2):'',(x.avisos||[]).filter(Boolean).join(' · ')]:['','','',''];}),f.vigente_desde,f.cargado_por||'']));
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'}));a.download=`precios_margenes_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
 let ayalaCoreLoaded=false;
 let AC_SKUS=[];
 const AC_COND_LABEL={contado:'Contado',reducida:'Reducida','3':'3 cuotas','6':'6 cuotas','9':'9 cuotas','12':'12 cuotas'};
