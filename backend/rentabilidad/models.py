@@ -430,3 +430,114 @@ class LiquidacionFravega(Base):
     liquidacion_hasta: Mapped[date] = mapped_column(Date)
     archivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+# ── Motor de precios (diseño: doc "Motor de Pricing Ayala — Diseño detallado",
+# 2026-09-29). Nada se pisa: cada cambio es una fila nueva con
+# `vigente_desde` y quién lo cargó; lo vigente a una fecha es la última fila
+# con `vigente_desde` <= esa fecha (`motor_precios.cargar_parametros`). ML y
+# Mercado Pago web NUNCA comparten fila: los separa `canal`. Porcentajes como
+# fracción (0.155 = 15,5%), igual que `parametro_tasa`. ──
+
+class PricingParametro(Base):
+    """Valores sueltos del motor por canal (`*` = todos): iibb, imp_cheque,
+    iva_cargos, comisión general / base, comisión MP por medio, umbrales,
+    fee logístico por defecto."""
+
+    __tablename__ = "pricing_parametro"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    canal: Mapped[str] = mapped_column(String(16), index=True)  # ML | WEB | FRAVEGA | MEGATONE | ONCITY | *
+    clave: Mapped[str] = mapped_column(String(64), index=True)
+    valor: Mapped[Decimal] = mapped_column(MONEY)
+    vigente_desde: Mapped[date] = mapped_column(Date)
+    cargado_por: Mapped[str] = mapped_column(String(128))
+    descripcion: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class PricingComisionCategoria(Base):
+    """Comisión por canal y categoría de GRAL CATEGORIAS. La categoría sin
+    fila usa `comision_general` del canal (15,5% en ML)."""
+
+    __tablename__ = "pricing_comision_categoria"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    canal: Mapped[str] = mapped_column(String(16), index=True)
+    categoria: Mapped[str] = mapped_column(String(128))
+    pct: Mapped[Decimal] = mapped_column(FACTOR)
+    origen: Mapped[str | None] = mapped_column(String(128), nullable=True)  # "cargos reales ciclo 23/08→22/09" / manual
+    vigente_desde: Mapped[date] = mapped_column(Date)
+    cargado_por: Mapped[str] = mapped_column(String(128))
+    cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class PricingCuotas(Base):
+    """Costo de financiación por canal y plan ("reducida", "3", "6"...).
+    Contado / 1 cuota no lleva fila: cuesta 0."""
+
+    __tablename__ = "pricing_cuotas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    canal: Mapped[str] = mapped_column(String(16), index=True)
+    plan: Mapped[str] = mapped_column(String(16))
+    pct: Mapped[Decimal] = mapped_column(FACTOR)
+    vigente_desde: Mapped[date] = mapped_column(Date)
+    cargado_por: Mapped[str] = mapped_column(String(128))
+    cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class PricingTramo(Base):
+    """Montos por escala. `unidad` = "precio" → rige en [desde, hasta);
+    "kg" (kilo aforado) → rige en (desde, hasta]. `hasta` vacío = sin tope.
+    Una tabla (ej. `ml_costo_fijo`) se reemplaza entera: vale el conjunto de
+    filas con la `vigente_desde` más reciente <= la fecha."""
+
+    __tablename__ = "pricing_tramo"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tabla: Mapped[str] = mapped_column(String(64), index=True)
+    unidad: Mapped[str] = mapped_column(String(8))  # precio | kg
+    desde: Mapped[Decimal] = mapped_column(MONEY)
+    hasta: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    valor: Mapped[Decimal] = mapped_column(MONEY)
+    vigente_desde: Mapped[date] = mapped_column(Date)
+    cargado_por: Mapped[str] = mapped_column(String(128))
+    cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class PricingSku(Base):
+    """Lo que carga el PM, una fila por cambio (nunca se pisa). Vacío =
+    no se vende en ese canal."""
+
+    __tablename__ = "pricing_sku"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    sku: Mapped[str] = mapped_column(String(64), index=True)
+    precio_web: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)  # con IVA
+    forma_pago_web: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "1", "3", "6"... cuotas sin interés
+    pct_ml: Mapped[Decimal | None] = mapped_column(FACTOR, nullable=True)  # factor sobre precio web
+    condicion_ml: Mapped[str | None] = mapped_column(String(16), nullable=True)  # contado | reducida | 3 | 6 | 9 | 12
+    precio_fravega: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    precio_megatone: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    precio_oncity: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    vigente_desde: Mapped[date] = mapped_column(Date)
+    cargado_por: Mapped[str] = mapped_column(String(128))
+    motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cargado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class PricingSkuLogistica(Base):
+    """Peso real (con packaging) y medidas por SKU, para el kilo aforado
+    del fee logístico. Se piden a depósito (2026-09-29): hasta tenerlos el
+    motor usa el fee histórico del SKU y, si no hay, el promedio general."""
+
+    __tablename__ = "pricing_sku_logistica"
+
+    sku: Mapped[str] = mapped_column(String(64), primary_key=True)
+    peso_kg: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    alto_cm: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    ancho_cm: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    largo_cm: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    origen: Mapped[str | None] = mapped_column(String(64), nullable=True)  # depósito | planilla
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

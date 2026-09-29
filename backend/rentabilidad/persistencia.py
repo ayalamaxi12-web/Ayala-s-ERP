@@ -378,25 +378,38 @@ def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decim
 
     - Liquidada (suma de todas las liquidaciones cargadas deja venta neta):
       comisión y fee logístico reales → `LIQUIDACION_FRAVEGA`.
+    - Comisión y fee (reales o estimados) llevan sumado el IVA que Frávega
+      factura aparte (`fravega_iva_cargos`, 21%): la liquidación los trae
+      sin IVA y el costo es la comisión completa (Maxx, 2026-09-29 —
+      mismo criterio que ML/MP y que el motor de precios).
     - Sin liquidación todavía: comisión base estimada
       (`fravega_comision_base` × Precio Final), fee 0 → `ESTIMADO_FRAVEGA`,
       hasta que llegue la liquidación de la quincena.
     - Cancelada en Frávega (la liquidación la revierte entera) pero cobrada
       en Ecom: no se fuerza nada — sigue estimada y lleva una observación
       para revisarla a mano (caso real: 1387291 del 01/06/2026)."""
+    mas_iva = 1 + _tasa(db, "fravega_iva_cargos")
     liquidada = liquidacion_neta_fravega(db, orden_externa) if orden_externa else None
     if liquidada is not None and not liquidada.cancelada:
-        return ComisionFravega(liquidada.comision, liquidada.fee_logistico, ORIGEN_COMISION_LIQUIDACION_FRAVEGA, None)
+        return ComisionFravega(
+            liquidada.comision * mas_iva, liquidada.fee_logistico * mas_iva, ORIGEN_COMISION_LIQUIDACION_FRAVEGA, None,
+        )
     if liquidada is not None:
         observacion = OBSERVACION_CANCELADA_EN_FRAVEGA
     elif not orden_externa:
         observacion = OBSERVACION_FRAVEGA_SIN_ORDEN
     else:
         observacion = None
-    tasa = db.get(ParametroTasa, "fravega_comision_base")
+    return ComisionFravega(
+        precio_final * _tasa(db, "fravega_comision_base") * mas_iva, Decimal(0), ORIGEN_COMISION_ESTIMADO_FRAVEGA, observacion,
+    )
+
+
+def _tasa(db: Session, nombre: str) -> Decimal:
+    tasa = db.get(ParametroTasa, nombre)
     if tasa is None:
-        raise ValueError("Falta sembrar el parámetro de tasa 'fravega_comision_base' (ver seed.py).")
-    return ComisionFravega(precio_final * tasa.valor, Decimal(0), ORIGEN_COMISION_ESTIMADO_FRAVEGA, observacion)
+        raise ValueError(f"Falta sembrar el parámetro de tasa '{nombre}' (ver seed.py).")
+    return tasa.valor
 
 
 def resolver_comision_fravega(db: Session, fila: FilaEcom) -> FilaEcom:

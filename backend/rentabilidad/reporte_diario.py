@@ -130,7 +130,7 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
         bloque = _bloque(vs, dia, top)
         if clave == "fravega":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA)
-            bloque["nota"] = "Comisión estimada (15%) hasta cargar la liquidación quincenal; después pasa a la real."
+            bloque["nota"] = "Comisión estimada (15% + IVA 21%) hasta cargar la liquidación quincenal; después pasa a la real (también + IVA)."
         elif clave == "oncity":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_ONCITY)
             bloque["nota"] = "Canal manual en Ecom sin dato de comisión: se descuenta una comisión estimada (15% del Precio Final)."
