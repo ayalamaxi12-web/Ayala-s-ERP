@@ -18,7 +18,7 @@ arquitectura pedido por Maxx, 2026-08-10):
 """
 import tempfile
 import time
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -26,7 +26,8 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import gsheets, seed
+from . import gsheets, pricing_pm, seed
+from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .adapters import (
     ClasificacionProvider,
     CostoVigenteProvider,
@@ -915,3 +916,141 @@ def historico_tactica(incluir_excluidos: bool = False) -> list[VentaTacticaOut]:
 def historico_ecom(incluir_excluidos: bool = False) -> list[ResultadoEcomOut]:
     with sesion() as db:
         return historico_ecom_de(db, incluir_excluidos)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# MOTOR DE PRECIOS — etapa 2: carga inicial de los precios de los PM y vista
+# de todos los SKU con su margen proyectado por canal (pricing_pm.py).
+# ══════════════════════════════════════════════════════════════════════════
+
+class CargaPmOut(BaseModel):
+    archivo: str | None
+    leidos: int
+    nuevos: int
+    cambiados: int
+    sin_cambios: int
+    duplicados: list[str]
+    sin_precio_web: list[str]
+
+
+@router.post("/pricing/carga-pm", response_model=CargaPmOut)
+async def pricing_carga_pm(
+    archivo: UploadFile = File(...),
+    cargado_por: str = Form(...),
+    motivo: str | None = Form(default=None),
+) -> CargaPmOut:
+    """Sube la planilla de un PM ("VENTAS POR CANALES <PM>", .xlsx) y guarda
+    en `pricing_sku` lo que decide el PM. Solo escribe lo que cambió;
+    volver a subir el mismo archivo no duplica."""
+    if not cargado_por.strip():
+        raise HTTPException(422, "Falta 'cargado_por' (quién hace la carga).")
+    contenido = await archivo.read()
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp.write(contenido)
+        tmp_path = tmp.name
+    try:
+        lectura = pricing_pm.leer_planilla_pm(pricing_pm.leer_xlsx_pm(tmp_path))
+    except pricing_pm.PlanillaPmInvalida as e:
+        raise HTTPException(422, str(e))
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+    with sesion() as db:
+        r = pricing_pm.cargar_precios_pm(
+            db, lectura, cargado_por=cargado_por.strip(), hoy=ayer_en_argentina() + timedelta(days=1),
+            motivo=motivo or f"Carga inicial desde planilla ({archivo.filename})",
+        )
+    return CargaPmOut(archivo=archivo.filename, leidos=r.leidos, nuevos=r.nuevos, cambiados=r.cambiados,
+                      sin_cambios=r.sin_cambios, duplicados=r.duplicados, sin_precio_web=r.sin_precio_web)
+
+
+def _datos_sku_fn(avisos: list[str]):
+    """Costo/IVA de Táctica (una sola consulta) y PM/categoría de GRAL
+    CATEGORIAS (una sola lectura). Si una fuente no responde, la vista sale
+    igual con los precios y un aviso — no se inventa el dato."""
+    consultar = _consultar_catalogo_tactica_con_cache()
+    costo_p, iva_p = CostoVigenteProvider(consultar=consultar), IvaProvider(consultar=consultar)
+    clasif = ClasificacionProvider(fetch_fn=_fetch_fn_con_cache())
+    tactica_ok = clasif_ok = True
+    try:
+        costo_p.precargar()
+        iva_p.precargar()
+    except Exception as e:
+        tactica_ok = False
+        avisos.append(f"Táctica no respondió ({type(e).__name__}): sin costo ni IVA, no se calculan márgenes.")
+    try:
+        clasif._indices()
+    except Exception as e:
+        clasif_ok = False
+        avisos.append(f"No se pudo leer GRAL CATEGORIAS ({type(e).__name__}): sin PM ni categoría (ML usa la comisión general).")
+
+    def datos(sku: str) -> pricing_pm.DatosSku:
+        costo = iva = None
+        if tactica_ok:
+            costo = costo_p.obtener(sku) or costo_p.obtener(sku.upper())
+            iva = iva_p.factor(sku) or iva_p.factor(sku.upper())
+        c = clasif.clasificacion_ecom(sku) if clasif_ok else {}
+        categoria = c.get("categoria")
+        return pricing_pm.DatosSku(
+            costo_usd=costo, iva_factor=iva, pm=c.get("pm"),
+            categoria=None if categoria == "SIN PM" else categoria, subcategoria=c.get("subcategoria"),
+        )
+
+    return datos
+
+
+def _periodo_en_curso() -> str:
+    inicio, fin = ciclo_de(ayer_en_argentina())
+    return _periodo_de_rango(inicio, fin)
+
+
+@router.get("/pricing/skus")
+def pricing_skus(
+    fecha: date | None = None,
+    pm: str | None = None,
+    categoria: str | None = None,
+    canal: str | None = None,
+    solo_negativos: bool = False,
+    margen_max: Decimal | None = None,  # en %, ej. 10 = margen menor a 10%
+    buscar: str | None = None,
+    cambiado_desde: date | None = None,
+    tc: str | None = None,
+) -> dict:
+    """Todos los SKU cargados con su precio y margen proyectado por canal
+    (Web, ML, Frávega, OnCity) y el margen real del ciclo en curso."""
+    if canal and canal.upper() not in pricing_pm.motor.CANALES:
+        raise HTTPException(422, f"Canal desconocido: {canal}")
+    fecha = fecha or ayer_en_argentina() + timedelta(days=1)
+    tc_valor, avisos = _resolver_tc(tc), []
+    filtros = pricing_pm.FiltrosVista(
+        pm=pm, categoria=categoria, canal=canal.upper() if canal else None, solo_negativos=solo_negativos,
+        margen_max=margen_max / 100 if margen_max is not None else None, buscar=buscar, cambiado_desde=cambiado_desde,
+    )
+    periodo = _periodo_en_curso()
+    with sesion() as db:
+        filas = pricing_pm.vista_pricing(db, _datos_sku_fn(avisos), tc_valor, fecha, filtros, periodo_real=periodo)
+    return {"fecha": fecha, "tc": tc_valor, "tc_origen": origen_tc(tc), "periodo_real": periodo,
+            "avisos": avisos, "total": len(filas), "filas": filas}
+
+
+@router.get("/pricing/skus/{sku}")
+def pricing_sku_detalle(sku: str, fecha: date | None = None, tc: str | None = None) -> dict:
+    """Ficha de un SKU: el desglose de cada cargo por canal y su historial
+    de precios (quién y cuándo)."""
+    fecha = fecha or ayer_en_argentina() + timedelta(days=1)
+    tc_valor, avisos = _resolver_tc(tc), []
+    with sesion() as db:
+        vigente = pricing_pm.vigentes(db, fecha).get(pricing_pm.norm_sku(sku))
+        if vigente is None:
+            raise HTTPException(404, f"{sku} no tiene precios cargados en el motor.")
+        datos = _datos_sku_fn(avisos)(vigente.sku)
+        canales = pricing_pm.calcular_sku(
+            vigente, datos, tc_valor, pricing_pm.motor.cargar_parametros(db, fecha), detalle=True,
+            fee_hist=pricing_pm.fee_historico_fravega(db),
+        )
+        historial = [
+            {c: getattr(h, c) for c in ("vigente_desde", "cargado_por", "motivo", *pricing_pm.CAMPOS_PM)}
+            for h in pricing_pm.historial(db, sku)
+        ]
+    return {"sku": vigente.sku, "fecha": fecha, "tc": tc_valor, "avisos": avisos, "pm": datos.pm,
+            "categoria": datos.categoria, "costo_usd": datos.costo_usd, "iva_factor": datos.iva_factor,
+            "canales": canales, "historial": historial}

@@ -127,6 +127,7 @@ PRICING_PARAMETROS = [
     ("FRAVEGA", "fee_logistico_default", "8500", "Fee promedio sin peso/medidas ni histórico del SKU (Maxx, 2026-09-29)"),
     ("ONCITY", "iva_cargos", "0.21", "Mismo modelo que Frávega hasta tener su tarifario"),
     ("ONCITY", "comision_base", "0.15", "Estimado, igual que la rentabilidad (2026-09-29)"),
+    ("ONCITY", "fee_logistico_default", "0", "OnCity no informa fee logístico: 0, igual que la rentabilidad real"),
 ]
 
 PRICING_COMISION_ML = [
@@ -163,10 +164,13 @@ PRICING_TRAMOS = [
 
 
 def seed_pricing(db: Session) -> None:
-    """Idempotente por tabla: solo carga los valores iniciales si la tabla
+    """Idempotente: comisiones, cuotas y tramos solo se cargan si la tabla
     está vacía — después, los cambios son filas nuevas con vigencia."""
-    if db.query(PricingParametro).first() is None:
-        for canal, clave, valor, desc in PRICING_PARAMETROS:
+    # Parámetros: por (canal, clave), así un parámetro nuevo del código entra
+    # aunque la tabla ya tenga filas; uno ya cargado nunca se toca.
+    existentes = {(p.canal, p.clave) for p in db.query(PricingParametro).all()}
+    for canal, clave, valor, desc in PRICING_PARAMETROS:
+        if (canal, clave) not in existentes:
             db.add(PricingParametro(canal=canal, clave=clave, valor=Decimal(valor), descripcion=desc, **_PRICING_ALTA))
     if db.query(PricingComisionCategoria).first() is None:
         for categoria, pct in PRICING_COMISION_ML:
