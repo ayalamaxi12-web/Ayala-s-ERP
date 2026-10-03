@@ -18,7 +18,7 @@ arquitectura pedido por Maxx, 2026-08-10):
 """
 import tempfile
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -963,6 +963,57 @@ async def pricing_carga_pm(
                       sin_cambios=r.sin_cambios, duplicados=r.duplicados, sin_precio_web=r.sin_precio_web)
 
 
+class SyncPmOut(BaseModel):
+    pm: str
+    ok: bool
+    detalle: str
+    nuevos: int = 0
+    cambiados: int = 0
+    sin_cambios: int = 0
+
+
+_ULTIMA_SYNC_PM: dict = {}
+
+
+@router.post("/pricing/sync-pm", response_model=list[SyncPmOut])
+def pricing_sync_pm() -> list[SyncPmOut]:
+    """Fuente principal: lee el Sheet de cada PM por API y guarda solo lo que
+    cambió. Un PM sin configurar o sin acceso sale con `ok=false` y el
+    motivo; el resto se carga igual."""
+    with sesion() as db:
+        res = pricing_pm.sincronizar_desde_sheets(db, hoy=ayer_en_argentina() + timedelta(days=1))
+    _ULTIMA_SYNC_PM.update(en=datetime.now(timezone.utc).isoformat(), ok=[r.pm for r in res if r.ok])
+    return [
+        SyncPmOut(pm=r.pm, ok=r.ok, detalle=r.detalle, nuevos=r.carga.nuevos if r.carga else 0,
+                  cambiados=r.carga.cambiados if r.carga else 0, sin_cambios=r.carga.sin_cambios if r.carga else 0)
+        for r in res
+    ]
+
+
+class FilasPmIn(BaseModel):
+    pm: str
+    filas: list[list]
+    cargado_por: str | None = None
+
+
+@router.post("/pricing/carga-pm-filas", response_model=SyncPmOut)
+def pricing_carga_pm_filas(payload: FilasPmIn) -> SyncPmOut:
+    """Respaldo: las filas del Sheet que ya lee el navegador con su propia
+    conexión (Configuración → planillas PM), para un PM que el backend
+    todavía no tiene configurado."""
+    try:
+        lectura = pricing_pm.leer_planilla_pm(payload.filas)
+    except pricing_pm.PlanillaPmInvalida as e:
+        raise HTTPException(422, str(e))
+    with sesion() as db:
+        r = pricing_pm.cargar_precios_pm(
+            db, lectura, cargado_por=payload.cargado_por or f"Sheet {payload.pm} (navegador)",
+            hoy=ayer_en_argentina() + timedelta(days=1), motivo="Sincronizado desde el Sheet del PM (navegador)",
+        )
+    return SyncPmOut(pm=payload.pm, ok=True, detalle=f"{r.leidos} SKU: {r.nuevos} nuevos, {r.cambiados} cambiados, {r.sin_cambios} sin cambios.",
+                     nuevos=r.nuevos, cambiados=r.cambiados, sin_cambios=r.sin_cambios)
+
+
 def _datos_sku_fn(avisos: list[str]):
     """Costo/IVA de Táctica (una sola consulta) y PM/categoría de GRAL
     CATEGORIAS (una sola lectura). Si una fuente no responde, la vista sale
@@ -1029,7 +1080,7 @@ def pricing_skus(
     with sesion() as db:
         filas = pricing_pm.vista_pricing(db, _datos_sku_fn(avisos), tc_valor, fecha, filtros, periodo_real=periodo)
     return {"fecha": fecha, "tc": tc_valor, "tc_origen": origen_tc(tc), "periodo_real": periodo,
-            "avisos": avisos, "total": len(filas), "filas": filas}
+            "ultima_sync_pm": _ULTIMA_SYNC_PM.get("en"), "avisos": avisos, "total": len(filas), "filas": filas}
 
 
 @router.get("/pricing/skus/{sku}")

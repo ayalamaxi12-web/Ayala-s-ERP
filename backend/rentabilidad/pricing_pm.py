@@ -2,7 +2,7 @@
 sus planillas y vista de todos los SKU con su margen proyectado por canal.
 
 **Carga** (`leer_planilla_pm` + `cargar_precios_pm`): lee la planilla de un
-PM ("VENTAS POR CANALES <PM>", bajada como .xlsx) y guarda en `pricing_sku`
+PM ("VENTAS POR CANALES <PM>") y guarda en `pricing_sku`
 SOLO lo que el PM decide (doc de diseño §4.1): precio web, forma de pago
 web, % ML, condición ML, precio Frávega / OnCity. Todo lo demás (costo,
 IVA, comisiones) lo pone el ERP. Las columnas se buscan por título, no por
@@ -20,6 +20,11 @@ planillas reales (2026-09-29):
   el PM lo cambie); la otra columna "Fravega" y "On City" son casillas de
   "se publica ahí". Matías no tiene precio propio: toma el de ML.
   OnCity no tiene columna de precio en ninguna planilla: toma el de Frávega.
+
+Fuente principal: el Sheet de cada PM en vivo por API
+(`sincronizar_desde_sheets`, decisión de Maxx 2026-10-03: "no quiero cargar
+las planillas a mano"). Respaldos: las filas que lee el navegador con su
+propia conexión a los Sheets, y el .xlsx subido a mano.
 
 Nada se pisa: si un SKU no cambió respecto de lo vigente no se escribe; si
 cambió, fila nueva. `vigente_desde` = "Fecha de Cambio de Precio" de la
@@ -113,7 +118,14 @@ def _fecha(v) -> date | None:
     if isinstance(v, date):
         return v
     m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", _texto(v))
-    return date(int(m.group(3)), int(m.group(2)), int(m.group(1))) if m else None
+    if not m:
+        return None
+    a, b, anio = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    dia, mes = (b, a) if b > 12 else (a, b)  # Sheet en formato de EE.UU. (m/d/aaaa)
+    try:
+        return date(anio, mes, dia)
+    except ValueError:
+        return None
 
 
 @dataclass
@@ -226,6 +238,99 @@ def leer_xlsx_pm(path: str) -> list[list]:
         if _fila_de_titulos(filas) is not None:
             return filas
     raise PlanillaPmInvalida("Ninguna pestaña del archivo tiene las columnas 'SKU' y 'WEB NUEVO'.")
+
+
+# ── Lectura en vivo de los Sheets de los PM (fuente principal) ──
+#
+# Los mismos Sheets que el ERP ya lee para comparar precios. Cada PM se
+# configura por variable de entorno (Railway): `RENT_SHEET_PM_<PM>_ID` y,
+# opcional, `RENT_SHEET_PM_<PM>_TAB` (sin pestaña se busca la que tenga
+# 'SKU' + 'WEB NUEVO'). Si falta el ID se usa `RENT_SHEET_MARGEN_<PM>_ID`,
+# el que ya usa la rentabilidad de Táctica. La cuenta de servicio
+# (`GOOGLE_CREDENTIALS_JSON`) tiene que tener acceso de lectura al Sheet.
+
+PMS = {"VERONICA": "Verónica", "LAURA": "Laura", "CRISTIAN": "Cristian", "MATIAS": "Matías"}
+
+
+@dataclass(frozen=True)
+class FuentePm:
+    pm: str  # clave: VERONICA / LAURA / CRISTIAN / MATIAS
+    sheet_id: str | None
+    tab: str | None
+
+    @property
+    def nombre(self) -> str:
+        return PMS.get(self.pm, self.pm.title())
+
+
+def fuentes_pm(env: dict | None = None) -> list[FuentePm]:
+    import os
+
+    env = os.environ if env is None else env
+    return [
+        FuentePm(
+            pm=pm,
+            sheet_id=env.get(f"RENT_SHEET_PM_{pm}_ID") or env.get(f"RENT_SHEET_MARGEN_{pm}_ID") or None,
+            tab=env.get(f"RENT_SHEET_PM_{pm}_TAB") or None,
+        )
+        for pm in PMS
+    ]
+
+
+def leer_sheet_pm(sheet_id: str, tab: str | None = None, cliente=None) -> list[list]:
+    """Filas de la pestaña de precios del PM, con los valores SIN formato
+    (números como números, casillas como TRUE/FALSE): el % ML con todos sus
+    decimales, no el "108%" que se ve en pantalla."""
+    from . import gsheets
+
+    libro = (cliente or gsheets.get_client()).open_by_key(sheet_id)
+    hojas = [libro.worksheet(tab)] if tab else libro.worksheets()
+    for ws in hojas:
+        if not tab and _fila_de_titulos(ws.get_values("A1:FZ6")) is None:
+            continue
+        return ws.get_values(
+            value_render_option="UNFORMATTED_VALUE",  # = gspread.utils.ValueRenderOption.unformatted
+            date_time_render_option="FORMATTED_STRING",
+        )
+    raise PlanillaPmInvalida(
+        "Ninguna pestaña del Sheet tiene las columnas 'SKU' y 'WEB NUEVO'" + (f" (pestaña '{tab}')" if tab else "") + "."
+    )
+
+
+@dataclass
+class ResultadoSyncPm:
+    pm: str
+    ok: bool
+    detalle: str
+    carga: ResultadoCargaPm | None = None
+
+
+LeerSheetFn = Callable[[str, "str | None"], list[list]]
+
+
+def sincronizar_desde_sheets(
+    db: Session, hoy: date, fuentes: list[FuentePm] | None = None, leer: LeerSheetFn | None = None,
+) -> list[ResultadoSyncPm]:
+    """Lee el Sheet de cada PM y guarda solo lo que cambió (`cargar_precios_pm`).
+    Un PM que falla (sin configurar, sin acceso, sin títulos) no frena a los
+    demás: queda en el resultado con el motivo."""
+    leer = leer or (lambda sheet_id, tab: leer_sheet_pm(sheet_id, tab))
+    resultados = []
+    for f in fuentes if fuentes is not None else fuentes_pm():
+        if not f.sheet_id:
+            resultados.append(ResultadoSyncPm(f.nombre, False, f"Sin configurar: falta RENT_SHEET_PM_{f.pm}_ID."))
+            continue
+        try:
+            lectura = leer_planilla_pm(leer(f.sheet_id, f.tab))
+        except Exception as e:  # cada PM por separado: uno caído no tapa al resto
+            resultados.append(ResultadoSyncPm(f.nombre, False, f"No se pudo leer el Sheet ({type(e).__name__}: {e})."))
+            continue
+        carga = cargar_precios_pm(db, lectura, cargado_por=f"Sheet {f.nombre}", hoy=hoy, motivo="Sincronizado desde el Sheet del PM")
+        resultados.append(ResultadoSyncPm(
+            f.nombre, True, f"{carga.leidos} SKU: {carga.nuevos} nuevos, {carga.cambiados} cambiados, {carga.sin_cambios} sin cambios.",
+            carga,
+        ))
+    return resultados
 
 
 # ── Carga en pricing_sku ──

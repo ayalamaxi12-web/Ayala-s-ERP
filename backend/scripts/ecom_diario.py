@@ -84,6 +84,18 @@ def main() -> int:
         api.migrar_y_sembrar()
         log("Migraciones OK")
 
+        # Motor de precios: trae los precios de cada PM desde su Sheet (solo
+        # lo que cambió). No frena la corrida de rentabilidad si falla.
+        if not args.solo_consulta:
+            log("Sincronizando precios de PM desde sus Sheets")
+            try:
+                from rentabilidad.pricing_pm import sincronizar_desde_sheets
+                with sesion() as db:
+                    for r in sincronizar_desde_sheets(db, hoy=ayer_en_argentina() + timedelta(days=1)):
+                        log(f"  {r.pm}: {r.detalle}" if r.ok else f"  AVISO {r.pm}: {r.detalle}")
+            except Exception as e:
+                log(f"AVISO: no se pudieron sincronizar los precios de PM ({type(e).__name__}: {e}) — sigo con la rentabilidad")
+
         # TC: siempre el del BNA del día (decisión de Maxx, 2026-09-28); --tc
         # queda para correr a mano un caso puntual. El origen sale al pie del
         # resumen y del informe para poder verificarlo.
