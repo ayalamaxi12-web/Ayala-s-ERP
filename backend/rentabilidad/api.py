@@ -1125,6 +1125,7 @@ def reporte_desvio_precios(
     umbral_pts: Decimal = Decimal(5),
     periodo: str | None = None,
     solo_revisar: bool = False,
+    con_links: bool = True,
     token: str | None = None,
     x_reporte_token: str | None = Header(default=None),
 ) -> dict:
@@ -1152,6 +1153,38 @@ def reporte_desvio_precios(
                 f"La corrida diaria todavía no guardó las ventas del {dia.isoformat()}"
                 + (f" (datos hasta {cierre.hasta.isoformat()})." if cierre else ".")
             )
+    if con_links:
+        reportes_pricing.agregar_publicaciones(res, _publicaciones_ml_de)
+    return res
+
+
+def _publicaciones_ml_de(skus: list[str]) -> dict[str, list[dict]]:
+    """Publicaciones ACTIVAS de cada SKU en las dos cuentas de ML
+    (`/users/{id}/items/search?seller_sku=`), con link y precio. Import
+    perezoso: `rentabilidad/` no depende de ML para el resto."""
+    import ml_full
+    from ml_auth import SELLERS
+
+    cli = ml_full.MLFullClient()
+    res: dict[str, list[dict]] = {sku: [] for sku in skus}
+    for cuenta, seller_id in SELLERS.items():
+        headers = {"Authorization": f"Bearer {cli._token(cuenta)}"}
+        ids_por_sku = {}
+        for sku in skus:
+            d = cli._get(f"https://api.mercadolibre.com/users/{seller_id}/items/search",
+                         {"seller_sku": sku, "status": "active"}, headers)
+            for item_id in d.get("results", []):
+                ids_por_sku[item_id] = sku
+        ids = list(ids_por_sku)
+        for i in range(0, len(ids), 20):
+            for entrada in cli._get("https://api.mercadolibre.com/items",
+                                    {"ids": ",".join(ids[i:i + 20]), "attributes": "id,permalink,price,title"}, headers):
+                it = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
+                if it and it.get("id") in ids_por_sku:
+                    res[ids_por_sku[it["id"]]].append({
+                        "item_id": it["id"], "cuenta": cuenta, "permalink": it.get("permalink"),
+                        "precio": it.get("price"), "titulo": it.get("title"),
+                    })
     return res
 
 

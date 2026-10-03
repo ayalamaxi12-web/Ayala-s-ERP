@@ -210,6 +210,9 @@ def cliente(db_multihilo, monkeypatch):  # noqa: F811
     monkeypatch.setattr(api, "sesion", _sesion)
     monkeypatch.setattr(api, "_periodo_en_curso", lambda: P)
     monkeypatch.setenv("RENT_REPORTE_TOKEN", "secreto")
+    monkeypatch.setattr(api, "_publicaciones_ml_de", lambda skus: {
+        "TONER-1": [{"item_id": "MLA111", "cuenta": "IT", "permalink": "https://articulo.mercadolibre.com.ar/MLA-111",
+                     "precio": 90009, "titulo": "Toner"}]})
     app = FastAPI()
     app.include_router(api.router)
     return TestClient(app)
@@ -226,6 +229,8 @@ def test_endpoints_con_token(cliente, db_multihilo, monkeypatch):
     body = r.json()
     assert body["filas"][0]["revisar"] and body["umbral_pts"] == 3 and body["dia"] == "2026-10-01"
     assert "todavía no guardó" in body["avisos"][-1]  # no hay cierre registrado en el test
+    assert body["filas"][0]["permalink"] == "https://articulo.mercadolibre.com.ar/MLA-111"
+    assert body["filas"][0]["item_id"] == "MLA111"
     r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"fecha": "2026-10-02"})
     assert r.json()["filas"] == []
     r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"todo_el_ciclo": "true"})
@@ -240,3 +245,50 @@ def test_endpoints_con_token(cliente, db_multihilo, monkeypatch):
         raise RuntimeError("sin token de ML")
     monkeypatch.setattr(api, "_ofertas_ml_activas", falla)
     assert cliente.get("/rentabilidad/reporte/pricing/ofertas", params={"token": "secreto"}).status_code == 502
+
+
+# ── Links a la publicación de ML (Maca) ──
+
+def _res(*filas):
+    return {"avisos": [], "filas": [dict(sku=s, canal=c, precio_real_promedio=p) for s, c, p in filas]}
+
+
+def test_links_elige_la_publicacion_con_precio_mas_parecido_al_vendido():
+    res = _res(("T1", "ML", 90009.0), ("T1", "WEB", 100000.0), ("T2", "ML", 5000.0))
+    pubs = {"T1": [{"item_id": "MLA1", "cuenta": "IT", "permalink": "p1", "precio": 120009},
+                   {"item_id": "MLA2", "cuenta": "MT", "permalink": "p2", "precio": 89999}], "T2": []}
+    pedidos = []
+    rp.agregar_publicaciones(res, lambda skus: pedidos.append(skus) or pubs)
+    ml, web, t2 = res["filas"]
+    assert pedidos == [["T1", "T2"]]
+    assert (ml["item_id"], ml["permalink"]) == ("MLA2", "p2") and len(ml["publicaciones"]) == 2
+    assert web["permalink"] is None and web["publicaciones"] == []
+    assert t2["permalink"] is None
+
+
+def test_links_si_ml_falla_el_reporte_sale_igual_con_aviso():
+    res = _res(("T1", "ML", 1.0))
+
+    def falla(skus):
+        raise RuntimeError("token vencido")
+    rp.agregar_publicaciones(res, falla)
+    assert res["filas"][0]["permalink"] is None and "links de ML" in res["avisos"][0]
+
+
+def test_busqueda_de_publicaciones_por_sku_en_las_dos_cuentas(monkeypatch):
+    import ml_full
+
+    llamadas = []
+
+    def get(url, params, headers):
+        llamadas.append((url, params))
+        if url.endswith("/items/search"):
+            return {"results": ["MLA9"] if params["seller_sku"] == "T1" and "111" in url else []}
+        return [{"code": 200, "body": {"id": "MLA9", "permalink": "https://ml/MLA9", "price": 1500, "title": "x"}}]
+
+    monkeypatch.setattr(ml_full, "_get_real", get)
+    monkeypatch.setattr(ml_full, "token_de", lambda cuenta: "tok")
+    monkeypatch.setattr("ml_auth.SELLERS", {"IT": "111", "MT": "222"})
+    res = api._publicaciones_ml_de(["T1", "T2"])
+    assert res == {"T1": [{"item_id": "MLA9", "cuenta": "IT", "permalink": "https://ml/MLA9", "precio": 1500, "titulo": "x"}], "T2": []}
+    assert ("https://api.mercadolibre.com/users/111/items/search", {"seller_sku": "T1", "status": "active"}) in llamadas

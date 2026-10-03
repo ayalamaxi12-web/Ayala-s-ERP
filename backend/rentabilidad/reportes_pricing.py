@@ -205,6 +205,36 @@ def desvio_precios(
     }
 
 
+def agregar_publicaciones(res: dict, buscar) -> None:
+    """Suma a cada fila de ML las publicaciones activas del SKU, para ir
+    directo a corregir el precio (pedido de Maxx, 2026-10-03). La venta no
+    guarda en qué MLA se hizo, así que se buscan las publicaciones del SKU
+    en las dos cuentas; `item_id`/`permalink` de la fila son los de la
+    publicación con precio más parecido al que se vendió (la que más
+    probablemente originó la venta). `buscar(skus)` → {sku: [{item_id,
+    cuenta, permalink, precio, titulo}]}. Si falla, la fila sale sin links
+    y un aviso, nunca sin el reporte."""
+    filas_ml = [f for f in res["filas"] if f["canal"] == "ML"]
+    for f in res["filas"]:
+        f.setdefault("item_id", None)
+        f.setdefault("permalink", None)
+        f.setdefault("publicaciones", [])
+    if not filas_ml:
+        return
+    try:
+        encontradas = buscar(sorted({f["sku"] for f in filas_ml}))
+    except Exception as e:
+        res["avisos"].append(f"No se pudieron traer los links de ML ({type(e).__name__}: {e}).")
+        return
+    for f in filas_ml:
+        pubs = encontradas.get(f["sku"]) or []
+        f["publicaciones"] = pubs
+        if pubs:
+            ref = f["precio_real_promedio"] or 0
+            mejor = min(pubs, key=lambda p: abs((p.get("precio") or 0) - ref))
+            f["item_id"], f["permalink"] = mejor.get("item_id"), mejor.get("permalink")
+
+
 # ── Control de ofertas (Natalia) ──
 
 def control_ofertas(
