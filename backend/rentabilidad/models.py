@@ -292,6 +292,9 @@ class VentaEcom(Base):
     unidades: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cuotas: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cargo_cuotas: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    # Publicación de ML exacta de la venta (de `OrderList.listing`).
+    item_ml: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    permalink_ml: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 # ── Tablas paramétricas (§1.3) — ninguna tasa/prefijo/régimen vive en código ──

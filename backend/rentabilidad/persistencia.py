@@ -339,6 +339,8 @@ def construir_venta_ecom(
         unidades=fila.unidades,
         cuotas=fila.cuotas,
         cargo_cuotas=fila.cargo_cuotas,
+        item_ml=fila.item_ml,
+        permalink_ml=fila.permalink_ml,
     )
 
 

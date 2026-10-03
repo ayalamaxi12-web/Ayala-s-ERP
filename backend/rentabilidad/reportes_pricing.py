@@ -78,7 +78,11 @@ class _VigentesPorFecha:
 
 def desvio_precios(
     db: Session, periodo: str, hoy: date, umbral_pts: Decimal = Decimal(5), solo_revisar: bool = False,
+    dia: date | None = None,
 ) -> dict:
+    """`dia`: solo las ventas CREADAS ese día (lo que usa Maca: ayer, para
+    revisar ventas recientes cuyo precio todavía no corrigió). None = todo
+    el período."""
     par = motor.cargar_parametros(db, hoy)
     tasa_op = db.get(ParametroTasa, "costo_operacion_ecom")
     costo_operacion = tasa_op.valor if tasa_op else Decimal(0)
@@ -88,7 +92,10 @@ def desvio_precios(
     sin_precio_pm, sin_datos = set(), set()
     excluidas = {"full": 0, "kits_o_carritos": 0}
 
-    ventas = db.query(VentaEcom).filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False)).all()
+    q = db.query(VentaEcom).filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False))
+    if dia is not None:
+        q = q.filter(VentaEcom.fecha_creacion_venta == dia)
+    ventas = q.all()
     for v in ventas:
         canal = _canal_de_venta(v.canal_de_venta)
         if canal not in CANALES_DESVIO or v.rentabilidad is None or not v.precio_sin_iva or not v.precio_final:
@@ -122,8 +129,11 @@ def desvio_precios(
             sin_datos.add(v.numero_orden)
             continue
 
-        g = grupos.setdefault((sku, canal), {
-            "sku": sku, "canal": canal, "pm": v.pm or _pm_de(p), "categoria": v.categoria,
+        # Una fila por PUBLICACIÓN en ML (el MLA exacto de la venta): un SKU
+        # puede estar en varias y cada una tiene su precio.
+        item = v.item_ml if canal == "ML" else None
+        g = grupos.setdefault((sku, canal, item), {
+            "sku": sku, "canal": canal, "item_id": item, "permalink": v.permalink_ml if item else None, "pm": v.pm or _pm_de(p), "categoria": v.categoria,
             "precio_pm": precio_pm, "plan_pm": _plan_pm(p, canal), "ordenes": [], "ordenes_en_cuotas": 0,
             "unidades": Decimal(0), "facturado": Decimal(0), "proy_rent": Decimal(0), "proy_venta": Decimal(0),
             "real_rent": Decimal(0), "real_venta": Decimal(0),
@@ -157,6 +167,7 @@ def desvio_precios(
             continue
         filas.append({
             "sku": g["sku"], "pm": g["pm"], "canal": g["canal"], "categoria": g["categoria"],
+            "item_id": g["item_id"], "permalink": g["permalink"],
             "margen_proyectado_pct": _pct(proy), "margen_real_pct": _pct(real),
             "diferencia_pts": _n(dif_pts), "revisar": revisar, "prioridad": prioridad, "motivo": motivo,
             "precio_pm": _n(g["precio_pm"]), "precio_real_promedio": _n(precio_real),
@@ -168,16 +179,23 @@ def desvio_precios(
     filas.sort(key=lambda f: (not f["revisar"], f["prioridad"], f["diferencia_pts"]))
 
     avisos = []
+    sin_mla = sum(1 for f in filas if f["canal"] == "ML" and not f["item_id"])
+    if sin_mla:
+        avisos.append(f"{sin_mla} filas de ML sin publicación (MLA): ventas guardadas antes de esta versión, "
+                      "se completan en la próxima corrida diaria.")
     if sin_datos:
         avisos.append(f"{len(sin_datos)} órdenes sin unidades/cuotas guardadas: se completan en la próxima corrida diaria.")
     return {
         "periodo": periodo,
+        "dia": dia.isoformat() if dia else None,
+        "alcance": f"ventas creadas el {dia.isoformat()}" if dia else "todo el período",
         "umbral_pts": float(umbral_pts),
         "canales": list(CANALES_DESVIO),
         "definiciones": {
             "margen": "rentabilidad / venta sin IVA, igual que la rentabilidad real",
             "margen_proyectado_pct": "el del motor para las mismas ventas a precio del PM: mismas unidades, costo, TC y cargo por cuotas",
-            "margen_real_pct": "el de las ventas del ciclo; en ML sin el costo de envío (el motor todavía no lo proyecta)",
+            "margen_real_pct": "el de las ventas; en ML sin el costo de envío (el motor todavía no lo proyecta)",
+            "item_id / permalink": "en ML, la publicación exacta en que se hicieron las ventas (de la orden); una fila por publicación",
             "diferencia_pts": "real − proyectado, en puntos",
             "revisar": f"real por debajo del proyectado más de {umbral_pts} pts, salvo precio inflado por cuotas",
             "prioridad": "1 = precio cobrado por debajo del precio del PM · 2 = precio OK, cargos o costo mayores · 3 = no revisar",

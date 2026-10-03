@@ -1120,23 +1120,39 @@ def pricing_sku_detalle(sku: str, fecha: date | None = None, tc: str | None = No
 
 @router.get("/reporte/pricing/desvio-precios")
 def reporte_desvio_precios(
+    fecha: date | None = None,
+    todo_el_ciclo: bool = False,
     umbral_pts: Decimal = Decimal(5),
     periodo: str | None = None,
     solo_revisar: bool = False,
     token: str | None = None,
     x_reporte_token: str | None = Header(default=None),
 ) -> dict:
-    """Maca: margen real vs proyectado por SKU y canal (Web y ML sin envío)
-    del ciclo en curso (o `periodo`). Marca los que quedan más de
-    `umbral_pts` puntos por debajo del proyectado, contemplando las cuotas."""
+    """Maca: margen real vs proyectado por SKU y canal (Web y ML sin envío).
+    Por defecto, solo las ventas CREADAS AYER (hora Argentina), como el
+    reporte diario de rentabilidad: lo de días anteriores capaz ya se
+    corrigió (Maxx, 2026-10-03). `fecha` = otro día puntual;
+    `todo_el_ciclo=true` = el acumulado del ciclo (o de `periodo`). Marca
+    los que quedan más de `umbral_pts` puntos por debajo del proyectado,
+    contemplando las cuotas."""
     _verificar_token_reporte(token, x_reporte_token)
     if umbral_pts < 0:
         raise HTTPException(422, "'umbral_pts' no puede ser negativo.")
     hoy = ayer_en_argentina() + timedelta(days=1)
+    dia = None if todo_el_ciclo else (fecha or ayer_en_argentina())
+    if periodo is None:
+        periodo = _periodo_de_rango(*ciclo_de(dia)) if dia else _periodo_en_curso()
     with sesion() as db:
-        return reportes_pricing.desvio_precios(
-            db, periodo or _periodo_en_curso(), hoy, umbral_pts=umbral_pts, solo_revisar=solo_revisar,
+        res = reportes_pricing.desvio_precios(
+            db, periodo, hoy, umbral_pts=umbral_pts, solo_revisar=solo_revisar, dia=dia,
         )
+        cierre = db.get(CierreRentabilidad, periodo)
+        if dia and (cierre is None or cierre.hasta < dia):
+            res["avisos"].append(
+                f"La corrida diaria todavía no guardó las ventas del {dia.isoformat()}"
+                + (f" (datos hasta {cierre.hasta.isoformat()})." if cierre else ".")
+            )
+    return res
 
 
 class _SinTactica:

@@ -23,7 +23,7 @@ def _precio(db, sku="TONER-1", web="100000", pct="1.2", cargado_por="Sheet Veró
 
 
 def _real(db, orden, precio_unit, unidades=1, canal="Mercadolibre", sku="TONER-1", cargo_cuotas=None, cuotas=1,
-          es_full=False, costo_usd="30", envio="0", proy_igual=True):
+          es_full=False, costo_usd="30", envio="0", proy_igual=True, dia=date(2026, 10, 1), item="MLA111"):
     """Venta guardada con la rentabilidad que daría el motor a ese precio
     (con un ajuste opcional para simular cargos de más)."""
     iva = d("1.21")
@@ -35,11 +35,13 @@ def _real(db, orden, precio_unit, unidades=1, canal="Mercadolibre", sku="TONER-1
         cuotas_pct_final=(d(cargo_cuotas) / pf) if cargo_cuotas else d(0)), par)
     rent = r.rentabilidad * unidades - d("149.12") - d(envio)
     db.add(VentaEcom(
-        periodo=P, numero_orden=orden, skus_vendidos=sku, canal_de_venta=canal, fecha_creacion_venta=date(2026, 10, 1),
+        periodo=P, numero_orden=orden, skus_vendidos=sku, canal_de_venta=canal, fecha_creacion_venta=dia,
         costo_sin_iva=d(costo_usd) * unidades, comision_venta=d(0), costo_envio=d(envio), precio_final=pf,
         precio_sin_iva=pf / iva, rentabilidad=rent, tc=TC, iva=iva, excluido=False, es_full=es_full,
         unidades=unidades, cuotas=cuotas, cargo_cuotas=d(cargo_cuotas) if cargo_cuotas else d(0),
         categoria="Insumo De Impresion", pm="Veronica",
+        item_ml=item if canal.startswith("Mercadolibre") else None,
+        permalink_ml=f"https://articulo.mercadolibre.com.ar/{item}" if canal.startswith("Mercadolibre") else None,
     ))
 
 
@@ -131,6 +133,51 @@ def test_umbral_orden_y_solo_revisar(db_session):
     assert rp.desvio_precios(db_session, P, HOY, umbral_pts=d(100))["resumen"]["a_revisar"] == 0
 
 
+def test_por_dia_solo_cuenta_las_ventas_creadas_ese_dia(db_session):
+    _precio(db_session)
+    _real(db_session, "1", "90009", dia=date(2026, 9, 28))   # vendida barata hace días (ya corregida)
+    _real(db_session, "2", "120009", dia=date(2026, 10, 2))  # ayer, a precio del PM
+    db_session.flush()
+    ayer = rp.desvio_precios(db_session, P, HOY, dia=date(2026, 10, 2))
+    assert ayer["dia"] == "2026-10-02" and ayer["resumen"]["a_revisar"] == 0
+    assert _fila(ayer)["ordenes"] == 1
+    ciclo = rp.desvio_precios(db_session, P, HOY)
+    assert ciclo["dia"] is None and _fila(ciclo)["ordenes"] == 2
+    assert rp.desvio_precios(db_session, P, HOY, dia=date(2026, 9, 28))["resumen"]["a_revisar"] == 1
+
+
+def test_una_fila_por_publicacion_con_su_link_exacto(db_session):
+    _precio(db_session)
+    _real(db_session, "1", "90009", item="MLA111")   # la publicación barata
+    _real(db_session, "2", "120009", item="MLA222")  # otra publicación del mismo SKU, bien
+    _real(db_session, "3", "100000", canal="Woocommerce")
+    db_session.flush()
+    res = rp.desvio_precios(db_session, P, HOY)
+    ml = {f["item_id"]: f for f in res["filas"] if f["canal"] == "ML"}
+    assert set(ml) == {"MLA111", "MLA222"}
+    assert ml["MLA111"]["revisar"] and ml["MLA111"]["permalink"] == "https://articulo.mercadolibre.com.ar/MLA111"
+    assert not ml["MLA222"]["revisar"]
+    web = _fila(res, canal="WEB")
+    assert web["item_id"] is None and web["permalink"] is None
+
+
+def test_venta_sin_mla_guardado_se_avisa(db_session):
+    _precio(db_session)
+    _real(db_session, "1", "120009", item=None)
+    db_session.flush()
+    res = rp.desvio_precios(db_session, P, HOY)
+    assert _fila(res)["item_id"] is None and "sin publicación" in res["avisos"][0]
+
+
+def test_publicacion_ml_de_la_orden():
+    from rentabilidad.ingesta_ecom_api import _publicacion_ml
+    lineas = [{"listing": {"owner": "MlItem", "ownerId": "MLA612932685",
+                           "ownerData": {"permalink": "https://articulo.mercadolibre.com.ar/MLA-612932685-toner"}}}]
+    assert _publicacion_ml(lineas) == {"item_ml": "MLA612932685",
+                                       "permalink_ml": "https://articulo.mercadolibre.com.ar/MLA-612932685-toner"}
+    assert _publicacion_ml([{"listing": {"owner": "ChItem", "ownerId": "481"}}, {}]) == {"item_ml": None, "permalink_ml": None}
+
+
 def test_orden_sin_unidades_se_avisa(db_session):
     _precio(db_session)
     _real(db_session, "1", "120009")
@@ -208,9 +255,16 @@ def test_endpoints_con_token(cliente, db_multihilo, monkeypatch):
     db_multihilo.flush()
     url = "/rentabilidad/reporte/pricing/desvio-precios"
     assert cliente.get(url).status_code == 401
-    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"umbral_pts": 3})
+    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"umbral_pts": 3, "fecha": "2026-10-01"})
     assert r.status_code == 200, r.text
-    assert r.json()["filas"][0]["revisar"] and r.json()["umbral_pts"] == 3
+    body = r.json()
+    assert body["filas"][0]["revisar"] and body["umbral_pts"] == 3 and body["dia"] == "2026-10-01"
+    assert "todavía no guardó" in body["avisos"][-1]  # no hay cierre registrado en el test
+    assert body["filas"][0]["item_id"] == "MLA111" and body["filas"][0]["permalink"].endswith("MLA111")
+    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"fecha": "2026-10-02"})
+    assert r.json()["filas"] == []
+    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"todo_el_ciclo": "true"})
+    assert r.json()["dia"] is None and len(r.json()["filas"]) == 1
 
     monkeypatch.setattr(api, "_ofertas_ml_activas", lambda incluir_propias: [_oferta("TONER-1", 99000)])
     r = cliente.get("/rentabilidad/reporte/pricing/ofertas", params={"token": "secreto"})
