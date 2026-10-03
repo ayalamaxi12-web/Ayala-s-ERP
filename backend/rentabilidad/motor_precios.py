@@ -143,6 +143,9 @@ class EntradaMotor:
     kg_aforado: Decimal | None = None  # max(peso real, volumétrico cm³/4000)
     fee_logistico: Decimal | None = None  # histórico del SKU; tiene prioridad sobre el kilo aforado
     colecta: bool = False  # Frávega: Global vende sin colecta
+    # Costo de cuotas YA con IVA, como fracción del precio (ej. el cargo real
+    # que cobró ML en una venta / su precio). Si viene, reemplaza al del plan.
+    cuotas_pct_final: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +172,12 @@ class _Estructura:
     origen_fee: str | None = None
 
 
+def _cuotas(e: EntradaMotor, par: ParametrosMotor, mas_iva: Decimal) -> Decimal:
+    if e.cuotas_pct_final is not None:
+        return e.cuotas_pct_final
+    return par.cuota(e.canal, e.plan) * mas_iva
+
+
 def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor) -> _Estructura:
     canal = e.canal
     if canal not in CANALES:
@@ -180,13 +189,13 @@ def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor) -> _Estructur
         fijo = e.costo_fijo_ml if e.costo_fijo_ml is not None else (par.tramo("ml_costo_fijo", p) or Decimal(0))
         envio = e.envio if p >= par.valor(canal, "umbral_envio_gratis") else Decimal(0)
         return _Estructura(
-            pct={"comision": comision * mas_iva, "cuotas": par.cuota(canal, e.plan) * mas_iva},
+            pct={"comision": comision * mas_iva, "cuotas": _cuotas(e, par, mas_iva)},
             fijos={"costo_fijo": fijo * mas_iva, "envio": envio},
         )
     if canal == "WEB":
         medio = "comision_mp_credito" if e.medio_pago == "credito" else "comision_mp_otros"
         return _Estructura(
-            pct={"comision": par.valor(canal, medio) * mas_iva, "cuotas": par.cuota(canal, e.plan) * mas_iva},
+            pct={"comision": par.valor(canal, medio) * mas_iva, "cuotas": _cuotas(e, par, mas_iva)},
             fijos={"envio": e.envio},
         )
     # Marketplaces

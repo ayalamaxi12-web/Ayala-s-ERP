@@ -26,7 +26,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import gsheets, pricing_pm, seed
+from . import gsheets, pricing_pm, reportes_pricing, seed
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .adapters import (
     ClasificacionProvider,
@@ -704,6 +704,16 @@ def fravega_pendientes() -> list[ResultadoEcomOut]:
 # corrida diaria ya guardó; no recalcula nada.
 # ══════════════════════════════════════════════════════════════════════════
 
+def _verificar_token_reporte(token: str | None, x_reporte_token: str | None) -> None:
+    """Si está configurada `RENT_REPORTE_TOKEN`, los reportes para n8n la
+    exigen (header `X-Reporte-Token` o `?token=`)."""
+    import os
+
+    esperado = os.environ.get("RENT_REPORTE_TOKEN")
+    if esperado and (x_reporte_token or token) != esperado:
+        raise HTTPException(401, "Token de reporte inválido o ausente.")
+
+
 @router.get("/reporte/ecom/diario")
 def reporte_ecom_diario(
     fecha: date | None = None,
@@ -717,11 +727,7 @@ def reporte_ecom_diario(
 
     Si está configurada `RENT_REPORTE_TOKEN`, exige ese token (header
     `X-Reporte-Token` o `?token=`)."""
-    import os
-
-    esperado = os.environ.get("RENT_REPORTE_TOKEN")
-    if esperado and (x_reporte_token or token) != esperado:
-        raise HTTPException(401, "Token de reporte inválido o ausente.")
+    _verificar_token_reporte(token, x_reporte_token)
     if not 1 <= top <= 50:
         raise HTTPException(422, "'top' debe estar entre 1 y 50.")
     with sesion() as db:
@@ -1105,3 +1111,79 @@ def pricing_sku_detalle(sku: str, fecha: date | None = None, tc: str | None = No
     return {"sku": vigente.sku, "fecha": fecha, "tc": tc_valor, "avisos": avisos, "pm": datos.pm,
             "categoria": datos.categoria, "costo_usd": datos.costo_usd, "iva_factor": datos.iva_factor,
             "canales": canales, "historial": historial}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# REPORTES DEL MOTOR DE PRECIOS para n8n — solo lectura, mismo token que el
+# reporte diario (reportes_pricing.py).
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/reporte/pricing/desvio-precios")
+def reporte_desvio_precios(
+    umbral_pts: Decimal = Decimal(5),
+    periodo: str | None = None,
+    solo_revisar: bool = False,
+    token: str | None = None,
+    x_reporte_token: str | None = Header(default=None),
+) -> dict:
+    """Maca: margen real vs proyectado por SKU y canal (Web y ML sin envío)
+    del ciclo en curso (o `periodo`). Marca los que quedan más de
+    `umbral_pts` puntos por debajo del proyectado, contemplando las cuotas."""
+    _verificar_token_reporte(token, x_reporte_token)
+    if umbral_pts < 0:
+        raise HTTPException(422, "'umbral_pts' no puede ser negativo.")
+    hoy = ayer_en_argentina() + timedelta(days=1)
+    with sesion() as db:
+        return reportes_pricing.desvio_precios(
+            db, periodo or _periodo_en_curso(), hoy, umbral_pts=umbral_pts, solo_revisar=solo_revisar,
+        )
+
+
+class _SinTactica:
+    """Natalia compara precios, no margen: no hace falta el costo de Táctica
+    (y así el reporte no depende del túnel)."""
+
+    def obtener(self, sku):
+        return None
+
+    def factor(self, sku):
+        return None
+
+
+def _ofertas_ml_activas(incluir_propias: bool) -> list[dict]:
+    """Ofertas activas de ML leídas en vivo con el módulo Ofertas ML (las dos
+    cuentas). Import perezoso: `rentabilidad/` no depende de ML para el resto."""
+    import ml_ofertas
+
+    ml, sin = ml_ofertas.MLOfertasClient(), _SinTactica()
+    filas, _ = ml_ofertas.ofertas_activas(ml, sin, sin)
+    if incluir_propias:
+        for cuenta in ml_ofertas.SELLERS:
+            f, _ = ml_ofertas.ofertas_propias_activas(ml, sin, sin, cuenta)
+            filas.extend(f)
+    return [ml_ofertas._fila_a_dict(f) for f in filas]
+
+
+@router.get("/reporte/pricing/ofertas")
+def reporte_control_ofertas(
+    tolerancia_pct: Decimal = Decimal(1),
+    incluir_propias: bool = False,
+    solo_revisar: bool = False,
+    token: str | None = None,
+    x_reporte_token: str | None = Header(default=None),
+) -> dict:
+    """Natalia: cada oferta activa de ML contra el precio ML del PM. Marca
+    las que no cuadran (primero las que quedan por debajo). Con
+    `incluir_propias=true` suma las ofertas propias (PRICE_DISCOUNT): el
+    escaneo es publicación por publicación y tarda varios minutos."""
+    _verificar_token_reporte(token, x_reporte_token)
+    try:
+        ofertas = _ofertas_ml_activas(incluir_propias)
+    except Exception as e:
+        raise HTTPException(502, f"No se pudieron leer las ofertas de Mercado Libre: {type(e).__name__}: {e}")
+    with sesion() as db:
+        res = reportes_pricing.control_ofertas(
+            db, ofertas, ayer_en_argentina() + timedelta(days=1), tolerancia_pct=tolerancia_pct, solo_revisar=solo_revisar,
+        )
+    res["incluye_ofertas_propias"] = incluir_propias
+    return res

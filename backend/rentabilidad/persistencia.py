@@ -336,6 +336,9 @@ def construir_venta_ecom(
         origen_comision=fila.origen_comision,
         observacion=fila.observacion,
         es_full=fila.es_full,
+        unidades=fila.unidades,
+        cuotas=fila.cuotas,
+        cargo_cuotas=fila.cargo_cuotas,
     )
 
 

@@ -364,7 +364,7 @@ query BuscarOrdenes($page: Int, $start: Int!, $end: Int!, $tab: ID) {
         owner
         paymentStatus
         shipping { listCost cost }
-        payments { totalFeeAmount details }
+        payments { totalFeeAmount details installmentAmount transactionAmount }
         ownerData { ... on ChChannelOrder { owner ownerId } }
         orderLists {
           quantity
@@ -651,6 +651,36 @@ def _cargos_del_vendedor(orden: dict, tipo: str) -> Decimal | None:
     return total if hay_detalle else None
 
 
+def _cuotas_del_pago(orden: dict) -> int | None:
+    """Cuotas en que pagó el comprador: monto del pago / monto de cada
+    cuota (el mayor si hay varios pagos). None si la API no trae el dato."""
+    cuotas = None
+    for pago in orden.get("payments") or []:
+        total, cuota = _decimal(pago.get("transactionAmount")), _decimal(pago.get("installmentAmount"))
+        if total > 0 and cuota > 0:
+            cuotas = max(cuotas or 0, int((total / cuota).to_integral_value()))
+    return cuotas
+
+
+def _cargo_cuotas_vendedor(orden: dict) -> Decimal | None:
+    """Lo que el canal le cobró al vendedor por las cuotas sin interés:
+    cargos `financing_*` del vendedor (`from=collector`), netos de
+    reintegros. Verificado con el ciclo 23/09 → 27/09: en ML el cargo
+    dividido el precio da exacto la tabla (8,9 / 13,4 / 5 / 17,8 / 21,6%).
+    Los intereses que paga el comprador (`from=payer`) no cuentan."""
+    hay_detalle, total = False, Decimal(0)
+    for pago in orden.get("payments") or []:
+        cargos = _detalles_de_pago(pago).get("charges_details")
+        if cargos is None:
+            continue
+        hay_detalle = True
+        for c in cargos:
+            if (c.get("name") or "").startswith("financing") and (c.get("accounts") or {}).get("from") == "collector":
+                montos = c.get("amounts") or {}
+                total += _decimal(montos.get("original")) - _decimal(montos.get("refunded"))
+    return total if hay_detalle else None
+
+
 def _comision_mercado_pago(orden: dict) -> Decimal:
     """Comisión real cobrada por MP/ML al vendedor. Sin `details` (no
     debería pasar en órdenes ML, visto 0 veces el 2026-09-27) cae a
@@ -796,6 +826,7 @@ def _fila_desde_orden(
         precio_final = sum((_decimal(l.get("subtotal")) for l in lineas), Decimal(0))
 
     skus = ", ".join(sku for sku in (_sku_de_linea(l) for l in lineas) if sku)
+    unidades = sum(int(_decimal(l.get("quantity"))) for l in lineas if _sku_de_linea(l)) or None
 
     return FilaEcom(
         numero_orden=str(orden.get("customOrderId") or orden["id"]),
@@ -816,6 +847,9 @@ def _fila_desde_orden(
         fecha_creacion=_fecha_creacion(orden.get("created")),
         factor_iva=_factor_iva(lineas),
         es_full=orden["id"] in ids_full,
+        unidades=unidades,
+        cuotas=_cuotas_del_pago(orden),
+        cargo_cuotas=_cargo_cuotas_vendedor(orden),
     )
 
 
