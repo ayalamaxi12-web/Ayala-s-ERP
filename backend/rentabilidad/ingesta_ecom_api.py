@@ -372,6 +372,7 @@ query BuscarOrdenes($page: Int, $start: Int!, $end: Int!, $tab: ID) {
           subtotalSinImpuestos
           taxTag
           variant { sku cost product { sku } }
+          listing { owner ownerId ownerData { ... on MlItem { permalink } } }
         }
       }
     }
@@ -651,6 +652,19 @@ def _cargos_del_vendedor(orden: dict, tipo: str) -> Decimal | None:
     return total if hay_detalle else None
 
 
+def _publicacion_ml(lineas: list[dict]) -> dict:
+    """MLA y link de la publicación de ML en que se vendió: cada línea de una
+    orden de ML trae su `listing` con `owner == "MlItem"`, `ownerId` = MLA y
+    `ownerData.permalink` (verificado 2026-10-03: las 35 líneas ML del
+    01/10/2026 lo traen). Si la orden tiene líneas de varias publicaciones,
+    queda la primera (igual esas órdenes no entran al reporte por SKU)."""
+    for linea in lineas:
+        listing = linea.get("listing") or {}
+        if listing.get("owner") == "MlItem" and listing.get("ownerId"):
+            return {"item_ml": listing["ownerId"], "permalink_ml": (listing.get("ownerData") or {}).get("permalink")}
+    return {"item_ml": None, "permalink_ml": None}
+
+
 def _cuotas_del_pago(orden: dict) -> int | None:
     """Cuotas en que pagó el comprador: monto del pago / monto de cada
     cuota (el mayor si hay varios pagos). None si la API no trae el dato."""
@@ -850,6 +864,7 @@ def _fila_desde_orden(
         unidades=unidades,
         cuotas=_cuotas_del_pago(orden),
         cargo_cuotas=_cargo_cuotas_vendedor(orden),
+        **_publicacion_ml(lineas),
     )
 
 

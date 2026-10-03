@@ -128,6 +128,10 @@ class FilaEcom:
     unidades: int | None = None
     cuotas: int | None = None
     cargo_cuotas: Decimal | None = None
+    # Publicación de ML exacta en la que se vendió (MLA y link), de la
+    # propia orden — para que el reporte de Maca lleve directo a corregirla.
+    item_ml: str | None = None
+    permalink_ml: str | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(
