@@ -23,7 +23,7 @@ def _precio(db, sku="TONER-1", web="100000", pct="1.2", cargado_por="Sheet Veró
 
 
 def _real(db, orden, precio_unit, unidades=1, canal="Mercadolibre", sku="TONER-1", cargo_cuotas=None, cuotas=1,
-          es_full=False, costo_usd="30", envio="0", proy_igual=True):
+          es_full=False, costo_usd="30", envio="0", proy_igual=True, dia=date(2026, 10, 1)):
     """Venta guardada con la rentabilidad que daría el motor a ese precio
     (con un ajuste opcional para simular cargos de más)."""
     iva = d("1.21")
@@ -35,7 +35,7 @@ def _real(db, orden, precio_unit, unidades=1, canal="Mercadolibre", sku="TONER-1
         cuotas_pct_final=(d(cargo_cuotas) / pf) if cargo_cuotas else d(0)), par)
     rent = r.rentabilidad * unidades - d("149.12") - d(envio)
     db.add(VentaEcom(
-        periodo=P, numero_orden=orden, skus_vendidos=sku, canal_de_venta=canal, fecha_creacion_venta=date(2026, 10, 1),
+        periodo=P, numero_orden=orden, skus_vendidos=sku, canal_de_venta=canal, fecha_creacion_venta=dia,
         costo_sin_iva=d(costo_usd) * unidades, comision_venta=d(0), costo_envio=d(envio), precio_final=pf,
         precio_sin_iva=pf / iva, rentabilidad=rent, tc=TC, iva=iva, excluido=False, es_full=es_full,
         unidades=unidades, cuotas=cuotas, cargo_cuotas=d(cargo_cuotas) if cargo_cuotas else d(0),
@@ -131,6 +131,19 @@ def test_umbral_orden_y_solo_revisar(db_session):
     assert rp.desvio_precios(db_session, P, HOY, umbral_pts=d(100))["resumen"]["a_revisar"] == 0
 
 
+def test_por_dia_solo_cuenta_las_ventas_creadas_ese_dia(db_session):
+    _precio(db_session)
+    _real(db_session, "1", "90009", dia=date(2026, 9, 28))   # vendida barata hace días (ya corregida)
+    _real(db_session, "2", "120009", dia=date(2026, 10, 2))  # ayer, a precio del PM
+    db_session.flush()
+    ayer = rp.desvio_precios(db_session, P, HOY, dia=date(2026, 10, 2))
+    assert ayer["dia"] == "2026-10-02" and ayer["resumen"]["a_revisar"] == 0
+    assert _fila(ayer)["ordenes"] == 1
+    ciclo = rp.desvio_precios(db_session, P, HOY)
+    assert ciclo["dia"] is None and _fila(ciclo)["ordenes"] == 2
+    assert rp.desvio_precios(db_session, P, HOY, dia=date(2026, 9, 28))["resumen"]["a_revisar"] == 1
+
+
 def test_orden_sin_unidades_se_avisa(db_session):
     _precio(db_session)
     _real(db_session, "1", "120009")
@@ -208,9 +221,15 @@ def test_endpoints_con_token(cliente, db_multihilo, monkeypatch):
     db_multihilo.flush()
     url = "/rentabilidad/reporte/pricing/desvio-precios"
     assert cliente.get(url).status_code == 401
-    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"umbral_pts": 3})
+    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"umbral_pts": 3, "fecha": "2026-10-01"})
     assert r.status_code == 200, r.text
-    assert r.json()["filas"][0]["revisar"] and r.json()["umbral_pts"] == 3
+    body = r.json()
+    assert body["filas"][0]["revisar"] and body["umbral_pts"] == 3 and body["dia"] == "2026-10-01"
+    assert "todavía no guardó" in body["avisos"][-1]  # no hay cierre registrado en el test
+    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"fecha": "2026-10-02"})
+    assert r.json()["filas"] == []
+    r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"todo_el_ciclo": "true"})
+    assert r.json()["dia"] is None and len(r.json()["filas"]) == 1
 
     monkeypatch.setattr(api, "_ofertas_ml_activas", lambda incluir_propias: [_oferta("TONER-1", 99000)])
     r = cliente.get("/rentabilidad/reporte/pricing/ofertas", params={"token": "secreto"})

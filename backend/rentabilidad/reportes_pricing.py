@@ -78,7 +78,11 @@ class _VigentesPorFecha:
 
 def desvio_precios(
     db: Session, periodo: str, hoy: date, umbral_pts: Decimal = Decimal(5), solo_revisar: bool = False,
+    dia: date | None = None,
 ) -> dict:
+    """`dia`: solo las ventas CREADAS ese día (lo que usa Maca: ayer, para
+    revisar ventas recientes cuyo precio todavía no corrigió). None = todo
+    el período."""
     par = motor.cargar_parametros(db, hoy)
     tasa_op = db.get(ParametroTasa, "costo_operacion_ecom")
     costo_operacion = tasa_op.valor if tasa_op else Decimal(0)
@@ -88,7 +92,10 @@ def desvio_precios(
     sin_precio_pm, sin_datos = set(), set()
     excluidas = {"full": 0, "kits_o_carritos": 0}
 
-    ventas = db.query(VentaEcom).filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False)).all()
+    q = db.query(VentaEcom).filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False))
+    if dia is not None:
+        q = q.filter(VentaEcom.fecha_creacion_venta == dia)
+    ventas = q.all()
     for v in ventas:
         canal = _canal_de_venta(v.canal_de_venta)
         if canal not in CANALES_DESVIO or v.rentabilidad is None or not v.precio_sin_iva or not v.precio_final:
@@ -172,6 +179,8 @@ def desvio_precios(
         avisos.append(f"{len(sin_datos)} órdenes sin unidades/cuotas guardadas: se completan en la próxima corrida diaria.")
     return {
         "periodo": periodo,
+        "dia": dia.isoformat() if dia else None,
+        "alcance": f"ventas creadas el {dia.isoformat()}" if dia else "todo el período",
         "umbral_pts": float(umbral_pts),
         "canales": list(CANALES_DESVIO),
         "definiciones": {
