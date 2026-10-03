@@ -26,7 +26,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import gsheets, pricing_pm, reportes_pricing, seed
+from . import export_ventas_ecom, gsheets, pricing_pm, reportes_pricing, seed
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .adapters import (
     ClasificacionProvider,
@@ -1202,4 +1202,33 @@ def reporte_control_ofertas(
             db, ofertas, ayer_en_argentina() + timedelta(days=1), tolerancia_pct=tolerancia_pct, solo_revisar=solo_revisar,
         )
     res["incluye_ofertas_propias"] = incluir_propias
+    return res
+
+
+@router.get("/reporte/ecom/ventas")
+def reporte_ecom_ventas(
+    fecha: date | None = None,
+    todo_el_ciclo: bool = False,
+    incluir_excluidas: bool = False,
+    token: str | None = None,
+    x_reporte_token: str | None = Header(default=None),
+) -> dict:
+    """Ventas Ecom guardadas por la corrida diaria, orden por orden, con las
+    columnas del reporte de facturación (claves = títulos de columna) —
+    para el Google Sheet de historial vía n8n. Por defecto las órdenes
+    CREADAS AYER (hora Argentina); `fecha` = otro día; `todo_el_ciclo=true`
+    = todo el ciclo de ese día (o del en curso)."""
+    _verificar_token_reporte(token, x_reporte_token)
+    dia = fecha or ayer_en_argentina()
+    periodo = _periodo_de_rango(*ciclo_de(dia))
+    with sesion() as db:
+        res = export_ventas_ecom.exportar_ventas(
+            db, periodo, dia=None if todo_el_ciclo else dia, incluir_excluidas=incluir_excluidas,
+        )
+        cierre = db.get(CierreRentabilidad, periodo)
+    res["datos_guardados_hasta"] = cierre.hasta.isoformat() if cierre else None
+    res["avisos"] = [] if cierre and cierre.hasta >= dia else [
+        f"La corrida diaria todavía no guardó las ventas del {dia.isoformat()}"
+        + (f" (datos hasta {cierre.hasta.isoformat()})." if cierre else ".")
+    ]
     return res
