@@ -71,6 +71,8 @@ class ResumenCorrida:
     observaciones: list[tuple[str, str]] = field(default_factory=list)  # (orden, observación)
     sin_pm: list[str] = field(default_factory=list)
     config_faltante: list[str] = field(default_factory=list)
+    con_error: list[tuple[str, str]] = field(default_factory=list)  # (orden, error) — no se guardaron
+    recortadas: list[tuple[str, str]] = field(default_factory=list)  # (orden, campo)
     facturacion: Decimal = Decimal(0)
     rentabilidad: Decimal = Decimal(0)
 
@@ -83,6 +85,8 @@ def _resumir(
     resumen.excluidas_por_estado_pago = len(ingesta.excluidas_por_estado_pago)
     resumen.costo_cero = [(f.numero_orden, f.skus_vendidos) for f in ingesta.incidencias_costo]
     resumen.config_faltante = resultado.config_faltante
+    resumen.con_error = list(ingesta.ilegibles) + resultado.con_error
+    resumen.recortadas = resultado.recortadas
     for venta in resultado.filas:
         if venta.excluido:
             continue
@@ -167,6 +171,12 @@ def formatear(resumen: ResumenCorrida) -> str:
     if resumen.sin_pm:
         muestra = ", ".join(resumen.sin_pm[:20]) + (" ..." if len(resumen.sin_pm) > 20 else "")
         lineas.append(f"Sin PM ({len(resumen.sin_pm)}): {muestra}")
+    if resumen.con_error:
+        lineas.append(f"ÓRDENES CON ERROR — no se guardaron, revisar ({len(resumen.con_error)}):")
+        lineas += [f"  {orden}  {error}" for orden, error in resumen.con_error]
+    if resumen.recortadas:
+        lineas.append(f"Textos recortados por largo ({len(resumen.recortadas)}): "
+                      + ", ".join(f"{o} ({c})" for o, c in resumen.recortadas[:20]))
     if resumen.config_faltante:
         lineas.append(f"Sin calcular por configuración faltante ({len(resumen.config_faltante)}): {', '.join(resumen.config_faltante)}")
     # Al pie, a propósito (pedido de Maxx, 2026-09-28): para verificar que el

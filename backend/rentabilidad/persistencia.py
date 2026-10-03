@@ -437,6 +437,26 @@ def resolver_comision_fravega(db: Session, fila: FilaEcom) -> FilaEcom:
 class ResultadoPersistenciaEcom:
     filas: list[VentaEcom] = field(default_factory=list)
     config_faltante: list[str] = field(default_factory=list)
+    # Órdenes que no se pudieron calcular por un dato inesperado: se saltean
+    # y se listan, en vez de tirar abajo la corrida entera (bug del
+    # 02/10/2026: una sola orden rompía todo el ciclo).
+    con_error: list[tuple[str, str]] = field(default_factory=list)  # (orden, error)
+    # Textos que no entraban en su columna y se recortaron (orden, campo).
+    recortadas: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _recortar_largos(venta: VentaEcom) -> list[str]:
+    """Recorta cualquier texto más largo que su columna `String(n)`, para
+    que un dato raro de la API no haga fallar el INSERT de todo el período.
+    Devuelve los campos recortados."""
+    recortados = []
+    for col in VentaEcom.__table__.columns:
+        largo = getattr(col.type, "length", None)
+        valor = getattr(venta, col.key, None)
+        if largo and isinstance(valor, str) and len(valor) > largo:
+            setattr(venta, col.key, valor[: largo - 1] + "…")
+            recortados.append(col.key)
+    return recortados
 
 
 def _clasificar_fila_ecom(
@@ -526,6 +546,13 @@ def construir_filas_ecom(
         except ConfiguracionFaltante:
             resultado.config_faltante.append(fila.numero_orden)
             continue
+        except Exception as e:  # una orden rara no tira abajo el ciclo entero
+            resultado.con_error.append((fila.numero_orden, f"{type(e).__name__}: {e}"))
+            if log:
+                log(f"AVISO: orden {fila.numero_orden} sin calcular ({type(e).__name__}: {e})")
+            continue
+        for campo in _recortar_largos(venta):
+            resultado.recortadas.append((fila.numero_orden, campo))
         resultado.filas.append(venta)
 
     return resultado

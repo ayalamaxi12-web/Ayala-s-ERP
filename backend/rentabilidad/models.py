@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Numeric, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -175,7 +175,10 @@ class VentaEcom(Base):
     # se bloquea a nivel de esquema (mismo criterio que venta_tactica).
     numero_orden: Mapped[str] = mapped_column(String(64), index=True)
     # B · Sku's Vendidos · DATO — SKU o lista separada por coma, sin normalizar
-    skus_vendidos: Mapped[str] = mapped_column(String(1000))
+    # Text, sin tope: un carrito grande (o la cadena de SKUs de un kit) pasó
+    # los 1000 caracteres y la corrida diaria del 02/10/2026 se cayó entera
+    # al guardar (migración f1a2b3c4d5e6).
+    skus_vendidos: Mapped[str] = mapped_column(Text)
     # C · FechaCreaciónVenta · DATO
     fecha_creacion_venta: Mapped[date | None] = mapped_column(Date, nullable=True)
     # D · EstadoVenta · DATO — Abierta/Cerrada, no se filtra (§10)

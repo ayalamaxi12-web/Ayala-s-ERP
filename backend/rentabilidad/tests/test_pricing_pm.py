@@ -85,6 +85,12 @@ def test_sku_numerico_de_excel_no_queda_con_punto_cero():
     assert pp.norm_sku(" tn670comp\u200b") == "TN670COMP"
 
 
+def test_fechas_del_sheet():
+    assert pp._fecha("13/2/2026") == date(2026, 2, 13)
+    assert pp._fecha("2/13/2026") == date(2026, 2, 13)
+    assert pp._fecha("31/31/2026") is None and pp._fecha("") is None
+
+
 def test_texto_de_sheets_se_entiende():
     assert pp._num("$ 3.699,50") == d("3699.5")
     assert pp._num("108,1081%") == d("1.081081")
@@ -124,6 +130,7 @@ _DATOS = {
     "INKCARTHP951XLY": pp.DatosSku(d("0.95"), d("1.21"), "Veronica", "Insumo De Impresion", "Tinta"),
     "EPGMR137GREEN": pp.DatosSku(d("5.96"), d("1.21"), "Cristian", "Perifericos", "Gamer"),
     "SIN-WEB": pp.DatosSku(None, None, "Veronica", None, None),
+    "PV-OCT26-MONI": pp.DatosSku(d("30"), d("1.105"), "Laura", "Audio y Video", None),
 }
 
 
@@ -287,3 +294,91 @@ def test_seed_agrega_parametros_nuevos_sin_tocar_los_cargados(db_session):
     db_session.flush()
     assert db_session.query(PricingParametro).filter_by(canal="ONCITY", clave="fee_logistico_default").count() == 1
     assert db_session.query(PricingParametro).filter_by(canal="*", clave="iibb").one().valor == d("0.065")
+
+
+# ── Sincronización desde los Sheets de los PM (fuente principal) ──
+
+def test_fuentes_pm_usa_el_id_propio_o_el_de_margen():
+    env = {"RENT_SHEET_PM_LAURA_ID": "laura", "RENT_SHEET_PM_LAURA_TAB": "Laura",
+           "RENT_SHEET_MARGEN_MATIAS_ID": "matias-margen", "RENT_SHEET_PM_MATIAS_ID": ""}
+    f = {x.pm: x for x in pp.fuentes_pm(env)}
+    assert (f["LAURA"].sheet_id, f["LAURA"].tab) == ("laura", "Laura")
+    assert f["MATIAS"].sheet_id == "matias-margen" and f["MATIAS"].tab is None
+    assert f["VERONICA"].sheet_id is None and f["VERONICA"].nombre == "Verónica"
+
+
+def test_sincroniza_cada_pm_y_un_error_no_frena_al_resto(db_session):
+    hojas = {"v": _veronica(), "m": _matias()}
+
+    def leer(sheet_id, tab):
+        if sheet_id == "roto":
+            raise PermissionError("sin acceso")
+        return hojas[sheet_id]
+
+    fuentes = [pp.FuentePm("VERONICA", "v", None), pp.FuentePm("LAURA", None, None),
+               pp.FuentePm("CRISTIAN", "roto", None), pp.FuentePm("MATIAS", "m", None)]
+    res = {r.pm: r for r in pp.sincronizar_desde_sheets(db_session, HOY, fuentes, leer)}
+    assert res["Verónica"].ok and res["Verónica"].carga.nuevos == 3
+    assert not res["Laura"].ok and "RENT_SHEET_PM_LAURA_ID" in res["Laura"].detalle
+    assert not res["Cristian"].ok and "sin acceso" in res["Cristian"].detalle
+    assert res["Matías"].ok and res["Matías"].carga.nuevos == 1
+    assert pp.vigentes(db_session)["JS10000-SC"].cargado_por == "Sheet Matías"
+
+    hojas["v"] = _veronica()
+    hojas["v"][1][2] = 3999.0  # el PM cambia un precio en su Sheet
+    res = {r.pm: r for r in pp.sincronizar_desde_sheets(db_session, HOY, fuentes, leer)}
+    assert (res["Verónica"].carga.cambiados, res["Verónica"].carga.sin_cambios) == (1, 2)
+    assert pp.vigentes(db_session)["INKCARTHP951XLY"].precio_web == d("3999")
+
+
+class _Ws:
+    def __init__(self, filas):
+        self.filas = filas
+        self.pedidos = []
+
+    def get_values(self, rango=None, **kw):
+        self.pedidos.append((rango, kw))
+        return self.filas[:6] if rango else self.filas
+
+
+class _Cliente:
+    def __init__(self, hojas):
+        self.hojas = hojas
+
+    def open_by_key(self, _id):
+        cliente = self
+
+        class Libro:
+            def worksheets(self):
+                return list(cliente.hojas.values())
+
+            def worksheet(self, tab):
+                return cliente.hojas[tab]
+        return Libro()
+
+
+def test_leer_sheet_busca_la_pestana_de_precios_y_pide_valores_sin_formato():
+    precios = _Ws(_veronica())
+    cliente = _Cliente({"Portada": _Ws([["Hola"]]), "Veronica": precios})
+    assert pp.leer_sheet_pm("id", cliente=cliente) == _veronica()
+    rango, kw = precios.pedidos[-1]
+    assert rango is None and kw["value_render_option"] == "UNFORMATTED_VALUE"
+    assert pp.leer_sheet_pm("id", "Veronica", cliente) == _veronica()
+    with pytest.raises(pp.PlanillaPmInvalida):
+        pp.leer_sheet_pm("id", cliente=_Cliente({"Portada": _Ws([["Hola"]])}))
+
+
+def test_endpoints_sync_y_carga_por_filas(cliente, monkeypatch):
+    monkeypatch.setattr(pp, "fuentes_pm", lambda env=None: [pp.FuentePm("VERONICA", "v", "Veronica"), pp.FuentePm("LAURA", None, None)])
+    monkeypatch.setattr(pp, "leer_sheet_pm", lambda sheet_id, tab=None, cliente=None: _veronica())
+    r = cliente.post("/rentabilidad/pricing/sync-pm")
+    assert r.status_code == 200, r.text
+    body = {x["pm"]: x for x in r.json()}
+    assert body["Verónica"]["ok"] and body["Verónica"]["nuevos"] == 3
+    assert not body["Laura"]["ok"]
+
+    r = cliente.post("/rentabilidad/pricing/carga-pm-filas", json={"pm": "Laura", "filas": _laura()})
+    assert r.status_code == 200, r.text
+    assert r.json()["nuevos"] == 1
+    assert cliente.get("/rentabilidad/pricing/skus").json()["ultima_sync_pm"]
+    assert cliente.post("/rentabilidad/pricing/carga-pm-filas", json={"pm": "X", "filas": [["Nada"]]}).status_code == 422

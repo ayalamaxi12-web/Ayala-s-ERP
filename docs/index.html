@@ -1349,8 +1349,10 @@ igual que la rentabilidad real, que se muestra al lado. -->
     <button class="btn primary" onclick="pricingLoad()">🔍 Consultar</button>
     <button class="btn" onclick="pricingExport()">⬇️ Excel</button>
     <span style="flex:1"></span>
-    <label class="btn" style="cursor:pointer">📥 Cargar planilla PM<input type="file" accept=".xlsx" style="display:none" onchange="pricingUpload(this)"></label>
+    <button class="btn" id="pr-btn-sync" onclick="pricingSync()" title="Lee los precios de cada PM directo de su Sheet (solo guarda lo que cambió)">🔄 Actualizar desde Sheets</button>
+    <label class="btn" style="cursor:pointer" title="Respaldo: subir a mano el .xlsx de un PM">📥 Excel (respaldo)<input type="file" accept=".xlsx" style="display:none" onchange="pricingUpload(this)"></label>
   </div>
+  <div id="pr-sync" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px"></div>
   <div id="pr-info" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px"></div>
   <div class="table-wrap">
     <table id="pr-table">
@@ -1716,7 +1718,7 @@ function goPage(page,el){
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();}
   if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
-  if(page==='pricing'&&!PR.cargado)pricingLoad();
+  if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
 }
 
 // ── MULTI-SELECT ──
@@ -3880,7 +3882,7 @@ async function pricingLoad(){
       const opts=(k,sel,todos)=>{const cur=qs(sel).value,vals=[...new Set(PR.filas.map(f=>f[k]).filter(Boolean))].sort();qs(sel).innerHTML=`<option value="">${todos}</option>`+vals.map(x=>`<option${x===cur?' selected':''}>${x}</option>`).join('');};
       opts('pm','pr-pm','Todos los PM');opts('categoria','pr-cat','Todas las categorías');
     }
-    qs('pr-info').innerHTML=`${d.total} SKU · TC ${Number(d.tc).toLocaleString('es-AR')} (${d.tc_origen}) · real: ciclo ${d.periodo_real}`+(d.avisos||[]).map(a=>`<div style="color:var(--yellow)">⚠ ${a}</div>`).join('');
+    qs('pr-info').innerHTML=`${d.total} SKU${d.ultima_sync_pm?' · últ. sync Sheets '+new Date(d.ultima_sync_pm).toLocaleString('es-AR'):''} · TC ${Number(d.tc).toLocaleString('es-AR')} (${d.tc_origen}) · real: ciclo ${d.periodo_real}`+(d.avisos||[]).map(a=>`<div style="color:var(--yellow)">⚠ ${a}</div>`).join('');
     pricingRender();
   }catch(e){qs('pr-info').textContent='';toast('No se pudo calcular: '+e.message,'error');}
 }
@@ -3918,6 +3920,40 @@ async function pricingFicha(sku){
     h+='</tbody></table></div>';
     qs('pr-ficha-body').innerHTML=h;
   }catch(e){qs('pr-ficha-body').innerHTML=`<div style="color:var(--red)">No se pudo abrir la ficha: ${e.message}</div>`;}
+}
+// Fuente principal de los precios de PM: el backend lee el Sheet de cada PM
+// por API (/pricing/sync-pm). Si a un PM el backend no lo tiene configurado,
+// respaldo: se lee con la conexión de este navegador (Configuración →
+// planillas PM) y se manda al backend. El Excel queda como último respaldo.
+async function pricingSync(){
+  const url=getBackendUrl();if(!url)return;
+  const btn=qs('pr-btn-sync');if(btn)btn.disabled=true;
+  qs('pr-sync').textContent='Sincronizando precios desde los Sheets de los PM...';
+  const lineas=[];
+  try{
+    const res=await fetch(`${url}/rentabilidad/pricing/sync-pm`,{method:'POST'});
+    const d=await res.json();if(!res.ok)throw new Error(d.detail||res.status);
+    for(const r of d){
+      if(r.ok){lineas.push(`✓ ${r.pm}: ${r.detalle}`);continue;}
+      const alt=await pricingSyncNavegador(url,r.pm);
+      lineas.push(alt||`⚠ ${r.pm}: ${r.detalle}`);
+    }
+  }catch(e){lineas.push('⚠ No se pudo sincronizar: '+e.message);}
+  qs('pr-sync').innerHTML=lineas.map(l=>`<div style="color:${l.startsWith('⚠')?'var(--yellow)':'var(--text3)'}">${l}</div>`).join('');
+  if(btn)btn.disabled=false;
+}
+async function pricingSyncNavegador(url,pm){
+  const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
+  const cfg=Object.values(S.sheets||{}).find(s=>norm(s.name)===norm(pm));
+  const key=S.sheetsKey||API_KEY;
+  if(!cfg||!cfg.id||!cfg.tab)return null;
+  try{
+    const r=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.id}/values/${encodeURIComponent(cfg.tab)}!A1:FZ3000?key=${key}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+    const d=await r.json();if(!d.values)throw new Error((d.error&&d.error.message)||'sin datos');
+    const res=await fetch(`${url}/rentabilidad/pricing/carga-pm-filas`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pm,filas:d.values})});
+    const x=await res.json();if(!res.ok)throw new Error(x.detail||res.status);
+    return `✓ ${pm} (vía navegador): ${x.detalle}`;
+  }catch(e){return `⚠ ${pm}: tampoco se pudo leer desde el navegador (${e.message})`;}
 }
 async function pricingUpload(inp){
   const url=getBackendUrl(),file=inp.files[0];inp.value='';
