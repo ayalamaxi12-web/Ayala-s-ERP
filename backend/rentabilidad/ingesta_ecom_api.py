@@ -363,8 +363,10 @@ query BuscarOrdenes($page: Int, $start: Int!, $end: Int!, $tab: ID) {
         created
         owner
         paymentStatus
-        shipping { listCost cost }
-        payments { totalFeeAmount details installmentAmount transactionAmount }
+        shipping { listCost cost shippingTag }
+        payments { totalFeeAmount details installmentAmount transactionAmount paymentTypeTag dateApproved retenciones }
+        status
+        account { userName }
         ownerData { ... on ChChannelOrder { owner ownerId } }
         orderLists {
           quantity
@@ -652,6 +654,30 @@ def _cargos_del_vendedor(orden: dict, tipo: str) -> Decimal | None:
     return total if hay_detalle else None
 
 
+_ESTADO_VENTA = {"closed": "Cerrada", "open": "Abierta"}
+
+
+def _datos_informativos(orden: dict) -> dict:
+    """Columnas informativas del reporte de facturación que la API trae y
+    antes no se guardaban (Maxx, 2026-10-03). Verificado contra la API real
+    (órdenes del 01/10/2026): `status` closed/open, `account.userName`
+    (GLOBALELECTRONICSGROUP / GLOBALELECTRONICSARG / Global WEB), pago con
+    `paymentTypeTag` ("Mercado Pago"), `dateApproved` y `retenciones`, y
+    `shipping.shippingTag` ("Estándar a domicilio"...)."""
+    pagos = orden.get("payments") or []
+    aprobados = sorted(p["dateApproved"] for p in pagos if p.get("dateApproved"))
+    medios = list(dict.fromkeys(p["paymentTypeTag"] for p in pagos if p.get("paymentTypeTag")))
+    retenciones = [_decimal(p.get("retenciones")) for p in pagos if p.get("retenciones") is not None]
+    return {
+        "estado_venta": _ESTADO_VENTA.get(orden.get("status") or "", orden.get("status")),
+        "fecha_pago": _fecha_creacion(aprobados[0]) if aprobados else None,
+        "medio_de_cobro": ", ".join(medios) or None,
+        "retenciones": sum(retenciones, Decimal(0)) if retenciones else None,
+        "usuario_integracion": (orden.get("account") or {}).get("userName"),
+        "entrega_envio": (orden.get("shipping") or {}).get("shippingTag"),
+    }
+
+
 def _publicacion_ml(lineas: list[dict]) -> dict:
     """MLA y link de la publicación de ML en que se vendió: cada línea de una
     orden de ML trae su `listing` con `owner == "MlItem"`, `ownerId` = MLA y
@@ -865,6 +891,7 @@ def _fila_desde_orden(
         cuotas=_cuotas_del_pago(orden),
         cargo_cuotas=_cargo_cuotas_vendedor(orden),
         **_publicacion_ml(lineas),
+        **_datos_informativos(orden),
     )
 
 

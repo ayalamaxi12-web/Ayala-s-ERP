@@ -74,15 +74,9 @@ COLUMNAS: list[tuple[str, str]] = [
     ("% Rentabilidad", "pct_rentabilidad"),
 ]
 
-# Columnas que la corrida por API no completa hoy (salen vacías) y por qué.
+# Columnas que la corrida no completa (salen vacías) y por qué.
 COLUMNAS_SIN_DATO = {
-    "EstadoVenta": "la corrida no lo guarda (la API lo tiene: pestaña abierta/cerrada)",
-    "FechaPago": "la corrida no lo guarda (la API lo tiene en el pago)",
     "IVA A Favor": "informativo, pendiente de definición (P-02)",
-    "Usuario Integracion": "la corrida no lo guarda",
-    "Medio De Cobro": "la corrida no lo guarda (la API lo tiene en el pago)",
-    "Entrega/Envio": "la corrida no lo guarda",
-    "Impuestos (retenciones)": "la corrida no lo guarda (la API lo tiene en los cargos de MP)",
     "Dif IVA": "depende de IVA A Favor (P-02)",
     "Cash": "informativo, pendiente de definición (P-02)",
     "Utilidad Venta": "informativo, pendiente de definición (P-02)",

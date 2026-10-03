@@ -40,7 +40,8 @@ def test_columnas_en_el_orden_del_reporte_y_valores(db_session):
     assert f["FechaCreacionVenta"] == "2026-10-02" and f["Precio Final"] == 12100.0
     assert f["Total Impuestos"] == 2100.0  # Precio Final − Precio SIN IVA
     assert f["Costo por Operacion Ecom"] == 149.12
-    assert f["EstadoVenta"] is None and "EstadoVenta" in res["columnas_sin_dato"]
+    assert f["IVA A Favor"] is None and "IVA A Favor" in res["columnas_sin_dato"]
+    assert "EstadoVenta" not in res["columnas_sin_dato"]
     assert ex.exportar_ventas(db_session, P)["total"] == 3
     assert ex.exportar_ventas(db_session, P, dia=date(2026, 10, 2), incluir_excluidas=True)["total"] == 3
 
@@ -78,3 +79,24 @@ def test_endpoint(cliente, db_multihilo):
     assert r["dia"] is None and r["total"] == 2 and r["periodo"] == P
     r = cliente.get(url, headers=h, params={"fecha": "2026-10-05"}).json()
     assert r["total"] == 0 and "todavía no guardó" in r["avisos"][0]
+
+
+def test_datos_informativos_de_la_orden_de_la_api():
+    from rentabilidad.ingesta_ecom_api import _datos_informativos
+    orden = {
+        "status": "closed", "account": {"userName": "GLOBALELECTRONICSGROUP"},
+        "shipping": {"shippingTag": "Estándar a domicilio"},
+        "payments": [
+            {"paymentTypeTag": "Mercado Pago", "dateApproved": "2026-10-01 23:25:30", "retenciones": 260.43},
+            {"paymentTypeTag": "Mercado Pago", "dateApproved": "2026-10-01 22:00:00", "retenciones": 10},
+        ],
+    }
+    assert _datos_informativos(orden) == {
+        "estado_venta": "Cerrada", "fecha_pago": date(2026, 10, 1), "medio_de_cobro": "Mercado Pago",
+        "retenciones": d("270.43"), "usuario_integracion": "GLOBALELECTRONICSGROUP",
+        "entrega_envio": "Estándar a domicilio",
+    }
+    assert _datos_informativos({"status": "open"}) == {
+        "estado_venta": "Abierta", "fecha_pago": None, "medio_de_cobro": None, "retenciones": None,
+        "usuario_integracion": None, "entrega_envio": None,
+    }

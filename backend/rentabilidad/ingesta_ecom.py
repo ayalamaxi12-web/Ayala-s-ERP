@@ -132,6 +132,15 @@ class FilaEcom:
     # propia orden — para que el reporte de Maca lleve directo a corregirla.
     item_ml: str | None = None
     permalink_ml: str | None = None
+    # Columnas informativas del reporte de facturación (2026-10-03), de la
+    # API: EstadoVenta, FechaPago, Medio De Cobro, Impuestos (retenciones),
+    # Usuario Integración, Entrega/Envío.
+    estado_venta: str | None = None
+    fecha_pago: date | None = None
+    medio_de_cobro: str | None = None
+    retenciones: Decimal | None = None
+    usuario_integracion: str | None = None
+    entrega_envio: str | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(
