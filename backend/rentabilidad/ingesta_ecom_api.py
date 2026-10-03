@@ -842,8 +842,15 @@ class EcomApiAdapter:
         lineas: list[FilaEcom] = []
         excluidas: list[FilaEcom] = []
         incidencias: list[FilaEcom] = []
+        ilegibles: list[tuple[str, str]] = []
         for orden in ordenes:
-            fila = _fila_desde_orden(orden, tc, canales, estados_pago, fulfillment)
+            try:
+                fila = _fila_desde_orden(orden, tc, canales, estados_pago, fulfillment)
+            except Exception as e:  # una orden rara no frena la corrida entera
+                numero = str(orden.get("customOrderId") or orden.get("id") or "?")
+                ilegibles.append((numero, f"{type(e).__name__}: {e}"))
+                self._log(f"AVISO: orden {numero} ilegible ({type(e).__name__}: {e}) — se saltea")
+                continue
             if fila.estado_pago not in ESTADOS_PAGO_QUE_PARTICIPAN:
                 excluidas.append(fila)
             elif fila.incidencia is not None:
@@ -851,4 +858,5 @@ class EcomApiAdapter:
             else:
                 lineas.append(fila)
 
-        return ResultadoIngestaEcom(lineas=lineas, excluidas_por_estado_pago=excluidas, incidencias_costo=incidencias)
+        return ResultadoIngestaEcom(lineas=lineas, excluidas_por_estado_pago=excluidas, incidencias_costo=incidencias,
+                                    ilegibles=ilegibles)

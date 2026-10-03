@@ -46,7 +46,7 @@ Todo lo demás (PM, categorías, responsables, listas, comparaciones,
 reportes personales) queda deliberadamente fuera — Maxx fue explícito en
 que este adaptador solo entrega líneas listas para el motor.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from typing import Callable
@@ -142,6 +142,9 @@ class ResultadoIngestaEcom:
     lineas: list[FilaEcom]
     excluidas_por_estado_pago: list[FilaEcom]
     incidencias_costo: list[FilaEcom]
+    # Órdenes que la API devolvió con un dato que no se pudo leer: se
+    # saltean y se informan, no frenan la corrida (2026-10-03).
+    ilegibles: list[tuple[str, str]] = field(default_factory=list)  # (orden, error)
 
 
 def _valor(fila: tuple, idx: int | None):
