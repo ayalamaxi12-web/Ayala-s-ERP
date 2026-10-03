@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Enum, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -287,6 +287,11 @@ class VentaEcom(Base):
     # Orden despachada por ML Full — para el reporte diario (2026-09-29).
     # None en filas importadas de la planilla o del Excel (no traen el dato).
     es_full: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Reporte de desvío de precios (2026-10-03) — ver `FilaEcom`. None en
+    # filas del Excel o guardadas antes de esta versión.
+    unidades: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cuotas: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cargo_cuotas: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
 
 
 # ── Tablas paramétricas (§1.3) — ninguna tasa/prefijo/régimen vive en código ──

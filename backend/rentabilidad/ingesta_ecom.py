@@ -120,6 +120,14 @@ class FilaEcom:
     # Orden despachada por ML Full (logistic_type=fulfillment). None = no se
     # sabe (Excel). Para el reporte diario "Full" (2026-09-29).
     es_full: bool | None = None
+    # Para el reporte de desvío de precios (2026-10-03): unidades vendidas
+    # (líneas con SKU), cuotas del pago (total / monto por cuota) y lo que el
+    # canal le cobró al vendedor por ofrecer cuotas sin interés
+    # (`financing_add_on_fee` en ML, `financing_fee` del vendedor en MP).
+    # None = el origen no trae el dato (Excel).
+    unidades: int | None = None
+    cuotas: int | None = None
+    cargo_cuotas: Decimal | None = None
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(
