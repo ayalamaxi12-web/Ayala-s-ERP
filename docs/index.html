@@ -922,6 +922,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="card">
       <div class="card-title">Backend Railway</div>
       <div class="field"><label>URL del servidor</label><input type="text" id="backend-url-input" placeholder="https://tu-app.railway.app"></div>
+      <div class="field"><label>Clave del backend</label><input type="password" id="backend-key-input" placeholder="La que te pasó el admin (ERP_API_KEY)" autocomplete="off"></div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn primary" onclick="saveBackendUrl()">Guardar</button>
         <button class="btn" onclick="testBackend()">Testear</button>
@@ -1528,7 +1529,6 @@ const RULES=[
 // CUOTAS_PCT_DEFAULT de backend/ml_ofertas.py -- si se corrige uno, corregir el otro.
 const CUOTAS_PCT_ML={3:8.90,6:13.40,9:17.80,12:21.60};
 const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#8b5cf6'];
-const API_KEY='AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
 const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
 const HIST_ID='1Wzs3SmmIGcGd_NJGfe5qJRBYkJBbyKjrl4rF7reojIE';
 const COMP_SHEET_ID='15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
@@ -1739,10 +1739,13 @@ function setupSortHeaders(tableId,sortObj,renderFn){document.querySelectorAll('#
 function renderPag(id,pages,total,pageProp,renderFn){const pag=qs(id);if(!pag||pages<=1){if(pag)pag.innerHTML='';return;}const cur=S[pageProp];let html=`<span class="page-info-txt">${total} resultados</span>`;if(cur>1)html+=`<button class="page-btn" onclick="S.${pageProp}=${cur-1};${renderFn}()">‹</button>`;for(let i=Math.max(1,cur-2);i<=Math.min(pages,cur+2);i++)html+=`<button class="page-btn${i===cur?' active':''}" onclick="S.${pageProp}=${i};${renderFn}()">${i}</button>`;if(cur<pages)html+=`<button class="page-btn" onclick="S.${pageProp}=${cur+1};${renderFn}()">›</button>`;pag.innerHTML=html;}
 
 // ── STORAGE ──
-function loadStor(){try{const d=JSON.parse(localStorage.getItem('global_erp_v1')||'{}');['mlToken','mlToken2','mlSellerId','mlSellerId2','sheetsKey','tolGreen','tolYellow','shippingThreshold','shippingCost','ecomCookie','ecomEmail'].forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});if(d.sheets)S.sheets=d.sheets;if(d.rules)d.rules.forEach(r=>{const x=RULES.find(x=>x.key===r.key);if(x)x.pct=r.pct;});const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;window.BACKEND_URL_RUNTIME=bu;}catch(e){}}
+function loadStor(){try{const d=JSON.parse(localStorage.getItem('global_erp_v1')||'{}');['mlToken','mlToken2','mlSellerId','mlSellerId2','sheetsKey','tolGreen','tolYellow','shippingThreshold','shippingCost','ecomCookie','ecomEmail'].forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});if(d.sheets)S.sheets=d.sheets;if(d.rules)d.rules.forEach(r=>{const x=RULES.find(x=>x.key===r.key);if(x)x.pct=r.pct;});const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;if(qs('backend-key-input'))qs('backend-key-input').value=getBackendKey();window.BACKEND_URL_RUNTIME=bu;}catch(e){}}
 function saveStor(){try{localStorage.setItem('global_erp_v1',JSON.stringify({mlToken:S.mlToken,mlToken2:S.mlToken2,mlSellerId:S.mlSellerId,mlSellerId2:S.mlSellerId2,sheetsKey:S.sheetsKey,ecomCookie:S.ecomCookie,ecomEmail:S.ecomEmail,sheets:S.sheets,tolGreen:S.tolGreen,tolYellow:S.tolYellow,shippingThreshold:S.shippingThreshold,shippingCost:S.shippingCost,rules:RULES.map(r=>({key:r.key,pct:r.pct}))}));}catch(e){}}
-function saveBackendUrl(){const url=qs('backend-url-input').value.trim().replace(/\/+$/,'');localStorage.setItem('erp_backend_url',url);window.BACKEND_URL_RUNTIME=url;qs('backend-status').textContent='✅ Guardado: '+url;}
+function saveBackendUrl(){const url=qs('backend-url-input').value.trim().replace(/\/+$/,'');localStorage.setItem('erp_backend_url',url);window.BACKEND_URL_RUNTIME=url;const k=(qs('backend-key-input')||{value:''}).value.trim();try{if(k)localStorage.setItem('erp_backend_key',k);else localStorage.removeItem('erp_backend_key');}catch(e){}qs('backend-status').textContent='✅ Guardado: '+url+(k?' (con clave)':' (sin clave)');}
 function getBackendUrl(){return window.BACKEND_URL_RUNTIME||localStorage.getItem('erp_backend_url')||'';}
+function getBackendKey(){try{return localStorage.getItem('erp_backend_key')||'';}catch(e){return '';}}
+// Agrega X-ERP-Key SOLO a los requests que van al backend configurado (nunca a Sheets, Anthropic, etc.).
+(function(){const _f=window.fetch.bind(window);window.fetch=function(input,init){try{const key=getBackendKey(),bu=getBackendUrl();if(key&&bu){const u=input instanceof Request?input.url:String(input);if(u===bu||u.startsWith(bu+'/')||u.startsWith(bu+'?')){init=Object.assign({},init);const h=new Headers(init.headers||(input instanceof Request?input.headers:undefined));h.set('X-ERP-Key',key);init.headers=h;}}}catch(e){}return _f(input,init);};})();
 // ── Persistencia genérica de "último resultado cargado" por módulo --
 // pedido de Maxx 2026-09-08: mismo patrón que ya existía solo para Ofertas
 // ML (`ofmGuardarUltimoResultado`/`OFM_RESULT_KEY`), generalizado para no
@@ -1751,13 +1754,13 @@ function getBackendUrl(){return window.BACKEND_URL_RUNTIME||localStorage.getItem
 // pedirle nada al backend/Sheets, el usuario decide cuándo re-cargar.
 function guardarUltimoResultado(clave,datos){try{localStorage.setItem('ult_'+clave,JSON.stringify({datos,ts:Date.now()}));}catch(e){}}
 function restaurarUltimoResultado(clave){try{const c=JSON.parse(localStorage.getItem('ult_'+clave)||'null');return c?c.datos:null;}catch(e){return null;}}
-async function testBackend(){const url=getBackendUrl();if(!url){qs('backend-status').textContent='⚠ Ingresá la URL primero';return;}qs('backend-status').textContent='● Testeando...';try{const res=await fetch(url+'/health',{signal:AbortSignal.timeout(5000)});const d=await res.json();qs('backend-status').textContent='✅ Backend online · '+d.time;}catch(e){qs('backend-status').textContent='❌ No se pudo conectar: '+e.message;}}
+async function testBackend(){const url=getBackendUrl();if(!url){qs('backend-status').textContent='⚠ Ingresá la URL primero';return;}qs('backend-status').textContent='● Testeando...';try{const res=await fetch(url+'/health',{signal:AbortSignal.timeout(5000)});const d=await res.json();let ck='';try{const rc=await fetch(url+'/auth/check',{method:'POST',signal:AbortSignal.timeout(5000)});if(rc.status===401)ck=' · ⚠ la clave falta o es incorrecta';else if(rc.ok){const dc=await rc.json();ck=dc.clave_activa?' · 🔑 clave OK':' · clave aún no exigida';}}catch(e2){}qs('backend-status').textContent='✅ Backend online · '+d.time+ck;}catch(e){qs('backend-status').textContent='❌ No se pudo conectar: '+e.message;}}
 
 // ── CATS ──
 async function loadCats(){
   qs('cats-status').textContent='Cargando...';
   try{
-    const key=S.sheetsKey||API_KEY;
+    const key=S.sheetsKey;if(!key)throw new Error('Falta la API Key de Sheets (Configuración)');
     // Range M2000: SKU(A) Categoria(B) Subcategoria2(C) PM(D) Subcategoria(E)
     const url=`https://sheets.googleapis.com/v4/spreadsheets/${CATS_ID}/values/${encodeURIComponent(CATS_TAB)}!A1:M2500?key=${key}`;
     const d=await(await fetch(url)).json();
@@ -1886,7 +1889,7 @@ function exportML(){if(!S.pubData.length){toast('Sin datos','error');return;}con
 
 // ── SHEETS FETCH HELPER ──
 async function fetchSheetByGid(sheetId, gid, range){
-  const key=S.sheetsKey||API_KEY;
+  const key=S.sheetsKey;if(!key)throw new Error('Falta la API Key de Sheets (Configuración)');
   // First get tab name from gid
   const meta=await(await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?key=${key}`)).json();
   const tab=meta.sheets?.find(s=>String(s.properties.sheetId)===String(gid));
@@ -2114,7 +2117,7 @@ async function loadMLSheets(){
   btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
 }
 // ── COMPETIDORES ──
-async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${API_KEY}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${API_KEY}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
+async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${S.sheetsKey}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${S.sheetsKey}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
       // ml_vendedor.py agrega un bloque de 4 columnas (Precio/Tachado/Desc/Cuotas) con
       // fecha cada vez que re-scrapea un vendedor ya existente, a la derecha de las
       // columnas base A-I -- antes esto leía siempre A1:I2000 (el precio del primer
@@ -3945,8 +3948,8 @@ async function pricingSync(){
 async function pricingSyncNavegador(url,pm){
   const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
   const cfg=Object.values(S.sheets||{}).find(s=>norm(s.name)===norm(pm));
-  const key=S.sheetsKey||API_KEY;
-  if(!cfg||!cfg.id||!cfg.tab)return null;
+  const key=S.sheetsKey;
+  if(!cfg||!cfg.id||!cfg.tab||!key)return null;
   try{
     const r=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.id}/values/${encodeURIComponent(cfg.tab)}!A1:FZ3000?key=${key}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
     const d=await r.json();if(!d.values)throw new Error((d.error&&d.error.message)||'sin datos');
@@ -4838,7 +4841,7 @@ function ayalaCoreMlaCondRevertir(){
 // ──────────────────────
 
 // ── DASHBOARD ──
-async function fetchSheet(sheetId,name){const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${API_KEY}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
+async function fetchSheet(sheetId,name){if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${S.sheetsKey}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
 // ── Fila unificada — mismo shape que usaba parseVentas() del Sheet (sheet
 // pasa a ser el `periodo` real del motor). Un solo mapeo para histórico
 // (/historico/tactica,ecom) y consulta en vivo (/tactica/periodo,
@@ -5747,7 +5750,7 @@ function init(){
   if(S.ecomEmail)qs('ecom-email').value=S.ecomEmail;
   qs('tol-green').value=S.tolGreen;qs('tol-yellow').value=S.tolYellow;
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
-  const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;
+  const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;if(qs('backend-key-input'))qs('backend-key-input').value=getBackendKey();
   renderSkuTags();
   // Trigger initial page load
   goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
