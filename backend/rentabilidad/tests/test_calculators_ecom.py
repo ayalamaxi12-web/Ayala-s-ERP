@@ -6,9 +6,9 @@ from rentabilidad.calculators import LineaEcomInput, RentabilidadEcomCalculator
 
 
 def test_av_es_cero_ante_error_no_none(db_session):
-    """§7.1 paso 7: AV = 1-(AA/Z), 'con 0 ante error' — literal, no None."""
+    """AV = AB/Q (sobre precio SIN IVA, CRITERIOS_MARGEN §1), 'con 0 ante error' — no None."""
     calc = RentabilidadEcomCalculator(db_session)
-    # Z=0: Q-M-O-S-T se anula exactamente.
+    # Q=0 (postventa / sin precio): no hay sobre qué medir.
     linea = LineaEcomInput(
         numero_orden="1",
         costo_sin_iva=Decimal("10"),
@@ -94,3 +94,15 @@ def test_orden_real_ago_sep_con_costo_operacion(db_session):
     assert abs(r.neto - Decimal("13516.1657")) <= Decimal("0.01")
     assert abs(r.costo_total - Decimal("9531.90")) <= Decimal("0.01")
     assert abs(r.rentabilidad - Decimal("3984.2657")) <= Decimal("0.01")
+
+
+def test_av_es_rentabilidad_sobre_precio_sin_iva_no_sobre_neto_de_cargos(db_session):
+    calc = RentabilidadEcomCalculator(db_session)
+    linea = LineaEcomInput(
+        numero_orden="2", costo_sin_iva=Decimal("20"), comision_venta=Decimal("5000"),
+        costo_envio=Decimal("1000"), precio_sin_iva=Decimal("100000"), precio_final=Decimal("121000"),
+        tc=Decimal("1500"), costo_operacion=Decimal(0),
+    )
+    r = calc.calcular(linea)
+    assert r.pct_rentabilidad == r.rentabilidad / Decimal("100000")
+    assert r.pct_rentabilidad != 1 - (r.costo_total / r.neto)  # la fórmula vieja daba otro número

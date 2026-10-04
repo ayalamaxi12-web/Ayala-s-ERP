@@ -15,7 +15,7 @@ no implementada acá).
     envio          = tramo_por_precio(precio_oferta)           # 0 si <33k, con descuento MercadoLíder Platinum si aplica
     imp_cheque     = precio_oferta × 1,2%                      # sobre el precio CON IVA (bruto)
     iibb           = base_sin_iva × 5%                         # sobre el precio SIN IVA (neto) -- NO sobre precio_oferta
-    costo_producto = costo_sin_iva_desde_TACTICA × TC          # nunca del PM Sheet
+    costo_producto = costo_sin_iva (catálogo de Ecom) × TC     # nunca del PM Sheet
 
     margen_$  = base_sin_iva − comision − costo_fijo − cuotas − envio − imp_cheque − iibb − costo_producto
     margen_%  = margen_$ / base_sin_iva
@@ -209,7 +209,7 @@ class ParametrosMargen:
     """Todo lo que el REQ pide editable con on/off (§2.0), con los valores
     confirmados como default. TC y el costo del producto NO viven acá --
     se resuelven antes de llamar a `calcular_margen_oferta` (TC porque es
-    un valor, no un descuento; costo porque sale de Táctica por SKU)."""
+    un valor, no un descuento; costo porque sale del catálogo de Ecom por SKU)."""
     comision_por_dominio: dict[str, Decimal] = field(default_factory=lambda: dict(COMISION_POR_DOMINIO_DEFAULT))
     comision_general: Decimal = COMISION_GENERAL_DEFAULT
     costo_fijo_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(COSTO_FIJO_TRAMOS_DEFAULT))
@@ -245,10 +245,12 @@ def calcular_margen_oferta(
 ) -> ResultadoMargenOferta:
     """Fórmula canónica REQ §2.0, literal -- ver docstring del módulo para
     el porqué de cada base imponible. `iva_factor` y `costo_producto_ars`
-    vienen resueltos por el llamador (Táctica, nunca el PM Sheet)."""
+    vienen resueltos por el llamador (Ecom/Táctica, nunca el PM Sheet)."""
     base_sin_iva = precio_oferta / iva_factor
 
-    comision_pct = params.comision_por_dominio.get(domain_id, params.comision_general) if domain_id else params.comision_general
+    # Criterio de margen §2: comisión ML 15,5% único. `comision_por_dominio`
+    # queda como dato (futuro: comisión real por categoría) pero NO se usa.
+    comision_pct = params.comision_general
     comision = (precio_oferta * comision_pct / 100) if params.usar_comision else Decimal(0)
 
     costo_fijo = _por_tramo(precio_oferta, params.costo_fijo_tramos) if params.usar_costo_fijo else Decimal(0)
@@ -1243,7 +1245,7 @@ def _armar_fila(
     precio_normal: Decimal, precio_oferta: Decimal,
     costo_provider, iva_provider, params: ParametrosMargen, tc: Decimal,
 ) -> tuple[FilaOferta, dict | None]:
-    """Resuelve costo/IVA desde Táctica (nunca del PM Sheet, REQ §2.0) y
+    """Resuelve costo (catálogo de Ecom) e IVA (Táctica, con respaldo de Ecom); nunca del PM Sheet, REQ §2.0, y
     arma la fila -- compartido entre `ofertas_activas` (campañas) y
     `ofertas_propias_activas` (PRICE_DISCOUNT) para no repetir la
     resolución de margen dos veces."""
@@ -1268,9 +1270,9 @@ def _armar_fila(
         costo_usd = costo_provider.obtener(sku_ml)
         iva_factor = iva_provider.factor(sku_ml)
         if costo_usd is None:
-            incidencia = "SIN_COSTO_TACTICA"
+            incidencia = "SIN_COSTO"
         elif iva_factor is None:
-            incidencia = "SIN_IVA_TACTICA"
+            incidencia = "SIN_IVA"
         else:
             costo_ars = costo_usd * tc
             margen = calcular_margen_oferta(precio_oferta, iva_factor, costo_ars, domain_id, cuotas_ofrecidas, params)
@@ -1289,10 +1291,10 @@ def _armar_fila(
 
 
 def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider, item_id: str, cuenta: str, tc: Decimal) -> dict:
-    """Trae UN ítem puntual y resuelve costo/IVA de Táctica -- para el
+    """Trae UN ítem puntual y resuelve costo (Ecom) / IVA -- para el
     buscador de "MLA sin oferta activa" (armar la fila a mano en vez de
     sacarla del escaneo de campañas). Misma resolución de incidencia que
-    `_armar_fila` (`SIN_SKU`/`SIN_COSTO_TACTICA`/`SIN_IVA_TACTICA`), sin
+    `_armar_fila` (`SIN_SKU`/`SIN_COSTO`/`SIN_IVA`), sin
     tocar esa función porque ahí `precio_oferta` es obligatorio y acá
     todavía no existe ninguno."""
     d = ml.detalle_item_completo(item_id, cuenta) or {}
@@ -1307,9 +1309,9 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
         costo_usd = costo_provider.obtener(sku_ml)
         iva_factor = iva_provider.factor(sku_ml)
         if costo_usd is None:
-            incidencia = "SIN_COSTO_TACTICA"
+            incidencia = "SIN_COSTO"
         elif iva_factor is None:
-            incidencia = "SIN_IVA_TACTICA"
+            incidencia = "SIN_IVA"
     return {
         "encontrado": True, "item_id": d["id"], "cuenta": cuenta, "sku": sku_ml, "titulo": d.get("title", ""),
         "permalink": d.get("permalink"), "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
@@ -1676,13 +1678,14 @@ def iniciar_job(job_id: str, cuentas: list = None, incluir_propias: bool = False
     "corriendo..." indeterminado."""
     _jobs[job_id] = {"status": "running", "log": ["Iniciando lectura de ofertas activas..."], "result": None, "progress": None}
     try:
-        from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+        from rentabilidad.costos_ecom import proveedores_de_costo_e_iva
 
         ml = MLOfertasClient()
-        costo_provider = CostoVigenteProvider()
-        iva_provider = IvaProvider()
+        costo_provider, iva_provider = proveedores_de_costo_e_iva()
         params = ParametrosMargen()
-        tc_decimal = Decimal(str(tc)) if tc else Decimal(1)
+        if not tc or Decimal(str(tc)) <= 0:
+            raise ValueError("Sin TC del BNA (ni guardado): no se calcula margen con TC 1.")
+        tc_decimal = Decimal(str(tc))
 
         cuentas = cuentas or list(SELLERS.keys())
         filas, incidencias = ofertas_activas(ml, costo_provider, iva_provider, cuentas=cuentas, params=params, tc=tc_decimal)

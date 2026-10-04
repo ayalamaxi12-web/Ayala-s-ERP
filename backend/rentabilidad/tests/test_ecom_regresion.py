@@ -43,7 +43,7 @@ def test_e1_ml_carrito_iva_10_5(db_session):
     assert _cerca(r.rentabilidad, "278741.686")
     assert _cerca(r.rentabilidad_usd, "185.83")
     assert _cerca(r.facturacion_usd, "454.71")
-    assert _cerca(r.pct_rentabilidad, "0.5879")
+    assert _cerca(r.pct_rentabilidad, "0.4495")  # AB/Q; la planilla vieja daba 0.5879 (AB/Z, neto de cargos)
 
     iva_provider = IvaProvider(consultar=lambda: [{"sku": "SKU-E1", "iva_descripcion": "IVA Debito 10.5%"}])
     ao = resolver_ao_orden(iva_provider, "SKU-E1")
@@ -69,7 +69,7 @@ def test_e2_ml_carrito_iva_21(db_session):
     assert _cerca(r.neto, "15357.765")
     assert _cerca(r.costo_total, "7470.00")
     assert _cerca(r.rentabilidad, "7887.765")
-    assert _cerca(r.pct_rentabilidad, "0.5136")
+    assert _cerca(r.pct_rentabilidad, "0.3234")  # AB/Q; la planilla vieja daba 0.5136 (AB/Z)
 
 
 def test_e3_fravega_sin_retenciones_deducidas_igual_que_siempre(db_session):

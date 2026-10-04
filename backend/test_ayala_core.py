@@ -70,7 +70,11 @@ class _MLFalso:
 
 
 # ── Ejemplo congelado, AYALA_CORE.md A.3.1 (PLANCHA-SUB-26X26-PORT,
-# tomado de la planilla 2026-09-02) -- valida el motor al peso exacto.
+# tomado de la planilla 2026-09-02). Era "al peso exacto" contra la planilla
+# con el 6,5% unificado; desde 2026-10 (CRITERIOS_MARGEN.md §2/§4: IIBB 5% s/
+# sin IVA + imp. cheque 1,2% s/ con IVA, separados) los precios esperados son
+# los del motor con impuestos corregidos -- ya NO coinciden con la planilla de
+# Matías hasta que ella se ajuste al mismo criterio. 
 # Usa las tasas de cuotas VIEJAS (8,4/12,3/15,7/19,2%) a propósito: son
 # las que estaban en la planilla cuando se congeló el ejemplo, antes de
 # la corrección del mismo día (ver Decisiones tomadas en el .md) -- por
@@ -86,7 +90,7 @@ def test_congelado_contado():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("0"), renta_pct=Decimal("32"),
     )
-    assert p == Decimal("201258")
+    assert p == Decimal("200467")
 
 
 def test_congelado_reducida():
@@ -94,7 +98,7 @@ def test_congelado_reducida():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("5"), renta_pct=Decimal("32"),
     )
-    assert p == Decimal("230046")
+    assert p == Decimal("229015")
 
 
 def test_congelado_3_cuotas_tasa_vieja():
@@ -102,7 +106,7 @@ def test_congelado_3_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("8.4"), renta_pct=Decimal("30"),
     )
-    assert p == Decimal("239645")
+    assert p == Decimal("238525")
 
 
 def test_congelado_6_cuotas_tasa_vieja():
@@ -110,7 +114,7 @@ def test_congelado_6_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("12.3"), renta_pct=Decimal("28"),
     )
-    assert p == Decimal("254029")
+    assert p == Decimal("252771")
 
 
 def test_congelado_9_cuotas_tasa_vieja():
@@ -118,7 +122,7 @@ def test_congelado_9_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("15.7"), renta_pct=Decimal("26"),
     )
-    assert p == Decimal("265784")
+    assert p == Decimal("264408")
 
 
 def test_congelado_12_cuotas_tasa_vieja():
@@ -126,7 +130,7 @@ def test_congelado_12_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("19.2"), renta_pct=Decimal("24"),
     )
-    assert p == Decimal("279649")
+    assert p == Decimal("278126")
 
 
 def test_congelado_las_6_condiciones_juntas_con_tasas_vigentes():
@@ -137,9 +141,9 @@ def test_congelado_las_6_condiciones_juntas_con_tasas_vigentes():
     precios = calcular_precios_todas_condiciones(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
     )
-    assert precios["contado"] == Decimal("201258")
-    assert precios["reducida"] == Decimal("230046")
-    assert precios["3"] != Decimal("239645")  # tasa vigente subió -> precio distinto
+    assert precios["contado"] == Decimal("200467")
+    assert precios["reducida"] == Decimal("229015")
+    assert precios["3"] != Decimal("238525")  # tasa vigente subió -> precio distinto
     assert set(precios) == {"contado", "reducida", "3", "6", "9", "12"}
 
 
@@ -397,7 +401,7 @@ def test_descubrir_publicaciones_marca_incidencia_sin_costo_tactica(monkeypatch)
     ]})
     filas, incidencias = descubrir_publicaciones(ml, _CostoProviderFalso({}), _IvaProviderFalso({"PLANCHA-SUB-TERMO": Decimal("1.21")}), ["IT"], Decimal(1000))
     assert filas == []
-    assert incidencias == [{"item_id": "MLA1", "cuenta": "IT", "sku": "PLANCHA-SUB-TERMO", "motivo": "SIN_COSTO_TACTICA"}]
+    assert incidencias == [{"item_id": "MLA1", "cuenta": "IT", "sku": "PLANCHA-SUB-TERMO", "motivo": "SIN_COSTO"}]
 
 
 def test_descubrir_publicaciones_recorre_las_dos_cuentas(monkeypatch):
@@ -735,3 +739,31 @@ def test_parsear_precios_excel_ignora_condicion_sin_precio_cargado():
     precios = parsear_precios_excel_matias(filas)
     assert "reducida" not in precios["PLANCHA-SUB-PORTATIL"]
     assert precios["PLANCHA-SUB-PORTATIL"]["contado"] == Decimal("73387")
+
+
+def test_impuestos_separados_iibb_5_sobre_neto_y_cheque_1_2_sobre_bruto():
+    # Criterio de margen §2/§4: sin el 6,5% unificado.
+    from ayala_core import IIBB_PCT_DEFAULT, IMP_CHEQUE_PCT_DEFAULT
+
+    assert IIBB_PCT_DEFAULT == Decimal("5")
+    assert IMP_CHEQUE_PCT_DEFAULT == Decimal("1.2")
+    kw = dict(costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
+              financiero_pct=Decimal("0"), renta_pct=Decimal("32"))
+    base = calcular_precio_condicion(**kw)
+    # el imp. cheque ENTRA siempre: sin él el precio baja
+    assert calcular_precio_condicion(**kw, imp_cheque_pct=Decimal("0")) < base
+    # y no es el viejo 6,5% de un solo lado
+    assert calcular_precio_condicion(**kw, iibb_pct=Decimal("6.5"), imp_cheque_pct=Decimal("0")) != base
+
+
+def test_el_precio_cumple_la_cuenta_con_los_impuestos_separados():
+    # Reverse-markup: con el precio resultante, lo que sobra tras descontar
+    # comisión, IIBB (s/ neto), cheque (s/ bruto), envío y costo es la renta pedida.
+    p = calcular_precio_condicion(
+        costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
+        financiero_pct=Decimal("0"), renta_pct=Decimal("32"),
+    )
+    iva21 = Decimal("1.21")
+    sobrante = (p / _IVA_FACTOR - p * Decimal("0.1532") / iva21 - p / _IVA_FACTOR * Decimal("0.05")
+                - p * Decimal("0.012") - _ENVIO / iva21 - _COSTO)
+    assert abs(sobrante - p * Decimal("0.32")) < Decimal("1")

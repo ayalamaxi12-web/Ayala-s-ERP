@@ -18,7 +18,7 @@ Reglas (decisiones de Maxx, 2026-09-29):
   paga el cliente) y se descuentan completos: el IVA que el canal factura
   aparte (MP, Frávega) se suma (`iva_cargos`). Solo la venta se lleva a sin
   IVA. IIBB va sobre la venta sin IVA, como en las planillas.
-- ML: comisión por categoría, costo fijo por publicación (de la API; la
+- ML: comisión 15,5% única (la de categoría queda sin usar), costo fijo por publicación (de la API; la
   tabla de tramos es el respaldo), cargo por cuotas, envío real del ítem
   desde el umbral de envío gratis.
 - Web (Mercado Pago): comisión por medio de pago + cuotas que absorbe el
@@ -184,8 +184,10 @@ def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor) -> _Estructur
         raise ValueError(f"Canal desconocido: {canal!r}")
     mas_iva = 1 + par.valor(canal, "iva_cargos")
     if canal == "ML":
-        cat = (e.categoria or "").strip().lower()
-        comision = par.comision_categoria.get((canal, cat)) or par.valor(canal, "comision_general")
+        # Criterio de margen §2: comisión ML 15,5% ÚNICO por ahora. La tabla
+        # por categoría (`par.comision_categoria`, pricing_comision_categoria)
+        # queda cargada y sin usar: es el futuro (comisión real por categoría).
+        comision = par.valor(canal, "comision_general")
         fijo = e.costo_fijo_ml if e.costo_fijo_ml is not None else (par.tramo("ml_costo_fijo", p) or Decimal(0))
         envio = e.envio if p >= par.valor(canal, "umbral_envio_gratis") else Decimal(0)
         return _Estructura(

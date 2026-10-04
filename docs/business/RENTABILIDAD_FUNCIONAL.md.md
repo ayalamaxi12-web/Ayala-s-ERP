@@ -318,7 +318,7 @@ Hoja `Julio - Agosto ECOM`. **Una fila = una orden.** El campo `Sku's Vendidos` 
 | 4 | `Z = Q - M - O - S - T - OP` |
 | 5 | `AA = G * AM` |
 | 6 | `AB = Z - AA` ← **resultado del motor** |
-| 7 | `AE = AB / AM` · `AF = U / AM` · `AV = 1 - (AA / Z)`, con 0 ante error |
+| 7 | `AE = AB / AM` · `AF = U / AM` · `AV = AB / Q` (rentabilidad / precio sin IVA; antes `1 - AA/Z`, cambiado 2026-10 por CRITERIOS_MARGEN.md §1), con 0 ante error |
 
 ### 7.2 Prohibición explícita — no recalcular Q
 
@@ -401,7 +401,7 @@ Resultado: cae automáticamente bajo el régimen de **pérdida definitiva** (§6
 | AS | Dias de Stock | F | `= SI.ERROR(AQ / (AR / 30); "Sin ventas")` (§8.5) |
 | AT | Precio De Venta | F | `= SI.ERROR(BUSCARV(B; Worksheet!G; 7; 0); 0)`. **La hoja `Worksheet` no existe: devuelve 0 siempre** — observación O-04 |
 | AU | Rentabilidad Real | I | Margen esperado por PM (§9). **No interviene en el cálculo** |
-| AV | % Rentabilidad | F | `= SI.ERROR(1 - (AA / Z); 0)`, equivalente a `AB / Z` |
+| AV | % Rentabilidad | F | `= SI.ERROR(AB / Q; 0)` desde 2026-10 (la planilla vieja usaba `1 - (AA / Z)` = `AB / Z`, sobre neto de cargos; CRITERIOS_MARGEN.md §1) |
 
 ---
 
@@ -610,8 +610,8 @@ La comparación se hace **columna por columna**, no solo sobre el resultado fina
 
 | # | Caso | Entradas | Resultado esperado |
 |---|---|---|---|
-| E-1 | ML Carrito, IVA 10,5 % (orden 1405031) | `G=130,27`; `M=98.898,56`; `O=7.821`; `Q=620.053,636`; `U=682.059`; `AM=1500`; `AO=1,105` | `S=8.184,708`; `T=31.002,6818`; `Z=474.146,686`; `AA=195.405,00`; `AB=278.741,686`; `AE=185,83`; `AF=454,71`; `AV=58,79%`; `AP=753.675,195` |
-| E-2 | ML Carrito, IVA 21 % (orden 1405030) | `G=4,98`; `M=7.456,35`; `O=0`; `Q=24.387,603`; `U=29.509`; `AM=1500` | `S=354,108`; `T=1.219,38015`; `Z=15.357,765`; `AA=7.470,00`; `AB=7.887,765`; `AV=51,36%` |
+| E-1 | ML Carrito, IVA 10,5 % (orden 1405031) | `G=130,27`; `M=98.898,56`; `O=7.821`; `Q=620.053,636`; `U=682.059`; `AM=1500`; `AO=1,105` | `S=8.184,708`; `T=31.002,6818`; `Z=474.146,686`; `AA=195.405,00`; `AB=278.741,686`; `AE=185,83`; `AF=454,71`; `AV=44,95%` (antes 58,79% s/ neto de cargos); `AP=753.675,195` |
+| E-2 | ML Carrito, IVA 21 % (orden 1405030) | `G=4,98`; `M=7.456,35`; `O=0`; `Q=24.387,603`; `U=29.509`; `AM=1500` | `S=354,108`; `T=1.219,38015`; `Z=15.357,765`; `AA=7.470,00`; `AB=7.887,765`; `AV=32,34%` (antes 51,36% s/ neto de cargos) |
 | E-3 | Frávega sin retenciones | `G=2,96`; `M=2.249,85`; `O=0`; `Q=12.395,868`; `U=14.999`; `AM=1500` | `S=179,988`; `T=619,7934`; `Z=9.346,2366`; `AA=4.440,00`; `AB=4.906,2366` |
 | E-4 | Posventa | **Pendiente de verificación contra el libro — §16, verificación V-02** | — |
 

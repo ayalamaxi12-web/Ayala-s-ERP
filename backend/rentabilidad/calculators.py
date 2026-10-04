@@ -171,7 +171,7 @@ class ResultadoEcom:
     rentabilidad: Decimal  # AB = Z - AA — resultado del motor
     rentabilidad_usd: Decimal  # AE = AB / AM
     facturacion_usd: Decimal  # AF = U / AM
-    pct_rentabilidad: Decimal  # AV = 1 - (AA/Z), 0 ante error (§7.1 paso 7, literal)
+    pct_rentabilidad: Decimal  # AV = AB / Q (rentabilidad / precio SIN IVA), 0 ante error — CRITERIOS_MARGEN §1
     costo_operacion: Decimal = Decimal(0)  # OP efectivamente descontado
 
 
@@ -199,7 +199,11 @@ class RentabilidadEcomCalculator:
         # Paso 7
         AE = AB / AM
         AF = U / AM
-        AV = (Decimal(1) - (AA / Z)) if Z else Decimal(0)  # "con 0 ante error", literal
+        # AV: antes 1 - AA/Z (= AB/Z, sobre el neto DESPUÉS de cargos). Desde
+        # 2026-10 (CRITERIOS_MARGEN.md §1: margen % siempre sobre el precio SIN
+        # IVA, nunca sobre "neto de cargos") es AB/Q, alineado con Táctica
+        # (`margen_pct`) y con el Dashboard. 0 si no hay precio sin IVA.
+        AV = (AB / Q) if Q else Decimal(0)
 
         return ResultadoEcom(
             imp_cheque=S, iibb=T, neto=Z, costo_total=AA, rentabilidad=AB,
