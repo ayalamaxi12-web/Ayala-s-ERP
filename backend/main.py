@@ -219,6 +219,13 @@ def root():
 def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
 
+@app.post("/auth/check")
+def auth_check():
+    """Para que el front verifique su clave sin efectos: es POST, así que el
+    middleware exige X-ERP-Key (401 si es mala). `clave_activa` dice si el
+    backend ya la está exigiendo (ERP_API_KEY definida) o sigue permisivo."""
+    return {"ok": True, "clave_activa": bool(os.environ.get("ERP_API_KEY", "").strip())}
+
 # ══════════════════════════════════════════════════════
 # ML TOKEN
 # ══════════════════════════════════════════════════════

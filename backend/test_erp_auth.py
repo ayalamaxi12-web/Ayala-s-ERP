@@ -169,3 +169,16 @@ def test_el_401_lleva_headers_cors_para_que_el_front_lo_lea(cliente, con_clave):
     r = cliente.post("/ecom/update-price", json={}, headers={"Origin": FRONT})
     assert r.status_code == 401
     assert r.headers["access-control-allow-origin"] == FRONT
+
+
+# ── /auth/check (el front lo usa para "Testear") ─────────────────────
+
+def test_auth_check_con_clave_activa(cliente, con_clave):
+    assert cliente.post("/auth/check").status_code == 401
+    r = cliente.post("/auth/check", headers={"X-ERP-Key": CLAVE})
+    assert r.status_code == 200 and r.json() == {"ok": True, "clave_activa": True}
+
+
+def test_auth_check_permisivo(cliente, sin_clave):
+    r = cliente.post("/auth/check")
+    assert r.status_code == 200 and r.json() == {"ok": True, "clave_activa": False}
