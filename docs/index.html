@@ -637,7 +637,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span style="font-weight:700;color:var(--accent)">Margen al P. Sugerido:</span>
       <span style="display:flex;gap:4px;align-items:center">Baja s/comp.<input type="text" id="cfg-baja" value="1" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.com=this.checked;renderCompetidores()">Comisión ML<input type="text" id="cfg-com" value="16" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.com=this.checked;renderCompetidores()">Comisión ML<input type="text" id="cfg-com" value="15.5" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.extra=this.checked;renderCompetidores()">Extra fijo<input type="text" id="cfg-e1" value="1255" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">&lt;16k</span><input type="text" id="cfg-e2" value="2500" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">16-24k</span><input type="text" id="cfg-e3" value="3030" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">24-33k</span><input type="text" id="cfg-e4" value="0" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">≥33k</span></label>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iva=this.checked;renderCompetidores()">IVA</label>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iibb=this.checked;renderCompetidores()">IIBB<input type="text" id="cfg-iibb" value="5" onchange="compCfgSave();renderCompetidores()" style="width:30px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
@@ -651,7 +651,6 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <span style="display:flex;gap:3px;align-items:center">6c<input type="text" id="cfg-r6" value="1.20" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q6" value="9.48" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
       <span style="display:flex;gap:3px;align-items:center">9c<input type="text" id="cfg-r9" value="1.25" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q9" value="15.12" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
       <span style="display:flex;gap:3px;align-items:center">12c<input type="text" id="cfg-r12" value="1.35" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q12" value="18.24" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
-      <span style="display:flex;gap:3px;align-items:center">18c<input type="text" id="cfg-r18" value="1.45" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><input type="text" id="cfg-q18" value="26.52" onchange="compCfgSave()" style="width:40px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--green);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
     </div>
   </div>
   <div class="erp-filters" id="competidores-search-bar" style="display:none">
@@ -2117,7 +2116,7 @@ async function loadMLSheets(){
   btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
 }
 // ── COMPETIDORES ──
-async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${S.sheetsKey}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${S.sheetsKey}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
+async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');cargarCostosEcom(true).then(()=>{if(COSTOS_ECOM.error)toast('Costos de Ecom: '+COSTOS_ECOM.error+' -- sin margen','error');if(COMPDESC_listo())renderCompetidores();});if(!S.tcBNA&&getBackendUrl()){fetch(`${getBackendUrl()}/tc/bna`).then(r=>r.json()).then(d=>{if(d.tc>0){S.tcBNA=d.tc;renderCompetidores();}}).catch(()=>{});}btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${S.sheetsKey}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${S.sheetsKey}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
       // ml_vendedor.py agrega un bloque de 4 columnas (Precio/Tachado/Desc/Cuotas) con
       // fecha cada vez que re-scrapea un vendedor ya existente, a la derecha de las
       // columnas base A-I -- antes esto leía siempre A1:I2000 (el precio del primer
@@ -2158,8 +2157,8 @@ const _oCMS=clearMS;clearMS=function(id){_oCMS(id);if(id==='ms-comp-pm'||id==='m
 const _oSAMS=selectAllMS;selectAllMS=function(id){_oSAMS(id);if(id==='ms-comp-pm'||id==='ms-comp-cat')renderCompetidores();};  
 function renderCompetidores(){
   const search=(qs('competidores-search').value||'').toLowerCase();const sort=qs('competidores-sort').value;
-const fPM=getMSValues('ms-comp-pm'),fCat=getMSValues('ms-comp-cat');let data=COMP.data.filter(r=>{if(COMP.selected.indexOf(r.vendedor)<0)return false;if(search){const hay=(r.titulo||'').toLowerCase().includes(search)||(r.sku||'').toLowerCase().includes(search)||(r.link||'').toLowerCase().includes(search);if(!hay)return false;}if(fPM){const px=S.pmData[normSku(r.sku||'')];if(!px||!fPM.includes(px.pmName))return false;}if(fCat&&!fCat.includes(getCat(r.sku||'')||'Sin categoría'))return false;return true;});const _tcS=(parseFloat(((qs('comp-tc')||{}).value||'').replace(',','.'))||0)||S.tcBNA||1465;
-  data=data.map(r=>{const pmx=S.pmData[normSku(r.sku||'')]||null;const cx=parseFloat(r.cantidad||1)||1;const pmT=(pmx?(pmx.ml||0):0)*cx;const mi=pmT>0?(pmT>=(S.shippingThreshold||33000)?pmT+(S.shippingCost||8500):pmT):0;const cARS=(pmx?(pmx.costo||0):0)*cx*_tcS;const ivaF=pmx?(pmx.iva||1.21):1.21;const ps=r.precio?r.precio*(1-cfgN('cfg-baja',1)/100):0;r._mi=mi;r._diff=(mi&&r.precio)?(r.precio-mi)/mi*100:null;r._psug=ps;r._mg=(cARS>0&&ps>0)?compMargenAt(ps,ivaF,cARS,0).m:null;return r;});
+const fPM=getMSValues('ms-comp-pm'),fCat=getMSValues('ms-comp-cat');let data=COMP.data.filter(r=>{if(COMP.selected.indexOf(r.vendedor)<0)return false;if(search){const hay=(r.titulo||'').toLowerCase().includes(search)||(r.sku||'').toLowerCase().includes(search)||(r.link||'').toLowerCase().includes(search);if(!hay)return false;}if(fPM){const px=S.pmData[normSku(r.sku||'')];if(!px||!fPM.includes(px.pmName))return false;}if(fCat&&!fCat.includes(getCat(r.sku||'')||'Sin categoría'))return false;return true;});const _tcS=(parseFloat(((qs('comp-tc')||{}).value||'').replace(',','.'))||0)||S.tcBNA||0;
+  data=data.map(r=>{const pmx=S.pmData[normSku(r.sku||'')]||null;const cx=parseFloat(r.cantidad||1)||1;const pmT=(pmx?(pmx.ml||0):0)*cx;const mi=pmT>0?(pmT>=(S.shippingThreshold||33000)?pmT+(S.shippingCost||8500):pmT):0;const cARS=costoUsdSku(r.sku)*cx*_tcS;const ivaF=ivaSku(r.sku,pmx);const ps=r.precio?r.precio*(1-cfgN('cfg-baja',1)/100):0;r._mi=mi;r._diff=(mi&&r.precio)?(r.precio-mi)/mi*100:null;r._psug=ps;r._mg=(cARS>0&&ps>0)?compMargenAt(ps,ivaF,cARS,0).m:null;return r;});
   if(S.cSort.col){const col=S.cSort.col,dir=S.cSort.dir;const gv=x=>{switch(col){case 'vendedor':return x.vendedor||'';case 'titulo':return x.titulo||'';case 'precio':return x.precio||0;case 'orig':return x.orig_price||0;case 'discount':return parseFloat(x.discount)||0;case 'cuotas':return x.cuotas||'';case 'ventas':return x.ventas||0;case 'sku':return x.sku||'';case 'cant':return parseFloat(x.cantidad||1)||1;case 'miPrecio':return x._mi==null?-Infinity:x._mi;case 'diffComp':return x._diff==null?-Infinity:x._diff;case 'psug':return x._psug==null?-Infinity:x._psug;case 'margenComp':return x._mg==null?-Infinity:x._mg;default:return x.vendedor||'';}};data.sort((a,b)=>{const va=gv(a),vb=gv(b);return va<vb?-dir:va>vb?dir:0;});}  else{if(sort==='precio-asc')data.sort((a,b)=>a.precio-b.precio);else if(sort==='precio-desc')data.sort((a,b)=>b.precio-a.precio);else if(sort==='ventas-desc')data.sort((a,b)=>b.ventas-a.ventas);else data.sort((a,b)=>a.titulo.localeCompare(b.titulo));}
   qs('competidores-count').textContent=data.length+' productos';
   document.querySelectorAll('#comp-table th[data-col]').forEach(th=>{th.classList.remove('sort-asc','sort-desc');if(th.dataset.col===S.cSort.col)th.classList.add(S.cSort.dir===1?'sort-asc':'sort-desc');});
@@ -2183,11 +2182,11 @@ const fPM=getMSValues('ms-comp-pm'),fCat=getMSValues('ms-comp-cat');let data=COM
     
 // Margen ML al PRECIO SUGERIDO (competencia − % baja) — valores editables en el panel
     window.COMPDESC = window.COMPDESC || {com:true,extra:true,iva:true,iibb:true,impch:true,envio:true};
-    const costoUSD = pm ? (pm.costo||0) : 0;
+    const costoUSD = costoUsdSku(r.sku);
     const tcManual = parseFloat(((qs('comp-tc')||{}).value||'').replace(',','.'))||0;
-    const tc = tcManual || S.tcBNA || 1465;
+    const tc = tcManual || S.tcBNA || 0; // sin TC => sin margen (nunca un valor fijo)
     const costoARS = costoUSD * cant * tc;
-    const ivaFactor = pm ? (pm.iva||1.21) : 1.21;
+    const ivaFactor = ivaSku(r.sku,pm);
     const pComp = r.precio || 0;
     const pSug = pComp ? pComp*(1-cfgN('cfg-baja',1)/100) : 0;
     const _mg = compMargenAt(pSug, ivaFactor, costoARS, 0);
@@ -2219,13 +2218,37 @@ const fPM=getMSValues('ms-comp-pm'),fCat=getMSValues('ms-comp-cat');let data=COM
   }).join('');
   const pag=qs('competidores-pag');if(pages<=1){pag.innerHTML='';return;}let html=`<span class="page-info-txt">${data.length} resultados</span>`;if(COMP.page>1)html+=`<button class="page-btn" onclick="COMP.page=${COMP.page-1};renderCompetidores()">‹</button>`;for(let i=Math.max(1,COMP.page-2);i<=Math.min(pages,COMP.page+2);i++)html+=`<button class="page-btn${i===COMP.page?' active':''}" onclick="COMP.page=${i};renderCompetidores()">${i}</button>`;if(COMP.page<pages)html+=`<button class="page-btn" onclick="COMP.page=${COMP.page+1};renderCompetidores()">›</button>`;pag.innerHTML=html;
 }
+// ── COSTO Y TC ÚNICOS (CRITERIOS_MARGEN §7) ──
+// El costo sale del catálogo de artículos de Ecom, vía el backend (/rentabilidad/costos/ecom), NO de la planilla PM
+// (la PM sigue siendo la fuente de PRECIOS). El TC es el del BNA del día, o el último guardado: nunca un valor fijo.
+const COSTOS_ECOM={usd:{},iva:{},cargado:false,cargando:null,error:null};
+function COMPDESC_listo(){return !!qs('competidores-tbody')&&COMP.data&&COMP.data.length>0;}
+function costoUsdSku(sku){const v=COSTOS_ECOM.usd[normSku(sku||'')];return v>0?v:0;}
+function ivaSku(sku,pm){return COSTOS_ECOM.iva[normSku(sku||'')]||(pm&&pm.iva)||1.21;}
+function cargarCostosEcom(force){
+  if(COSTOS_ECOM.cargando)return COSTOS_ECOM.cargando;
+  if(COSTOS_ECOM.cargado&&!force)return Promise.resolve();
+  const bu=getBackendUrl();
+  if(!bu){COSTOS_ECOM.error='Falta la URL del backend (Configuración)';return Promise.resolve();}
+  COSTOS_ECOM.cargando=fetch(`${bu}/rentabilidad/costos/ecom`).then(async r=>{
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.detail||('status '+r.status));
+    const usd={},iva={};
+    Object.keys(d.costos||{}).forEach(k=>{usd[normSku(k)]=d.costos[k];});
+    Object.keys(d.iva||{}).forEach(k=>{iva[normSku(k)]=d.iva[k];});
+    COSTOS_ECOM.usd=usd;COSTOS_ECOM.iva=iva;COSTOS_ECOM.cargado=true;COSTOS_ECOM.error=null;
+  }).catch(e=>{COSTOS_ECOM.error=String(e.message||e);}).finally(()=>{COSTOS_ECOM.cargando=null;});
+  return COSTOS_ECOM.cargando;
+}
 // ── CONFIG MARGEN COMPETIDORES ──
 function cfgN(id,def){const el=qs(id);if(!el)return def;const v=parseFloat(String(el.value).replace(',','.'));return isNaN(v)?def:v;}
-function compCfgSave(){try{const ids=['cfg-baja','cfg-com','cfg-e1','cfg-e2','cfg-e3','cfg-e4','cfg-iibb','cfg-impch','cfg-envio','cfg-r3','cfg-q3','cfg-r6','cfg-q6','cfg-r9','cfg-q9','cfg-r12','cfg-q12','cfg-r18','cfg-q18'];const o={};ids.forEach(i=>{const el=qs(i);if(el)o[i]=el.value;});localStorage.setItem('comp_cfg',JSON.stringify(o));}catch(e){}}
-function compCfgLoad(){try{const o=JSON.parse(localStorage.getItem('comp_cfg')||'{}');Object.keys(o).forEach(i=>{const el=qs(i);if(el&&o[i]!=='')el.value=o[i];});}catch(e){}}
+function compCfgSave(){try{const ids=['cfg-baja','cfg-com','cfg-e1','cfg-e2','cfg-e3','cfg-e4','cfg-iibb','cfg-impch','cfg-envio','cfg-r3','cfg-q3','cfg-r6','cfg-q6','cfg-r9','cfg-q9','cfg-r12','cfg-q12'];const o={_v:2};ids.forEach(i=>{const el=qs(i);if(el)o[i]=el.value;});localStorage.setItem('comp_cfg',JSON.stringify(o));}catch(e){}}
+function compCfgLoad(){try{const o=JSON.parse(localStorage.getItem('comp_cfg')||'{}');if((o._v||1)<2){delete o['cfg-com'];delete o['cfg-iibb'];delete o['cfg-impch'];} // v2 (2026-10): comisión 15,5 / IIBB 5 / cheque 1,2 unificados -- se descartan los valores viejos guardados
+Object.keys(o).forEach(i=>{const el=qs(i);if(el&&o[i]!=='')el.value=o[i];});}catch(e){}}
 function compExtraFijo(p){return p<16000?cfgN('cfg-e1',1255):p<24000?cfgN('cfg-e2',2500):p<33000?cfgN('cfg-e3',3030):cfgN('cfg-e4',0);}
-function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',16)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&(mars+costoARS)>0)?mars/(mars+costoARS):null,mars:mars};}
-function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=[['3 Cuotas','cfg-r3',1.15,'cfg-q3',4.08],['6 Cuotas','cfg-r6',1.20,'cfg-q6',9.48],['9 Cuotas','cfg-r9',1.25,'cfg-q9',15.12],['12 Cuotas','cfg-r12',1.35,'cfg-q12',18.24],['18 Cuotas','cfg-r18',1.45,'cfg-q18',26.52]];const cells=planes.map(pl=>{const p=pSug*cfgN(pl[1],pl[2]);const q=cfgN(pl[3],pl[4]);const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
+// Margen % sobre el precio SIN IVA (CRITERIOS_MARGEN §1); antes era sobre el neto de cargos.
+function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',15.5)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&neto>0)?mars/neto:null,mars:mars};}
+function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=[['3 Cuotas','cfg-r3',1.15,'cfg-q3',4.08],['6 Cuotas','cfg-r6',1.20,'cfg-q6',9.48],['9 Cuotas','cfg-r9',1.25,'cfg-q9',15.12],['12 Cuotas','cfg-r12',1.35,'cfg-q12',18.24]];const cells=planes.map(pl=>{const p=pSug*cfgN(pl[1],pl[2]);const q=cfgN(pl[3],pl[4]);const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
 function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').forEach(row=>{const btn=row.previousElementSibling&&row.previousElementSibling.querySelector('button[data-psug]');if(btn){compToggleCuotas(btn);compToggleCuotas(btn);}});} document.addEventListener('change',e=>{if(e.target&&/^cfg-(r|q)\d+$/.test(e.target.id))compUpdateCuotasRows();}); const _oRC=renderCompetidores;renderCompetidores=function(){let openLink=null;const op=document.querySelector('.comp-cuotas-row');if(op){const b=op.previousElementSibling&&op.previousElementSibling.querySelector('button[data-link]');if(b)openLink=b.dataset.link;}_oRC();if(openLink){const nb=Array.from(document.querySelectorAll('#competidores-tbody button[data-link]')).find(x=>x.dataset.link===openLink);if(nb)compToggleCuotas(nb);}}; compCfgLoad();
 
 // ── INTELIGENCIA COMERCIAL (Fase 1 — hub SKU de solo lectura) ──
@@ -2542,12 +2565,13 @@ async function mixProcesar(){
 }
 
 function renderMixResultados(resultados){
+  if(!COSTOS_ECOM.cargado&&!COSTOS_ECOM.cargando&&!COSTOS_ECOM.error){cargarCostosEcom().then(()=>renderMixResultados(resultados));}
   const tbody=qs('mix-tbody');
   tbody.innerHTML=resultados.map(r=>{
     const pm=S.pmData[normSku(r.sku||'')]||null;
     let rentHtml='<span style="color:var(--text3)">Sin PM</span>';
     if(pm&&r.precio_detectado){
-      const marg=compMargenAt(r.precio_detectado,pm.iva||1.21,pm.costo||0,0);
+      const marg=compMargenAt(r.precio_detectado,ivaSku(r.sku,pm),costoUsdSku(r.sku)*(S.tcBNA||0),0);
       rentHtml=marg.m!==null?(marg.m*100).toFixed(1)+'%':'—';
     }
     const estadoColor=r.estado==='OK'?'var(--green)':r.estado==='Duplicado'?'#ffd166':'var(--red)';
@@ -3147,7 +3171,9 @@ function ofmPorTramo(precio,tramos){for(const t of tramos){const techo=t[0],mont
 function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
   const p=OFM;
   const baseSinIva=precioOferta/ivaFactor;
-  const comisionPct=(domainId&&p.comisionPorDominio[domainId]!==undefined)?p.comisionPorDominio[domainId]:p.comisionGeneral;
+  // Comisión ML 15,5% ÚNICO (CRITERIOS_MARGEN §2). `comisionPorDominio` queda como dato
+  // (futuro: comisión real por categoría) pero NO se usa.
+  const comisionPct=p.comisionGeneral;
   const comision=p.usarComision?precioOferta*comisionPct/100:0;
   const costoFijo=p.usarCostoFijo?ofmPorTramo(precioOferta,p.costoFijoTramos):0;
   const cuotasPct=cuotasOfrecidas?(p.cuotasPct[cuotasOfrecidas]||0):0;
@@ -3159,17 +3185,20 @@ function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
   const margenPct=baseSinIva?margen/baseSinIva:null;
   return{baseSinIva,comision,costoFijo,cuotas,envio,impCheque,iibb,margen,margenPct};
 }
+// TC para margen: el manual, o el del último job (BNA / último guardado); NUNCA 1 ni un valor fijo.
+function ofmTc(){return OFM.tc||(typeof ofmResult!=='undefined'&&ofmResult&&ofmResult.tc)||0;}
 function ofmCfgSave(){try{localStorage.setItem('ofm_cfg',JSON.stringify(OFM));}catch(e){}}
-function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o)Object.assign(OFM,o);const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
+// v2 (2026-10): comisión única 15,5% / IIBB 5% / cheque 1,2% -- un `ofm_cfg` guardado antes de esto
+// traía la comisión por dominio y valores viejos; se descartan esos campos una vez.
+const OFM_CFG_VERSION=2;
+function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o){if((o.cfgVersion||1)<OFM_CFG_VERSION){delete o.comisionPorDominio;delete o.comisionGeneral;delete o.iibbPct;delete o.impChequePct;delete o.cuotasPct;}Object.assign(OFM,o);}OFM.cfgVersion=OFM_CFG_VERSION;const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
 // `ac-operador` sumado 2026-09-04: el panel "⚙ Gestionar" de Ofertas ML se
 // reutiliza tal cual dentro de Ayala Core (Maxx: "quiero que sea igual
 // que como se ven en Ofertas ML"), que no tiene el campo `ofm-operador`
 // propio -- mismo localStorage `ofm_operador`, campo de input distinto.
 function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
 function ofmRenderPanel(){
-  const dominiosHtml=Object.keys(OFM.comisionPorDominio).map(d=>
-    `<span style="display:flex;gap:3px;align-items:center" title="${d}"><span style="color:var(--text3)">${OFM_DOMAIN_LABELS[d]||d}</span><input type="text" value="${OFM.comisionPorDominio[d]}" onchange="OFM.comisionPorDominio['${d}']=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:38px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>`
-  ).join('');
+  const dominiosHtml='<span style="font-size:9px;color:var(--text3)">Comisión ML 15,5% único (criterio de margen); la comisión por categoría queda para más adelante.</span>';
   qs('ofm-panel').innerHTML=`
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarComision?'checked':''} onchange="OFM.usarComision=this.checked;ofmCfgSave();ofmRender()">Comisión general<input type="text" value="${OFM.comisionGeneral}" onchange="OFM.comisionGeneral=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:36px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
@@ -3183,7 +3212,7 @@ function ofmRenderPanel(){
       <span style="display:flex;gap:4px;align-items:center" title="Default del % de tachado al abrir el panel Gestionar de una publicación -- item 17 de Natalia, sigue editable por publicación">Tachado por defecto:<input type="text" value="${OFM.inflacionDefaultPct}" onchange="OFM.inflacionDefaultPct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
     </div>
     <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <span style="font-weight:700;color:var(--accent)">Comisión por categoría (domain_id ML):</span>
+      <span style="font-weight:700;color:var(--accent)">Comisión ML:</span>
       ${dominiosHtml}
     </div>`;
 }
@@ -3333,7 +3362,7 @@ const _oCMSOfm=clearMS;clearMS=function(id){_oCMSOfm(id);if(id==='ms-ofm-pm'||id
 const _oSAMSOfm=selectAllMS;selectAllMS=function(id){_oSAMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
 function ofmRender(){
   if(!ofmResult){ofmReanclarPanelAbierto();return;}
-  const tc=OFM.tc||ofmResult.tc||1;
+  const tc=ofmTc();
   const search=(qs('ofm-search')?.value||'').toLowerCase();
   const filtroTipo=qs('ofm-filter-tipo')?.value||'';
   const soloBajoUmbral=qs('ofm-filter-bajo-umbral')?.checked;
@@ -3344,7 +3373,7 @@ function ofmRender(){
     let margen=null;
     if(f._costoUnitSinIva!=null){
       const costoARS=f._costoUnitSinIva*tc;
-      margen=ofmMargenAt(f.precio_oferta,f._ivaFactor,costoARS,f.domain_id,f.cuotas_ofrecidas);
+      margen=!tc?null:ofmMargenAt(f.precio_oferta,f._ivaFactor,costoARS,f.domain_id,f.cuotas_ofrecidas);
     }
     // Contra precio_oferta (lo que paga el cliente), NO precio_normal --
     // el tachado se infla a propósito como "teatro" para mostrar más
@@ -3612,22 +3641,22 @@ function ofmSimularActivar(itemId){
     if(descPct<5)avisoDescuento=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige mínimo 5% para aplicar el tachado (si no, "the price is not credible").</div>`;
     else if(descPct>=80)avisoDescuento=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige menos de 80%, así como está probablemente lo rechace.</div>`;
   }
-  if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
-  const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
+  if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin costo/IVA -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
+  const tc=ofmTc();if(!tc){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin TC del BNA (ni guardado) -- no se puede simular margen</span>`;return;}
   const costoARS=f._costoUnitSinIva*tc;
   const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
   const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
   const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
   const resumen=`Margen simulado${f._ayalaCoreMotor?' (motor Ayala Core)':''}: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
-  // Costo fijo/Imp.CH no existen en el motor de Ayala Core -- se omiten
-  // en vez de mostrar $0 como si aplicaran, y "Cuotas" pasa a llamarse
+  // Costo fijo no existe en el motor de Ayala Core -- se omite
+  // en vez de mostrar $0 como si aplicara, y "Cuotas" pasa a llamarse
   // "Financiero" (mismo número, nombre real de ese cargo en ese motor).
   const desglose=`<div style="display:grid;grid-template-columns:repeat(4,auto);gap:2px 14px;margin-top:4px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
     <span>Base sin IVA: $${fmtN(Math.round(m.baseSinIva))}</span>
     <span>− Comisión: $${fmtN(Math.round(m.comision))}</span>
     ${f._ayalaCoreMotor?'':`<span>− Costo fijo: $${fmtN(Math.round(m.costoFijo))}</span>`}
     <span>− Envío: $${fmtN(Math.round(m.envio))}</span>
-    ${f._ayalaCoreMotor?`<span>− Financiero: $${fmtN(Math.round(m.cuotas))}</span>`:`<span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>`}
+    ${f._ayalaCoreMotor?`<span>− Financiero: $${fmtN(Math.round(m.cuotas))}</span><span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>`:`<span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>`}
     <span>− IIBB: $${fmtN(Math.round(m.iibb))}</span>
     <span>− Costo producto: $${fmtN(Math.round(costoARS))}</span>
     <span style="color:${color}">= Margen: $${fmtN(Math.round(m.margen))}</span>
@@ -3643,8 +3672,8 @@ async function ofmConfirmarActivar(itemId){
   const tachado=parseFloat(qs('ofm-act-tachado-'+itemId)?.value)||0;
   if(!precio||!tachado){toast('Cargá precio y tachado','error');return;}
   let margenPct=null,bajoUmbral=false;
-  if(f._costoUnitSinIva!=null){
-    const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
+  if(f._costoUnitSinIva!=null&&ofmTc()){
+    const tc=ofmTc();
     const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
     margenPct=m.margenPct;bajoUmbral=margenPct!==null&&margenPct*100<OFM.umbral;
   }
@@ -3682,8 +3711,8 @@ function ofmSimularCampana(itemId){
   // precio*1.25). tachado × (1 − descuento%) = precio, no al revés.
   const tachado=descuentoPct<100?Math.round(precio/(1-descuentoPct/100)):0;
   const tachadoEl=qs('ofm-camp-tachado-'+itemId);if(tachadoEl)tachadoEl.textContent=`= tachado $${fmtN(tachado)}`;
-  if(f._costoUnitSinIva==null){out.innerHTML=`<span style="color:var(--text3)">Sin costo/IVA de Táctica -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
-  const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
+  if(f._costoUnitSinIva==null){out.innerHTML=`<span style="color:var(--text3)">Sin costo/IVA -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
+  const tc=ofmTc();if(!tc){out.innerHTML=`<span style="color:var(--text3)">Sin TC del BNA (ni guardado) -- no se puede simular margen</span>`;return;}
   const costoARS=f._costoUnitSinIva*tc;
   const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
   const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
@@ -3713,8 +3742,8 @@ async function ofmConfirmarCampana(itemId,opts){
   if(descuentoPct>=100){toast('El descuento tiene que ser menor a 100%','error');return;}
   const tachado=Math.round(precioPm/(1-descuentoPct/100));
   const margenEn=(precio)=>{
-    if(f._costoUnitSinIva==null)return{pct:null,txt:'sin dato (falta costo/IVA de Táctica)'};
-    const tc=OFM.tc||(ofmResult?ofmResult.tc:1)||1;
+    if(f._costoUnitSinIva==null)return{pct:null,txt:'sin dato (falta costo/IVA)'};
+    const tc=ofmTc();if(!tc)return{pct:null,txt:'sin dato (falta el TC del BNA)'};
     const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
     return{pct:m.margenPct,txt:m.margenPct!==null?(m.margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)'};
   };
@@ -4111,7 +4140,9 @@ function ayalaCoreRenderRefLista(){
 // defecto que backend/ayala_core.py (COMISION_ML_DEFAULT/IIBB_PCT_DEFAULT),
 // para el margen manual por fila ("que no sea lineal, que yo pueda
 // jugar", pedido 2026-09-03) sin ida y vuelta al backend por cada tecla. ──
-const AC_COMISION_PCT=15.32, AC_IIBB_PCT=6.50, AC_IVA_SERVICIOS_ML=1.21;
+// Impuestos SEPARADOS (CRITERIOS_MARGEN §2/§4): IIBB 5% s/ sin IVA, imp. cheque 1,2% s/ con IVA
+// (antes un 6,50% unificado). Mismos valores que ml_ofertas.IIBB/IMP_CHEQUE_PCT_DEFAULT.
+const AC_COMISION_PCT=15.32, AC_IIBB_PCT=5, AC_IMPCH_PCT=1.2, AC_IVA_SERVICIOS_ML=1.21;
 function ayalaCoreFinancieroPct(condicion){
   if(condicion==='contado')return 0;
   if(condicion==='reducida')return 5;
@@ -4119,7 +4150,7 @@ function ayalaCoreFinancieroPct(condicion){
 }
 function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct){
   const num=costoSinIvaArs+envioReal/AC_IVA_SERVICIOS_ML;
-  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(financieroPct/100)-(rentaPct/100);
+  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(AC_IMPCH_PCT/100)-(financieroPct/100)-(rentaPct/100);
   return Math.round(num/den);
 }
 // Desglose de qué se descuenta para llegar al precio -- pedido 2026-09-03
@@ -4140,13 +4171,14 @@ function ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,finan
   const financiero=-(financieroPct/100)*precio;
   const envioFijo=-envioReal;
   const iibb=-(AC_IIBB_PCT/100)*(precio/ivaFactor);
+  const impCheque=-(AC_IMPCH_PCT/100)*precio;
   const envioFullMonto=envioFull?-(0.5/100)*precio:0;
   const ivaComision=comision/AC_IVA_SERVICIOS_ML-comision;
   const ivaEnvio=envioFijo/AC_IVA_SERVICIOS_ML-envioFijo;
   const ventaSinIva=precio/ivaFactor;
-  const costoSinIvaTotal=-costoSinIvaArs+comision+financiero+envioFijo+iibb+envioFullMonto+ivaComision+ivaEnvio;
+  const costoSinIvaTotal=-costoSinIvaArs+comision+financiero+envioFijo+iibb+impCheque+envioFullMonto+ivaComision+ivaEnvio;
   const rentaMonto=ventaSinIva+costoSinIvaTotal;
-  return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,envioFull:-envioFullMonto,renta:rentaMonto};
+  return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,impCheque:-impCheque,envioFull:-envioFullMonto,renta:rentaMonto};
 }
 function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull){
   const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct);
@@ -4159,13 +4191,13 @@ function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rent
 // particular que use el motor de cálculo de este módulo, no los
 // márgenes que ya usamos en la otra sección". Misma forma de salida que
 // `ofmMargenAt` para reutilizar el resto del panel sin duplicarlo --
-// `costoFijo`/`impCheque` no existen en este motor, quedan en 0 (el
-// desglose los omite cuando `f._ayalaCoreMotor`, ver `ofmSimularActivar`/
+// `costoFijo` no existe en este motor, queda en 0 (el
+// desglose lo omite cuando `f._ayalaCoreMotor`, ver `ofmSimularActivar`/
 // `ofmSimularCampana`).
 function ayalaCoreMargenAt(precio,f){
   const financieroPct=ayalaCoreFinancieroPct(f._condicionAyalaCore);
   const g=ayalaCoreDesgloseDesdeP(precio,f._costoSinIvaArs,f._ivaFactor,f._envioReal,financieroPct,false);
-  return{baseSinIva:precio/f._ivaFactor,comision:g.comision,costoFijo:0,cuotas:g.financiero,envio:g.envio,impCheque:0,iibb:g.iibb,margen:g.renta,margenPct:precio?g.renta/precio:null};
+  return{baseSinIva:precio/f._ivaFactor,comision:g.comision,costoFijo:0,cuotas:g.financiero,envio:g.envio,impCheque:g.impCheque,iibb:g.iibb,margen:g.renta,margenPct:precio?g.renta/precio:null};
 }
 // Único punto de despacho: si la fila viene de Ayala Core usa su motor
 // real (que no necesita `costoARS`/`domainId`/`cuotasOfrecidas` -- ya
@@ -4182,7 +4214,7 @@ const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
 // input (`ac-renta-<condicion>`, ver AC_COND_ORDEN/el HTML) -- sin
 // fórmula, se lee directo.
 function ayalaCoreRentaPct(condicion){return Number(qs('ac-renta-'+condicion)?.value||0);}
-const AC_DESGLOSE_HEAD='<th style="text-align:right">Comisión</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío</th><th style="text-align:right">IIBB</th><th style="text-align:right">Renta $</th>';
+const AC_DESGLOSE_HEAD='<th style="text-align:right">Comisión</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío</th><th style="text-align:right">IIBB</th><th style="text-align:right">Imp. cheque</th><th style="text-align:right">Renta $</th>';
 function ayalaCoreDesgloseFila(d,c){
   // `d.renta_por_condicion` viene del backend -- es la renta que ESE
   // resultado usó de verdad, no necesariamente lo que muestran los
@@ -4191,7 +4223,7 @@ function ayalaCoreDesgloseFila(d,c){
   const rentaPct=d.renta_por_condicion[c];
   const fin=ayalaCoreFinancieroPct(c);
   const g=ayalaCoreDesglose(d.costo_sin_iva_ars,d.iva_factor,d.envio_real,fin,rentaPct,d.envio_full);
-  return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
+  return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.impCheque)}</td><td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
 }
 // Celdas "Precio manual"/"Usar" compartidas por las dos tablas de abajo --
 // pedido de Maxx 2026-09-15: al lado de cada precio calculado, poder poner
@@ -4562,7 +4594,7 @@ async function ayalaCoreAbrirOferta(btn){
       if(d.tc)OFM.tc=d.tc;
     }catch(e){}
   }
-  const tc=OFM.tc||1;
+  const tc=OFM.tc||0;
   const cuotasOfrecidas=['3','6','9','12'].includes(String(f.condicion_detectada))?Number(f.condicion_detectada):null;
   ofmFilaPorId[f.item_id]={
     item_id:f.item_id,cuenta:f.cuenta,sku:f.sku,titulo:f.titulo,permalink:f.permalink,
@@ -4573,7 +4605,7 @@ async function ayalaCoreAbrirOferta(btn){
     // arrancaría mostrando el precio actual en vez del que Maxx ya
     // decidió aplicar.
     precio_oferta:window._acPubPrecioDefinido[idx],precio_normal:f.precio_actual,domain_id:null,
-    cuotas_ofrecidas:cuotasOfrecidas,_ivaFactor:f.iva_factor,_costoUnitSinIva:f.costo_sin_iva_ars/tc,
+    cuotas_ofrecidas:cuotasOfrecidas,_ivaFactor:f.iva_factor,_costoUnitSinIva:tc?f.costo_sin_iva_ars/tc:null,
     // Pedido de Maxx 2026-09-04: "congelar" acá también el envío real,
     // igual que ya se congela precio/costo/cuotas arriba -- sin esto,
     // `ofmCargarPromociones` ve `costo_envio_real===undefined` y le pide
@@ -5066,13 +5098,15 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,ren
     const fact2=useComparison?(groupSum(data2,'categoria','precioFinal')[cat]||0):0;
     const factCombinado=fact+fact2;
     const pct=totalFact?(factCombinado/totalFact*100).toFixed(1):0;
-    const rp1=fact>0?(rentMap[cat]||0)/fact:0;
-    const rp2=useComparison&&fact2>0?(rentMap2[cat]||0)/fact2:null;
+    // Rent. % siempre sobre el precio SIN IVA (CRITERIOS_MARGEN §1)
+    const sin1=groupSum(data,'categoria','precioSinIva')[cat]||0,sin2=useComparison?(groupSum(data2,'categoria','precioSinIva')[cat]||0):0;
+    const rp1=sin1>0?(rentMap[cat]||0)/sin1:0;
+    const rp2=useComparison&&sin2>0?(rentMap2[cat]||0)/sin2:null;
     const varPct=useComparison&&fact2>0?((fact-fact2)/fact2*100).toFixed(1):null;
     const varStr=varPct!==null?'<span style="color:'+(+varPct>=0?'var(--green)':'var(--red)')+';font-size:9px;font-family:DM Mono,monospace">'+(+varPct>=0?'↑':'↓')+Math.abs(+varPct)+'%</span>':'';
     // Top SKUs para esta categoría -- rankeados por P1+P2 combinado, mismo criterio que las categorías.
-    const skuMap={};data.filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap[s]=(skuMap[s]||0)+d.precioFinal;}));
-    const skuMap2={};if(useComparison)(data2||[]).filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap2[s]=(skuMap2[s]||0)+d.precioFinal;}));
+    const skuMap={},skuSin1={},skuSin2={};data.filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap[s]=(skuMap[s]||0)+d.precioFinal;skuSin1[s]=(skuSin1[s]||0)+(d.precioSinIva||0);}));
+    const skuMap2={};if(useComparison)(data2||[]).filter(d=>d.categoria===cat).forEach(d=>d.skus.forEach(s=>{skuMap2[s]=(skuMap2[s]||0)+d.precioFinal;skuSin2[s]=(skuSin2[s]||0)+(d.precioSinIva||0);}));
     const skuCombinado={};[...Object.keys(skuMap),...Object.keys(skuMap2)].forEach(s=>{skuCombinado[s]=(skuMap[s]||0)+(skuMap2[s]||0);});
     const topSkus=Object.entries(skuCombinado).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([s])=>[s,skuMap[s]||0]);
     const catId='cat-'+inst+'-'+cat.replace(/[^a-z0-9]/gi,'');
@@ -5101,11 +5135,11 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,ren
       const svarStr=svar!==null?'<span style="color:'+(+svar>=0?'var(--green)':'var(--red)')+';font-size:9px">'+(+svar>=0?'↑':'↓')+Math.abs(+svar)+'%</span>':'';
       // Rent% de este SKU, por período -- mismo criterio que la fila de categoría de arriba.
       const skuRent1=data.filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
-      const skuRentPct1=sv>0?(skuRent1/sv*100):0;
+      const skuRentPct1=(skuSin1[sku]||0)>0?(skuRent1/skuSin1[sku]*100):0;
       let skuRentPct2=null;
       if(useComparison){
         const skuRent2=(data2||[]).filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
-        skuRentPct2=sv2>0?(skuRent2/sv2*100):null;
+        skuRentPct2=(skuSin2[sku]||0)>0?(skuRent2/skuSin2[sku]*100):null;
       }
       html+='<tr><td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent)">'+sku+'</td>';
       html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+(sv?fmt$(sv):'-')+'</td>';
@@ -5141,8 +5175,8 @@ function renderDashboard(inst){
     label2=cmp.dim==='sistema'?'Ecom':(cmp.v2||'Valor 2');
     compareTitle=`Comparación por ${dimLabel}`;compareNote=`Compara ${dimLabel}: ${label1} vs ${label2}`;
   }
-  const k1={fact:data.reduce((s,d)=>s+d.precioFinal,0),rent:data.reduce((s,d)=>s+d.rentabilidad,0),costo:data.reduce((s,d)=>s+d.costo,0),usd:data.reduce((s,d)=>s+d.facturUSD,0)};
-  const k2=useComparison?{fact:data2.reduce((s,d)=>s+d.precioFinal,0),rent:data2.reduce((s,d)=>s+d.rentabilidad,0),costo:data2.reduce((s,d)=>s+d.costo,0)}:null;
+  const k1={fact:data.reduce((s,d)=>s+d.precioFinal,0),sinIva:data.reduce((s,d)=>s+(d.precioSinIva||0),0),rent:data.reduce((s,d)=>s+d.rentabilidad,0),costo:data.reduce((s,d)=>s+d.costo,0),usd:data.reduce((s,d)=>s+d.facturUSD,0)};
+  const k2=useComparison?{fact:data2.reduce((s,d)=>s+d.precioFinal,0),sinIva:data2.reduce((s,d)=>s+(d.precioSinIva||0),0),rent:data2.reduce((s,d)=>s+d.rentabilidad,0),costo:data2.reduce((s,d)=>s+d.costo,0)}:null;
   const allP=[...data,...(data2||[])];const totalFact=allP.reduce((s,d)=>s+d.precioFinal,0);
   const totalSinIva=allP.reduce((s,d)=>s+(d.precioSinIva||0),0);
   const byCanal=groupSum(allP,'canal','precioFinal');const topCanal=Object.entries(byCanal).sort((a,b)=>b[1]-a[1]);
@@ -5159,7 +5193,7 @@ function renderDashboard(inst){
   let crossSection='';
   if(inst==='hist'){
     const periodos=[...new Set(allSalesData.map(d=>d.periodo).filter(Boolean))].sort();
-    const crossData=periodos.map(p=>{const rows=allSalesData.filter(d=>d.periodo===p);const fact=rows.reduce((s,d)=>s+d.precioFinal,0);const rent=rows.reduce((s,d)=>s+d.rentabilidad,0);return{label:_fmtPeriodoLabel(p),fact,rent,rentPct:fact>0?rent/fact*100:0};}).filter(d=>d.fact>0);
+    const crossData=periodos.map(p=>{const rows=allSalesData.filter(d=>d.periodo===p);const fact=rows.reduce((s,d)=>s+d.precioFinal,0);const sinIva=rows.reduce((s,d)=>s+(d.precioSinIva||0),0);const rent=rows.reduce((s,d)=>s+d.rentabilidad,0);return{label:_fmtPeriodoLabel(p),fact,rent,rentPct:sinIva>0?rent/sinIva*100:0};}).filter(d=>d.fact>0);
     crossSection=`<div><div class="section-hdr">Histórico por Período</div><div class="chart-card"><h3>Facturación · Rentabilidad · Rent. %</h3><p>Todos los períodos · línea amarilla = Rent %</p><div style="position:relative;height:220px"><canvas id="chartCross"></canvas></div></div></div>`;
     requestAnimationFrame(()=>{
       if(!qs('chartCross'))return;
@@ -5176,8 +5210,8 @@ function renderDashboard(inst){
     <div class="kpi-row">
       <div class="kpi-card c1"><div class="kpi-label">Facturación Total</div><div class="kpi-value">${fmt$(totalFact)}</div><div class="kpi-sub">${fmtUSD(k1.usd)}</div></div>
       <div class="kpi-card c1" style="border-color:rgba(0,229,160,0.3)"><div class="kpi-label">Facturación SIN IVA</div><div class="kpi-value">${fmt$(totalSinIva)}</div><div class="kpi-sub">${totalSinIva>0?(totalSinIva/totalFact*100).toFixed(1)+'% del total':''}</div></div>
-      <div class="kpi-card c2"><div class="kpi-label">Rentabilidad $</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.rentabilidad,0))}</div><div class="kpi-sub">${totalFact?(allP.reduce((s,d)=>s+d.rentabilidad,0)/totalFact*100).toFixed(1):0}%</div></div>
-      <div class="kpi-card c3"><div class="kpi-label">Rent. % P1</div><div class="kpi-value">${k1.fact>0?(k1.rent/k1.fact*100).toFixed(1):0}%</div><div class="kpi-sub">${data.length.toLocaleString()} órdenes${useComparison?` · ${data2.length} P2`:''}</div></div>
+      <div class="kpi-card c2"><div class="kpi-label">Rentabilidad $</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.rentabilidad,0))}</div><div class="kpi-sub">${totalSinIva?(allP.reduce((s,d)=>s+d.rentabilidad,0)/totalSinIva*100).toFixed(1):0}% s/ sin IVA</div></div>
+      <div class="kpi-card c3"><div class="kpi-label">Rent. % P1</div><div class="kpi-value">${k1.sinIva>0?(k1.rent/k1.sinIva*100).toFixed(1):0}%</div><div class="kpi-sub">${data.length.toLocaleString()} órdenes${useComparison?` · ${data2.length} P2`:''}</div></div>
       <div class="kpi-card c4"><div class="kpi-label">Costo Total</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.costo,0))}</div><div class="kpi-sub">${totalFact?((allP.reduce((s,d)=>s+d.costo,0)/totalFact)*100).toFixed(1):0}%</div></div>
       <div class="kpi-card c5"><div class="kpi-label">Canal Principal</div><div class="kpi-value" style="font-size:13px;word-break:break-word">${topCanal[0]?.[0]||'—'}</div><div class="kpi-sub">${fmt$(topCanal[0]?.[1]||0)}</div></div>
     </div>
@@ -5188,7 +5222,7 @@ function renderDashboard(inst){
       // columnas separadas por período -- pero sin perder lo que ya
       // teníamos y ML no muestra: el valor absoluto del período de
       // comparación (acá va de subtítulo) y la cantidad de órdenes.
-      const rentPct1=k1.fact>0?(k1.rent/k1.fact*100):0,rentPct2=k2.fact>0?(k2.rent/k2.fact*100):0;
+      const rentPct1=k1.sinIva>0?(k1.rent/k1.sinIva*100):0,rentPct2=k2.sinIva>0?(k2.rent/k2.sinIva*100):0;
       // Puntos porcentuales, no % relativo -- mismo criterio que usa ML
       // ("Conversión +0,1 puntos"): un margen que pasa de 18,9% a 19,2%
       // tiene que verse como "+0,3 puntos", no como un enorme "+1,6%"
@@ -5229,7 +5263,7 @@ function toggleCatSkus(id){
   row.style.display=isOpen?'none':'table-row';
   if(arr)arr.textContent=isOpen?'▶':'▼';
 }
-async function pedirAnalisis(inst){inst=inst||'hist';const ctx=(window._dashCtx||{})[inst];if(!ctx)return;const btnId=inst==='hist'?'btn-analisis':'btn-analisis-vivo';const boxId=inst==='hist'?'ai-analisis':'ai-analisis-vivo';const btn=qs(btnId);const box=qs(boxId);if(!btn||!box)return;btn.textContent='● analizando...';btn.disabled=true;box.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);padding:6px">Procesando...</div>`;const prompt=`Sos analista de ventas de Global Electronics Argentina. ${ctx.compareNote||'Comparás dos períodos'} en español rioplatense.\n\n${ctx.label1.toUpperCase()}: Facturación $${Math.round(ctx.k1.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k1.rent).toLocaleString('es-AR')} (${(ctx.k1.rent/ctx.k1.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal1.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\n${ctx.label2.toUpperCase()}: Facturación $${Math.round(ctx.k2.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k2.rent).toLocaleString('es-AR')} (${(ctx.k2.rent/ctx.k2.fact*100).toFixed(1)}%) · Top canales: ${ctx.topCanal2.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nAnálisis de 4-5 oraciones: qué cambió, qué canal explica la diferencia, si la rentabilidad mejoró. Números concretos. Sin bullets.`;try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});const json=await res.json();const text=json.content?.[0]?.text||'No se pudo generar el análisis.';box.innerHTML=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;}catch(e){box.innerHTML=`<div style="font-size:10px;color:var(--red)">Error: ${e.message}</div>`;}btn.textContent='✦ Analizar con IA';btn.disabled=false;}
+async function pedirAnalisis(inst){inst=inst||'hist';const ctx=(window._dashCtx||{})[inst];if(!ctx)return;const btnId=inst==='hist'?'btn-analisis':'btn-analisis-vivo';const boxId=inst==='hist'?'ai-analisis':'ai-analisis-vivo';const btn=qs(btnId);const box=qs(boxId);if(!btn||!box)return;btn.textContent='● analizando...';btn.disabled=true;box.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);padding:6px">Procesando...</div>`;const prompt=`Sos analista de ventas de Global Electronics Argentina. ${ctx.compareNote||'Comparás dos períodos'} en español rioplatense.\n\n${ctx.label1.toUpperCase()}: Facturación $${Math.round(ctx.k1.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k1.rent).toLocaleString('es-AR')} (${(ctx.k1.rent/ctx.k1.sinIva*100).toFixed(1)}% s/ sin IVA) · Top canales: ${ctx.topCanal1.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\n${ctx.label2.toUpperCase()}: Facturación $${Math.round(ctx.k2.fact).toLocaleString('es-AR')} · Rent $${Math.round(ctx.k2.rent).toLocaleString('es-AR')} (${(ctx.k2.rent/ctx.k2.sinIva*100).toFixed(1)}% s/ sin IVA) · Top canales: ${ctx.topCanal2.map(([k,v])=>`${k}: $${Math.round(v).toLocaleString('es-AR')}`).join(', ')}\n\nAnálisis de 4-5 oraciones: qué cambió, qué canal explica la diferencia, si la rentabilidad mejoró. Números concretos. Sin bullets.`;try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});const json=await res.json();const text=json.content?.[0]?.text||'No se pudo generar el análisis.';box.innerHTML=`<div style="background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;}catch(e){box.innerHTML=`<div style="font-size:10px;color:var(--red)">Error: ${e.message}</div>`;}btn.textContent='✦ Analizar con IA';btn.disabled=false;}
 
 // ──────────────────────
 
@@ -6620,7 +6654,7 @@ function ofertasExport(){
   function _getTC(){
     const manual=parseFloat(document.getElementById('tacrent-cfg-tc')?.value||'0');
     if(manual>100) return manual;
-    return tacTCBNA || (window.S&&S.tcBNA) || 1455;
+    return tacTCBNA || (window.S&&S.tcBNA) || 0; // nunca un valor fijo (CRITERIOS_MARGEN §7)
   }
 
   // ── CARGAR TC ──
@@ -6676,6 +6710,7 @@ function ofertasExport(){
     document.getElementById('tacrent-table-wrap').style.display='none';
 
     const tc=_getTC();
+    if(!tc){toast('Sin TC del BNA (ni guardado): cargá uno manual en Configuración','error');document.getElementById('tacrent-empty').innerHTML='<div style="color:var(--red);text-align:center">⚠ Sin tipo de cambio — cargá un TC manual</div>';return;}
     const activas=[]; let borradas=0;
     for(const row of tacRawRows){
       if(_debeBorrar((row['Código']||'').trim())) borradas++; else activas.push(row);
