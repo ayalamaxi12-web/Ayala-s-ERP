@@ -64,3 +64,66 @@ def test_vuelve_a_pedir_html_despues_de_una_hora():
     ahora["t"] += 3700  # más de 1 hora
     cliente.obtener()
     assert llamadas["n"] == 2
+
+
+def _bna_caido():
+    raise RuntimeError("BNA caído")
+
+
+def test_guarda_el_tc_cada_vez_que_el_bna_responde_bien():
+    guardados = []
+    cliente = TcBnaClient(fetch_html=lambda: _HTML_REAL, guardar=guardados.append)
+    info = cliente.obtener_info()
+    assert info["source"] == "bna" and info["tc"] == Decimal("1460.50")
+    assert guardados == [Decimal("1460.50")]
+
+
+def test_si_el_bna_no_responde_usa_el_ultimo_guardado():
+    from datetime import datetime, timezone
+
+    fecha = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    cliente = TcBnaClient(fetch_html=_bna_caido, leer_ultimo=lambda: (Decimal("1399.00"), fecha))
+    info = cliente.obtener_info()
+    assert info == {"tc": Decimal("1399.00"), "source": "ultimo_guardado", "fecha": fecha}
+    assert cliente.obtener() == Decimal("1399.00")
+
+
+def test_si_el_html_no_trae_la_fila_tambien_cae_al_ultimo_guardado():
+    from datetime import datetime, timezone
+
+    cliente = TcBnaClient(fetch_html=lambda: "<html></html>",
+                          leer_ultimo=lambda: (Decimal("1399.00"), datetime.now(timezone.utc)))
+    assert cliente.obtener() == Decimal("1399.00")
+
+
+def test_sin_bna_y_sin_guardado_falla_nunca_devuelve_1():
+    cliente = TcBnaClient(fetch_html=_bna_caido, leer_ultimo=lambda: None)
+    with pytest.raises(TcBnaError):
+        cliente.obtener()
+    with pytest.raises(TcBnaError):
+        TcBnaClient(fetch_html=_bna_caido).obtener()
+
+
+def test_un_error_al_guardar_no_tira_el_tc_bueno():
+    def guardar(_):
+        raise RuntimeError("base caída")
+
+    assert TcBnaClient(fetch_html=lambda: _HTML_REAL, guardar=guardar).obtener() == Decimal("1460.50")
+
+
+def test_persistencia_en_db_guarda_y_lee(db_session, monkeypatch):
+    from contextlib import contextmanager
+
+    from rentabilidad import db as db_mod
+    from rentabilidad import tc_bna
+
+    @contextmanager
+    def _sesion():
+        yield db_session
+
+    monkeypatch.setattr(db_mod, "sesion", _sesion)
+    assert tc_bna._leer_de_db() is None
+    tc_bna._guardar_en_db(Decimal("1450.25"))
+    tc_bna._guardar_en_db(Decimal("1460.50"))  # se pisa, no se acumula
+    valor, fecha = tc_bna._leer_de_db()
+    assert valor == Decimal("1460.500000") and fecha is not None

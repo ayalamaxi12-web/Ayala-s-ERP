@@ -26,7 +26,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import export_ventas_ecom, gsheets, pricing_pm, reportes_pricing, seed
+from . import costos_ecom, export_ventas_ecom, gsheets, pricing_pm, reportes_pricing, seed
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .adapters import (
     ClasificacionProvider,
@@ -1021,19 +1021,23 @@ def pricing_carga_pm_filas(payload: FilasPmIn) -> SyncPmOut:
 
 
 def _datos_sku_fn(avisos: list[str]):
-    """Costo/IVA de Táctica (una sola consulta) y PM/categoría de GRAL
+    """Costo del catálogo de Ecom (fuente primaria, criterio de margen §7),
+    IVA de Táctica con respaldo del IVA de Ecom, y PM/categoría de GRAL
     CATEGORIAS (una sola lectura). Si una fuente no responde, la vista sale
     igual con los precios y un aviso — no se inventa el dato."""
     consultar = _consultar_catalogo_tactica_con_cache()
-    costo_p, iva_p = CostoVigenteProvider(consultar=consultar), IvaProvider(consultar=consultar)
+    costo_p = costos_ecom.CostoEcomProvider()
+    iva_p = costos_ecom.IvaConRespaldoEcom(tactica=IvaProvider(consultar=consultar))
     clasif = ClasificacionProvider(fetch_fn=_fetch_fn_con_cache())
-    tactica_ok = clasif_ok = True
+    ecom_ok = clasif_ok = True
     try:
         costo_p.precargar()
         iva_p.precargar()
     except Exception as e:
-        tactica_ok = False
-        avisos.append(f"Táctica no respondió ({type(e).__name__}): sin costo ni IVA, no se calculan márgenes.")
+        ecom_ok = False
+        avisos.append(f"El catálogo de Ecom no respondió ({type(e).__name__}): sin costo ni IVA, no se calculan márgenes.")
+    if ecom_ok and iva_p.tactica_caida:
+        avisos.append("Táctica no respondió: el IVA sale del artículo en Ecom.")
     try:
         clasif._indices()
     except Exception as e:
@@ -1042,7 +1046,7 @@ def _datos_sku_fn(avisos: list[str]):
 
     def datos(sku: str) -> pricing_pm.DatosSku:
         costo = iva = None
-        if tactica_ok:
+        if ecom_ok:
             costo = costo_p.obtener(sku) or costo_p.obtener(sku.upper())
             iva = iva_p.factor(sku) or iva_p.factor(sku.upper())
         c = clasif.clasificacion_ecom(sku) if clasif_ok else {}
@@ -1053,6 +1057,43 @@ def _datos_sku_fn(avisos: list[str]):
         )
 
     return datos
+
+
+@router.get("/costos/ecom")
+def costos_catalogo_ecom() -> dict:
+    """Costo (USD, sin IVA) de todos los SKU del catálogo de Ecom — la fuente
+    única de costo del ERP. Lo lee el front (Competidores) en vez de la
+    planilla PM. La primera llamada tras un arranque baja el catálogo (~80 s)."""
+    try:
+        cat = costos_ecom.obtener_catalogo()
+    except Exception as e:
+        raise HTTPException(503, f"No se pudo leer el catálogo de costos de Ecom: {e}")
+    return {
+        "obtenido_en": cat.obtenido_en,
+        "costos": {k: float(v) for k, v in cat.costos.items()},
+        "iva": {k: float(v) for k, v in cat.iva.items()},
+        "sin_costo": sorted(cat.sin_costo),
+        "ambiguos": {k: [float(x) for x in v] for k, v in cat.ambiguos.items()},
+    }
+
+
+@router.get("/costos/cruce-tactica")
+def costos_cruce_tactica(tolerancia_pct: Decimal = Decimal("1")) -> dict:
+    """Alerta de diferencias de costo Ecom vs Táctica (por SKU en ambas).
+    Táctica solo se usa para cruzar: si no responde, se informa y no se corta
+    nada."""
+    try:
+        cat = costos_ecom.obtener_catalogo()
+    except Exception as e:
+        raise HTTPException(503, f"No se pudo leer el catálogo de costos de Ecom: {e}")
+    try:
+        tactica = CostoVigenteProvider(consultar=_consultar_catalogo_tactica_con_cache())
+        tactica_costos = {sku: c for sku in cat.costos if (c := tactica.obtener(sku)) is not None}
+    except Exception as e:
+        raise HTTPException(503, f"Táctica no respondió ({type(e).__name__}): no se puede cruzar el costo.")
+    difs = costos_ecom.cruzar_costos(cat.costos, tactica_costos, tolerancia_pct)
+    return {"comparados": len(tactica_costos), "con_diferencia": len(difs), "tolerancia_pct": float(tolerancia_pct),
+            "diferencias": [{**d, "ecom": float(d["ecom"]), "tactica": float(d["tactica"]), "dif_pct": float(d["dif_pct"])} for d in difs]}
 
 
 def _periodo_en_curso() -> str:

@@ -54,11 +54,17 @@
 
 ## 7. Costo y Tipo de Cambio (una sola fuente cada uno)
 - **Costo del producto:**
-  - La verdad es **Táctica** (correcto en ~98% de los SKU).
-  - Táctica es frágil: vive en el servidor de la oficina; si se cae VPN/Tailscale, corta todo.
-  - **Ecom es el respaldo estable y 98% confiable** (coincide con Táctica).
-  - **Una sola fuente de costo para todos los módulos.** Competidores deja de usar la planilla
-    PM por su lado.
+  - **Fuente primaria: el catálogo de artículos de Ecom** (Artículos / Editar Artículos, donde se
+    crean los SKU y se les pone el costo; tiene el costo de TODOS los SKU, no solo de lo vendido).
+    Es estable y accesible por API (`products.find` del GraphQL de Ecom; ver
+    `backend/rentabilidad/costos_ecom.py`). *Decisión de Maxx 2026-10, reemplaza el criterio
+    anterior que ponía a Táctica como verdad.*
+  - **Táctica queda para CRUZAR** (hoy `GET /rentabilidad/costos/cruce-tactica`): cuando hay
+    diferencia de costo entre Ecom y Táctica, se informa, para subir la confiabilidad de ~98% a
+    100%. Táctica vive en el servidor de la oficina y se cae con la VPN/Tailscale — por eso no es
+    la fuente primaria.
+  - **Una sola fuente de costo para todos los módulos.** Competidores deja de usar la planilla PM
+    por su lado (la PM sigue siendo la fuente de PRECIOS).
 - **Tipo de cambio:**
   - **BNA dólar billete venta del día, siempre.**
   - **Fallback: el último TC guardado.** Nunca 1, nunca un valor fijo que quede viejo.

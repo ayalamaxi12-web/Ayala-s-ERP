@@ -39,20 +39,20 @@ def test_ml_precio_a_margen_contado_desglosa_cada_cargo(par):
     r = m.precio_a_margen(d("201258"), _plancha(), par)
     assert r.venta_sin_iva == d("182133.94")
     assert r.cargos == {
-        "comision": d("30188.70"), "cuotas": d("0.00"), "costo_fijo": d("0.00"), "envio": d("29410.00"),
+        "comision": d("31194.99"), "cuotas": d("0.00"), "costo_fijo": d("0.00"), "envio": d("29410.00"),
         "imp_cheque": d("2415.10"), "iibb": d("9106.70"), "costo": d("56105.10"),
     }
-    assert r.rentabilidad == d("54908.34")
-    assert r.margen == d("0.3015")
+    assert r.rentabilidad == d("53902.05")
+    assert r.margen == d("0.2959")
 
 
 def test_ml_tres_cuotas_descuenta_el_cargo_por_cuotas(par):
     r = m.precio_a_margen(d("239645"), _plancha(plan="3"), par)
     assert r.cargos["cuotas"] == d("21328.41")  # 8,9%
-    assert r.margen == d("0.2783")
+    assert r.margen == d("0.2728")
 
 
-@pytest.mark.parametrize("plan,precio", [("contado", "200629"), ("3", "253579"), ("6", "292629")])
+@pytest.mark.parametrize("plan,precio", [("contado", "203019"), ("3", "257399"), ("6", "297719")])
 def test_ml_margen_a_precio_cumple_el_margen_pedido(par, plan, precio):
     r = m.margen_a_precio(d("0.30"), _plancha(plan=plan), par)
     assert r.precio == d(precio)
@@ -84,7 +84,7 @@ def test_ml_costo_fijo_de_la_publicacion_tiene_prioridad_sobre_la_tabla(par):
 
 def test_ml_margen_a_precio_recalcula_si_el_precio_cae_en_un_tramo_de_costo_fijo(par):
     r = m.margen_a_precio(d("0.30"), _plancha(costo=d("3000"), envio=d("0")), par)
-    assert r.precio == d("10159")
+    assert r.precio == d("10279")
     assert r.cargos["costo_fijo"] == d("1330.00")
     assert r.margen == d("0.3000")
 
@@ -92,6 +92,15 @@ def test_ml_margen_a_precio_recalcula_si_el_precio_cae_en_un_tramo_de_costo_fijo
 def test_ml_categoria_sin_fila_usa_la_comision_general(par):
     r = m.precio_a_margen(d("100000"), _plancha(categoria="Impresión 3D"), par)
     assert r.cargos["comision"] == d("15500.00")
+
+
+def test_ml_comision_unica_15_5_aunque_la_categoria_tenga_fila_propia(par):
+    # Criterio de margen §2: 15,5% único. La tabla por categoría sigue cargada
+    # (futuro) pero el motor no la usa.
+    assert par.comision_categoria[("ML", "audio y video")] == d("0.16")
+    for cat in ("Audio y Video", "Electrodomesticos", "Gráfica y Estampado"):
+        r = m.precio_a_margen(d("100000"), _plancha(categoria=cat), par)
+        assert r.cargos["comision"] == d("15500.00")
 
 
 # ── Web (Mercado Pago): tarifa del panel + IVA ──

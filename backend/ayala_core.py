@@ -19,7 +19,9 @@ from typing import Callable
 
 from ml_auth import SELLERS
 from ml_full import _sku_de_item
-from ml_ofertas import CUOTAS_PCT_DEFAULT, _cuotas_sin_interes, costo_envio_real_item
+from ml_ofertas import (
+    CUOTAS_PCT_DEFAULT, IIBB_PCT_DEFAULT, IMP_CHEQUE_PCT_DEFAULT, _cuotas_sin_interes, costo_envio_real_item,
+)
 
 # Los 5 SKU piloto (AYALA_CORE.md A.1) -- lista extensible, NO un límite
 # estructural: no hardcodear "5" en ningún lado que dependa de esto.
@@ -40,7 +42,12 @@ SKUS_PILOTO: list[str] = [
 # la API de ML por dominio, a diferencia de Ofertas ML -- ver AYALA_CORE.md
 # A.2/A.3, decisión explícita de Maxx de replicar la planilla tal cual).
 COMISION_ML_DEFAULT = Decimal("15.32")
-IIBB_PCT_DEFAULT = Decimal("6.50")
+# Impuestos: criterio de margen (docs/business/CRITERIOS_MARGEN.md §2/§4),
+# 2026-10. ANTES había un 6,50% unificado (IIBB + imp. cheque descontados
+# juntos de un solo lado) -- eliminado. Ahora van SEPARADOS, cada uno sobre su
+# base: IIBB 5% sobre el precio SIN IVA, imp. cheque 1,2% sobre el precio CON
+# IVA (importados de `ml_ofertas`, que ya los tiene así -- un solo lugar).
+# `IIBB_PCT_DEFAULT` / `IMP_CHEQUE_PCT_DEFAULT` se re-exportan de acá.
 ENVIO_FULL_PCT_DEFAULT = Decimal("0.50")  # solo si envío a Bodega (Full), Tasas!D6:D7
 
 # Financiero por condición -- Tasas!C13:C18. Reducida es un 5% FIJO (no
@@ -93,6 +100,7 @@ def calcular_precio_condicion(
     renta_pct: Decimal,
     comision_pct: Decimal = COMISION_ML_DEFAULT,
     iibb_pct: Decimal = IIBB_PCT_DEFAULT,
+    imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
     envio_full: bool = False,
     envio_full_pct: Decimal = ENVIO_FULL_PCT_DEFAULT,
 ) -> Decimal:
@@ -106,13 +114,15 @@ def calcular_precio_condicion(
     Nota real de la planilla: la comisión de ML y el % de Envío Full se
     descuentan siempre sobre 1,21 (el servicio de ML factura IVA 21%
     sin importar la alícuota del producto vendido); el IIBB se descuenta
-    sobre la alícuota propia del producto (`iva_factor`)."""
+    sobre la alícuota propia del producto (`iva_factor`, o sea sobre el
+    neto) y el imp. cheque directo sobre el precio con IVA."""
     numerador = costo_sin_iva + envio_real / _IVA_SERVICIOS_ML
     full = (envio_full_pct / 100) if envio_full else Decimal("0")
     denominador = (
         (1 / iva_factor)
         - (comision_pct / 100) / _IVA_SERVICIOS_ML
-        - (iibb_pct / 100) / iva_factor
+        - (iibb_pct / 100) / iva_factor  # IIBB: sobre el precio SIN IVA
+        - (imp_cheque_pct / 100)  # imp. cheque: sobre el precio CON IVA
         - (financiero_pct / 100)
         - (renta_pct / 100)
         - full
@@ -129,6 +139,7 @@ def calcular_precios_todas_condiciones(
     envio_full: bool = False,
     comision_pct: Decimal = COMISION_ML_DEFAULT,
     iibb_pct: Decimal = IIBB_PCT_DEFAULT,
+    imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
 ) -> dict[str, Decimal]:
     """El motor completo, las 6 condiciones de una (A.8 punto 2 de
     AYALA_CORE.md: "tabla ... precio calculado por el motor para cada
@@ -148,6 +159,7 @@ def calcular_precios_todas_condiciones(
             renta_pct=renta_por_condicion[condicion],
             comision_pct=comision_pct,
             iibb_pct=iibb_pct,
+            imp_cheque_pct=imp_cheque_pct,
             envio_full=envio_full,
         )
         for condicion in CONDICIONES
@@ -322,10 +334,10 @@ def descubrir_publicaciones(
     incidencias: list[dict] = []
     cache_familias: dict[str, list[dict]] = {}
     if progreso_cb:
-        progreso_cb(0, 1, "Consultando costos en Táctica...")
+        progreso_cb(0, 1, "Consultando costos en Ecom...")
     costo_provider.precargar()
     if progreso_cb:
-        progreso_cb(0, 1, "Consultando IVA en Táctica...")
+        progreso_cb(0, 1, "Consultando IVA...")
     iva_provider.precargar()
     for cuenta in cuentas:
         ids = ml.items_activos(cuenta)
@@ -344,7 +356,7 @@ def descubrir_publicaciones(
             if costo_usd is None or iva_factor is None:
                 incidencias.append({
                     "item_id": d.get("id"), "cuenta": cuenta, "sku": sku,
-                    "motivo": "SIN_COSTO_TACTICA" if costo_usd is None else "SIN_IVA_TACTICA",
+                    "motivo": "SIN_COSTO" if costo_usd is None else "SIN_IVA",
                 })
                 continue
             costo_ars = costo_usd * tc
@@ -503,12 +515,13 @@ def iniciar_job_publicaciones(
     _jobs[job_id] = {"status": "running", "log": ["Escaneando publicaciones activas..."], "result": None, "progress": None}
     try:
         from ml_ofertas import MLOfertasClient
-        from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+        from rentabilidad.costos_ecom import proveedores_de_costo_e_iva
 
         ml = MLOfertasClient()
-        costo_provider = CostoVigenteProvider()
-        iva_provider = IvaProvider()
-        tc_decimal = Decimal(str(tc)) if tc else Decimal(1)
+        costo_provider, iva_provider = proveedores_de_costo_e_iva()
+        if not tc or Decimal(str(tc)) <= 0:
+            raise ValueError("Sin TC del BNA (ni guardado): no se calculan precios con TC 1.")
+        tc_decimal = Decimal(str(tc))
         renta_decimal = (
             {c: Decimal(str(v)) for c, v in renta_por_condicion.items()} if renta_por_condicion else None
         )

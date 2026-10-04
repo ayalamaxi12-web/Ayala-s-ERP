@@ -18,6 +18,7 @@ import ayala_core
 from erp_auth import ClaveERPMiddleware
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
+from rentabilidad import costos_ecom
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 
@@ -61,6 +62,10 @@ def _rentabilidad_startup():
         migrar_y_sembrar()
     except Exception as e:
         print(f"Rentabilidad: no se pudo migrar/sembrar en el arranque: {e}")
+    # El catálogo de costos de Ecom tarda ~80 s en bajar: se precalienta en un
+    # hilo aparte para que el primer uso no espere.
+    import threading
+    threading.Thread(target=costos_ecom.precalentar, daemon=True).start()
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
 # "VENTAS POR CANALES MATIAS" -- Excel real de Matías donde vive el control
@@ -968,41 +973,30 @@ def refresh_status(job_id: str):
 # TIPO DE CAMBIO — BNA scraper
 # ══════════════════════════════════════════════════════
 
-_tc_cache = {'value': 0, 'expiry': 0}
-
 def obtener_tc_bna() -> dict:
-    """Scrappea el tipo de cambio venta del Dólar del BNA -- extraído a
-    función propia (2026-08-27) para que `ml_ofertas.py` pueda pedir el TC
-    vigente sin duplicar el scraping ni importar de `main.py` (evita
-    import circular: `main.py` ya importa `ml_ofertas`)."""
-    if time.time() < _tc_cache['expiry'] and _tc_cache['value'] > 0:
-        return {"tc": _tc_cache['value'], "source": "cache"}
+    """TC venta del dólar billete del BNA -- delega en el ÚNICO scraper
+    (`rentabilidad/tc_bna.py`, 2026-10): BNA del día; si no responde, el
+    último TC guardado (`source: "ultimo_guardado"`). Si no hay ninguno,
+    `tc: 0` + error: quien llama NO debe seguir con 1 ni con un valor fijo."""
+    from rentabilidad import tc_bna
     try:
-        r = requests.get("https://bna.com.ar/Personas",
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-            timeout=10)
-        html = r.text
-        # Find the billetes table - Dolar U.S.A venta (last td of first tr in tbody)
-        import re
-        # Pattern: Dolar U.S.A ... compra ... venta
-        m = re.search(r'Dolar U\.S\.A</td>\s*<td>([\d,\.]+)</td>\s*<td>([\d,\.]+)</td>', html)
-        if m:
-            venta_str = m.group(2).replace('.', '').replace(',', '.')
-            tc = float(venta_str)
-            _tc_cache['value'] = tc
-            _tc_cache['expiry'] = time.time() + 3600  # cache 1 hora
-            return {"tc": tc, "source": "bna", "fecha": datetime.now().strftime('%d/%m/%Y %H:%M')}
-        # Fallback pattern
-        m2 = re.search(r'<td class="tit">Dolar U\.S\.A</td>\s*<td>([\d,\.]+)</td>\s*<td>([\d,\.]+)</td>', html)
-        if m2:
-            venta_str = m2.group(2).replace('.', '').replace(',', '.')
-            tc = float(venta_str)
-            _tc_cache['value'] = tc
-            _tc_cache['expiry'] = time.time() + 3600
-            return {"tc": tc, "source": "bna", "fecha": datetime.now().strftime('%d/%m/%Y %H:%M')}
-        return {"tc": 0, "error": "No se pudo parsear el TC", "source": "error"}
-    except Exception as e:
+        info = tc_bna.obtener_tc_bna_info()
+    except tc_bna.TcBnaError as e:
         return {"tc": 0, "error": str(e), "source": "error"}
+    out = {"tc": float(info["tc"]), "source": info["source"]}
+    if info.get("fecha"):
+        out["fecha"] = info["fecha"].astimezone().strftime('%d/%m/%Y %H:%M')
+    if info["source"] == "ultimo_guardado":
+        out["aviso"] = "El BNA no respondió: se usa el último TC guardado."
+    return out
+
+
+def tc_bna_requerido() -> Decimal:
+    """TC para cálculos de margen: nunca 1, nunca 0 -- sin TC corta con 503."""
+    tc = obtener_tc_bna().get("tc") or 0
+    if tc <= 0:
+        raise HTTPException(status_code=503, detail="No hay TC del BNA ni un TC guardado: no se puede calcular el margen.")
+    return Decimal(str(tc))
 
 
 @app.get("/tc/bna")
@@ -1988,7 +1982,7 @@ async def mix_cargar(request: Request):
 @app.post("/ml-ofertas/run")
 async def ml_ofertas_run(background_tasks: BackgroundTasks, incluir_propias: bool = False):
     job_id = f"mlofertas_{int(time.time())}"
-    tc = obtener_tc_bna().get("tc") or 0
+    tc = float(tc_bna_requerido())
     background_tasks.add_task(ml_ofertas.iniciar_job, job_id, None, incluir_propias, tc)
     return {"job_id": job_id, "status": "started"}
 
@@ -2086,11 +2080,10 @@ def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
     """Buscador puntual -- para activar una oferta en un MLA que hoy NO
     tiene nada activo (no aparece en el escaneo de campañas de /ml-ofertas/
     run, que por diseño solo trae publicaciones que ya tienen algo)."""
-    from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
     ml = ml_ofertas.MLOfertasClient()
-    tc = Decimal(str(obtener_tc_bna().get("tc") or 1))
+    tc = tc_bna_requerido()
     try:
-        r = ml_ofertas.resolver_item_para_gestion(ml, CostoVigenteProvider(), IvaProvider(), item_id, cuenta, tc)
+        r = ml_ofertas.resolver_item_para_gestion(ml, *costos_ecom.proveedores_de_costo_e_iva(), item_id, cuenta, tc)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudo consultar Mercado Libre: {e}")
     if not r.get("encontrado"):
@@ -2216,24 +2209,25 @@ def _ayala_core_motor_sync(
     tc_override: Decimal | None = None, costo_override: Decimal | None = None,
 ) -> dict:
     # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
-    # pisar el costo sin IVA (USD) de Táctica a mano para simular. Sin
-    # `costo`, sigue viniendo de Táctica como siempre (y sigue fallando
-    # SIN_COSTO_TACTICA si el SKU no está ahí). Con `costo`, ni siquiera se
-    # consulta Táctica -- también sirve para simular un SKU que todavía no
+    # pisar el costo sin IVA (USD) a mano para simular. Sin
+    # `costo`, viene del catálogo de Ecom (y falla SIN_COSTO si el SKU
+    # no está ahí). Con `costo`, ni siquiera se
+    # consulta Ecom -- también sirve para simular un SKU que todavía no
     # tiene costo cargado ahí.
+    costo_p, iva_p = costos_ecom.proveedores_de_costo_e_iva()
     if costo_override is not None:
         costo_usd = costo_override
     else:
-        costo_usd = CostoVigenteProvider().obtener(sku)
+        costo_usd = costo_p.obtener(sku)
         if costo_usd is None:
-            raise HTTPException(status_code=404, detail=f"SIN_COSTO_TACTICA para SKU {sku!r}")
-    iva_factor = IvaProvider().factor(sku)
+            raise HTTPException(status_code=404, detail=f"SIN_COSTO para SKU {sku!r} (catálogo de Ecom)")
+    iva_factor = iva_p.factor(sku)
     if iva_factor is None:
-        raise HTTPException(status_code=404, detail=f"SIN_IVA_TACTICA para SKU {sku!r}")
+        raise HTTPException(status_code=404, detail=f"SIN_IVA para SKU {sku!r}")
     # Pedido de Maxx 2026-09-15: poder pisar el TC de BNA a mano para
     # simular con un valor propio -- sin `tc`, se sigue usando el TC en
     # vivo como siempre.
-    tc = tc_override if tc_override is not None else Decimal(str(obtener_tc_bna().get("tc") or 0))
+    tc = tc_override if tc_override is not None else tc_bna_requerido()
     costo_sin_iva = costo_usd * tc
 
     item_info = None
@@ -2322,7 +2316,7 @@ async def ayala_core_publicaciones_run(
     pedido de Maxx 2026-09-15: pisar el TC de BNA a mano, sin el parámetro
     sigue siendo el TC en vivo."""
     job_id = f"ayalacore_pub_{int(time.time())}"
-    tc = tc if tc is not None else (obtener_tc_bna().get("tc") or 0)
+    tc = tc if tc is not None else float(tc_bna_requerido())
     lista_cuentas = [c for c in cuentas.split(",") if c] or None
     lista_skus = [s for s in skus.split(",") if s] or None
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)

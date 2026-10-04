@@ -271,7 +271,8 @@ class VentaEcom(Base):
     precio_de_venta_roto: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     # AU · Rentabilidad Real · INFORMATIVO — esperada por el PM, no interviene (§9)
     rentabilidad_real: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
-    # AV · % Rentabilidad · CALCULADO = 1 - (AA/Z), equivalente a AB/Z
+    # AV · % Rentabilidad · CALCULADO = AB/Q (rentabilidad / precio SIN IVA) desde 2026-10;
+    # las filas guardadas ANTES de esa fecha tienen AB/Z (sobre neto de cargos)
     pct_rentabilidad: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
 
     # Sin columna en la planilla — solo los completa el adaptador de la API
@@ -552,3 +553,16 @@ class PricingSkuLogistica(Base):
     largo_cm: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     origen: Mapped[str | None] = mapped_column(String(64), nullable=True)  # depósito | planilla
     actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class TcBnaGuardado(Base):
+    """Último TC del BNA (dólar billete, venta) que respondió bien. Una sola
+    fila (`id` = "ultimo"), se pisa cada vez que el BNA contesta: es el
+    respaldo cuando el BNA no responde (criterio de margen §7: nunca 1, nunca
+    un valor fijo que quede viejo)."""
+
+    __tablename__ = "tc_bna_guardado"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default="ultimo")
+    valor: Mapped[Decimal] = mapped_column(MONEY)
+    obtenido_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

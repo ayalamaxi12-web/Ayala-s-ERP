@@ -78,6 +78,18 @@ def test_comision_general_si_el_dominio_no_esta_en_la_tabla():
     assert r.comision == Decimal(10000) * params.comision_general / 100
 
 
+def test_comision_unica_15_5_aunque_el_dominio_tenga_otra_en_la_tabla():
+    # Criterio de margen §2: 15,5% único. La tabla por dominio sigue como dato (futuro), no se usa.
+    params = ParametrosMargen()
+    assert params.comision_por_dominio["MLA-VINYL_ROLLS_AND_SHEETS"] == Decimal("14.3")
+    for dominio in ("MLA-VINYL_ROLLS_AND_SHEETS", "MLA-CALCULATORS", "MLA-TONERS"):
+        r = calcular_margen_oferta(
+            precio_oferta=Decimal(10000), iva_factor=Decimal("1.21"), costo_producto_ars=Decimal(0),
+            domain_id=dominio, cuotas_ofrecidas=None, params=params,
+        )
+        assert r.comision == Decimal("1550.0")
+
+
 def test_domain_id_none_usa_comision_general():
     params = ParametrosMargen()
     r = calcular_margen_oferta(
@@ -276,8 +288,8 @@ def test_ofertas_activas_marca_incidencia_sin_costo_tactica():
     filas, incidencias = ofertas_activas(ml, costo, iva, cuentas=["IT"])
 
     assert filas[0].margen is None
-    assert filas[0].incidencia == "SIN_COSTO_TACTICA"
-    assert incidencias == [{"item_id": "MLA1", "cuenta": "IT", "sku": "SKU-SIN-COSTO", "motivo": "SIN_COSTO_TACTICA"}]
+    assert filas[0].incidencia == "SIN_COSTO"
+    assert incidencias == [{"item_id": "MLA1", "cuenta": "IT", "sku": "SKU-SIN-COSTO", "motivo": "SIN_COSTO"}]
 
 
 def test_ofertas_activas_encuentra_sku_por_atributo_seller_sku():
@@ -1339,4 +1351,4 @@ def test_resolver_item_para_gestion_sin_costo_tactica():
         return {"id": "MLA1", "title": "T1", "price": 15000, "seller_custom_field": "SKU-X", "domain_id": "MLA-TONERS"}
     ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
     r = resolver_item_para_gestion(ml, _CostoProviderFalso({}), _IvaProviderFalso({"SKU-X": Decimal("1.21")}), "MLA1", "IT", Decimal(1000))
-    assert r["incidencia"] == "SIN_COSTO_TACTICA"
+    assert r["incidencia"] == "SIN_COSTO"
