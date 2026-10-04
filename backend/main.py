@@ -15,12 +15,16 @@ import ml_full
 import ml_reposicion
 import ml_ofertas
 import ayala_core
+from erp_auth import ClaveERPMiddleware
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
+# Orden: el último en agregarse es el más externo. CORS va por fuera de la clave
+# para que el 401 también lleve headers CORS y el navegador pueda leerlo.
+app.add_middleware(ClaveERPMiddleware)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(rentabilidad_router)
 
