@@ -4,6 +4,7 @@ ML Competencia  ->  Referencias_Mercado + Historial_Precios (+ Migracion_Huerfan
 Uso (desde backend/):
   python scripts/migrar_competencia.py                       # DRY-RUN contra el Sheet real (solo lectura)
   python scripts/migrar_competencia.py --api-key <KEY de Sheets>   # DRY-RUN solo lectura, sin cuenta de servicio
+  python scripts/migrar_competencia.py --from-file competencia_export.json   # DRY-RUN con el export del navegador
   python scripts/migrar_competencia.py --from-dir export/    # DRY-RUN contra exports JSON (sin credenciales)
   python scripts/migrar_competencia.py --ejecutar --plan-hash <hash del dry-run>
 
@@ -96,6 +97,20 @@ def leer_sheet_api(key):
     return f
 
 
+_CLAVES = ('refs', 'ents', 'general', 'ml_competencia', 'hist_competidores', 'monitor',
+           'historial_existente', 'huerfanos_existentes')
+
+
+def leer_archivo(path):
+    """Un solo JSON (export desde el navegador): {refs, ents, ..., v_tabs: {'V - X': filas}, _errores: [...]}."""
+    d = json.load(open(path, encoding='utf-8'))
+    if d.get('_errores'):
+        sys.exit(f"El export tiene pestañas que no se pudieron leer: {d['_errores']}. Volver a exportar.")
+    f = {k: d.get(k) or [] for k in _CLAVES}
+    f['v_tabs'] = d.get('v_tabs') or {}
+    return f
+
+
 def leer_dir(d):
     def j(n):
         p = os.path.join(d, n + '.json')
@@ -164,16 +179,17 @@ def main():
     ap.add_argument('--ejecutar', action='store_true', help='escribe de verdad (default: dry-run, solo lectura)')
     ap.add_argument('--plan-hash', help='hash del informe de dry-run aprobado (obligatorio con --ejecutar)')
     ap.add_argument('--from-dir', help='leer exports JSON en vez del Sheet (solo dry-run)')
+    ap.add_argument('--from-file', help='un solo JSON exportado desde el navegador (solo dry-run)')
     ap.add_argument('--api-key', help='API key de Sheets (solo lectura): dry-run sin cuenta de servicio')
     ap.add_argument('--informe', default='informe_migracion_competencia.json')
     a = ap.parse_args()
-    if (a.from_dir or a.api_key) and a.ejecutar:
-        sys.exit('--from-dir y --api-key son solo para dry-run (--ejecutar escribe con la cuenta de servicio).')
+    if (a.from_dir or a.from_file or a.api_key) and a.ejecutar:
+        sys.exit('--from-dir, --from-file y --api-key son solo para dry-run (--ejecutar escribe con la cuenta de servicio).')
     if a.ejecutar and not a.plan_hash:
         sys.exit('--ejecutar requiere --plan-hash del dry-run aprobado.')
 
-    ss = None if (a.from_dir or a.api_key) else get_gs().open_by_key(SPREADSHEET_ID)
-    fuentes = leer_dir(a.from_dir) if a.from_dir else leer_sheet_api(a.api_key) if a.api_key else leer_sheet(ss)
+    ss = None if (a.from_dir or a.from_file or a.api_key) else get_gs().open_by_key(SPREADSHEET_ID)
+    fuentes = (leer_archivo(a.from_file) if a.from_file else leer_dir(a.from_dir) if a.from_dir else leer_sheet_api(a.api_key) if a.api_key else leer_sheet(ss))
     plan = cdb.planificar(fuentes)
     imprimir_informe(plan.rep)
     json.dump({k: v for k, v in plan.rep.items()}, open(a.informe, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
