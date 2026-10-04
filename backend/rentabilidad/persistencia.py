@@ -75,6 +75,7 @@ from .models import (
     ParametroTasa,
     SkuExcluido,
     VentaEcom,
+    VentaEcomLinea,
     VentaTactica,
 )
 
@@ -512,11 +513,37 @@ def _clasificar_fila_ecom(
     excluido = excluido_por_estado or excluido_sku
     motivo = MotivoExclusion.MANUAL if excluido_por_estado else motivo_sku
 
-    return construir_venta_ecom(
+    venta = construir_venta_ecom(
         fila, resultado, "", pm, subcategoria, vinculacion, ao, facturacion_iva,
         stock, ventas_30d, dias_de_stock, rentabilidad_real, excluido, motivo,
         categoria=clasificacion["categoria"], subcategoria2=clasificacion["subcategoria2"],
     )
+    venta.lineas = _construir_lineas_ecom(fila, clasificacion, clasificacion_provider)
+    return venta
+
+
+def _construir_lineas_ecom(fila: FilaEcom, clasificacion_orden: dict, clasificacion_provider) -> list[VentaEcomLinea]:
+    """Una `VentaEcomLinea` por SKU de la orden, con SU importe y SU
+    clasificación (PM / subcategoría / categoría del propio SKU, no la del
+    primer SKU de la orden). Una orden de un solo SKU reusa la clasificación
+    ya resuelta para la orden."""
+    sin_clasificar = {"pm": None, "subcategoria": None, "categoria": None, "subcategoria2": None}
+    por_sku: dict[str, dict] = {}
+    lineas = []
+    for i, l in enumerate(fila.lineas):
+        if len(fila.lineas) == 1:
+            c = clasificacion_orden
+        else:
+            if l.sku not in por_sku:
+                por_sku[l.sku] = _opcional(lambda: clasificacion_provider.clasificacion_ecom(l.sku), sin_clasificar)
+            c = por_sku[l.sku]
+        lineas.append(VentaEcomLinea(
+            periodo="", orden_linea=i, sku=l.sku[:100], cantidad=l.cantidad,
+            precio_final=l.precio_final, precio_sin_iva=l.precio_sin_iva, costo_sin_iva=l.costo_sin_iva,
+            factor_iva=l.factor_iva, pm=c["pm"], subcategoria=c["subcategoria"], categoria=c["categoria"],
+            subcategoria2=c["subcategoria2"], item_ml=(l.item_ml or None) and l.item_ml[:32], permalink_ml=l.permalink_ml,
+        ))
+    return lineas
 
 
 def construir_filas_ecom(
@@ -583,11 +610,20 @@ def guardar_cierre_ecom(
     )
     if log:
         log(f"Guardando {len(resultado.filas)} filas del período {periodo}")
-    db.query(VentaEcom).filter(VentaEcom.periodo == periodo).delete(synchronize_session=False)
+    borrar_ventas_ecom_de_periodo(db, periodo)
     for venta in resultado.filas:
         venta.periodo = periodo
+        for linea in venta.lineas:
+            linea.periodo = periodo
         db.add(venta)
     return resultado
+
+
+def borrar_ventas_ecom_de_periodo(db: Session, periodo: str) -> None:
+    """Borra las ventas de Ecom de un período Y sus líneas (el DELETE masivo
+    no pasa por el cascade del ORM)."""
+    db.query(VentaEcomLinea).filter(VentaEcomLinea.periodo == periodo).delete(synchronize_session=False)
+    db.query(VentaEcom).filter(VentaEcom.periodo == periodo).delete(synchronize_session=False)
 
 
 # ── Metadata del cierre (§3 del ajuste de arquitectura, 2026-08-10) ──

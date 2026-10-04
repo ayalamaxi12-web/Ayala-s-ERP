@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session
 
 from . import gsheets
 from .models import VentaEcom, VentaTactica
-from .persistencia import registrar_cierre
+from .persistencia import borrar_ventas_ecom_de_periodo, registrar_cierre
 from .regimen import extraer_comprobante
 from .regimen import periodo_de_rango as _periodo_de_rango
 from .regimen import resolver_regimen
@@ -443,7 +443,7 @@ def guardar_historico(db: Session, resultado: ResultadoImportacion) -> None:
         registrar_cierre(db, periodo, desde, hasta, tactica_guardado=True)
 
     for periodo, ventas in periodos_ecom.items():
-        db.query(VentaEcom).filter(VentaEcom.periodo == periodo).delete(synchronize_session=False)
+        borrar_ventas_ecom_de_periodo(db, periodo)
         for venta in ventas:
             db.add(venta)
         desde, hasta = _rango_de_periodo(periodo)

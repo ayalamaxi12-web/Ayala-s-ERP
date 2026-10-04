@@ -174,6 +174,7 @@ from .ingesta_ecom import (
     ORIGEN_COMISION_ESTIMADO_FRAVEGA,
     ORIGEN_COMISION_ESTIMADO_ONCITY,
     FilaEcom,
+    LineaEcom,
     ResultadoIngestaEcom,
 )
 
@@ -678,6 +679,29 @@ def _datos_informativos(orden: dict) -> dict:
     }
 
 
+def _lineas_de_orden(lineas: list[dict], es_postventa: bool) -> list[LineaEcom]:
+    """Importe real de cada SKU de la orden, para repartir bien los combos y
+    carritos: `subtotal` / `subtotalSinImpuestos` / `quantity` / `variant.cost`
+    de CADA `OrderList`. Mismas reglas que el total de la orden (que sigue
+    siendo la suma de estas líneas): Postventa va en cero, el costo es el
+    vigente × cantidad, y una línea sin variante no suma costo."""
+    res = []
+    for l in lineas:
+        listing = l.get("listing") or {}
+        es_ml = listing.get("owner") == "MlItem" and listing.get("ownerId")
+        res.append(LineaEcom(
+            sku=_sku_de_linea(l) or "",
+            cantidad=int(_decimal(l.get("quantity"))),
+            precio_final=Decimal(0) if es_postventa else _decimal(l.get("subtotal")),
+            precio_sin_iva=Decimal(0) if es_postventa else _decimal(l.get("subtotalSinImpuestos")),
+            costo_sin_iva=_decimal((l.get("variant") or {}).get("cost")) * _decimal(l.get("quantity")) if l.get("variant") else Decimal(0),
+            factor_iva=_FACTOR_POR_TAX_TAG.get(str(l.get("taxTag") or "").strip()),
+            item_ml=listing["ownerId"] if es_ml else None,
+            permalink_ml=(listing.get("ownerData") or {}).get("permalink") if es_ml else None,
+        ))
+    return res
+
+
 def _publicacion_ml(lineas: list[dict]) -> dict:
     """MLA y link de la publicación de ML en que se vendió: cada línea de una
     orden de ML trae su `listing` con `owner == "MlItem"`, `ownerId` = MLA y
@@ -892,6 +916,7 @@ def _fila_desde_orden(
         cargo_cuotas=_cargo_cuotas_vendedor(orden),
         **_publicacion_ml(lineas),
         **_datos_informativos(orden),
+        lineas=_lineas_de_orden(lineas, es_postventa),
     )
 
 

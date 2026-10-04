@@ -8,10 +8,13 @@ Definiciones (las mismas del informe de rentabilidad y de la pantalla):
 - facturación = Σ Precio Final (con IVA); también se informa sin IVA.
 - rentabilidad % = rentabilidad $ / facturación sin IVA.
 - "ayer" = órdenes con fecha de CREACIÓN ese día (hora Argentina).
-- SKU = los SKU de la orden tal como los guarda la corrida (`skus_vendidos`):
-  una orden de un solo SKU cuenta para ese SKU; un kit / carrito de varios
-  SKU cuenta como esa combinación — mismo criterio que las filas de la
-  planilla (una fila = una orden). La corrida no guarda el importe por línea.
+- SKU = cada SKU de la orden con SU parte del importe (`desglose_sku`): un
+  kit / carrito de varios SKU ya no cuenta como una "combinación" ni suma el
+  total de la orden a cada SKU — cada SKU toma el importe de su línea. Los
+  totales por orden (ayer, ciclo, canales) no cambian. Las órdenes viejas
+  importadas de la planilla que nunca tuvieron líneas se reparten por precio
+  de lista y quedan marcadas `prorrateado`.
+- PM = el de cada SKU (no el del primer SKU de la orden).
 - Las órdenes con costo 0 (sin calcular) suman facturación pero no
   rentabilidad, y se listan en alertas.
 """
@@ -22,6 +25,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
+from .desglose_sku import LineaSku, con_lineas, desglosar
 from .ingesta_ecom import ORIGEN_COMISION_ESTIMADO_FRAVEGA, ORIGEN_COMISION_ESTIMADO_ONCITY
 from .models import CierreRentabilidad, VentaEcom
 from .regimen import periodo_de_rango
@@ -53,47 +57,68 @@ def _totales(ventas: list[VentaEcom]) -> dict:
     }
 
 
-def _por_sku(ventas: list[VentaEcom]) -> list[dict]:
-    grupos: dict[str, list] = defaultdict(lambda: [Decimal(0), Decimal(0), Decimal(0), 0])
-    for v in ventas:
-        g = grupos[(v.skus_vendidos or "").strip() or "(sin SKU)"]
-        g[0] += v.precio_final or 0
-        g[1] += v.precio_sin_iva or 0
-        g[2] += v.rentabilidad or 0
-        g[3] += 1
+def _por_sku(lineas: list[LineaSku]) -> list[dict]:
+    grupos: dict[str, list] = defaultdict(lambda: [Decimal(0), Decimal(0), Decimal(0), set(), False])
+    for l in lineas:
+        g = grupos[l.sku]
+        g[0] += l.precio_final or 0
+        g[1] += l.precio_sin_iva or 0
+        g[2] += l.rentabilidad or 0
+        g[3].add(l.venta.numero_orden)
+        g[4] = g[4] or l.prorrateado
     return [
-        {"sku": sku, "facturacion": _n(f), "rentabilidad": _n(r), "rentabilidad_pct": _pct(r, s), "ordenes": n}
-        for sku, (f, s, r, n) in grupos.items()
+        {"sku": sku, "facturacion": _n(f), "rentabilidad": _n(r), "rentabilidad_pct": _pct(r, s),
+         "ordenes": len(ordenes), "prorrateado": prorr}
+        for sku, (f, s, r, ordenes, prorr) in grupos.items()
     ]
 
 
-def _mas_facturaron(ventas: list[VentaEcom], top: int) -> list[dict]:
-    return sorted(_por_sku(ventas), key=lambda x: -x["facturacion"])[:top]
+def _mas_facturaron(lineas: list[LineaSku], top: int) -> list[dict]:
+    return sorted(_por_sku(lineas), key=lambda x: -x["facturacion"])[:top]
 
 
-def _en_perdida(ventas: list[VentaEcom], top: int) -> list[dict]:
+def _en_perdida(lineas: list[LineaSku], top: int) -> list[dict]:
     """SKU con rentabilidad negativa, de la mayor pérdida a la menor."""
-    return sorted((x for x in _por_sku(ventas) if x["rentabilidad"] < 0), key=lambda x: x["rentabilidad"])[:top]
+    return sorted((x for x in _por_sku(lineas) if x["rentabilidad"] < 0), key=lambda x: x["rentabilidad"])[:top]
 
 
-def _bloque(ventas_ciclo: list[VentaEcom], dia: date, top: int) -> dict:
+def _lineas_de(lineas: list[LineaSku], ventas: list[VentaEcom]) -> list[LineaSku]:
+    ids = {id(v) for v in ventas}
+    return [l for l in lineas if id(l.venta) in ids]
+
+
+def _bloque(ventas_ciclo: list[VentaEcom], lineas: list[LineaSku], dia: date, top: int) -> dict:
+    lineas_ciclo = _lineas_de(lineas, ventas_ciclo)
     return {
         "ayer": _totales([v for v in ventas_ciclo if v.fecha_creacion_venta == dia]),
         "ciclo": _totales(ventas_ciclo),
-        "mas_facturaron": _mas_facturaron(ventas_ciclo, top),
-        "en_perdida": _en_perdida(ventas_ciclo, top),
+        "mas_facturaron": _mas_facturaron(lineas_ciclo, top),
+        "en_perdida": _en_perdida(lineas_ciclo, top),
     }
 
 
-def _por_pm(ventas: list[VentaEcom], top_skus: int) -> list[dict]:
-    grupos: dict[str, list[VentaEcom]] = defaultdict(list)
-    for v in ventas:
-        grupos[v.pm or "(sin PM)"].append(v)
+def _totales_lineas(lineas: list[LineaSku]) -> dict:
+    fact = sum((l.precio_final or 0 for l in lineas), Decimal(0))
+    sin_iva = sum((l.precio_sin_iva or 0 for l in lineas), Decimal(0))
+    rent = sum((l.rentabilidad or 0 for l in lineas), Decimal(0))
+    return {
+        "facturacion": _n(fact), "facturacion_sin_iva": _n(sin_iva),
+        "rentabilidad": _n(rent), "rentabilidad_pct": _pct(rent, sin_iva),
+        "ordenes": len({l.venta.numero_orden for l in lineas}),
+    }
+
+
+def _por_pm(lineas: list[LineaSku], top_skus: int) -> list[dict]:
+    """Por el PM de cada SKU: una orden de un combo con SKU de dos PM suma a
+    cada uno SU parte (la suma de los PM sigue dando el total)."""
+    grupos: dict[str, list[LineaSku]] = defaultdict(list)
+    for l in lineas:
+        grupos[l.pm or "(sin PM)"].append(l)
     filas = [
-        {"pm": pm, **_totales(vs), "top_skus": [
-            {"sku": x["sku"], "facturacion": x["facturacion"]} for x in _mas_facturaron(vs, top_skus)
+        {"pm": pm, **_totales_lineas(ls), "top_skus": [
+            {"sku": x["sku"], "facturacion": x["facturacion"]} for x in _mas_facturaron(ls, top_skus)
         ]}
-        for pm, vs in grupos.items()
+        for pm, ls in grupos.items()
     ]
     return sorted(filas, key=lambda x: -x["facturacion"])
 
@@ -103,12 +128,15 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
     inicio, fin = ciclo_de(dia)
     periodo = periodo_de_rango(inicio, fin)
     ventas = (
-        db.query(VentaEcom)
+        con_lineas(db.query(VentaEcom))
         .filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False))
         .all()
     )
     ventas = [v for v in ventas if v.fecha_creacion_venta is None or v.fecha_creacion_venta <= dia]
     del_dia = [v for v in ventas if v.fecha_creacion_venta == dia]
+    lineas = desglosar(db, ventas)
+    lineas_del_dia = _lineas_de(lineas, del_dia)
+    prorrateadas = sorted({l.venta.numero_orden for l in lineas if l.prorrateado})
     cierre = db.get(CierreRentabilidad, periodo)
 
     datos_hasta = cierre.hasta if cierre else None
@@ -127,7 +155,7 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
     marketplaces = {}
     for clave, canal in MARKETPLACES.items():
         vs = [v for v in ventas if (v.canal_de_venta or "") == canal]
-        bloque = _bloque(vs, dia, top)
+        bloque = _bloque(vs, lineas, dia, top)
         if clave == "fravega":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA)
             bloque["nota"] = "Comisión estimada (15% + IVA 21%) hasta cargar la liquidación quincenal; después pasa a la real (también + IVA)."
@@ -149,20 +177,24 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
             "facturacion": "Precio Final con IVA",
             "rentabilidad_pct": "rentabilidad $ / facturación sin IVA × 100",
             "dia": "órdenes creadas ese día (hora Argentina)",
-            "sku": "SKU de la orden; un kit o carrito de varios SKU cuenta como esa combinación",
+            "sku": "cada SKU con el importe de SU línea de la orden; los combos viejos sin detalle van prorrateados por precio de lista del PM (prorrateado=true)",
         },
         "general": {
             "ayer": _totales(del_dia),
             "acumulado_ciclo": _totales(ventas),
-            "por_pm": {"ayer": _por_pm(del_dia, 2), "ciclo": _por_pm(ventas, 2)},
-            "ayer_mas_facturaron": _mas_facturaron(del_dia, top),
-            "ayer_en_perdida": _en_perdida(del_dia, top),
+            "por_pm": {"ayer": _por_pm(lineas_del_dia, 2), "ciclo": _por_pm(lineas, 2)},
+            "ayer_mas_facturaron": _mas_facturaron(lineas_del_dia, top),
+            "ayer_en_perdida": _en_perdida(lineas_del_dia, top),
             "alertas": {
                 "costo_cero": [
                     {"orden": v.numero_orden, "skus": v.skus_vendidos or "(sin SKU)", "fecha": v.fecha_creacion_venta.isoformat()
                      if v.fecha_creacion_venta else None, "canal": v.canal_de_venta, "facturacion": _n(v.precio_final)}
                     for v in costo_cero
                 ],
+                "combos_prorrateados": {
+                    "ordenes": len(prorrateadas),
+                    "nota": "Combos viejos importados de la planilla, sin detalle por línea: su importe se repartió entre los SKU por precio de lista del PM (prorrateado).",
+                },
                 "sin_sku": [v.numero_orden for v in ventas if not (v.skus_vendidos or "").strip()],
                 "fravega_estimadas": {"ordenes": len(fravega_est), "facturacion": _n(sum((v.precio_final or 0 for v in fravega_est), Decimal(0)))},
                 "observaciones": [{"orden": v.numero_orden, "observacion": v.observacion} for v in ventas if v.observacion],
@@ -171,7 +203,7 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
             },
         },
         "full_y_marketplaces": {
-            "full": _bloque(full, dia, top),
+            "full": _bloque(full, lineas, dia, top),
             **marketplaces,
         },
     }

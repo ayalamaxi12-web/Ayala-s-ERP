@@ -12,7 +12,10 @@ para ESAS MISMAS ventas a precio del PM:
   solo por haber pagado cuotas (pedido de Maxx);
 - ML sin envío: al real se le devuelve el envío (el motor todavía no tiene
   el costo de envío por publicación);
-- solo órdenes de un SKU (la corrida no guarda el importe por línea).
+- combos y carritos de varios SKU: cada SKU se controla por separado, con
+  SU precio, SU costo y SU parte de los cargos de la orden (repartidos en
+  proporción al precio sin IVA de cada línea). Quedan afuera solo los combos
+  viejos importados de la planilla, que no tienen detalle por línea.
 
 Se marcan para revisar los que quedan por DEBAJO del proyectado más de
 `umbral_pts`. Prioridad 1 = el precio cobrado está por debajo del precio
@@ -35,6 +38,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from . import motor_precios as motor
+from .desglose_sku import SIN_SKU, con_lineas, desglosar
 from .models import ParametroTasa, PricingSku, VentaEcom
 from .pricing_pm import _canal_de_venta, norm_sku, precio_ml, vigentes
 
@@ -91,24 +95,35 @@ def desvio_precios(
     grupos: dict[tuple[str, str], dict] = {}
     sin_precio_pm, sin_datos = set(), set()
     excluidas = {"full": 0, "kits_o_carritos": 0}
+    combos_sin_detalle: set[str] = set()
 
-    q = db.query(VentaEcom).filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False))
+    q = con_lineas(db.query(VentaEcom)).filter(VentaEcom.periodo == periodo, VentaEcom.excluido.is_(False))
     if dia is not None:
         q = q.filter(VentaEcom.fecha_creacion_venta == dia)
-    ventas = q.all()
-    for v in ventas:
+    elegibles = []
+    for v in q.all():
         canal = _canal_de_venta(v.canal_de_venta)
         if canal not in CANALES_DESVIO or v.rentabilidad is None or not v.precio_sin_iva or not v.precio_final:
-            continue
-        skus = (v.skus_vendidos or "").strip()
-        if not skus or "," in skus:
-            excluidas["kits_o_carritos"] += 1
             continue
         if v.es_full:
             excluidas["full"] += 1
             continue
-        sku = norm_sku(skus)
-        if not v.unidades:
+        elegibles.append(v)
+    for l in desglosar(db, elegibles):
+        v = l.venta
+        canal = _canal_de_venta(v.canal_de_venta)
+        if l.prorrateado:
+            # Combo viejo importado de la planilla, sin detalle por línea: no
+            # hay unidades ni precio real por SKU, el desvío no se puede medir.
+            combos_sin_detalle.add(v.numero_orden)
+            continue
+        if not l.precio_final or not l.precio_sin_iva:  # línea sin cobrar (regalo): no tiene precio que controlar
+            continue
+        if l.sku == SIN_SKU:
+            excluidas["kits_o_carritos"] += 1
+            continue
+        sku = norm_sku(l.sku)
+        if not l.cantidad:
             sin_datos.add(v.numero_orden)
             continue
         p = precios(v.fecha_creacion_venta or hoy).get(sku)
@@ -117,11 +132,11 @@ def desvio_precios(
             sin_precio_pm.add(sku)
             continue
 
-        unidades = Decimal(v.unidades)
+        unidades = Decimal(l.cantidad)
         cuotas_pct = (v.cargo_cuotas / v.precio_final) if v.cargo_cuotas is not None else None
         entrada = motor.EntradaMotor(
-            canal=canal, costo=v.costo_sin_iva * v.tc / unidades, iva_factor=v.iva or Decimal("1.21"),
-            categoria=v.categoria, plan=_plan_pm(p, canal), cuotas_pct_final=cuotas_pct,
+            canal=canal, costo=l.costo_usd * v.tc / unidades, iva_factor=l.factor_iva or Decimal("1.21"),
+            categoria=l.categoria, plan=_plan_pm(p, canal), cuotas_pct_final=cuotas_pct,
         )
         try:
             proy = motor.precio_a_margen(precio_pm, entrada, par)
@@ -131,9 +146,9 @@ def desvio_precios(
 
         # Una fila por PUBLICACIÓN en ML (el MLA exacto de la venta): un SKU
         # puede estar en varias y cada una tiene su precio.
-        item = v.item_ml if canal == "ML" else None
+        item = l.item_ml if canal == "ML" else None
         g = grupos.setdefault((sku, canal, item), {
-            "sku": sku, "canal": canal, "item_id": item, "permalink": v.permalink_ml if item else None, "pm": v.pm or _pm_de(p), "categoria": v.categoria,
+            "sku": sku, "canal": canal, "item_id": item, "permalink": l.permalink_ml if item else None, "pm": l.pm or _pm_de(p), "categoria": l.categoria,
             "precio_pm": precio_pm, "plan_pm": _plan_pm(p, canal), "ordenes": [], "ordenes_en_cuotas": 0,
             "unidades": Decimal(0), "facturado": Decimal(0), "proy_rent": Decimal(0), "proy_venta": Decimal(0),
             "real_rent": Decimal(0), "real_venta": Decimal(0),
@@ -142,12 +157,12 @@ def desvio_precios(
         g["ordenes"].append(v.numero_orden)
         g["ordenes_en_cuotas"] += 1 if (v.cargo_cuotas or 0) > 0 or (v.cuotas or 1) > 1 else 0
         g["unidades"] += unidades
-        g["facturado"] += v.precio_final
+        g["facturado"] += l.precio_final
         g["proy_rent"] += proy.rentabilidad * unidades - costo_operacion
         g["proy_venta"] += proy.venta_sin_iva * unidades
         # ML sin envío: el motor todavía no proyecta el envío por publicación.
-        g["real_rent"] += v.rentabilidad + ((v.costo_envio or 0) if canal == "ML" else 0)
-        g["real_venta"] += v.precio_sin_iva
+        g["real_rent"] += l.rentabilidad + ((l.costo_envio or 0) if canal == "ML" else 0)
+        g["real_venta"] += l.precio_sin_iva
 
     filas = []
     for g in grupos.values():
@@ -199,14 +214,15 @@ def desvio_precios(
             "diferencia_pts": "real − proyectado, en puntos",
             "revisar": f"real por debajo del proyectado más de {umbral_pts} pts, salvo precio inflado por cuotas",
             "prioridad": "1 = precio cobrado por debajo del precio del PM · 2 = precio OK, cargos o costo mayores · 3 = no revisar",
-            "fuera_del_reporte": "Frávega, OnCity y Full (esperan peso y medidas), kits y carritos de varios SKU",
+            "fuera_del_reporte": "Frávega, OnCity y Full (esperan peso y medidas); combos viejos importados de la planilla sin detalle por línea",
+            "combos_y_carritos": "cada SKU se controla con el importe de su línea; comisión, envío e impuestos de la orden se reparten según el precio sin IVA de cada línea",
         },
         "resumen": {
             "skus": len(filas), "a_revisar": sum(f["revisar"] for f in filas),
             "prioridad_1": sum(f["prioridad"] == 1 for f in filas),
             "prioridad_2": sum(f["prioridad"] == 2 for f in filas),
             "inflados_por_cuotas": sum(f["motivo"] == "precio_inflado_por_cuotas" for f in filas),
-            "excluidas_full": excluidas["full"], "excluidas_kits_o_carritos": excluidas["kits_o_carritos"],
+            "excluidas_full": excluidas["full"], "excluidas_kits_o_carritos": excluidas["kits_o_carritos"] + len(combos_sin_detalle),
         },
         "avisos": avisos,
         "filas": filas,

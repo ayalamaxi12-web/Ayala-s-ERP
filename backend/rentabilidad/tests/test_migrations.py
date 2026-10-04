@@ -19,6 +19,7 @@ TABLAS_ESPERADAS = {
     "sku_excluido",
     "sku_auxiliar",
     "liquidacion_fravega",
+    "venta_ecom_linea",
 }
 
 

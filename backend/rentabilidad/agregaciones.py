@@ -21,6 +21,7 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .desglose_sku import con_lineas, desglosar
 from .models import ParametroTasa, VentaEcom, VentaTactica
 
 TACTICA_DIMENSIONES = {
@@ -40,7 +41,13 @@ ECOM_DIMENSIONES = {
     "responsable": VentaEcom.responsable_de_ventas,
     "periodo": VentaEcom.periodo,
     "semana": VentaEcom.semana,
+    "categoria": VentaEcom.categoria,
 }
+
+# Estas dimensiones se agregan por SKU de cada orden (`desglose_sku`), no por
+# la clasificación del primer SKU: un combo con SKU de dos PM suma a cada PM su
+# parte. La suma de todos los grupos sigue dando el total de las órdenes.
+ECOM_DIMENSIONES_POR_SKU = {"pm", "subcategoria", "categoria"}
 
 
 @dataclass
@@ -89,7 +96,11 @@ def agregar_tactica(db: Session, periodo: str, dimension: str, incluir_excluidos
 
 
 def agregar_ecom(db: Session, periodo: str, dimension: str, incluir_excluidos: bool = False) -> list[FilaAgregadaEcom]:
-    """§11.1 — bloque ECOM, por la dimensión pedida."""
+    """§11.1 — bloque ECOM, por la dimensión pedida. PM / subcategoría /
+    categoría salen del desglose por SKU (cada SKU a SU PM); `cantidad_lineas`
+    ahí cuenta órdenes distintas del grupo."""
+    if dimension in ECOM_DIMENSIONES_POR_SKU:
+        return _agregar_ecom_por_sku(db, periodo, dimension, incluir_excluidos)
     col = ECOM_DIMENSIONES[dimension]
     q = db.query(
         col,
@@ -108,6 +119,24 @@ def agregar_ecom(db: Session, periodo: str, dimension: str, incluir_excluidos: b
         s_q = s_q or Decimal(0)
         pct = (s_ab / s_q) if s_ab is not None and s_q else None
         filas.append(FilaAgregadaEcom(valor, s_u or Decimal(0), s_q, s_aa or Decimal(0), s_ab or Decimal(0), pct, n))
+    return filas
+
+
+def _agregar_ecom_por_sku(db: Session, periodo: str, dimension: str, incluir_excluidos: bool) -> list[FilaAgregadaEcom]:
+    q = con_lineas(db.query(VentaEcom)).filter(VentaEcom.periodo == periodo)
+    if not incluir_excluidos:
+        q = q.filter(VentaEcom.excluido.is_(False))
+    grupos: dict[str | None, list] = {}
+    for l in desglosar(db, q.all()):
+        g = grupos.setdefault(getattr(l, dimension), [Decimal(0)] * 4 + [set()])
+        g[0] += l.precio_final or 0
+        g[1] += l.precio_sin_iva or 0
+        g[2] += l.costo_total or 0
+        g[3] += l.rentabilidad or 0
+        g[4].add(l.venta.id)
+    filas = []
+    for valor, (s_u, s_q, s_aa, s_ab, ordenes) in grupos.items():
+        filas.append(FilaAgregadaEcom(valor, s_u, s_q, s_aa, s_ab, (s_ab / s_q) if s_q else None, len(ordenes)))
     return filas
 
 

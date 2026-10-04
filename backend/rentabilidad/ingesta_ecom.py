@@ -88,6 +88,21 @@ _COLS_PRECIO_SIN_IVA = ("Precio SIN IVA", "Precio Neto")
 
 
 @dataclass
+class LineaEcom:
+    """Una línea (SKU) de la orden con su importe real, de `OrderList` en la
+    API de Ecom. El Excel no la trae (una fila = una orden)."""
+
+    sku: str
+    cantidad: int
+    precio_final: Decimal
+    precio_sin_iva: Decimal
+    costo_sin_iva: Decimal  # USD, ya × cantidad
+    factor_iva: Decimal | None = None
+    item_ml: str | None = None
+    permalink_ml: str | None = None
+
+
+@dataclass
 class FilaEcom:
     """Una orden ya limpia — lista para `a_linea_input()`, salvo que tenga
     `incidencia` (no se calcula, se revisa a mano)."""
@@ -141,6 +156,8 @@ class FilaEcom:
     retenciones: Decimal | None = None
     usuario_integracion: str | None = None
     entrega_envio: str | None = None
+    # Importe real por SKU (solo la API). Vacío = el origen no lo trae.
+    lineas: list[LineaEcom] = field(default_factory=list)
 
     def a_linea_input(self) -> LineaEcomInput:
         return LineaEcomInput(

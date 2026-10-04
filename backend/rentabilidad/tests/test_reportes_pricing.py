@@ -275,3 +275,34 @@ def test_endpoints_con_token(cliente, db_multihilo, monkeypatch):
         raise RuntimeError("sin token de ML")
     monkeypatch.setattr(api, "_ofertas_ml_activas", falla)
     assert cliente.get("/rentabilidad/reporte/pricing/ofertas", params={"token": "secreto"}).status_code == 502
+
+
+def test_combo_con_lineas_se_controla_sku_por_sku(db_session):
+    """Un combo de dos SKU, cada uno vendido a su precio de PM: sin desvío en ninguno
+    (antes la orden entera quedaba afuera como kit)."""
+    from rentabilidad.models import VentaEcomLinea
+    _precio(db_session)
+    _precio(db_session, sku="TONER-2", web="50000")
+    _real(db_session, "1", "120009", sku="TONER-1, TONER-2")  # fila de la orden; las líneas definen el reparto
+    db_session.flush()
+    v = db_session.query(VentaEcom).one()
+    par = motor.cargar_parametros(db_session, HOY)
+    ent = lambda sku: motor.EntradaMotor(canal="ML", costo=d("30") * TC, iva_factor=d("1.21"),
+                                         categoria="Insumo De Impresion", cuotas_pct_final=d(0))
+    p1, p2 = d("120009"), d("60009")
+    r1, r2 = (motor.precio_a_margen(p, ent(s), par) for p, s in ((p1, "a"), (p2, "b")))
+    v.precio_final, v.precio_sin_iva = p1 + p2, (p1 + p2) / d("1.21")
+    v.costo_sin_iva, v.unidades = d("60"), 2
+    v.rentabilidad = r1.rentabilidad + r2.rentabilidad - d("149.12")
+    v.neto, v.costo_total = v.rentabilidad + d("60") * TC, d("60") * TC
+    for i, (sku, p) in enumerate((("TONER-1", p1), ("TONER-2", p2))):
+        db_session.add(VentaEcomLinea(
+            venta_id=v.id, periodo=P, orden_linea=i, sku=sku, cantidad=1, precio_final=p, precio_sin_iva=p / d("1.21"),
+            costo_sin_iva=d("30"), factor_iva=d("1.21"), pm="Veronica", categoria="Insumo De Impresion", item_ml=f"MLA{i}"))
+    db_session.flush()
+    db_session.refresh(v)
+    res = rp.desvio_precios(db_session, P, HOY)
+    assert {f["sku"] for f in res["filas"]} == {"TONER-1", "TONER-2"}
+    assert {f["item_id"] for f in res["filas"]} == {"MLA0", "MLA1"}
+    assert res["resumen"]["excluidas_kits_o_carritos"] == 0
+    assert _fila(res, "TONER-1")["facturacion"] == 120009 and _fila(res, "TONER-2")["facturacion"] == 60009

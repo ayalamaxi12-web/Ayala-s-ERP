@@ -16,8 +16,8 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Integer, Numeric, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
 
@@ -295,6 +295,50 @@ class VentaEcom(Base):
     # Publicación de ML exacta de la venta (de `OrderList.listing`).
     item_ml: Mapped[str | None] = mapped_column(String(32), nullable=True)
     permalink_ml: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Líneas (SKU) de la orden, tal como las trae la API de Ecom. Vacío en
+    # filas importadas de la planilla/Excel y en las guardadas antes de esta
+    # versión (el desglose por SKU las prorratea — ver `desglose_sku.py`).
+    lineas: Mapped[list["VentaEcomLinea"]] = relationship(
+        back_populates="venta", cascade="all, delete-orphan", order_by="VentaEcomLinea.orden_linea",
+    )
+
+
+class VentaEcomLinea(Base):
+    """Una línea (SKU) de una orden de Ecom, con SU importe real: `OrderList`
+    de la API (`subtotal`, `subtotalSinImpuestos`, `quantity`, costo de la
+    variante). Es lo único que se guarda por línea: comisión, envío e
+    impuestos de la orden se reparten al LEER (`desglose_sku.py`) en
+    proporción a `precio_sin_iva`, así si la orden se recalcula (ej. la
+    liquidación de Frávega cambia la comisión) las líneas siguen cerrando
+    con el total. El total de la orden vive en `venta_ecom`, sin cambios."""
+
+    __tablename__ = "venta_ecom_linea"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    venta_id: Mapped[str] = mapped_column(String(36), ForeignKey("venta_ecom.id", ondelete="CASCADE"), index=True)
+    # Copia de `venta_ecom.periodo`: permite borrar las líneas de un período
+    # de un solo DELETE antes de reemplazarlo.
+    periodo: Mapped[str] = mapped_column(String(64), index=True)
+    orden_linea: Mapped[int] = mapped_column(Integer, default=0)
+    # SKU de la línea (`variant.sku`, o el del producto padre); "" si Ecom no trae ninguno.
+    sku: Mapped[str] = mapped_column(String(100), default="")
+    cantidad: Mapped[int] = mapped_column(Integer, default=1)
+    precio_final: Mapped[Decimal] = mapped_column(MONEY)
+    precio_sin_iva: Mapped[Decimal] = mapped_column(MONEY)
+    # Costo VIGENTE de la línea en USD (`variant.cost` × cantidad), igual criterio que `venta_ecom.costo_sin_iva`.
+    costo_sin_iva: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    factor_iva: Mapped[Decimal | None] = mapped_column(FACTOR, nullable=True)
+    # Clasificación del SKU de la línea (GRAL CATEGORIAS), no la del primer SKU de la orden.
+    pm: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    subcategoria: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    categoria: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    subcategoria2: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Publicación de ML de esta línea.
+    item_ml: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    permalink_ml: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    venta: Mapped["VentaEcom"] = relationship(back_populates="lineas")
 
 
 # ── Tablas paramétricas (§1.3) — ninguna tasa/prefijo/régimen vive en código ──
