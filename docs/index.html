@@ -1529,7 +1529,6 @@ const RULES=[
 // CUOTAS_PCT_DEFAULT de backend/ml_ofertas.py -- si se corrige uno, corregir el otro.
 const CUOTAS_PCT_ML={3:8.90,6:13.40,9:17.80,12:21.60};
 const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#8b5cf6'];
-const API_KEY='AIzaSyD4RWc7Xf7uq0pCWK2si5e0vFfa-tC57Co';
 const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
 const HIST_ID='1Wzs3SmmIGcGd_NJGfe5qJRBYkJBbyKjrl4rF7reojIE';
 const COMP_SHEET_ID='15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
@@ -1761,7 +1760,7 @@ async function testBackend(){const url=getBackendUrl();if(!url){qs('backend-stat
 async function loadCats(){
   qs('cats-status').textContent='Cargando...';
   try{
-    const key=S.sheetsKey||API_KEY;
+    const key=S.sheetsKey;if(!key)throw new Error('Falta la API Key de Sheets (Configuración)');
     // Range M2000: SKU(A) Categoria(B) Subcategoria2(C) PM(D) Subcategoria(E)
     const url=`https://sheets.googleapis.com/v4/spreadsheets/${CATS_ID}/values/${encodeURIComponent(CATS_TAB)}!A1:M2500?key=${key}`;
     const d=await(await fetch(url)).json();
@@ -1890,7 +1889,7 @@ function exportML(){if(!S.pubData.length){toast('Sin datos','error');return;}con
 
 // ── SHEETS FETCH HELPER ──
 async function fetchSheetByGid(sheetId, gid, range){
-  const key=S.sheetsKey||API_KEY;
+  const key=S.sheetsKey;if(!key)throw new Error('Falta la API Key de Sheets (Configuración)');
   // First get tab name from gid
   const meta=await(await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?key=${key}`)).json();
   const tab=meta.sheets?.find(s=>String(s.properties.sheetId)===String(gid));
@@ -2118,7 +2117,7 @@ async function loadMLSheets(){
   btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
 }
 // ── COMPETIDORES ──
-async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${API_KEY}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${API_KEY}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
+async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${S.sheetsKey}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${S.sheetsKey}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
       // ml_vendedor.py agrega un bloque de 4 columnas (Precio/Tachado/Desc/Cuotas) con
       // fecha cada vez que re-scrapea un vendedor ya existente, a la derecha de las
       // columnas base A-I -- antes esto leía siempre A1:I2000 (el precio del primer
@@ -3949,8 +3948,8 @@ async function pricingSync(){
 async function pricingSyncNavegador(url,pm){
   const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
   const cfg=Object.values(S.sheets||{}).find(s=>norm(s.name)===norm(pm));
-  const key=S.sheetsKey||API_KEY;
-  if(!cfg||!cfg.id||!cfg.tab)return null;
+  const key=S.sheetsKey;
+  if(!cfg||!cfg.id||!cfg.tab||!key)return null;
   try{
     const r=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.id}/values/${encodeURIComponent(cfg.tab)}!A1:FZ3000?key=${key}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
     const d=await r.json();if(!d.values)throw new Error((d.error&&d.error.message)||'sin datos');
@@ -4842,7 +4841,7 @@ function ayalaCoreMlaCondRevertir(){
 // ──────────────────────
 
 // ── DASHBOARD ──
-async function fetchSheet(sheetId,name){const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${API_KEY}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
+async function fetchSheet(sheetId,name){if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(name)}?key=${S.sheetsKey}`;const res=await fetch(url);if(!res.ok)throw new Error(`${name}: ${res.status}`);return(await res.json()).values||[];}
 // ── Fila unificada — mismo shape que usaba parseVentas() del Sheet (sheet
 // pasa a ser el `periodo` real del motor). Un solo mapeo para histórico
 // (/historico/tactica,ecom) y consulta en vivo (/tactica/periodo,
