@@ -15,6 +15,7 @@ import ml_full
 import ml_reposicion
 import ml_ofertas
 import ayala_core
+import competencia_db
 from erp_auth import ClaveERPMiddleware
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
@@ -388,7 +389,7 @@ def tracker_job(job_id):
             sheet.append_row(['Link ML','Título','Vendedor','Precio Real ($)','Precio Tachado ($)','Descuento %','Cuotas','Último Update'])
         all_values = sheet.get_all_values()
         filas_datos = all_values[1:]
-        ok = errors = 0; batch = []
+        ok = errors = 0; batch = []; lecturas_hist = []
         for i, row in enumerate(filas_datos):
             job_status[job_id]["progress"] = {"current": i, "total": len(filas_datos), "label": "Consultando links"}
             url = row[0].strip() if row else ''
@@ -409,10 +410,14 @@ def tracker_job(job_id):
                     parsed['title'], nick, parsed['price'],
                     parsed['orig_price'] or '', parsed['discount'] or 'Sin descuento',
                     parsed['cuotas'], now]]})
+                lecturas_hist.append({'link': url, 'entidad': nick, 'precio': parsed['price'],
+                                      'tachado': parsed['orig_price'] or '', 'descuento': parsed['discount'] or '',
+                                      'cuotas': parsed['cuotas'], 'estado': 'OK', 'metodo': 'API'})
                 ok += 1; time.sleep(0.5)
             except Exception as e:
                 log.append(f"❌ Fila {row_num}: {e}"); errors += 1
         if batch: sheet.batch_update(batch)
+        competencia_db.registrar_lecturas_seguro(ss, lecturas_hist, 'ML Competencia (tracker)', log)
         job_status[job_id] = {"status": "done", "ok": ok, "errors": errors, "log": log, "finished": datetime.now().isoformat()}
     except Exception as e:
         job_status[job_id] = {"status": "error", "message": str(e), "log": log}
@@ -958,6 +963,11 @@ def refresh_job(job_id, ml_token):
         for i in range(0, len(new_rows), 500):
             hist_ws.append_rows(new_rows[i:i+500], value_input_option='RAW'); time.sleep(0.3)
         log.append(f"✅ {len(new_rows)} filas agregadas al historial con fecha {today}")
+        competencia_db.registrar_lecturas_seguro(ss, [
+            {'link': item['link'], 'entidad': item['vendedor'], 'precio': mla_prices[item['mla']]['precio'],
+             'tachado': mla_prices[item['mla']]['tachado'], 'descuento': mla_prices[item['mla']]['descuento'],
+             'cuotas': mla_prices[item['mla']]['cuotas'], 'estado': 'OK', 'metodo': 'API'}
+            for item in all_items if item['mla'] in mla_prices], 'Refresh competidores', log)
         job_status[job_id] = {"status": "done", "log": log, "rows_added": len(new_rows),
                                "prices_fetched": len(mla_prices), "finished": datetime.now().isoformat()}
     except Exception as e:
@@ -1185,6 +1195,18 @@ def leer_precio_publicacion(link, driver_holder):
     return {'precio': None, 'estado': 'Error', 'metodo': '', 'seller_id': None, 'official_store_id': None,
             'detalle_error': 'Link no reconocido (sin product_id ni item_id)'}
 
+def _registrar_lecturas_monitor(ss, results, fuente):
+    """Doble escritura a Historial_Precios (Etapa 1 competencia). Los históricos viejos siguen escribiéndose
+    porque el front todavía los lee; esto nunca rompe el monitor. Catálogo sin wid = 'Sin lectura', no se guarda."""
+    lecturas = []
+    for r in results:
+        estado, guardar = competencia_db.normalizar_resultado(
+            {'precio': r.get('precio_detectado'), 'detalle_error': r.get('detalle_error', '')}, r['link'])
+        if guardar:
+            lecturas.append({'link': r['link'], 'entidad': r.get('entidad_nombre') or r.get('distribuidor', ''),
+                             'precio': r.get('precio_detectado'), 'estado': estado, 'metodo': r.get('metodo', '')})
+    return competencia_db.registrar_lecturas_seguro(ss, lecturas, fuente)
+
 @app.post("/distribucion/monitor/run")
 def run_monitor():
     try:
@@ -1239,6 +1261,7 @@ def run_monitor():
         finally:
             if driver_holder['driver']:
                 driver_holder['driver'].quit()
+        _registrar_lecturas_monitor(ss, results, 'Monitor distribuidores')
 
         return {"status": "ok", "count": len(results), "results": results}
     except HTTPException:
@@ -1259,6 +1282,9 @@ INTEL_SHEETS = {
     'Referencias_Mercado': ['Referencia_ID','SKU','Tipo','Entidad_ID','Entidad_Nombre','Link_Publicacion','PVP_Oficial','PVP_Override','Tolerancia_Pct','Activo','Seller_ID_Esperado','Fecha_Alta','Origen','Observaciones'],
     'Discovery_Sugerencias': ['Sugerencia_ID','Entidad_Origen','Titulo_Detectado','Link_Detectado','Precio_Detectado','SKU_Sugerido','Fecha_Deteccion','Estado_Revision','Referencia_ID_Generada'],
     'Intel_Config': ['Tipo','Tolerancia_Default_Pct'],
+    # Etapa 1 competencia: histórico único en formato largo + huérfanos de la migración (competencia_db.py)
+    competencia_db.HISTORIAL_SHEET: competencia_db.HISTORIAL_HEADERS,
+    competencia_db.HUERFANOS_SHEET: competencia_db.HUERFANOS_HEADERS,
 }
 
 MONITOR_HEADERS_EXT = ['Referencia_ID','Tipo','Entidad','PVP_Comparado','Diferencia_Pct','Cumple']
@@ -1629,6 +1655,7 @@ def run_monitor_unificado():
         finally:
             if driver_holder['driver']:
                 driver_holder['driver'].quit()
+        _registrar_lecturas_monitor(ss, results, 'Monitor unificado')
 
         return {"status": "ok", "count": len(results), "results": results}
     except HTTPException:
