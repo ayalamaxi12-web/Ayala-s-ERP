@@ -141,3 +141,31 @@ def test_permisivo_loguea_el_request_sin_clave(cliente, sin_clave, capsys, monke
     cliente.post("/ml-proxy", content=b"x", headers={"Origin": "https://ayalamaxi12-web.github.io"})
     salida = capsys.readouterr().out
     assert "[auth] PERMISIVO" in salida and "POST /ml-proxy" in salida
+
+
+# ── CORS ─────────────────────────────────────────────────────────────
+
+FRONT = "https://ayalamaxi12-web.github.io"
+
+
+def test_cors_preflight_del_front_permite_x_erp_key(cliente):
+    r = cliente.options("/ecom/update-price", headers={
+        "Origin": FRONT, "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type,x-erp-key"})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == FRONT
+    assert "x-erp-key" in r.headers["access-control-allow-headers"].lower()
+
+
+def test_cors_no_abre_a_otros_origenes(cliente):
+    r = cliente.options("/ecom/update-price", headers={
+        "Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
+    assert "access-control-allow-origin" not in r.headers
+    r = cliente.get("/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in r.headers
+
+
+def test_el_401_lleva_headers_cors_para_que_el_front_lo_lea(cliente, con_clave):
+    r = cliente.post("/ecom/update-price", json={}, headers={"Origin": FRONT})
+    assert r.status_code == 401
+    assert r.headers["access-control-allow-origin"] == FRONT
