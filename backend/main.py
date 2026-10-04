@@ -15,13 +15,22 @@ import ml_full
 import ml_reposicion
 import ml_ofertas
 import ayala_core
+from erp_auth import ClaveERPMiddleware
 from ml_auth import APP_ID, CLIENT_SECRET, ML_TOKEN, get_ml_token, get_ml_token_2, ml_headers
 from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Orden: el último en agregarse es el más externo. CORS va por fuera de la clave
+# para que el 401 también lleve headers CORS y el navegador pueda leerlo.
+app.add_middleware(ClaveERPMiddleware)
+# CORS cerrado al front en GitHub Pages. CORS_ORIGINS (separados por coma)
+# reemplaza la lista, p. ej. para sumar http://localhost:5500 en desarrollo.
+# Ojo: CORS solo frena a otros sitios web, no a curl -- la protección real es
+# la clave X-ERP-Key (erp_auth.py).
+_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "https://ayalamaxi12-web.github.io").split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 app.include_router(rentabilidad_router)
 
 
@@ -209,6 +218,13 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
+
+@app.post("/auth/check")
+def auth_check():
+    """Para que el front verifique su clave sin efectos: es POST, así que el
+    middleware exige X-ERP-Key (401 si es mala). `clave_activa` dice si el
+    backend ya la está exigiendo (ERP_API_KEY definida) o sigue permisivo."""
+    return {"ok": True, "clave_activa": bool(os.environ.get("ERP_API_KEY", "").strip())}
 
 # ══════════════════════════════════════════════════════
 # ML TOKEN
