@@ -123,7 +123,7 @@ def test_normalizar_resultado_catalogo_sin_wid_es_sin_lectura():
     res = {'precio': None, 'detalle_error': 'Link de catálogo sin wid= — no se puede identificar la oferta'}
     assert cdb.normalizar_resultado(res, LCAT_SIN_WID) == ('Sin lectura', False)
     assert cdb.normalizar_resultado({'precio': 10}, L1) == ('OK', True)
-    assert cdb.normalizar_resultado({'precio': None, 'detalle_error': 'API 403'}, L1) == ('Error', True)
+    assert cdb.normalizar_resultado({'precio': None, 'detalle_error': 'API 403'}, L1) == ('Error', False)  # sin precio no se guarda
 
 
 class _WS:
@@ -148,9 +148,9 @@ def test_registrar_lecturas_en_vivo_idempotente_por_dia():
     lec = [{'link': L1, 'entidad': 'Rival', 'precio': 1234, 'estado': 'OK', 'metodo': 'API'},
            {'link': L2, 'entidad': 'Rival', 'precio': 5, 'estado': 'OK', 'metodo': 'API'}]
     r1 = cdb.registrar_lecturas(ss, lec, 'test')
-    assert r1 == {'escritas': 1, 'duplicadas': 0, 'sin_referencia': 1}
+    assert r1 == {'escritas': 1, 'duplicadas': 0, 'sin_referencia': 1, 'sin_precio': 0}
     r2 = cdb.registrar_lecturas(ss, lec, 'test')
-    assert r2 == {'escritas': 0, 'duplicadas': 1, 'sin_referencia': 1}
+    assert r2 == {'escritas': 0, 'duplicadas': 1, 'sin_referencia': 1, 'sin_precio': 0}
     assert len(ss.w[cdb.HISTORIAL_SHEET].rows) == 2  # header + 1
 
 
@@ -164,3 +164,15 @@ def test_bloque_de_fecha_repetido_no_se_pisa_y_sku_guion_es_vacio():
     assert sorted(l['Precio'] for l in plan.lecturas) == [100, 200]  # ambos scrapes del 25/06 se conservan
     assert plan.refs_nuevas[0]['SKU'] == ''
     assert plan.rep['conflictos_precio_mismo_dia'] == 1
+
+
+def test_lecturas_sin_precio_no_se_migran_se_cuentan_y_el_informe_cierra():
+    f = fuentes_base()
+    f['hist_competidores'] += [['Rival', 't1', '', '', '', '', L1, 'SKU-1', '1', '04/10/2026', 'MLA1111111111', 'OK']] * 3
+    plan = cdb.planificar(f, hoy='04/10/2026')
+    assert plan.rep['fuentes'][cdb.F_H2]['sin_precio'] == 3
+    assert plan.rep['cierra'] and all(l['Precio'] != '' for l in plan.lecturas)
+    # en vivo tampoco se guardan
+    ss = _SS()
+    r = cdb.registrar_lecturas(ss, [{'link': L1, 'entidad': 'Rival', 'precio': None, 'estado': 'Error'}], 'test')
+    assert r['sin_precio'] == 1 and r['escritas'] == 0

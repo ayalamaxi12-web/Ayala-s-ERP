@@ -221,7 +221,7 @@ def planificar(fuentes, hoy=None):
 
     def fuente(nombre):
         return rep['fuentes'].setdefault(nombre, {'origen': 0, 'nuevas': 0, 'fusionadas': 0,
-                                                  'ya_existian': 0, 'huerfanas': 0})
+                                                  'ya_existian': 0, 'huerfanas': 0, 'sin_precio': 0})
 
     # --- Entidades y referencias existentes ---
     ents = fuentes.get('ents') or [[]]
@@ -470,7 +470,15 @@ def planificar(fuentes, hoy=None):
             ya.add((_celda(f, hx.get('Referencia_ID')), _celda(f, hx.get('Fecha')),
                     _num_out(parse_precio(_celda(f, hx.get('Precio')))), _celda(f, hx.get('Estado'))))
     grupos = {}
+    rep['sin_precio_no_encontrado'] = 0
     for c in candidatas:
+        if c['precio'] is None:
+            # El histórico nuevo queda limpio: una lectura sin precio (lector caído / no encontrado) no se
+            # migra, pero se cuenta acá para que el informe cierre exacto. El link/SKU ya quedan en la referencia.
+            fuente(c['fuente'])['sin_precio'] += 1
+            if c['estado'] == 'No encontrado':
+                rep['sin_precio_no_encontrado'] += 1
+            continue
         k = (c['ref']['id'], c['fecha'], _num_out(c['precio']), c['estado'])
         if k in ya:
             fuente(c['fuente'])['ya_existian'] += 1
@@ -493,7 +501,6 @@ def planificar(fuentes, hoy=None):
         con_precio = [g for g in gs if g['precio'] is not None]
         if len({_num_out(g['precio']) for g in con_precio}) > 1:
             conflictos.append(con_precio)
-    rep['lecturas_sin_precio_a_escribir'] = sum(1 for g in grupos.values() if g['precio'] is None)
     rep['conflictos_precio_mismo_dia'] = len(conflictos)
     rep['conflictos_precio_entre_fuentes'] = sum(
         1 for gs in conflictos if len({fte for g in gs for fte in g['fuentes']}) > 1)
@@ -525,12 +532,12 @@ def planificar(fuentes, hoy=None):
     plan.huerfanos = nuevos
 
     # --- Cierre exacto ---
-    tot = {'origen': 0, 'nuevas': 0, 'fusionadas': 0, 'ya_existian': 0, 'huerfanas': 0}
+    tot = {'origen': 0, 'nuevas': 0, 'fusionadas': 0, 'ya_existian': 0, 'huerfanas': 0, 'sin_precio': 0}
     for d in rep['fuentes'].values():
         for k in tot:
             tot[k] += d[k]
     rep['totales'] = tot
-    rep['cierra'] = tot['origen'] == tot['nuevas'] + tot['fusionadas'] + tot['ya_existian'] + tot['huerfanas']
+    rep['cierra'] = tot['origen'] == tot['nuevas'] + tot['fusionadas'] + tot['ya_existian'] + tot['huerfanas'] + tot['sin_precio']
     rep['entidades_nuevas'] = len(plan.entidades_nuevas)
     rep['referencias_nuevas'] = len(plan.refs_nuevas)
     rep['lecturas_a_escribir'] = len(plan.lecturas)
@@ -569,7 +576,7 @@ def normalizar_resultado(res, link):
         return 'OK', True
     if es_catalogo_sin_wid(link) and 'sin wid' in str(res.get('detalle_error', '')):
         return 'Sin lectura', False
-    return 'Error', True
+    return 'Error', False  # sin precio no se guarda: el histórico es solo de lecturas con precio
 
 
 def mapa_referencias(ss):
@@ -591,7 +598,7 @@ def mapa_referencias(ss):
 
 def registrar_lecturas(ss, lecturas, fuente):
     """Agrega lecturas a Historial_Precios. Cada lectura: {link, entidad, precio, tachado, descuento,
-    cuotas, estado, metodo, [referencia_id]}. Idempotente por (Referencia_ID, Fecha): correr dos veces el
+    cuotas, estado, metodo}. Las lecturas sin precio NO se guardan (se cuentan). Idempotente por (Referencia_ID, Fecha): correr dos veces el
     mismo día no duplica. Links sin referencia se cuentan y se omiten (no se inventan referencias en vivo).
     Devuelve {'escritas', 'duplicadas', 'sin_referencia'}."""
     ws = asegurar_pestana(ss, HISTORIAL_SHEET, HISTORIAL_HEADERS, 20000)
@@ -599,8 +606,11 @@ def registrar_lecturas(ss, lecturas, fuente):
     existentes = set(zip(ws.col_values(1)[1:], ws.col_values(4)[1:]))
     ahora = datetime.now()
     fecha, hora = ahora.strftime('%d/%m/%Y'), ahora.strftime('%H:%M')
-    filas, dup, sin_ref = [], 0, 0
+    filas, dup, sin_ref, sin_precio = [], 0, 0, 0
     for l in lecturas:
+        if parse_precio(l.get('precio')) is None:
+            sin_precio += 1
+            continue
         r = refs.get(clave_ref(l.get('link'), l.get('entidad', '')))
         if r is None:
             sin_ref += 1
@@ -617,7 +627,7 @@ def registrar_lecturas(ss, lecturas, fuente):
     for i in range(0, len(filas), 500):
         ws.append_rows(filas[i:i + 500], value_input_option='RAW')
         time.sleep(0.3)
-    return {'escritas': len(filas), 'duplicadas': dup, 'sin_referencia': sin_ref}
+    return {'escritas': len(filas), 'duplicadas': dup, 'sin_referencia': sin_ref, 'sin_precio': sin_precio}
 
 
 def registrar_lecturas_seguro(ss, lecturas, fuente, log=None):
@@ -626,7 +636,7 @@ def registrar_lecturas_seguro(ss, lecturas, fuente, log=None):
         res = registrar_lecturas(ss, lecturas, fuente)
         if log is not None:
             log.append(f"📚 Historial_Precios ({fuente}): {res['escritas']} nuevas · {res['duplicadas']} ya del día · "
-                       f"{res['sin_referencia']} sin referencia")
+                       f"{res['sin_referencia']} sin referencia · {res['sin_precio']} sin precio (no se guardan)")
         return res
     except Exception as e:
         if log is not None:

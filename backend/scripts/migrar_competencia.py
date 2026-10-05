@@ -124,17 +124,17 @@ def leer_dir(d):
 
 def imprimir_informe(rep):
     print('\n=== INFORME DE MIGRACIÓN (DRY-RUN) ===')
-    print(f"{'Fuente':<26}{'Origen':>9}{'Nuevas':>9}{'Fusion.':>9}{'YaExist.':>9}{'Huérf.':>9}")
+    print(f"{'Fuente':<26}{'Origen':>9}{'Nuevas':>9}{'Fusion.':>9}{'YaExist.':>9}{'Huérf.':>9}{'SinPrec.':>9}")
     for n, d in sorted(rep['fuentes'].items()):
-        print(f"{n:<26}{d['origen']:>9}{d['nuevas']:>9}{d['fusionadas']:>9}{d['ya_existian']:>9}{d['huerfanas']:>9}")
+        print(f"{n:<26}{d['origen']:>9}{d['nuevas']:>9}{d['fusionadas']:>9}{d['ya_existian']:>9}{d['huerfanas']:>9}{d['sin_precio']:>9}")
     t = rep['totales']
-    print(f"{'TOTAL':<26}{t['origen']:>9}{t['nuevas']:>9}{t['fusionadas']:>9}{t['ya_existian']:>9}{t['huerfanas']:>9}")
-    print(f"\nCierre exacto (origen = nuevas + fusionadas + ya existían + huérfanas): {'SÍ' if rep['cierra'] else 'NO ⚠'}")
+    print(f"{'TOTAL':<26}{t['origen']:>9}{t['nuevas']:>9}{t['fusionadas']:>9}{t['ya_existian']:>9}{t['huerfanas']:>9}{t['sin_precio']:>9}")
+    print(f"\nCierre exacto (origen = nuevas + fusionadas + ya existían + huérfanas + sin precio): {'SÍ' if rep['cierra'] else 'NO ⚠'}")
     print(f"Entidades nuevas: {rep['entidades_nuevas']} · Referencias nuevas: {rep['referencias_nuevas']} · "
           f"Lecturas a escribir: {rep['lecturas_a_escribir']} · Huérfanos a escribir: {rep['huerfanos_a_escribir']}")
     print(f"Links sin identificador ML: {rep['links_sin_identificador']}")
     print(f"Lecturas SIN precio por fuente (diagnóstico del lector 'refresh'/403): {rep['sin_precio_por_fuente']}")
-    print(f"De las lecturas a escribir, SIN precio (lector caído / no encontrado): {rep['lecturas_sin_precio_a_escribir']}")
+    print(f"Lecturas sin precio NO migradas (contadas aparte): {t['sin_precio']} (de ellas 'No encontrado' en V-*: {rep['sin_precio_no_encontrado']})")
     print(f"Mismo día con precios distintos: {rep['conflictos_precio_mismo_dia']} "
           f"(entre fuentes distintas: {rep['conflictos_precio_entre_fuentes']}) — se conservan ambas")
     print(f"Conflictos de SKU con referencias existentes (no se tocan): {len(rep['conflictos_sku'])}")
@@ -158,7 +158,28 @@ def _append(ws, headers_hoja, dicts, headers_default):
         time.sleep(0.4)
 
 
-def ejecutar(ss, plan):
+def respaldar_historial_competidores(ss, filas):
+    """Copia COMPLETA de 'Historial Competidores' (que se autoborra por el tope de 10 fechas) a una pestaña
+    de respaldo + un JSON local, ANTES de escribir nada. Aborta si no queda idéntica en cantidad de filas."""
+    if not filas:
+        print('Respaldo: Historial Competidores está vacío, nada que respaldar.')
+        return
+    nombre = 'Respaldo_Hist_Competidores_' + time.strftime('%Y%m%d')
+    local = f'respaldo_historial_competidores_{time.strftime("%Y%m%d_%H%M")}.json'
+    json.dump(filas, open(local, 'w', encoding='utf-8'), ensure_ascii=False)
+    ws = cdb.asegurar_pestana(ss, nombre, filas[0], len(filas) + 10)
+    if len(ws.get_all_values()) <= 1:
+        for i in range(1, len(filas), 2000):
+            ws.append_rows(filas[i:i + 2000], value_input_option='RAW')
+            time.sleep(0.5)
+    n = len(ws.get_all_values())
+    if n != len(filas):
+        sys.exit(f'RESPALDO NO CIERRA ({n} filas en {nombre} vs {len(filas)} de origen): no se migra nada.')
+    print(f'Respaldo OK: {len(filas)} filas -> pestaña {nombre} + archivo local {local}')
+
+
+def ejecutar(ss, plan, fuentes):
+    respaldar_historial_competidores(ss, fuentes.get('hist_competidores') or [])
     ent_ws = cdb.asegurar_pestana(ss, 'Entidades', ENT_HEADERS, 1000)
     ref_ws = cdb.asegurar_pestana(ss, 'Referencias_Mercado', REF_HEADERS, 1000)
     h_ws = cdb.asegurar_pestana(ss, cdb.HISTORIAL_SHEET, cdb.HISTORIAL_HEADERS, 20000)
@@ -203,7 +224,7 @@ def main():
     if plan.rep['plan_hash'] != a.plan_hash:
         sys.exit(f"plan_hash distinto ({plan.rep['plan_hash']} vs {a.plan_hash}): los datos cambiaron desde el dry-run; "
                  'volver a correr el dry-run y aprobar.')
-    ejecutar(ss, plan)
+    ejecutar(ss, plan, fuentes)
     # Verificación contra el Sheet: re-planificar tiene que dar todo "ya existía" y 0 por escribir.
     post = cdb.planificar(leer_sheet(ss))
     r = post.rep
