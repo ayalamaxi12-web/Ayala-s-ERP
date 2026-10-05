@@ -2058,6 +2058,56 @@ def competencia_migracion_status(job_id: str, request: Request):
     return job_status.get(job_id, {"status": "not_found"})
 
 
+# ── Cambios masivos y reversibles sobre Referencias_Mercado (Etapa 2): desactivar las referencias de una entidad
+# (Global Electronics: somos nosotros). Dry-run por defecto; la real exige la cantidad esperada. Misma clave estricta.
+
+def _desactivar_entidad_sync(entidad, ejecutar, esperado):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.desactivar_entidad(ss, entidad, ejecutar, esperado, operador="endpoint")
+
+
+def _revertir_lote_sync(lote, ejecutar):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.revertir_lote(ss, lote, ejecutar)
+
+
+async def _cambio_referencias(request: Request, fn):
+    _exigir_clave_estricta(request)
+    if not _migracion_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Hay una migración/cambio masivo en curso")
+    try:
+        return await run_in_threadpool(fn)
+    except Exception as e:
+        if e.__class__.__name__ == "CambioError":
+            raise HTTPException(status_code=400, detail=str(e))
+        raise
+    finally:
+        _migracion_lock.release()
+
+
+@app.post("/competencia/referencias/desactivar-entidad")
+async def competencia_desactivar_entidad(request: Request):
+    """Body: {"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": 1927}. Sin `ejecutar` = dry-run."""
+    body = await request.json()
+    entidad = str(body.get("entidad", "")).strip()
+    ejecutar = bool(body.get("ejecutar", False))
+    esperado = body.get("esperado")
+    if ejecutar and esperado is None:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere `esperado` (la cantidad que mostró el dry-run)")
+    return await _cambio_referencias(request, lambda: _desactivar_entidad_sync(entidad, ejecutar, esperado))
+
+
+@app.post("/competencia/referencias/revertir-lote")
+async def competencia_revertir_lote(request: Request):
+    """Body: {"lote": "LOTE-...", "ejecutar": false}. Deshace un cambio masivo registrado en Cambios_Referencias."""
+    body = await request.json()
+    lote, ejecutar = str(body.get("lote", "")).strip(), bool(body.get("ejecutar", False))
+    if not lote:
+        raise HTTPException(status_code=400, detail="Falta `lote`")
+    return await _cambio_referencias(request, lambda: _revertir_lote_sync(lote, ejecutar))
+
 # ══════════════════════════════════════════════════════
 # ML OFERTAS — dashboard de ofertas/promos activas (docs/business/
 # COMERCIAL/canales/mercadolibre/REQ_MODULO_OFERTAS_ML.md). Fases 1 y 2

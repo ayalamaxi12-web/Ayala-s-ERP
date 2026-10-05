@@ -31,3 +31,16 @@ Las lecturas SIN precio no se migran (se cuentan aparte en el informe); antes de
 ## Doble escritura (transitoria)
 Los monitores, `/competidores/refresh` y `/ml/tracker/run` siguen escribiendo a los históricos viejos (el front
 todavía los lee) y además a `Historial_Precios`. Se cortan los viejos en la Etapa 3, cuando la pantalla lea el nuevo.
+
+## Etapa 2: scraper automático (carpeta `scraper/`)
+Lee la **planilla de Maca** (`PLANILLA_MACA_ID` en `scraper/config.py`; pestañas `A-CATEGORIAS` y `B-SKU-COMPETENCIA`, encabezados en la
+fila 3) en lugar de la pestaña `Vendedores`. Sincroniza `Entidades` y `Referencias_Mercado` (columna nueva `Rol_Competidor`), scrapea
+perfiles de tienda y publicaciones puntuales con Selenium (perfil de Chrome persistente) y escribe en `Historial_Precios` con las mismas
+reglas de la Etapa 1. Eventos en `Eventos_Competencia`; tiendas con publicaciones que no son referencias, en `Discovery_Sugerencias`.
+Instalación, modo prueba y tarea de las 17:30: `scraper/README_WINDOWS.md`.
+
+Pendiente: alertas de **stock bajo** (< 5) — lógica lista pero desactivada hasta que la columna de stock de B-SKU tenga el dato real.
+
+Cambios masivos reversibles (`backend/competencia_referencias.py`): `POST /competencia/referencias/desactivar-entidad` (dry-run por defecto;
+la real exige `esperado` = cantidad del dry-run y registra cada valor anterior en `Cambios_Referencias`) y
+`POST /competencia/referencias/revertir-lote`. Misma clave `X-ERP-Key` estricta que la migración.
