@@ -62,7 +62,9 @@ def correr_prueba(filas_maca, lector, n=20, log=print):
         log(f"{x['tipo']:>17}  {x['sku']}  {x['url'][:70]}")
         r = lector.leer_publicacion(x['url'], None, diagnostico=True)
         informe['publicaciones'].append(dict(x, estado=r['estado'], precio=r.get('precio'), vendedor=r.get('vendedor'),
-                                             detalle=r.get('detalle'), url_final=r.get('url_final'), intentos=r.get('intentos', [])))
+                                             precio_ganador=r.get('precio_ganador'), vendedor_ganador=r.get('vendedor_ganador'),
+                                             via=r.get('via'), detalle=r.get('detalle'), url_final=r.get('url_final'),
+                                             pasos=r.get('pasos', []), evidencia=r.get('evidencia', {})))
         if r['estado'] == 'Bloqueado':
             break
         time.sleep(2)
@@ -87,5 +89,9 @@ def resumen_texto(informe):
         L.append(f'{tipo:<18} {est:<14} {k}')
     L.append('')
     for p in informe['publicaciones']:
-        L.append(f"{p['tipo']:<17} {p['estado']:<13} precio={p['precio']} vendedor={p['vendedor']!r} {p['detalle'] or ''}")
+        L.append(f"{p['tipo']:<17} {p['estado']:<13} precio={p['precio']} ganador={p.get('precio_ganador')} "
+                 f"via={p.get('via') or '-'} vendedor={p['vendedor']!r} {p['detalle'] or ''}")
+        for st in p.get('pasos', []):
+            L.append(f"      · {st['paso']:<20} {str(st.get('estado')):<13} precio={st.get('precio')} ganador={st.get('precio_ganador')}"
+                     f" vendedor={st.get('vendedor')!r}")
     return '\n'.join(L)

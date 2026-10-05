@@ -36,8 +36,18 @@ def _vendedor_de(snap):
     if not v:
         m = re.search(r'vendido por\s+([^\n|]+)', str(snap.get('texto') or ''), re.I)
         v = m.group(1).strip() if m else ''
-    v = re.sub(r'^(vendido por|tienda oficial de|vendedor:?)\s*', '', v, flags=re.I).strip()
+    v = re.sub(r'^(vendido por|tienda oficial de|tienda oficial|vendedor:?)\s*', '', v, flags=re.I).strip()
     return v
+
+
+def vendedor_de_texto(texto):
+    """Vendedor a partir del texto suelto de una tarjeta de oferta ('Vendido por X', 'Tienda oficial X', 'Por X')."""
+    t = str(texto or '')
+    for pat in (r'vendido por\s+([^\n|]+)', r'tienda oficial(?: de)?\s+([^\n|]+)', r'(?:^|\n)por\s+([^\n|]{2,60})'):
+        m = re.search(pat, t, re.I)
+        if m:
+            return m.group(1).strip()
+    return ''
 
 
 def coincide_vendedor(visto, esperado):
@@ -85,6 +95,9 @@ def clasificar_publicacion(snap, esperado=None, url_original=None, directo=False
     ids = cdb.extraer_ids(url_original)
     es_catalogo = bool(ids['product_id'])
     vendedor = base['vendedor']
+    if es_catalogo and not directo:
+        # La página de catálogo muestra a la oferta GANADORA (buy box): es el "Precio_Ganador", aunque no sea la que seguimos.
+        out['precio_ganador'], out['vendedor_ganador'] = precio, vendedor
     if directo:
         wid = ids['wid'] or ids['item_id'] or ''
         if _digitos_wid(snap.get('url')) != re.sub(r'\D', '', wid):
@@ -107,3 +120,24 @@ def url_item_directo(wid):
     """wid 'MLA3334869990' -> 'https://articulo.mercadolibre.com.ar/MLA-3334869990' (la oferta puntual)."""
     m = re.fullmatch(r'(ML[A-Z])(\d+)', str(wid or '').upper())
     return f'https://articulo.mercadolibre.com.ar/{m.group(1)}-{m.group(2)}' if m else ''
+
+
+def clasificar_oferta_en_catalogo(snap, oferta, esperado=None, url_original=''):
+    """Catálogo con wid. `snap` = la página de catálogo (muestra a la GANADORA); `oferta` = lo que encontró el extractor
+    buscando en esa página la tarjeta de la oferta del wid ({'encontrada', 'precio', 'texto', ...}) o None.
+    El wid identifica la oferta (no hace falta saber de antemano quién es el vendedor). Siempre devuelve el
+    precio/vendedor ganador de la página para guardarlos aparte."""
+    res = clasificar_publicacion(snap, None, url_original)
+    if res['estado'] in ('Bloqueado', 'Caida', 'Error'):
+        return res
+    if oferta and oferta.get('encontrada'):
+        p = cdb.parse_precio(oferta.get('precio'))
+        v = vendedor_de_texto(oferta.get('texto'))
+        if p:
+            if esperado and v and not coincide_vendedor(v, esperado):
+                return dict(res, estado='Otro vendedor', precio=None, vendedor=v,
+                            detalle=f'La tarjeta del wid es de {v}, se esperaba {esperado}')
+            gan_p, gan_v = res.get('precio_ganador'), res.get('vendedor_ganador')
+            return dict(res, estado='OK', precio=p, vendedor=v, via=oferta.get('via', 'tarjeta_wid'), detalle='',
+                        tachado=None, descuento='', cuotas='', precio_ganador=gan_p, vendedor_ganador=gan_v)
+    return dict(res, detalle=(res.get('detalle') or '') + ' | no encontré la tarjeta de la oferta del wid en la página')

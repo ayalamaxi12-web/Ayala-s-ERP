@@ -33,6 +33,21 @@ Lee ~20 links reales (4 tiendas y publicaciones de cada tipo: catálogo con `wid
 escribe nada**. Al final imprime un resumen y guarda `scraper\logs\prueba_scraper_AAAAMMDD_HHMM.json`: pasame ese archivo
 (o pegá el resumen). Con eso se confirma qué muestra ML en cada tipo de link antes de tocar el histórico.
 
+### Cómo se lee un link de catálogo (`/p/…?wid=…`)
+Al abrir un `/p/`, Mercado Libre muestra a la **oferta ganadora**, no a la del `wid` que carga Maca. Por eso, para el competidor:
+1. se busca en esa misma página la **tarjeta de la oferta del `wid`** (precio y vendedor);
+2. si no está a la vista, se hace clic en **"Más opciones de compra"** y se vuelve a buscar;
+3. si configuraste la **vía API** (abajo), se le pregunta al backend por las ofertas del producto;
+4. como último recurso se abre la página del ítem `/MLA-<wid>`, que **solo existe si la oferta no es una publicación de catálogo**
+   (si es de catálogo, ML la redirige al `/p/`: ahí no hay link directo posible).
+
+Siempre se guarda además el **precio de la ganadora** en `Historial_Precios` (`Precio_Ganador` y `Vendedor_Ganador`), junto al del
+competidor. Los eventos de cambio de precio miran **solo** el precio del competidor. Si no se pudo leer la oferta del competidor
+no se guarda fila (aunque se haya visto a la ganadora): el histórico solo tiene lecturas del competidor que seguimos.
+
+**Vía API (opcional):** si definís en Windows `setx ERP_BACKEND_URL https://TU-BACKEND` y `setx ERP_API_KEY TU-CLAVE` (y abrís una consola
+nueva), el scraper puede traer el precio de la oferta del `wid` y el de la ganadora sin abrir la página. Si ML responde 403 se apaga sola.
+
 ## 4. Primera corrida
 ```
 python scraper.py --sin-escribir     # corre completo pero NO toca ningún Sheet: mirá el resumen

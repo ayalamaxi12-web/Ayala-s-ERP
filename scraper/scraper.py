@@ -74,7 +74,10 @@ def main(argv=None):
     cliente, email = _cliente()
     maca = _abrir(cliente, config.PLANILLA_MACA_ID, email, 'la planilla de Maca')
     filas = _filas_maca(maca)
-    lector = LectorML(headless=a.headless, log=log)
+    from ml_api import ApiCatalogo
+    api = ApiCatalogo(log=log)
+    log('Vía API de catálogo: ' + ('configurada (ERP_BACKEND_URL / ERP_API_KEY)' if api.disponible() else 'NO configurada (solo páginas)'))
+    lector = LectorML(headless=a.headless, log=log, api=api)
     try:
         if a.probar:
             import prueba

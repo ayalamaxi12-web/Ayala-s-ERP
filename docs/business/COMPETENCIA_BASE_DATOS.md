@@ -44,3 +44,9 @@ Pendiente: alertas de **stock bajo** (< 5) — lógica lista pero desactivada ha
 Cambios masivos reversibles (`backend/competencia_referencias.py`): `POST /competencia/referencias/desactivar-entidad` (dry-run por defecto;
 la real exige `esperado` = cantidad del dry-run y registra cada valor anterior en `Cambios_Referencias`) y
 `POST /competencia/referencias/revertir-lote`. Misma clave `X-ERP-Key` estricta que la migración.
+
+### Etapa 2 — catálogo y precio ganador
+`Historial_Precios` suma dos columnas al final: `Precio_Ganador` y `Vendedor_Ganador` (lo que ML muestra primero en un `/p/`). El precio del
+competidor que sigue Maca (`Precio`) y el de la ganadora son datos separados; los eventos de cambio de precio miran solo `Precio`.
+Un link de catálogo con `wid` se resuelve buscando la tarjeta de esa oferta en la página (o en "Más opciones de compra"), por API si está
+configurada, o en el ítem directo (que solo existe para ofertas que no son de catálogo).

@@ -53,9 +53,78 @@ return out;
 """
 
 
+# Busca en la página la TARJETA de una oferta puntual (el wid): cualquier elemento del <body> con un atributo (href, data-*,
+# id...) que contenga los dígitos del wid; sube hasta el ancestro más chico que tenga un precio y devuelve ese precio y el
+# texto de la tarjeta. Descarta <link>/<meta>/<script> (la URL canónica de la propia página trae el wid). Si el ancestro
+# con precio tiene demasiados montos distintos es ambiguo (no es una tarjeta): no se acepta.
+JS_OFERTA_POR_WID = r"""
+const wid = String(arguments[0] || '').replace(/\D/g, '');
+if (!wid) return {encontrada: false, candidatos: [], motivo: 'sin wid'};
+const SKIP = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'HEAD', 'TITLE']);
+const montosDe = root => Array.from(root.querySelectorAll('.andes-money-amount'))
+  .filter(m => !m.classList.contains('andes-money-amount--previous') && !m.closest('s'));
+const precioDe = root => {
+  const ms = montosDe(root);
+  for (const m of ms) { const f = m.querySelector('.andes-money-amount__fraction'); if (f && (f.innerText || '').trim()) return {txt: f.innerText.trim(), n: ms.length}; }
+  return null;
+};
+const candidatos = [];
+const vistos = new Set();
+for (const e of document.body.querySelectorAll('*')) {
+  if (SKIP.has(e.tagName)) continue;
+  let hit = false;
+  for (const a of e.attributes) { if (a.value && a.value.indexOf(wid) >= 0) { hit = true; break; } }
+  if (!hit) continue;
+  let n = e, prof = 0;
+  while (n && n !== document.body && prof < 8) {
+    const p = precioDe(n);
+    if (p) {
+      if (!vistos.has(n)) { vistos.add(n); candidatos.push({precio: p.txt, montos: p.n, prof: prof, tag: n.tagName, texto: (n.innerText || '').trim().slice(0, 500)}); }
+      break;
+    }
+    n = n.parentElement; prof++;
+  }
+}
+const buenos = candidatos.filter(c => c.montos <= 3).sort((a, b) => a.montos - b.montos || a.prof - b.prof);
+if (!buenos.length) return {encontrada: false, candidatos: candidatos.slice(0, 5), motivo: candidatos.length ? 'ancestro ambiguo' : 'el wid no aparece en la página'};
+return {encontrada: true, precio: buenos[0].precio, texto: buenos[0].texto, via: 'tarjeta_wid', candidatos: candidatos.slice(0, 5)};
+"""
+
+# Hace clic en "Más opciones de compra" / "Otros vendedores" (lo que haya) para que se listen las demás ofertas.
+JS_ABRIR_OPCIONES = r"""
+const re = /(m[aá]s|otras|ver)\s+(las\s+)?opciones\s+de\s+compra|ver\s+todas\s+las\s+ofertas|otros\s+vendedores|m[aá]s\s+vendedores|ver\s+m[aá]s\s+ofertas/i;
+const els = Array.from(document.querySelectorAll('a, button, [role="button"]'));
+const el = els.find(e => re.test((e.innerText || '').trim()) && (e.innerText || '').trim().length < 80);
+if (!el) return {clic: false};
+const href = el.href || '';
+el.scrollIntoView({block: 'center'});
+el.click();
+return {clic: true, texto: (el.innerText || '').trim().slice(0, 80), href: href};
+"""
+
+# Evidencia para el modo prueba: lo que necesito ver para afinar la lectura de catálogo.
+JS_EVIDENCIA = r"""
+const wid = String(arguments[0] || '').replace(/\D/g, '');
+const txt = e => (e.innerText || '').trim();
+const html = document.documentElement.outerHTML;
+const ctx = [];
+for (let i = wid ? html.indexOf(wid) : -1; i >= 0 && ctx.length < 4; i = html.indexOf(wid, i + 1)) ctx.push(html.slice(Math.max(0, i - 160), i + 160));
+return {
+  url: location.href,
+  opciones: Array.from(document.querySelectorAll('a[href], button')).filter(e => /opciones de compra|otros vendedores|m[aá]s vendedores|m[aá]s ofertas/i.test(txt(e))).slice(0, 8)
+    .map(e => ({tag: e.tagName, texto: txt(e).slice(0, 80), href: e.href || ''})),
+  wid_en_html: ctx,
+  wid_veces_en_html: wid ? html.split(wid).length - 1 : 0,
+  secciones: Array.from(document.querySelectorAll('h2, h3')).map(txt).filter(Boolean).slice(0, 25),
+  ld_json: Array.from(document.querySelectorAll('script[type="application/ld+json"]')).slice(0, 3).map(s => (s.textContent || '').slice(0, 500))
+};
+"""
+
+
 class LectorML:
-    def __init__(self, perfil_dir=None, headless=False, log=print):
+    def __init__(self, perfil_dir=None, headless=False, log=print, api=None):
         self.perfil_dir, self.headless, self.log = perfil_dir or config.PERFIL_CHROME, headless, log
+        self.api = api            # ml_api.ApiCatalogo (opcional)
         self._driver = None
 
     # ── navegador ────────────────────────────────────────────────────────────
@@ -115,35 +184,128 @@ class LectorML:
         self._ir(url, '.andes-money-amount__fraction')
         return self.driver().execute_script(JS_PUBLICACION)
 
+    def _snapshot_actual(self):
+        return self.driver().execute_script(JS_PUBLICACION)
+
+    def _buscar_oferta(self, wid):
+        try:
+            return self.driver().execute_script(JS_OFERTA_POR_WID, wid) or {'encontrada': False}
+        except Exception as e:  # noqa: BLE001
+            return {'encontrada': False, 'motivo': f'JS: {e}'}
+
+    def _evidencia(self, wid):
+        try:
+            return self.driver().execute_script(JS_EVIDENCIA, wid)
+        except Exception as e:  # noqa: BLE001
+            return {'error': str(e)}
+
+    def _abrir_opciones(self):
+        try:
+            r = self.driver().execute_script(JS_ABRIR_OPCIONES) or {'clic': False}
+        except Exception as e:  # noqa: BLE001
+            return {'clic': False, 'error': str(e)}
+        if r.get('clic'):
+            time.sleep(2.5)          # el listado de ofertas se arma con JS (modal o página nueva)
+            self._ir(self.driver().current_url, '.andes-money-amount__fraction', timeout=8) if r.get('href') else None
+        return r
+
     def leer_publicacion(self, url, esperado=None, diagnostico=False):
-        """-> dict de paginas_ml.clasificar_publicacion (+ 'intentos' en diagnóstico).
-        Catálogo con wid: primero la URL tal cual; si no se puede atribuir, la página del ítem puntual de la oferta."""
+        """-> dict de paginas_ml (estado OK|Caida|Error|Sin lectura|Otro vendedor|Bloqueado, precio, vendedor,
+        precio_ganador, vendedor_ganador, via, ...). En diagnóstico agrega 'pasos' y 'evidencia' (qué se intentó y qué vio).
+        - Ítem directo: la página del ítem.
+        - Catálogo CON wid (la oferta que sigue Maca): la página de catálogo muestra a la GANADORA; la oferta del wid se busca
+          (1) en la propia página, (2) abriendo 'Más opciones de compra', (3) por API si está configurada, (4) en la página
+          del ítem (/MLA-<wid>) que solo existe si la oferta NO es una publicación de catálogo.
+        - Catálogo SIN wid: no hay forma de saber de quién es la oferta; se guarda solo el precio de la ganadora."""
         ids = cdb.extraer_ids(url)
-        intentos = [(url, False)]
-        if ids['product_id'] and ids['wid']:
-            intentos.append((pml.url_item_directo(ids['wid']), True))
-        hechos = []
-        for u, directo in intentos:
-            try:
-                res = pml.clasificar_publicacion(self._snapshot(u), esperado, url, directo=directo)
-            except Exception as e:  # noqa: BLE001
-                res = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': u}
-            res['intento'] = 'directo' if directo else 'original'
-            res['url_intentada'] = u
-            hechos.append(res)
-            if res['estado'] == 'Bloqueado' or (res['estado'] == 'OK' and not diagnostico):
-                break
-        orden = ['OK', 'Caida', 'Otro vendedor', 'Sin lectura', 'Error', 'Bloqueado']
-        mejor = dict(sorted(hechos, key=lambda r: orden.index(r['estado']) if r['estado'] in orden else 9)[0])
-        if any(r['estado'] == 'Bloqueado' for r in hechos):
-            mejor = next(r for r in hechos if r['estado'] == 'Bloqueado')
-        # Caída solo si TODOS los intentos dicen caída (un catálogo muerto en /p/ puede seguir vivo en el ítem)
-        if mejor['estado'] == 'Caida' and not all(r['estado'] == 'Caida' for r in hechos):
-            mejor = next(r for r in hechos if r['estado'] != 'Caida')
+        if not (ids['product_id'] and ids['wid']):
+            return self._leer_simple(url, esperado, diagnostico)
+        wid, pasos, evid = ids['wid'], [], {}
+        digitos = re.sub(r'\D', '', wid)
+
+        def paso(nombre, res, extra=None):
+            pasos.append(dict({'paso': nombre, 'estado': res.get('estado'), 'precio': res.get('precio'),
+                               'vendedor': res.get('vendedor'), 'precio_ganador': res.get('precio_ganador'),
+                               'url_final': res.get('url_final'), 'detalle': res.get('detalle')}, **(extra or {})))
+
+        try:
+            snap = self._snapshot(url)
+        except Exception as e:  # noqa: BLE001
+            return {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': url}
+        oferta = self._buscar_oferta(digitos)
+        res = pml.clasificar_oferta_en_catalogo(snap, oferta, esperado, url)
+        paso('pagina_original', res, {'oferta': {k: oferta.get(k) for k in ('encontrada', 'precio', 'motivo', 'via')}})
+        ganador = {k: res.get(k) for k in ('precio_ganador', 'vendedor_ganador')}
         if diagnostico:
-            mejor['intentos'] = [{k: r.get(k) for k in ('intento', 'url_intentada', 'url_final', 'estado', 'precio',
-                                                         'vendedor', 'detalle')} for r in hechos]
-        return mejor
+            evid['original'] = self._evidencia(digitos)
+            evid['original']['candidatos'] = oferta.get('candidatos')
+        if res['estado'] == 'Bloqueado':
+            return self._cerrar(res, ganador, pasos, evid, diagnostico)
+
+        if res['estado'] != 'OK' or diagnostico:
+            clic = self._abrir_opciones()
+            if clic.get('clic'):
+                try:
+                    snap2 = self._snapshot_actual()
+                    oferta2 = self._buscar_oferta(digitos)
+                    res2 = pml.clasificar_oferta_en_catalogo(snap2, oferta2, esperado, url)
+                    res2['via'] = 'opciones_de_compra' if res2.get('estado') == 'OK' else res2.get('via')
+                    paso('opciones_de_compra', res2, {'clic': clic, 'oferta': {k: oferta2.get(k) for k in ('encontrada', 'precio', 'motivo')}})
+                    if diagnostico:
+                        evid['opciones'] = self._evidencia(digitos)
+                        evid['opciones']['candidatos'] = oferta2.get('candidatos')
+                    if res['estado'] != 'OK' and res2['estado'] == 'OK':
+                        res = dict(res2, precio_ganador=ganador['precio_ganador'], vendedor_ganador=ganador['vendedor_ganador'])
+                except Exception as e:  # noqa: BLE001
+                    paso('opciones_de_compra', {'estado': 'Error', 'detalle': f'Selenium: {e}'}, {'clic': clic})
+            else:
+                paso('opciones_de_compra', {'estado': 'Sin lectura', 'detalle': 'No encontré el botón de más opciones de compra'}, {'clic': clic})
+
+        if self.api and self.api.disponible() and (res['estado'] != 'OK' or diagnostico):
+            a = self.api.leer(ids['product_id'], wid)
+            paso('api', {'estado': a['estado'], 'precio': a.get('precio'), 'detalle': a.get('detalle'),
+                         'precio_ganador': a.get('precio_ganador')}, {'http': a.get('http'), 'ofertas': a.get('ofertas')})
+            if res['estado'] != 'OK' and a['estado'] == 'OK':
+                res = dict(res, estado='OK', precio=a['precio'], vendedor=f"seller {a.get('seller_id')}", via='api', detalle='',
+                           precio_ganador=ganador['precio_ganador'] or a.get('precio_ganador'))
+            if not ganador['precio_ganador'] and a.get('precio_ganador'):
+                ganador['precio_ganador'] = a['precio_ganador']
+
+        if res['estado'] != 'OK' or diagnostico:
+            directo_url = pml.url_item_directo(wid)
+            try:
+                rd = pml.clasificar_publicacion(self._snapshot(directo_url), esperado, url, directo=True)
+            except Exception as e:  # noqa: BLE001
+                rd = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': directo_url}
+            paso('item_directo', rd, {'url_intentada': directo_url})
+            if res['estado'] != 'OK' and rd['estado'] == 'OK':
+                res = dict(rd, via='item_directo', precio_ganador=ganador['precio_ganador'], vendedor_ganador=ganador['vendedor_ganador'])
+            elif res['estado'] == 'Sin lectura' and rd['estado'] == 'Caida':
+                pass   # la página de catálogo vive: no es una caída
+        res.setdefault('via', 'pagina_original' if res['estado'] == 'OK' else '')
+        return self._cerrar(res, ganador, pasos, evid, diagnostico)
+
+    def _cerrar(self, res, ganador, pasos, evid, diagnostico):
+        res = dict(res)
+        for k, v in ganador.items():
+            if v is not None and not res.get(k):
+                res[k] = v
+        if diagnostico:
+            res['pasos'], res['evidencia'] = pasos, evid
+        return res
+
+    def _leer_simple(self, url, esperado, diagnostico):
+        """Ítem directo o catálogo sin wid: una sola página."""
+        try:
+            res = pml.clasificar_publicacion(self._snapshot(url), esperado, url)
+        except Exception as e:  # noqa: BLE001
+            res = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': url}
+        res['via'] = 'pagina_original' if res['estado'] == 'OK' else ''
+        if diagnostico:
+            res['pasos'] = [{'paso': 'pagina_original', 'estado': res['estado'], 'precio': res.get('precio'),
+                             'vendedor': res.get('vendedor'), 'precio_ganador': res.get('precio_ganador'),
+                             'url_final': res.get('url_final'), 'detalle': res.get('detalle')}]
+        return res
 
     # ── tienda completa ──────────────────────────────────────────────────────
     def leer_tienda(self, url, max_paginas=40):

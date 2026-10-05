@@ -43,3 +43,11 @@ UMBRAL_CAMBIO_PRECIO_PCT = 0.0
 # Pausas para no saturar a ML (segundos).
 PAUSA_ENTRE_PUBLICACIONES = (2.0, 4.0)
 PAUSA_ENTRE_PAGINAS = (1.5, 3.0)
+
+# ── Vía API para ofertas de catálogo (opcional) ───────────────────────────────
+# El scraper puede preguntarle al backend (Railway) por las ofertas de un producto de catálogo
+# (`/ml-proxy?path=products/<id>/items`), que da el precio de la oferta del wid y el de la ganadora SIN abrir la página.
+# Se configura con variables de entorno de Windows (no van al repo):  setx ERP_BACKEND_URL https://...   setx ERP_API_KEY ...
+# Si no están, esta vía simplemente no se usa. Si ML responde 403, se apaga sola durante la corrida.
+ERP_BACKEND_URL = os.environ.get('ERP_BACKEND_URL', '').rstrip('/')
+ERP_API_KEY = os.environ.get('ERP_API_KEY', '')

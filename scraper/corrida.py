@@ -14,6 +14,8 @@ import sheets_io as sio
 import sincronizar as sy
 import paginas_ml as pml
 
+# Historial_Precios + las 2 columnas del precio de la oferta GANADORA del catálogo (se agregan al final de la hoja).
+HISTORIAL_HEADERS_V2 = cdb.HISTORIAL_HEADERS + ['Precio_Ganador', 'Vendedor_Ganador']
 DISCOVERY_SHEET = 'Discovery_Sugerencias'
 DISCOVERY_HEADERS = ['Sugerencia_ID', 'Entidad_Origen', 'Titulo_Detectado', 'Link_Detectado', 'Precio_Detectado',
                      'SKU_Sugerido', 'Fecha_Deteccion', 'Estado_Revision', 'Referencia_ID_Generada']
@@ -111,7 +113,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
     R = {'fecha': hoy, 'escribir': escribir, 'vendedor': vendedor or 'todos', 'solo': solo or 'todo',
          'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0},
          'publicaciones': {'leidas': 0, 'ok': 0, 'caidas': 0, 'sin_lectura': 0, 'otro_vendedor': 0, 'error': 0,
-                           'saltadas_por_perfil': 0},
+                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0},
          'lecturas': 0, 'eventos': {}, 'descubrimiento_nuevas': 0, 'avisos': [], 'pendientes_stock': None}
 
     titulos = {w.title for w in ss.worksheets()}
@@ -208,7 +210,9 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
             'Referencia_ID': ref['id'], 'SKU': ref['sku'], 'Entidad': ref['entidad'], 'Fecha': hoy, 'Hora': hora,
             'Precio': precio if not float(precio).is_integer() else int(precio),
             'Precio_Tachado': (res.get('tachado') or ''), 'Descuento': res.get('descuento') or '',
-            'Cuotas': res.get('cuotas') or '', 'Estado': 'OK', 'Metodo': 'Selenium', 'Fuente': fuente, 'Link': link}
+            'Cuotas': res.get('cuotas') or '', 'Estado': 'OK', 'Metodo': 'Selenium', 'Fuente': fuente, 'Link': link,
+            # lo que ML muestra primero en el catálogo (la ganadora): dato aparte; el evento de precio NO lo mira
+            'Precio_Ganador': res.get('precio_ganador') or '', 'Vendedor_Ganador': res.get('vendedor_ganador') or ''}
         d = ev.evento_precio(previos.get(ref['id']), precio)
         if d:
             emitir(d, ref, link=link)
@@ -301,6 +305,8 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                         R['avisos'].append(f'{url[:70]}: el vendedor de la página es propio ({vend}): se omite.')
                         continue
                     R['publicaciones']['ok'] += 1
+                    via = res.get('via') or 'pagina_original'
+                    R['publicaciones']['via'][via] = R['publicaciones']['via'].get(via, 0) + 1
                     for r in pendientes:
                         if not r['entidad_id'] and vend:
                             e = entidad_por_nombre(vend)
@@ -326,6 +332,8 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                     R['avisos'].append(f'{url[:70]}: {res.get("detalle", "")}')
                 elif est == 'Sin lectura':
                     R['publicaciones']['sin_lectura'] += 1
+                    if res.get('precio_ganador'):      # se vio al ganador pero no la oferta que sigue Maca: no se guarda fila
+                        R['publicaciones']['solo_precio_ganador'] += 1
                 else:
                     R['publicaciones']['error'] += 1
                     R['avisos'].append(f'{url[:70]}: {res.get("detalle", "error de lectura")}')
@@ -370,8 +378,9 @@ def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, dis
         celdas = [(filas[u['Referencia_ID']], sy.COL_ROL, u['Rol']) for u in plan.rol_updates if u['Referencia_ID'] in filas]
         sio.actualizar_celdas(ref_ws, ref_h, celdas + list(cambios_ref))
     if lecturas:
-        ws = cdb.asegurar_pestana(ss, cdb.HISTORIAL_SHEET, cdb.HISTORIAL_HEADERS, 20000)
-        ins, act = sio.upsert(ws, cdb.HISTORIAL_HEADERS, list(lecturas.values()), ['Referencia_ID', 'Fecha'])
+        ws = cdb.asegurar_pestana(ss, cdb.HISTORIAL_SHEET, HISTORIAL_HEADERS_V2, 20000)
+        hh = sio.asegurar_columnas(ws, HISTORIAL_HEADERS_V2)
+        ins, act = sio.upsert(ws, hh, list(lecturas.values()), ['Referencia_ID', 'Fecha'])
         R['lecturas_escritas'] = {'nuevas': ins, 'reemplazadas': act}
     if eventos:
         ws = cdb.asegurar_pestana(ss, ev.EVENTOS_SHEET, ev.EVENTOS_HEADERS, 5000)
