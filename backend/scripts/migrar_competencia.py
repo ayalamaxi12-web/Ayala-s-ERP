@@ -19,14 +19,10 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import competencia_db as cdb  # noqa: E402
+import competencia_migracion as mig  # noqa: E402
+from competencia_migracion import ejecutar, leer_sheet  # noqa: E402
 
 SPREADSHEET_ID = '15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY'
-ENT_HEADERS = ['Entidad_ID', 'Nombre', 'Tipo', 'Provincia', 'Localidad', 'Estado', 'Responsable',
-               'Tolerancia_Default_Pct', 'Fecha_Alta', 'Fecha_Ultima_Revision', 'Observaciones', 'Link_ML', 'Seller_ID']
-REF_HEADERS = ['Referencia_ID', 'SKU', 'Tipo', 'Entidad_ID', 'Entidad_Nombre', 'Link_Publicacion', 'PVP_Oficial',
-               'PVP_Override', 'Tolerancia_Pct', 'Activo', 'Seller_ID_Esperado', 'Fecha_Alta', 'Origen', 'Observaciones']
-
-
 def get_gs():
     import gspread
     from google.oauth2.service_account import Credentials
@@ -35,27 +31,6 @@ def get_gs():
     creds = (Credentials.from_service_account_info(json.loads(cj), scopes=scopes) if cj
              else Credentials.from_service_account_file('credentials.json', scopes=scopes))
     return gspread.authorize(creds)
-
-
-def _valores(ss, nombre):
-    try:
-        return ss.worksheet(nombre).get_all_values()
-    except Exception:
-        return []
-
-
-def leer_sheet(ss):
-    titulos = [ws.title for ws in ss.worksheets()]
-    f = {'refs': _valores(ss, 'Referencias_Mercado'), 'ents': _valores(ss, 'Entidades'),
-         'general': _valores(ss, 'General'), 'ml_competencia': _valores(ss, 'ML Competencia'),
-         'hist_competidores': _valores(ss, cdb.HIST_H2_NOMBRE), 'monitor': _valores(ss, 'Monitor_Lecturas'),
-         'historial_existente': _valores(ss, cdb.HISTORIAL_SHEET),
-         'huerfanos_existentes': _valores(ss, cdb.HUERFANOS_SHEET), 'v_tabs': {}}
-    for t in titulos:
-        if t.startswith('V - '):
-            f['v_tabs'][t] = _valores(ss, t)
-            time.sleep(0.5)  # cuota de la API de Sheets
-    return f
 
 
 class _SsApi:
@@ -148,52 +123,6 @@ def imprimir_informe(rep):
         for tab, cols in rep['columnas_no_reconocidas'].items():
             print(f'  {tab}: {cols[:8]}')
     print(f"\nplan_hash: {rep['plan_hash']}\n")
-
-
-def _append(ws, headers_hoja, dicts, headers_default):
-    headers = headers_hoja or headers_default
-    filas = [cdb.fila_desde_dict(headers, d) for d in dicts]
-    for i in range(0, len(filas), 500):
-        ws.append_rows(filas[i:i + 500], value_input_option='RAW')
-        time.sleep(0.4)
-
-
-def respaldar_historial_competidores(ss, filas):
-    """Copia COMPLETA de 'Historial Competidores' (que se autoborra por el tope de 10 fechas) a una pestaña
-    de respaldo + un JSON local, ANTES de escribir nada. Aborta si no queda idéntica en cantidad de filas."""
-    if not filas:
-        print('Respaldo: Historial Competidores está vacío, nada que respaldar.')
-        return
-    nombre = 'Respaldo_Hist_Competidores_' + time.strftime('%Y%m%d')
-    local = f'respaldo_historial_competidores_{time.strftime("%Y%m%d_%H%M")}.json'
-    json.dump(filas, open(local, 'w', encoding='utf-8'), ensure_ascii=False)
-    ws = cdb.asegurar_pestana(ss, nombre, filas[0], len(filas) + 10)
-    if len(ws.get_all_values()) <= 1:
-        for i in range(1, len(filas), 2000):
-            ws.append_rows(filas[i:i + 2000], value_input_option='RAW')
-            time.sleep(0.5)
-    n = len(ws.get_all_values())
-    if n != len(filas):
-        sys.exit(f'RESPALDO NO CIERRA ({n} filas en {nombre} vs {len(filas)} de origen): no se migra nada.')
-    print(f'Respaldo OK: {len(filas)} filas -> pestaña {nombre} + archivo local {local}')
-
-
-def ejecutar(ss, plan, fuentes):
-    respaldar_historial_competidores(ss, fuentes.get('hist_competidores') or [])
-    ent_ws = cdb.asegurar_pestana(ss, 'Entidades', ENT_HEADERS, 1000)
-    ref_ws = cdb.asegurar_pestana(ss, 'Referencias_Mercado', REF_HEADERS, 1000)
-    h_ws = cdb.asegurar_pestana(ss, cdb.HISTORIAL_SHEET, cdb.HISTORIAL_HEADERS, 20000)
-    o_ws = cdb.asegurar_pestana(ss, cdb.HUERFANOS_SHEET, cdb.HUERFANOS_HEADERS, 5000)
-    ref_h = ref_ws.row_values(1)
-    if cdb.REFERENCIAS_COL_EXTRA not in ref_h:  # agrega 'Cantidad' al final: no mueve ninguna columna existente
-        if len(ref_h) + 1 > ref_ws.col_count:
-            ref_ws.add_cols(1)
-        ref_ws.update_cell(1, len(ref_h) + 1, cdb.REFERENCIAS_COL_EXTRA)
-        ref_h.append(cdb.REFERENCIAS_COL_EXTRA)
-    _append(ent_ws, ent_ws.row_values(1), plan.entidades_nuevas, ENT_HEADERS)
-    _append(ref_ws, ref_h, plan.refs_nuevas, REF_HEADERS)
-    _append(h_ws, h_ws.row_values(1), plan.lecturas, cdb.HISTORIAL_HEADERS)
-    _append(o_ws, o_ws.row_values(1), plan.huerfanos, cdb.HUERFANOS_HEADERS)
 
 
 def main():

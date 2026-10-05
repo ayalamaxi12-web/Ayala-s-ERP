@@ -1997,6 +1997,68 @@ async def mix_cargar(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ══════════════════════════════════════════════════════
+# COMPETENCIA — migración de la Etapa 1 (a los históricos/links unificados)
+# Una sola vez. Dry-run (default) o real; la real exige el plan_hash del informe aprobado
+# y corre en un hilo (el worker es único, no se bloquea el resto). Ver competencia_migracion.py.
+# Protegido SIEMPRE con X-ERP-Key, incluso si ERP_API_KEY no está definida (aquí falla cerrado,
+# a diferencia del modo permisivo del middleware).
+# ══════════════════════════════════════════════════════
+
+import threading
+_migracion_lock = threading.Lock()
+
+
+def _exigir_clave_estricta(request: Request):
+    esperada = os.environ.get("ERP_API_KEY", "").strip()
+    if not esperada:
+        raise HTTPException(status_code=503, detail="ERP_API_KEY no está definida en el servidor: "
+                                                    "la migración no corre sin clave.")
+    from erp_auth import HEADER_CLAVE, clave_valida
+    if not clave_valida(esperada, request.headers.get(HEADER_CLAVE)):
+        raise HTTPException(status_code=401, detail="X-ERP-Key inválida o ausente")
+
+
+def _migracion_competencia_job(job_id, ejecutar_real, plan_hash):
+    import competencia_migracion
+    log = job_status[job_id]["log"]
+    try:
+        ss = get_gs().open_by_key(SPREADSHEET_ID)
+        res = competencia_migracion.correr(ss, plan_hash, ejecutar_real, log=log.append, archivo_local=False)
+        job_status[job_id] = {"status": "done", "log": log, "resultado": res, "finished": datetime.now().isoformat()}
+    except Exception as e:
+        job_status[job_id] = {"status": "error", "message": str(e), "log": log}
+    finally:
+        _migracion_lock.release()
+
+
+@app.post("/competencia/migracion/run")
+async def competencia_migracion_run(request: Request):
+    """Body: {"ejecutar": false|true, "plan_hash": "<hash del dry-run aprobado>"}. Sin `ejecutar` = dry-run."""
+    _exigir_clave_estricta(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    ejecutar_real = bool(body.get("ejecutar", False))
+    plan_hash = str(body.get("plan_hash", "")).strip()
+    if ejecutar_real and not plan_hash:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere plan_hash")
+    if not _migracion_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Ya hay una migración/dry-run en curso")
+    job_id = f"migcomp_{int(time.time())}"
+    job_status[job_id] = {"status": "running", "log": [], "started": datetime.now().isoformat(),
+                          "modo": "ejecutar" if ejecutar_real else "dry-run"}
+    threading.Thread(target=_migracion_competencia_job, args=(job_id, ejecutar_real, plan_hash), daemon=True).start()
+    return {"job_id": job_id, "status": "started", "modo": job_status[job_id]["modo"]}
+
+
+@app.get("/competencia/migracion/status/{job_id}")
+def competencia_migracion_status(job_id: str, request: Request):
+    _exigir_clave_estricta(request)
+    return job_status.get(job_id, {"status": "not_found"})
+
+
+# ══════════════════════════════════════════════════════
 # ML OFERTAS — dashboard de ofertas/promos activas (docs/business/
 # COMERCIAL/canales/mercadolibre/REQ_MODULO_OFERTAS_ML.md). Fases 1 y 2
 # (lectura + alertas) más Fase 3 (activar/sacar UNA oferta puntual,
