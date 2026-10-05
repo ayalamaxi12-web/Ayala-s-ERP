@@ -134,6 +134,7 @@ def imprimir_informe(rep):
           f"Lecturas a escribir: {rep['lecturas_a_escribir']} · Huérfanos a escribir: {rep['huerfanos_a_escribir']}")
     print(f"Links sin identificador ML: {rep['links_sin_identificador']}")
     print(f"Lecturas SIN precio por fuente (diagnóstico del lector 'refresh'/403): {rep['sin_precio_por_fuente']}")
+    print(f"De las lecturas a escribir, SIN precio (lector caído / no encontrado): {rep['lecturas_sin_precio_a_escribir']}")
     print(f"Mismo día con precios distintos: {rep['conflictos_precio_mismo_dia']} "
           f"(entre fuentes distintas: {rep['conflictos_precio_entre_fuentes']}) — se conservan ambas")
     print(f"Conflictos de SKU con referencias existentes (no se tocan): {len(rep['conflictos_sku'])}")

@@ -133,6 +133,15 @@ def _num_out(p):
     return int(p) if float(p).is_integer() else round(float(p), 2)
 
 
+_SKU_VACIO = {'-', '--', '—', '–', 'n/a', 'na', 's/d', 'sin sku', 'null', 'none'}
+
+
+def limpiar_sku(v):
+    """'-' y similares son 'sin SKU' en las planillas: no son un SKU real (no generan conflictos)."""
+    v = str(v or '').strip()
+    return '' if v.lower() in _SKU_VACIO else v
+
+
 def _celda(fila, i):
     return str(fila[i]).strip() if i is not None and i < len(fila) else ''
 
@@ -176,7 +185,13 @@ def _split_bloques_v(headers):
             campo = 'cuotas'
         if m and campo:
             f, _ = parse_fecha(m.group(1))
-            bloques.setdefault(f or m.group(1), {})[campo] = i
+            f = f or m.group(1)
+            # misma fecha repetida (ej. dos scrapes el mismo día): bloque aparte, no se pisa el anterior
+            k, n = f, 1
+            while campo in bloques.get(k, {}):
+                n += 1
+                k = f'{f}#{n}'
+            bloques.setdefault(k, {})[campo] = i
         elif not m and campo and campo not in base:
             base[campo] = i
         elif hl in ('titulo', 'título', 'title') and 'titulo' not in base:
@@ -235,6 +250,7 @@ def planificar(fuentes, hoy=None):
         link = _celda(r, rh.get('Link_Publicacion'))
         sku = _celda(r, rh.get('SKU'))
         ent = _celda(r, rh.get('Entidad_Nombre'))
+        sku = limpiar_sku(sku)
         ref_por_id[rid] = {'id': rid, 'sku': sku, 'entidad': ent, 'link': link, 'tipo': tipo}
         if tipo == 'Competencia':
             k = clave_ref(link, ent)
@@ -271,7 +287,7 @@ def planificar(fuentes, hoy=None):
         k = clave_ref(link, nombre_ent, item_id)
         if k is None:
             return None
-        sku, cantidad = str(sku or '').strip(), str(cantidad or '').strip()
+        sku, cantidad = limpiar_sku(sku), str(cantidad or '').strip()
         if k in ref_por_clave:
             r = ref_por_id.get(ref_por_clave[k])
             if r is not None:
@@ -334,11 +350,12 @@ def planificar(fuentes, hoy=None):
             cantidad = g.get('cantidad') or _celda(f, base.get('cantidad')) or '1'
             ref = asegurar_ref(link, vendedor, sku, cantidad, 'Migracion V-*') if link else None
             lecs = []  # (detalle, fecha, precio, tachado, desc, cuotas)
-            for fecha, b in bloques.items():
+            for fecha_k, b in bloques.items():
+                fecha = fecha_k.split('#')[0]
                 p = _celda(f, b.get('precio'))
                 d = _celda(f, b.get('desc'))
                 if p or 'no encontr' in d.lower():
-                    lecs.append((fecha, fecha, p, _celda(f, b.get('tachado')), d, _celda(f, b.get('cuotas'))))
+                    lecs.append((fecha_k, fecha, p, _celda(f, b.get('tachado')), d, _celda(f, b.get('cuotas'))))
             if _celda(f, base.get('precio')):
                 lecs.append(('base (sin fecha)', None, _celda(f, base['precio']), _celda(f, base.get('tachado')),
                              _celda(f, base.get('desc')), _celda(f, base.get('cuotas'))))
@@ -471,7 +488,12 @@ def planificar(fuentes, hoy=None):
     por_dia = {}
     for k, g in grupos.items():
         por_dia.setdefault((k[0], k[1]), []).append(g)
-    conflictos = [gs for gs in por_dia.values() if len({_num_out(g['precio']) for g in gs}) > 1]
+    conflictos = []
+    for gs in por_dia.values():
+        con_precio = [g for g in gs if g['precio'] is not None]
+        if len({_num_out(g['precio']) for g in con_precio}) > 1:
+            conflictos.append(con_precio)
+    rep['lecturas_sin_precio_a_escribir'] = sum(1 for g in grupos.values() if g['precio'] is None)
     rep['conflictos_precio_mismo_dia'] = len(conflictos)
     rep['conflictos_precio_entre_fuentes'] = sum(
         1 for gs in conflictos if len({fte for g in gs for fte in g['fuentes']}) > 1)

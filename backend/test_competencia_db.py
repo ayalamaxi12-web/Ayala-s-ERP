@@ -152,3 +152,15 @@ def test_registrar_lecturas_en_vivo_idempotente_por_dia():
     r2 = cdb.registrar_lecturas(ss, lec, 'test')
     assert r2 == {'escritas': 0, 'duplicadas': 1, 'sin_referencia': 1}
     assert len(ss.w[cdb.HISTORIAL_SHEET].rows) == 2  # header + 1
+
+
+def test_bloque_de_fecha_repetido_no_se_pisa_y_sku_guion_es_vacio():
+    hdr = ['Titulo', 'Precio ($)', 'Precio Tachado ($)', 'Descuento', 'Cuotas', 'Ventas', 'Link', 'SKU', 'Cantidad',
+           'Precio ($) 25/06/2026', 'Tachado ($) 25/06/2026', 'Desc 25/06/2026', 'Cuotas 25/06/2026',
+           'Precio ($) 25/06/2026', 'Tachado ($) 25/06/2026', 'Desc 25/06/2026', 'Cuotas 25/06/2026']
+    f = {'ents': [ENT_HDR], 'refs': [REF_HDR], 'v_tabs': {'V - R': [
+        hdr, ['t', '', '', '', '', '', L1, '-', '1', '100', '', '', '', '200', '', '', '']]}}
+    plan = cdb.planificar(f, hoy='04/10/2026')
+    assert sorted(l['Precio'] for l in plan.lecturas) == [100, 200]  # ambos scrapes del 25/06 se conservan
+    assert plan.refs_nuevas[0]['SKU'] == ''
+    assert plan.rep['conflictos_precio_mismo_dia'] == 1
