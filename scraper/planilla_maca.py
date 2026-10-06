@@ -159,6 +159,7 @@ def leer_skus(filas):
     c_stock = _buscar(hs, 'Stock', obligatorio=False)
     roles = _cols_roles(hs, avisos)
     por_sku, orden, repetidas, filas_con_link = {}, [], 0, 0
+    guiones = vacias = 0     # celdas de competidor con '-' (a propósito) o vacías: no son competidores cargados todavía
     for n, f in enumerate(filas[FILA_ENCABEZADO + 1:], start=FILA_ENCABEZADO + 2):
         sku = cdb.limpiar_sku(_v(_cel(f, c_sku)))
         if not sku:
@@ -174,7 +175,11 @@ def leer_skus(filas):
         tuvo = False
         for rol, ci in roles.items():
             u = _url(_cel(f, ci))
-            if not u or u == '-':
+            if not u:
+                vacias += 1
+                continue
+            if u == '-':
+                guiones += 1
                 continue
             if not es_link(u):
                 avisos.append(f'Fila {n} ({sku}) {rol}: "{u[:40]}" no es un link, se ignora.')
@@ -185,5 +190,6 @@ def leer_skus(filas):
         filas_con_link += tuvo
     out = [por_sku[s] for s in orden]
     resumen = {'skus': len(out), 'filas_repetidas': repetidas, 'skus_con_links': sum(1 for d in out if d['links']),
-               'links': sum(len(d['links']) for d in out)}
+               'links': sum(len(d['links']) for d in out), 'skus_sin_competidor_cargado': sum(1 for d in out if not d['links']),
+               'celdas_con_guion': guiones, 'celdas_vacias': vacias}
     return out, avisos, resumen

@@ -100,8 +100,7 @@ def main(argv=None):
         ruta = os.path.join(config.CARPETA_LOGS, f"corrida_{datetime.now().strftime('%Y%m%d_%H%M')}.json")
         with open(ruta, 'w', encoding='utf-8') as f:
             json.dump(res, f, ensure_ascii=False, indent=1, default=str)
-        log('Resumen: ' + json.dumps({k: res.get(k) for k in ('perfiles', 'publicaciones', 'lecturas', 'eventos',
-                                                               'descubrimiento_nuevas', 'pendientes_stock')}, ensure_ascii=False))
+        log(corrida.texto_resumen(res) if 'sync' in res else str(res))
         return codigo
     except SystemExit:
         raise

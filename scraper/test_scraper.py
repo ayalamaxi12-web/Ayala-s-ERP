@@ -78,7 +78,8 @@ def test_perfiles_normaliza_url_y_toma_comp2_sin_encabezado():
 def test_skus_encabezado_partido_repetidos_y_guiones():
     skus, av, res = pm.leer_skus(hoja_b())
     d = {x['sku']: x for x in skus}
-    assert res == {'skus': 3, 'filas_repetidas': 1, 'skus_con_links': 2, 'links': 4}   # CAM-1 repetido: unido, no duplicado
+    assert res == {'skus': 3, 'filas_repetidas': 1, 'skus_con_links': 2, 'links': 4, 'skus_sin_competidor_cargado': 1,
+                   'celdas_con_guion': 2, 'celdas_vacias': 4}      # CAM-1 repetido: unido; guiones y vacíos se cuentan aparte
     assert d['CAM-1']['stock'] == 21777                       # 'Stock' viene del rótulo de la fila 2, no del 35091
     assert [(l['rol_nombre']) for l in d['CAM-1']['links']] == ['Rey', 'Media']      # el '-' de COMP3 se ignora
     assert d['SIN-LINKS']['links'] == []
@@ -183,7 +184,7 @@ def test_corrida_completa_escribe_lecturas_eventos_descubrimiento_y_es_idempoten
     assert r1['perfiles'] == {'leidos': 3, 'ok': 1, 'sin_resultados': 2, 'error': 0, 'items': 2}
     assert r1['eventos'] == {'Vendedor_sin_resultados': 2}               # american-computers y geotek (tienda vacía)
     assert r1['descubrimiento_nuevas'] == 1 and len(ss.tab('Discovery_Sugerencias')) == 2
-    assert r1['publicaciones']['sin_lectura'] == 1 and r1['pendientes_stock'].startswith('Stock bajo DESACTIVADO')
+    assert r1['publicaciones']['catalogo_sin_wid'] == 1 and r1['pendientes_stock'].startswith('Stock bajo DESACTIVADO')   # sin wid: no se abre
     refs = {r[1]: r for r in ss.tab('Referencias_Mercado')[1:]}
     assert 'Rol_Competidor' in ss.tab('Referencias_Mercado')[0]
     # la entidad de las refs nuevas se completó al leer: GEOTEK ya existe (perfil nuevo) y TECNOVIBEARG por perfil
@@ -268,3 +269,17 @@ def test_modo_prueba_se_corta_si_ml_bloquea():
     lector = LectorFalso(tiendas={'https://listado.mercadolibre.com.ar/tienda/tecnovibe': {'estado': 'bloqueado', 'items': [], 'detalle': 'login'}})
     inf = prueba.correr_prueba(maca(), lector, n=20, log=lambda m: None)
     assert len(lector.llamadas) == 1 and inf['publicaciones'] == []
+
+
+def test_catalogo_sin_wid_sin_vendedor_no_se_abre_y_se_lista_para_maca():
+    ss = base()
+    tiendas = {f'https://listado.mercadolibre.com.ar/tienda/{x}': tienda() for x in ('tecnovibe', 'american-computers', 'geotek')}
+    lector = LectorFalso(tiendas=tiendas, pubs={L_WID: ok(2000, 'GEOTEK'), L_WID2: ok(3000, 'GEOTEK')})
+    r = corrida.correr(ss, maca(), lector, hoy=HOY, pausa=False, log=lambda m: None)
+    assert ('pub', L_SINWID) not in lector.llamadas                         # no se abrió: no es un error ni "Sin lectura"
+    assert r['publicaciones']['catalogo_sin_wid'] == 1 and r['publicaciones']['sin_lectura'] == 0
+    assert r['para_completar_en_la_planilla'] == [{'sku': 'CAM-2', 'rol': 'Barato', 'link': L_SINWID,
+                                                    'falta': 'el wid de la oferta (link de catálogo sin ?wid=)'}]
+    txt = corrida.texto_resumen(r)
+    assert 'SKU sin competidor cargado' in txt and 'Para completar en la planilla (1 links' in txt and L_SINWID[:60] in txt
+    assert 'Stock bajo DESACTIVADO' in txt

@@ -48,11 +48,41 @@ no se guarda fila (aunque se haya visto a la ganadora): el histórico solo tiene
 **Vía API (opcional):** si definís en Windows `setx ERP_BACKEND_URL https://TU-BACKEND` y `setx ERP_API_KEY TU-CLAVE` (y abrís una consola
 nueva), el scraper puede traer el precio de la oferta del `wid` y el de la ganadora sin abrir la página. Si ML responde 403 se apaga sola.
 
-## 4. Primera corrida
-```
-python scraper.py --sin-escribir     # corre completo pero NO toca ningún Sheet: mirá el resumen
-python scraper.py                    # corrida real
-```
+## 4. Corrida real (primera vez)
+Actualizá la carpeta con el ZIP más reciente de la rama y, desde `C:\ayala-erp\scraper`:
+
+1. **Ensayo sin escribir** (lee todo, no toca ningún Sheet; tarda unos minutos):
+   ```
+   python scraper.py --sin-escribir --sin-descubrimiento
+   ```
+   Mirá el resumen del final. Con la planilla de hoy tiene que decir, más o menos: 4 entidades nuevas (WTP WOW TOTAL PRINT, SUDINEROSEGURO,
+   MORSHOP, GEOTEK), ~103 referencias nuevas, 3 `Link_ML` a completar, ~90 publicaciones leídas, 0 con error, y la lista "Para completar en la
+   planilla" (links de catálogo sin `wid`, que NO se leen). Si dice `CORRIDA CORTADA` repetí `--configurar-login`.
+2. **Corrida real:**
+   ```
+   python scraper.py --sin-descubrimiento
+   ```
+   (`--sin-descubrimiento` la primera vez: así no se vuelcan de golpe a `Discovery_Sugerencias` todas las publicaciones de las tiendas que no
+   son referencias, que pueden ser miles. Las siguientes corridas, sin esa opción, las van registrando.)
+3. **Qué verificar en los Sheets** (Sheet del ERP):
+   - `Entidades`: +4 filas (las de arriba) y `Link_ML` completado en TECNOVIBEARG, AMERICANCOMPUTERS y ELEPHANT CARTDRIGE. Global no se toca.
+   - `Referencias_Mercado`: ~+103 filas con `Origen = Planilla Maca B-SKU` y `Rol_Competidor` (Rey/Media/Barato) completo.
+   - `Historial_Precios`: ahora tiene 15 columnas (se agregaron `Precio_Ganador` y `Vendedor_Ganador` al final; las 13 de antes no se movieron).
+     Filas nuevas con `Fuente` = `Scraper perfil` o `Scraper publicación`, **todas con `Precio`**. En los links de catálogo, `Precio_Ganador` junto al `Precio`.
+     Ninguna fila con `Entidad` GLOBAL ELECTRONICS.
+   - **Idempotencia:** corré lo mismo de nuevo ese día (`python scraper.py --sin-descubrimiento`): la cantidad de filas de `Historial_Precios`
+     **no** tiene que crecer (la lectura nueva reemplaza la del día).
+   - `Eventos_Competencia`: la primera vez puede haber `Bajo`/`Subio` en referencias que ya tenían historial (migradas); no tiene que haber
+     decenas de `Publicacion_caida` ni `Vendedor_sin_resultados` (si los hay, algo falló al leer: avisame antes de la tarea programada).
+   - **3 chequeos a ojo:** abrí 3 publicaciones en ML y compará el precio con la fila (una de perfil, una directa y una de catálogo con `wid`).
+   - Las pestañas viejas (`V - *`, `Monitor_Lecturas`, `Historial Competidores`) quedan intactas.
+   - En `scraper\logs\` quedan `corrida_*.log` y `corrida_*.json` con el resumen.
+4. Recién cuando esto cierre, programá la tarea (paso siguiente). Al otro día revisá el log de la primera corrida automática.
+
+### Filas sin competidor cargado
+Las celdas de competidor con `-` o vacías (hoy 1.387 SKU sin competidor) no son competidores todavía: se saltean sin ruido y el resumen solo las
+cuenta. Un link de catálogo (`/p/` o `/up/`) **sin `?wid=`** no se lee (no hay forma de saber cuál es la oferta del competidor): sale en
+"Para completar en la planilla" con el SKU y el rol, para que Maca agregue el `wid`.
 
 ## 5. Programar la tarea a las 17:30
 En `cmd` (como tu usuario):

@@ -113,7 +113,8 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
     R = {'fecha': hoy, 'escribir': escribir, 'vendedor': vendedor or 'todos', 'solo': solo or 'todo',
          'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0},
          'publicaciones': {'leidas': 0, 'ok': 0, 'caidas': 0, 'sin_lectura': 0, 'otro_vendedor': 0, 'error': 0,
-                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0},
+                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0, 'catalogo_sin_wid': 0},
+         'para_completar_en_la_planilla': [],
          'lecturas': 0, 'eventos': {}, 'descubrimiento_nuevas': 0, 'avisos': [], 'pendientes_stock': None}
 
     titulos = {w.title for w in ss.worksheets()}
@@ -293,6 +294,15 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                     R['publicaciones']['saltadas_por_perfil'] += 1
                     continue
                 esperado = next((r['entidad'] for r in pendientes if r['entidad']), None)
+                ident_u = sy.ident_publicacion(url)
+                if ident_u and ident_u[0] == 'Pn' and not esperado:
+                    # Catálogo SIN wid y sin vendedor conocido: no hay forma de saber cuál es la oferta del competidor.
+                    # No se abre (no es un error ni una lectura fallida): se lista para que Maca complete el wid.
+                    R['publicaciones']['catalogo_sin_wid'] += 1
+                    for r in pendientes:
+                        R['para_completar_en_la_planilla'].append({'sku': r['sku'], 'rol': r['rol'], 'link': url,
+                                                                   'falta': 'el wid de la oferta (link de catálogo sin ?wid=)'})
+                    continue
                 R['publicaciones']['leidas'] += 1
                 res = lector.leer_publicacion(url, esperado)
                 est = res['estado']
@@ -389,3 +399,34 @@ def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, dis
         ws = cdb.asegurar_pestana(ss, DISCOVERY_SHEET, DISCOVERY_HEADERS, 5000)
         sio.agregar(ws, DISCOVERY_HEADERS, disc_nuevas)
     log('Escritura al Sheet terminada.')
+
+
+def texto_resumen(R):
+    """Resumen legible de una corrida (lo que se imprime al final y queda en el log)."""
+    pl, pu, sy_ = R['perfiles'], R['publicaciones'], R['sync']
+    plan = sy_.get('planilla', {})
+    L = ['', f"=== RESUMEN {R['fecha']} · vendedor={R['vendedor']} · solo={R['solo']} · {'ESCRIBIÓ' if R['escribir'] else 'SIN escribir'} ===",
+         f"Planilla de Maca: {plan.get('skus', 0)} SKU · {plan.get('skus_con_links', 0)} con competidores cargados "
+         f"({plan.get('links', 0)} links) · {plan.get('skus_sin_competidor_cargado', 0)} SKU sin competidor cargado todavía "
+         f"(celdas con guion: {plan.get('celdas_con_guion', 0)}, vacías: {plan.get('celdas_vacias', 0)}) · {plan.get('perfiles', 0)} perfiles",
+         f"Base: entidades nuevas {sy_.get('entidades_nuevas', [])} · referencias nuevas {sy_.get('refs_nuevas', 0)} · "
+         f"roles completados {sy_.get('roles_a_completar', 0)} · Link_ML completados {sy_.get('link_ml_a_completar', 0)}",
+         f"Perfiles de tienda: {pl['leidos']} leídos · {pl['ok']} ok ({pl['items']} publicaciones) · {pl['sin_resultados']} sin resultados · {pl['error']} con error"
+         + (f" · {pl['items_sin_identidad']} tarjetas sin identidad ML" if pl.get('items_sin_identidad') else ''),
+         f"Publicaciones puntuales: {pu['leidas']} leídas · {pu['ok']} ok {pu['via'] or ''} · {pu['caidas']} caídas · "
+         f"{pu['sin_lectura']} sin lectura · {pu['otro_vendedor']} de otro vendedor · {pu['error']} con error · "
+         f"{pu['saltadas_por_perfil']} ya leídas por el perfil",
+         f"Lecturas a Historial_Precios: {R['lecturas']}" + (f" {R['lecturas_escritas']}" if R.get('lecturas_escritas') else ''),
+         f"Eventos: {R['eventos'] or 'ninguno'}",
+         f"Descubrimiento (publicaciones de tienda que no son referencias): {R['descubrimiento_nuevas']} nuevas"]
+    if pu['catalogo_sin_wid']:
+        L.append(f"Para completar en la planilla ({pu['catalogo_sin_wid']} links de catálogo sin wid, NO se leyeron):")
+        L += [f"   - {x['sku']} ({x['rol']}): {x['link'][:90]}" for x in R['para_completar_en_la_planilla'][:15]]
+    if sy_.get('diferencias_sku'):
+        L.append(f"Mismo link con otro SKU en la base (informativo): {len(sy_['diferencias_sku'])}")
+    if R.get('pendientes_stock'):
+        L.append(R['pendientes_stock'])
+    if R['avisos']:
+        L.append(f"Avisos ({len(R['avisos'])}):")
+        L += [f'   - {a}' for a in R['avisos'][:15]]
+    return '\n'.join(L)
