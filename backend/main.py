@@ -2099,6 +2099,40 @@ async def competencia_desactivar_entidad(request: Request):
     return await _cambio_referencias(request, lambda: _desactivar_entidad_sync(entidad, ejecutar, esperado))
 
 
+def _borrar_lecturas_sync(entidad, ejecutar, esperado):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.borrar_lecturas_entidad(ss, entidad, ejecutar, esperado, operador="endpoint")
+
+
+def _borrar_respaldo_sync(nombre, ejecutar, confirmar):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.borrar_pestana_respaldo(ss, nombre, ejecutar, confirmar, operador="endpoint")
+
+
+@app.post("/competencia/historial/borrar-lecturas-entidad")
+async def competencia_borrar_lecturas_entidad(request: Request):
+    """Body: {"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": 7073}. IRREVERSIBLE: dry-run primero;
+    no correrlo mientras el scraper está escribiendo."""
+    body = await request.json()
+    entidad, ejecutar, esperado = str(body.get("entidad", "")).strip(), bool(body.get("ejecutar", False)), body.get("esperado")
+    if ejecutar and esperado is None:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere `esperado` (la cantidad que mostró el dry-run)")
+    return await _cambio_referencias(request, lambda: _borrar_lecturas_sync(entidad, ejecutar, esperado))
+
+
+@app.post("/competencia/pestanas/borrar-respaldo")
+async def competencia_borrar_respaldo(request: Request):
+    """Body: {"nombre": "Respaldo_Hist_Competidores_20261005", "ejecutar": false, "confirmar": "<mismo nombre>"}. Solo borra
+    pestañas con ese patrón de nombre."""
+    body = await request.json()
+    nombre, ejecutar, confirmar = str(body.get("nombre", "")).strip(), bool(body.get("ejecutar", False)), body.get("confirmar")
+    if ejecutar and not confirmar:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere `confirmar` con el nombre exacto de la pestaña")
+    return await _cambio_referencias(request, lambda: _borrar_respaldo_sync(nombre, ejecutar, confirmar))
+
+
 @app.post("/competencia/referencias/revertir-lote")
 async def competencia_revertir_lote(request: Request):
     """Body: {"lote": "LOTE-...", "ejecutar": false}. Deshace un cambio masivo registrado en Cambios_Referencias."""

@@ -56,3 +56,11 @@ Una fila por (Fecha, Entidad_ID): `Leidas, Declaradas_ML, Paginas, Completa, Mot
 Estado_Debilidad, Fuente`. `Nuevas`/`Desaparecidas` se completan en la Fase 2 (`Tiendas_Estado`/`Tiendas_Cambios`) y `Estado_Debilidad` en la Fase 3.
 Solo las lecturas `Completa = Si` forman la línea base. Esquema pensado para Postgres (`comp_tienda_conteo`, clave `(fecha, entidad_id)`).
 Medidor: `scraper/celdas.py` (límite de Google Sheets: 10M celdas por archivo, cuentan también las vacías).
+
+### Limpieza (Etapa 2) — endpoints protegidos, dry-run por defecto
+- `POST /competencia/historial/borrar-lecturas-entidad` `{"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": N}`: borra de `Historial_Precios`
+  las lecturas de esa entidad (somos nosotros, no es competencia). **Irreversible**; la real exige `esperado` = la cantidad del dry-run, registra el lote en
+  `Cambios_Referencias`, borra por tandas de filas consecutivas y verifica. No correrlo mientras el scraper está escribiendo.
+- `POST /competencia/pestanas/borrar-respaldo` `{"nombre": "Respaldo_Hist_Competidores_AAAAMMDD", "ejecutar": false, "confirmar": "<mismo nombre>"}`: borra
+  **solo** pestañas con ese patrón de nombre (el respaldo de la migración de la Etapa 1).
+- Pendiente de OK puntual, después de la Etapa 3: `Historial Competidores` y las `V-*` (las leen dos pantallas y guardan títulos/ventas que la base nueva no tiene).

@@ -1,6 +1,7 @@
 """Cambios masivos y REVERSIBLES sobre Referencias_Mercado (Etapa 2): desactivar todas las referencias de una entidad
 (p. ej. 'GLOBAL ELECTRONICS GROUP': somos nosotros, no es competencia). Dry-run primero; la ejecución exige la cantidad
 esperada (la que mostró el dry-run), deja registro de cada valor anterior en `Cambios_Referencias` y verifica al final."""
+import re
 import time
 import uuid
 from datetime import datetime
@@ -133,3 +134,86 @@ def revertir_lote(ss, lote, ejecutar=False, log=print):
         time.sleep(0.5)
     log(f'{lote}: {len(a_revertir)} referencias revertidas')
     return dict(info, ejecutado=True)
+
+
+# ── Limpieza: lecturas de una entidad en Historial_Precios y pestañas de respaldo ─────────────────────────────────
+PATRON_RESPALDO = re.compile(r'^Respaldo_Hist_Competidores_\d{8}$')
+
+
+def _registrar_cambio(ss, lote, referencia, campo, anterior, nuevo, motivo, operador):
+    cws = cdb.asegurar_pestana(ss, CAMBIOS_SHEET, CAMBIOS_HEADERS, 5000)
+    cws.append_row([lote, datetime.now().strftime('%d/%m/%Y %H:%M'), referencia, campo, anterior, nuevo, motivo, operador])
+
+
+def _tandas(filas):
+    """[3,4,5,9,10] -> [(3,5),(9,10)] (números de fila 1-based, consecutivos)."""
+    out = []
+    for n in sorted(filas):
+        if out and n == out[-1][1] + 1:
+            out[-1] = (out[-1][0], n)
+        else:
+            out.append((n, n))
+    return out
+
+
+def borrar_lecturas_entidad(ss, entidad, ejecutar=False, esperado=None, operador='', log=print):
+    """Borra de Historial_Precios TODAS las lecturas cuya `Entidad` es esa (p. ej. GLOBAL ELECTRONICS GROUP: somos nosotros).
+    IRREVERSIBLE (se puede reconstruir desde las V-* con la migración, mientras existan). Dry-run primero; la real exige `esperado`
+    = cantidad del dry-run, borra por tandas de filas consecutivas (de abajo hacia arriba) y verifica al final.
+    No correr mientras el scraper está escribiendo."""
+    if not str(entidad or '').strip():
+        raise CambioError('Falta la entidad')
+    try:
+        ws = ss.worksheet(cdb.HISTORIAL_SHEET)
+    except Exception:
+        raise CambioError(f'No existe la pestaña {cdb.HISTORIAL_SHEET}')
+    filas = ws.get_all_values()
+    if not filas or 'Entidad' not in filas[0]:
+        raise CambioError('Historial_Precios no tiene la columna Entidad')
+    ie = filas[0].index('Entidad')
+    objetivo = cdb.norm_texto(entidad)
+    nums = [n for n, f in enumerate(filas[1:], start=2) if cdb.norm_texto(f[ie] if ie < len(f) else '') == objetivo]
+    info = {'entidad': entidad, 'filas_con_datos': len(filas) - 1, 'a_borrar': len(nums), 'tandas': len(_tandas(nums))}
+    if not ejecutar:
+        return dict(info, ejecutado=False)
+    if esperado is None or int(esperado) != len(nums):
+        return dict(info, ejecutado=False,
+                    motivo=f'`esperado` ({esperado}) no coincide con las filas a borrar ({len(nums)}). No se tocó nada.')
+    if not nums:
+        return dict(info, ejecutado=False, motivo='No hay filas de esa entidad.')
+    lote = 'LOTE-' + datetime.now().strftime('%Y%m%d%H%M%S') + '-' + uuid.uuid4().hex[:4]
+    _registrar_cambio(ss, lote, f'({cdb.HISTORIAL_SHEET})', 'filas_borradas', len(nums), 0,
+                      f'Borrar lecturas de {entidad} (no es competencia)', operador)    # primero el registro
+    reqs = [{'deleteDimension': {'range': {'sheetId': ws.id, 'dimension': 'ROWS', 'startIndex': a - 1, 'endIndex': b}}}
+            for a, b in reversed(_tandas(nums))]                                          # de abajo hacia arriba: los índices no se corren
+    for i in range(0, len(reqs), 100):
+        ss.batch_update({'requests': reqs[i:i + 100]})
+        time.sleep(0.5)
+    despues = ws.get_all_values()
+    quedan = sum(1 for f in despues[1:] if cdb.norm_texto(f[ie] if ie < len(f) else '') == objetivo)
+    ok = quedan == 0 and len(despues) == len(filas) - len(nums)
+    log(f'{lote}: {len(nums)} lecturas de {entidad} borradas de Historial_Precios · verificación ' + ('OK' if ok else 'NO CIERRA'))
+    return dict(info, ejecutado=True, lote=lote, verificacion_ok=ok, quedan=quedan, filas_con_datos_despues=len(despues) - 1)
+
+
+def borrar_pestana_respaldo(ss, nombre, ejecutar=False, confirmar=None, operador='', log=print):
+    """Borra UNA pestaña de respaldo (solo nombres `Respaldo_Hist_Competidores_AAAAMMDD`: no sirve para ninguna otra).
+    Dry-run: cuántas celdas libera. Real: exige `confirmar` == el nombre exacto."""
+    if not PATRON_RESPALDO.fullmatch(str(nombre or '')):
+        raise CambioError('Solo se pueden borrar pestañas con nombre Respaldo_Hist_Competidores_AAAAMMDD')
+    try:
+        ws = ss.worksheet(nombre)
+    except Exception:
+        raise CambioError(f'No existe la pestaña {nombre}')
+    info = {'pestana': nombre, 'filas_con_datos': len(ws.get_all_values()), 'celdas_liberadas': ws.row_count * ws.col_count}
+    if not ejecutar:
+        return dict(info, ejecutado=False)
+    if confirmar != nombre:
+        return dict(info, ejecutado=False, motivo='`confirmar` debe ser el nombre exacto de la pestaña. No se tocó nada.')
+    lote = 'LOTE-' + datetime.now().strftime('%Y%m%d%H%M%S') + '-' + uuid.uuid4().hex[:4]
+    _registrar_cambio(ss, lote, '(pestaña)', 'pestaña', f"{nombre} ({info['filas_con_datos']} filas)", 'borrada',
+                      'Respaldo de la migración de la Etapa 1: ya cumplió (copia en competencia_export.json)', operador)
+    ss.del_worksheet(ws)
+    ok = nombre not in {w.title for w in ss.worksheets()}
+    log(f'{lote}: pestaña {nombre} borrada ({info["celdas_liberadas"]} celdas liberadas) · verificación ' + ('OK' if ok else 'NO CIERRA'))
+    return dict(info, ejecutado=True, lote=lote, verificacion_ok=ok)
