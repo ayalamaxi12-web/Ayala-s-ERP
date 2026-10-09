@@ -56,13 +56,17 @@ class SS:
 
     def tab(self, n): return self.w[n].rows
 
+    def fetch_sheet_metadata(self, params=None):
+        return {'sheets': [{'properties': {'title': n, 'gridProperties': {'rowCount': max(len(w.rows), 1), 'columnCount': w.col_count}}}
+                           for n, w in self.w.items()]}
+
 
 class LectorFalso:
     """tiendas: {url: {'estado':..., 'items':[...]}} · pubs: {url: dict resultado}. Cuenta las llamadas."""
     def __init__(self, tiendas=None, pubs=None):
         self.tiendas, self.pubs, self.llamadas = tiendas or {}, pubs or {}, []
 
-    def leer_tienda(self, url, max_paginas=None):
+    def leer_tienda(self, url, max_paginas=None, diagnostico=False):
         self.llamadas.append(('tienda', url))
         return self.tiendas.get(url, {'estado': 'error', 'items': [], 'detalle': 'no mockeada'})
 

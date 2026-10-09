@@ -50,3 +50,9 @@ la real exige `esperado` = cantidad del dry-run y registra cada valor anterior e
 competidor que sigue Maca (`Precio`) y el de la ganadora son datos separados; los eventos de cambio de precio miran solo `Precio`.
 Un link de catálogo con `wid` se resuelve buscando la tarjeta de esa oferta en la página (o en "Más opciones de compra"), por API si está
 configurada, o en el ítem directo (que solo existe para ofertas que no son de catálogo).
+
+### Etapa 2 — Fase 1 del diseño B: `Tiendas_Conteo`
+Una fila por (Fecha, Entidad_ID): `Leidas, Declaradas_ML, Paginas, Completa, Motivo, Nuevas, Desaparecidas, Mediana_7d, Var_vs_Mediana_Pct,
+Estado_Debilidad, Fuente`. `Nuevas`/`Desaparecidas` se completan en la Fase 2 (`Tiendas_Estado`/`Tiendas_Cambios`) y `Estado_Debilidad` en la Fase 3.
+Solo las lecturas `Completa = Si` forman la línea base. Esquema pensado para Postgres (`comp_tienda_conteo`, clave `(fecha, entidad_id)`).
+Medidor: `scraper/celdas.py` (límite de Google Sheets: 10M celdas por archivo, cuentan también las vacías).

@@ -51,9 +51,10 @@ def correr_prueba(filas_maca, lector, n=20, log=print):
     bloqueado = False
     for p in tiendas:
         log(f"Tienda {p['slug']}: {p['url_listado']}")
-        t = lector.leer_tienda(p['url_listado'], max_paginas=1)
+        t = lector.leer_tienda(p['url_listado'], max_paginas=1, diagnostico=True)
         informe['tiendas'].append({'slug': p['slug'], 'url': p['url_listado'], 'estado': t['estado'],
                                    'tarjetas': len(t['items']), 'detalle': t.get('detalle', ''),
+                                   'declaradas_ml': t.get('declaradas'), 'evidencia_declaradas': t.get('evidencia', {}),
                                    'ejemplos': [{k: x[k] for k in ('title', 'price', 'link')} for x in t['items'][:3]]})
         if t['estado'] == 'bloqueado':
             bloqueado = True
@@ -82,7 +83,8 @@ def guardar_informe(informe):
 def resumen_texto(informe):
     L = ['', '=== RESULTADO DEL MODO PRUEBA (no se escribió nada) ===']
     for t in informe['tiendas']:
-        L.append(f"TIENDA {t['slug']:<22} {t['estado']:<14} tarjetas={t['tarjetas']}")
+        L.append(f"TIENDA {t['slug']:<22} {t['estado']:<14} tarjetas(1ª página)={t['tarjetas']} · ML declara={t.get('declaradas_ml')}"
+                 + ('' if t.get('declaradas_ml') else '  ← NO pude leer el "N resultados" (ver evidencia_declaradas en el JSON)'))
     from collections import Counter
     c = Counter((p['tipo'], p['estado']) for p in informe['publicaciones'])
     for (tipo, est), k in sorted(c.items()):

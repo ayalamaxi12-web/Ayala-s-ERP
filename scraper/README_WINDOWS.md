@@ -84,6 +84,25 @@ Las celdas de competidor con `-` o vacías (hoy 1.387 SKU sin competidor) no son
 cuenta. Un link de catálogo (`/p/` o `/up/`) **sin `?wid=`** no se lee (no hay forma de saber cuál es la oferta del competidor): sale en
 "Para completar en la planilla" con el SKU y el rol, para que Maca agregue el `wid`.
 
+## Conteo diario por tienda y medidor de celdas (Fase 1)
+Cada corrida guarda en **`Tiendas_Conteo`** una fila por tienda y día: cuántas publicaciones **leyó**, cuántas **declara ML** ("N resultados"),
+cuántas páginas recorrió y si la lectura fue **completa** (sin bloqueo, llegó al final y leyó ≥90% de lo declarado). También guarda la mediana
+de las últimas 7 lecturas completas y cuánto se aleja hoy de ella. Es la base de la detección de debilidad de un competidor (Fase 3), que necesita
+varios días de línea base: **por eso conviene correr el scraper todos los días desde ya**. Una lectura incompleta o bloqueada queda registrada como
+`Completa = No` y **no cuenta** para la línea base. Correr dos veces el mismo día reemplaza la fila.
+
+- **Sembrar la línea base con el historial de las `V-*`** (una sola vez; Tecnovibe, American Computers y Elephant; no toca lo que ya exista):
+  ```
+  python scraper.py --sembrar-linea-base --sin-escribir     # ver qué sembraría
+  python scraper.py --sembrar-linea-base
+  ```
+  Son fechas sueltas (no diarias) y no se puede verificar si cada scrape viejo fue completo: quedan con `Fuente = V-* (historico)`.
+- **Medidor de celdas:** cada corrida imprime `Celdas usadas: 3.7M / 10M (37%)` con las 3 pestañas más grandes, y avisa al 60% y al 80% del límite de
+  Google Sheets. Solo, sin correr el scraper: `python scraper.py --medir-celdas`.
+- **El "N resultados" es lo único que no pude verificar contra ML.** El modo prueba (`--probar 20`) ahora muestra, por tienda, `ML declara=...`; si dice
+  `NO pude leer el "N resultados"`, pasame el JSON (`evidencia_declaradas`) y ajusto el selector. Mientras no se lea, la completitud se juzga solo por
+  "llegó a la última página".
+
 ## 5. Programar la tarea a las 17:30
 En `cmd` (como tu usuario):
 ```

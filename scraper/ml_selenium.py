@@ -121,6 +121,20 @@ return {
 """
 
 
+# Cuántas publicaciones declara ML en el listado de la tienda ("1.234 resultados"). El selector es una SUPOSICIÓN (no pude abrir
+# ML): se prueban los habituales y, si no, se busca el texto "N resultados" en la página. El modo prueba muestra los candidatos.
+JS_DECLARADAS = r"""
+const sels = ['.ui-search-search-result__quantity-results', '.ui-search-search-result__quantity-results span',
+              '[class*="quantity-results"]', '[class*="search-result__quantity"]'];
+let texto = '';
+for (const s of sels) { const e = document.querySelector(s); if (e && (e.innerText || '').trim()) { texto = e.innerText.trim(); break; } }
+if (!texto) { const m = (document.body.innerText || '').match(/[^\n]{0,40}\d[\d\.\,]*\s+resultados?[^\n]{0,20}/i); texto = m ? m[0].trim() : ''; }
+const cand = Array.from(document.querySelectorAll('span, p, div, h1, h2')).filter(e => e.children.length === 0 && /\d\s+resultados?/i.test(e.innerText || ''))
+  .slice(0, 5).map(e => ({clase: String(e.className || '').slice(0, 80), texto: (e.innerText || '').trim().slice(0, 80)}));
+return {texto: texto, candidatos: cand};
+"""
+
+
 class LectorML:
     def __init__(self, perfil_dir=None, headless=False, log=print, api=None):
         self.perfil_dir, self.headless, self.log = perfil_dir or config.PERFIL_CHROME, headless, log
@@ -308,24 +322,39 @@ class LectorML:
         return res
 
     # ── tienda completa ──────────────────────────────────────────────────────
-    def leer_tienda(self, url, max_paginas=40):
-        """-> {'estado': 'ok'|'sin_resultados'|'bloqueado'|'error', 'items': [...], 'detalle': str}.
+    def leer_tienda(self, url, max_paginas=40, diagnostico=False):
+        """-> {'estado': 'ok'|'sin_resultados'|'bloqueado'|'error', 'items': [...], 'detalle': str,
+               'declaradas': int|None, 'paginas': int, 'fin': str, 'completa': bool, 'motivo': str}.
         El link de cada tarjeta se guarda COMPLETO (con ?wid=...): el scraper viejo lo cortaba en '?' y perdía la
-        identidad de las ofertas de catálogo. Se deduplica por identidad de publicación, no por título."""
+        identidad de las ofertas de catálogo. Se deduplica por identidad de publicación, no por título.
+        `completa` (ver paginas_ml.evaluar_completitud) dice si se puede confiar en el conteo: sin bloqueo, llegó al final
+        y leyó al menos COMPLETITUD_MIN_PCT% de lo que ML declara."""
         from selenium.webdriver.common.by import By
         d = self.driver()
         items, vistos_pag, vistos_item = [], set(), set()
+        declaradas, paginas, fin, evid = None, 0, 'excepcion', {}
         try:
             self._ir(url, '.poly-card, .ui-search-result')
             b = pml.detectar_bloqueo(d.current_url, d.execute_script('return document.body.innerText.slice(0,3000)'))
             if b:
-                return {'estado': 'bloqueado', 'items': [], 'detalle': f'ML pidió {b} al abrir la tienda'}
+                return {'estado': 'bloqueado', 'items': [], 'detalle': f'ML pidió {b} al abrir la tienda', 'declaradas': None,
+                        'paginas': 0, 'fin': 'bloqueado', 'completa': False, 'motivo': f'ML pidió {b}'}
+            try:
+                dec = d.execute_script(JS_DECLARADAS) or {}
+                declaradas = pml.parse_declaradas(dec.get('texto'))
+                if diagnostico:
+                    evid = {'texto_declaradas': dec.get('texto'), 'candidatos': dec.get('candidatos')}
+            except Exception as e:  # noqa: BLE001
+                evid = {'error_declaradas': str(e)}
+            fin = 'tope_paginas'
             for pagina in range(1, max_paginas + 1):
                 if d.current_url in vistos_pag:
+                    fin = 'repetida'
                     break
                 vistos_pag.add(d.current_url)
                 self._scroll()
                 tarjetas = d.execute_script(JS_TARJETAS) or []
+                paginas = pagina
                 nuevas = 0
                 for t in tarjetas:
                     if not (t['title'] and t['price']):
@@ -337,12 +366,25 @@ class LectorML:
                     items.append(t)
                     nuevas += 1
                 self.log(f'    página {pagina}: {len(tarjetas)} tarjetas, {nuevas} nuevas (total {len(items)})')
-                if not tarjetas or not self._siguiente(By):
+                if not tarjetas:
+                    fin = 'sin_tarjetas'
+                    break
+                if not self._siguiente(By):
+                    fin = 'sin_siguiente'
                     break
                 time.sleep(1)
         except Exception as e:  # noqa: BLE001
-            return {'estado': 'error', 'items': items, 'detalle': f'Selenium: {e}'}
-        return {'estado': 'ok' if items else 'sin_resultados', 'items': items, 'detalle': ''}
+            ok_, motivo = pml.evaluar_completitud(len(items), declaradas, 'excepcion')
+            return {'estado': 'error', 'items': items, 'detalle': f'Selenium: {e}', 'declaradas': declaradas, 'paginas': paginas,
+                    'fin': 'excepcion', 'completa': False, 'motivo': motivo or f'Selenium: {e}'}
+        completa, motivo = pml.evaluar_completitud(len(items), declaradas, fin)
+        if declaradas:
+            self.log(f'    ML declara {declaradas} · leídas {len(items)} · {"completa" if completa else "INCOMPLETA: " + motivo}')
+        out = {'estado': 'ok' if items else 'sin_resultados', 'items': items, 'detalle': '', 'declaradas': declaradas,
+               'paginas': paginas, 'fin': fin, 'completa': completa, 'motivo': motivo}
+        if diagnostico:
+            out['evidencia'] = evid
+        return out
 
     def _scroll(self):
         d = self.driver()

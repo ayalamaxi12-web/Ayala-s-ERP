@@ -13,6 +13,8 @@ import planilla_maca as pm
 import sheets_io as sio
 import sincronizar as sy
 import paginas_ml as pml
+import celdas as cel
+import tiendas_conteo as tc
 
 # Historial_Precios + las 2 columnas del precio de la oferta GANADORA del catálogo (se agregan al final de la hoja).
 HISTORIAL_HEADERS_V2 = cdb.HISTORIAL_HEADERS + ['Precio_Ganador', 'Vendedor_Ganador']
@@ -114,13 +116,14 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
          'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0},
          'publicaciones': {'leidas': 0, 'ok': 0, 'caidas': 0, 'sin_lectura': 0, 'otro_vendedor': 0, 'error': 0,
                            'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0, 'catalogo_sin_wid': 0},
-         'para_completar_en_la_planilla': [],
+         'para_completar_en_la_planilla': [], 'tiendas': [], 'celdas': None,
          'lecturas': 0, 'eventos': {}, 'descubrimiento_nuevas': 0, 'avisos': [], 'pendientes_stock': None}
 
     titulos = {w.title for w in ss.worksheets()}
     ents_f, refs_f = sio.leer(ss, 'Entidades', titulos), sio.leer(ss, 'Referencias_Mercado', titulos)
     hist_f, ev_f = sio.leer(ss, cdb.HISTORIAL_SHEET, titulos), sio.leer(ss, ev.EVENTOS_SHEET, titulos)
     disc_f = sio.leer(ss, DISCOVERY_SHEET, titulos)
+    conteo_f = sio.leer(ss, tc.CONTEO_SHEET, titulos)
 
     # 1) Planilla de Maca -> perfiles y SKU
     perfiles, av1 = pm.leer_perfiles(filas_maca['A'])
@@ -185,7 +188,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
 
     previos = _ultimos_precios(hist_f, hoy)
     ultimo_caida = ev.ultimo_tipo_por_referencia(ev_f)
-    lecturas, eventos, disc_nuevas = {}, [], []
+    lecturas, eventos, disc_nuevas, conteos = {}, [], [], []
     leidas_por_perfil = set()
     disc_existentes = set()
     if disc_f:
@@ -234,6 +237,19 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                 R['perfiles']['leidos'] += 1
                 log(f"Perfil {p['entidad_nombre']}: {p['url_listado']}")
                 t = lector.leer_tienda(p['url_listado'])
+                # Conteo diario de la tienda (Fase 1): también el día que no se pudo leer (queda como Completa=No)
+                n_leidas = len(t.get('items') or [])
+                completa, motivo_c = t.get('completa'), t.get('motivo', '')
+                if completa is None:
+                    completa, motivo_c = pml.evaluar_completitud(n_leidas, t.get('declaradas'), t.get('fin', 'sin_siguiente'),
+                                                                 t['estado'] == 'bloqueado')
+                previas = tc.validas_previas(conteo_f, p['entidad_id'], hoy)
+                fila_c = tc.fila_conteo(hoy, hora, p['entidad_id'], p['entidad_nombre'], n_leidas, t.get('declaradas'),
+                                        t.get('paginas'), completa, motivo_c, previas)
+                conteos.append(fila_c)
+                R['tiendas'].append({'entidad': p['entidad_nombre'], 'leidas': n_leidas, 'declaradas': t.get('declaradas'),
+                                     'completa': completa, 'motivo': motivo_c, 'mediana': fila_c['Mediana_7d'],
+                                     'var': fila_c['Var_vs_Mediana_Pct']})
                 if t['estado'] == 'bloqueado':
                     bloqueo = t.get('detalle', 'ML pidió login/verificación')
                     break
@@ -365,14 +381,15 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
         R['lecturas'] = len(lecturas)
         R['descubrimiento_nuevas'] = len(disc_nuevas)
         if escribir:
-            _escribir(ss, titulos, plan, ents_nuevas_por_lectura, cambios_ref, lecturas, eventos, disc_nuevas, R, log)
+            _escribir(ss, titulos, plan, ents_nuevas_por_lectura, cambios_ref, lecturas, eventos, disc_nuevas, conteos, R, log)
+        R['celdas'] = cel.medir(ss)
     if bloqueo:
         R['bloqueo'] = bloqueo
         raise CorridaBloqueada(bloqueo)
     return R
 
 
-def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, disc_nuevas, R, log):
+def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, disc_nuevas, conteos, R, log):
     ent_ws = cdb.asegurar_pestana(ss, 'Entidades', ENT_HEADERS, 1000)
     ref_ws = cdb.asegurar_pestana(ss, 'Referencias_Mercado', REF_HEADERS, 1000)
     ent_h = sio.asegurar_columnas(ent_ws, ENT_HEADERS)
@@ -398,6 +415,9 @@ def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, dis
     if disc_nuevas:
         ws = cdb.asegurar_pestana(ss, DISCOVERY_SHEET, DISCOVERY_HEADERS, 5000)
         sio.agregar(ws, DISCOVERY_HEADERS, disc_nuevas)
+    if conteos:
+        ins, act, _ = tc.registrar(ss, conteos)
+        R['conteos_escritos'] = {'nuevos': ins, 'reemplazados': act}
     log('Escritura al Sheet terminada.')
 
 
@@ -419,6 +439,14 @@ def texto_resumen(R):
          f"Lecturas a Historial_Precios: {R['lecturas']}" + (f" {R['lecturas_escritas']}" if R.get('lecturas_escritas') else ''),
          f"Eventos: {R['eventos'] or 'ninguno'}",
          f"Descubrimiento (publicaciones de tienda que no son referencias): {R['descubrimiento_nuevas']} nuevas"]
+    if R.get('tiendas'):
+        L.append('Conteo por tienda (Tiendas_Conteo):')
+        for t in R['tiendas']:
+            dec = f" / {t['declaradas']} declaradas" if t['declaradas'] else ''
+            med = f" · mediana {t['mediana']} ({t['var']:+}%)" if t['mediana'] != '' and t['var'] != '' else (f" · mediana {t['mediana']}" if t['mediana'] != '' else ' · línea base en construcción')
+            L.append(f"   - {t['entidad']}: {t['leidas']} leídas{dec} · " + ('completa' if t['completa'] else f"INCOMPLETA ({t['motivo']})") + med)
+    if R.get('celdas'):
+        L.append(cel.texto(R['celdas']))
     if pu['catalogo_sin_wid']:
         L.append(f"Para completar en la planilla ({pu['catalogo_sin_wid']} links de catálogo sin wid, NO se leyeron):")
         L += [f"   - {x['sku']} ({x['rol']}): {x['link'][:90]}" for x in R['para_completar_en_la_planilla'][:15]]

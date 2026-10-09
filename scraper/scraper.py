@@ -6,6 +6,8 @@
   python scraper.py --vendedor tecnovibe          # actualizar UN vendedor al momento
   python scraper.py --solo perfiles|publicaciones # solo tiendas completas, o solo links puntuales
   python scraper.py --sin-escribir                # corre y muestra qué haría, sin tocar ningún Sheet
+  python scraper.py --medir-celdas                # cuántas celdas de las 10.000.000 de Google Sheets se usan (no abre Chrome)
+  python scraper.py --sembrar-linea-base          # una vez: carga el conteo histórico de las V-* en Tiendas_Conteo (--sin-escribir para ver)
 
 Códigos de salida: 0 ok · 1 error · 2 Mercado Libre pidió login/verificación (corrida cortada, ver el log)."""
 import argparse
@@ -53,6 +55,28 @@ def _filas_maca(planilla):
             'B': planilla.worksheet(config.TAB_SKU).get_all_values()}
 
 
+def _sembrar(erp, escribir, log):
+    """Línea base de debilidad: cuántas publicaciones con precio tenía cada tienda de A en cada scrape viejo (V-*)."""
+    import sheets_io as sio
+    import tiendas_conteo as tc
+    titulos = {w.title for w in erp.worksheets()}
+    v_tabs = {t: sio.leer(erp, t, titulos) for t in sorted(titulos) if t.startswith('V - ')}
+    filas, avisos = tc.sembrar_desde_v(v_tabs, sio.leer(erp, 'Entidades', titulos), config.ALIAS_TIENDAS.values())
+    por = {}
+    for f in filas:
+        por.setdefault(f['Entidad'], []).append(f['Fecha'])
+    for e, fs in por.items():
+        log(f'  {e}: {len(fs)} fechas ({fs[0]} → {fs[-1]})')
+    for a in avisos:
+        log(f'  ⚠ {a}')
+    if not escribir:
+        log(f'SIN escribir: se sembrarían {len(filas)} filas en {tc.CONTEO_SHEET} (no pisa lo que ya exista).')
+        return 0
+    ins, act, om = tc.registrar(erp, filas, solo_nuevas=True)
+    log(f'Línea base sembrada en {tc.CONTEO_SHEET}: {ins} filas nuevas · {om} ya existían (no se pisaron).')
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--configurar-login', action='store_true')
@@ -61,6 +85,8 @@ def main(argv=None):
     ap.add_argument('--solo', choices=['perfiles', 'publicaciones'])
     ap.add_argument('--sin-escribir', action='store_true')
     ap.add_argument('--sin-descubrimiento', action='store_true')
+    ap.add_argument('--medir-celdas', action='store_true')
+    ap.add_argument('--sembrar-linea-base', action='store_true')
     ap.add_argument('--headless', action='store_true', help='Chrome sin ventana (ML puede bloquearlo: probar antes)')
     a = ap.parse_args(argv)
 
@@ -72,6 +98,14 @@ def main(argv=None):
     log = _Tee(os.path.join(config.CARPETA_LOGS, f"corrida_{datetime.now().strftime('%Y%m%d_%H%M')}.log"))
     from ml_selenium import LectorML
     cliente, email = _cliente()
+    if a.medir_celdas or a.sembrar_linea_base:
+        import celdas
+        erp = _abrir(cliente, config.SPREADSHEET_ID, email, 'el Sheet del ERP')
+        if a.medir_celdas:
+            log(celdas.texto(celdas.medir(erp)))
+        if a.sembrar_linea_base:
+            return _sembrar(erp, not a.sin_escribir, log)
+        return 0
     maca = _abrir(cliente, config.PLANILLA_MACA_ID, email, 'la planilla de Maca')
     filas = _filas_maca(maca)
     from ml_api import ApiCatalogo

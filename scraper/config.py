@@ -51,3 +51,13 @@ PAUSA_ENTRE_PAGINAS = (1.5, 3.0)
 # Si no están, esta vía simplemente no se usa. Si ML responde 403, se apaga sola durante la corrida.
 ERP_BACKEND_URL = os.environ.get('ERP_BACKEND_URL', '').rstrip('/')
 ERP_API_KEY = os.environ.get('ERP_API_KEY', '')
+
+# ── Fase 1: conteo diario por tienda y medidor de celdas ──────────────────────
+# Una lectura de tienda es "completa" si no hubo bloqueo, llegó al final y leyó al menos este % de lo que ML declara
+# ("N resultados"). Solo los días completos cuentan para la línea base (mediana) y para detectar debilidad.
+COMPLETITUD_MIN_PCT = 90
+CONTEO_MEDIANA_DIAS = 7        # mediana de las últimas N lecturas completas
+CONTEO_MEDIANA_MIN = 3         # con menos de 3 lecturas completas previas no se calcula la mediana
+# Google Sheets: 10.000.000 de celdas por archivo (cuentan también las vacías de cada pestaña).
+LIMITE_CELDAS = 10_000_000
+AVISOS_CELDAS_PCT = (60, 80)

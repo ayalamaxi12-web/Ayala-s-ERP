@@ -141,3 +141,33 @@ def clasificar_oferta_en_catalogo(snap, oferta, esperado=None, url_original=''):
             return dict(res, estado='OK', precio=p, vendedor=v, via=oferta.get('via', 'tarjeta_wid'), detalle='',
                         tachado=None, descuento='', cuotas='', precio_ganador=gan_p, vendedor_ganador=gan_v)
     return dict(res, detalle=(res.get('detalle') or '') + ' | no encontré la tarjeta de la oferta del wid en la página')
+
+
+def parse_declaradas(texto):
+    """'1.234 resultados' / '1 resultado' / 'Más de 2.000 resultados' -> int (o None si no hay número)."""
+    m = re.search(r'(\d[\d\.\,]*)\s+resultados?\b', str(texto or ''), re.I)
+    if not m:
+        return None
+    n = re.sub(r'\D', '', m.group(1))
+    return int(n) if n else None
+
+
+def evaluar_completitud(leidas, declaradas, fin, bloqueado=False, minimo_pct=None):
+    """¿La lectura de la tienda fue COMPLETA? -> (bool, motivo). Se usa para no sacar conclusiones (ni "desapareció", ni
+    "debilidad") de una lectura cortada.
+    fin: 'sin_siguiente' (llegó a la última página) | 'tope_paginas' | 'sin_tarjetas' | 'repetida' | 'excepcion'."""
+    minimo = config.COMPLETITUD_MIN_PCT if minimo_pct is None else minimo_pct
+    if bloqueado:
+        return False, 'ML pidió login/verificación'
+    if not leidas:
+        if declaradas == 0:
+            return True, 'La tienda declara 0 publicaciones'
+        return False, 'No se leyó ninguna publicación' + (f' (ML declara {declaradas})' if declaradas else '')
+    if declaradas:
+        pct = leidas / declaradas * 100
+        if pct >= minimo:
+            return True, ''
+        return False, f'Leyó {leidas} de {declaradas} declaradas ({pct:.0f}% < {minimo}%)' + (f' · fin: {fin}' if fin != 'sin_siguiente' else '')
+    if fin == 'sin_siguiente':
+        return True, 'ML no declara el total: se asume completa porque llegó a la última página'
+    return False, f'Lectura cortada ({fin}) y ML no declara el total'
