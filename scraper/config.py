@@ -61,3 +61,10 @@ CONTEO_MEDIANA_MIN = 3         # con menos de 3 lecturas completas previas no se
 # Google Sheets: 10.000.000 de celdas por archivo (cuentan también las vacías de cada pestaña).
 LIMITE_CELDAS = 10_000_000
 AVISOS_CELDAS_PCT = (60, 80)
+
+# ── Robustez de una corrida DESATENDIDA ───────────────────────────────────────
+RECICLAR_CADA_NAVEGACIONES = 60   # cada tanto se cierra y se vuelve a abrir Chrome (evita que una sola sesión larga se quede sin memoria)
+REINTENTOS_SESION = 2             # si Chrome se cae leyendo algo: reabrir y reintentar hasta N veces ESA lectura
+MAX_REINICIOS = 8                 # más reinicios que esto en una corrida = algo anda mal: se corta (lo leído ya se escribió)
+TIMEOUT_PAGINA_SEG = 60           # una página que no termina de cargar no cuelga la corrida
+DURACION_MAXIMA_MIN = 180         # tope de la corrida: si se pasa, escribe lo que tenga y corta (con --reanudar se retoma)

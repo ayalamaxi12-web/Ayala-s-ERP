@@ -10,6 +10,7 @@ import time
 import config
 import competencia_db as cdb
 import paginas_ml as pml
+from errores import NavegadorCaido, es_error_de_sesion, es_timeout
 
 JS_PUBLICACION = r"""
 const q = s => document.querySelector(s);
@@ -135,11 +136,37 @@ return {texto: texto, candidatos: cand};
 """
 
 
+# Evidencia de paginación (para entender por qué una tienda queda INCOMPLETA): qué controles de "siguiente"/"ver más" hay.
+JS_PAGINACION = r"""
+const pag = document.querySelector('.andes-pagination');
+return {
+  url: location.href,
+  paginacion_html: pag ? pag.outerHTML.slice(0, 900) : '',
+  controles: Array.from(document.querySelectorAll('a, button')).filter(e => /siguiente|m[aá]s|next/i.test((e.innerText || '') + (e.getAttribute('aria-label') || '') + (e.title || '')))
+    .slice(0, 8).map(e => ({tag: e.tagName, texto: (e.innerText || '').trim().slice(0, 40), aria: e.getAttribute('aria-label') || '', clase: String(e.className || '').slice(0, 70), href: (e.href || '').slice(0, 120)})),
+  tarjetas: document.querySelectorAll('.poly-card, .ui-search-result').length,
+  altura: document.body.scrollHeight
+};
+"""
+
+# "Ver más" / "Mostrar más" / "Cargar más": algunas tiendas cargan el resto con un botón en vez de paginar.
+JS_VER_MAS = r"""
+const re = /^(ver|mostrar|cargar)\s+m[aá]s(\s+(resultados|productos|publicaciones))?$/i;
+const el = Array.from(document.querySelectorAll('a, button, [role="button"]')).find(e => re.test((e.innerText || '').trim()));
+if (!el) return false;
+el.scrollIntoView({block: 'center'});
+el.click();
+return true;
+"""
+
+
 class LectorML:
     def __init__(self, perfil_dir=None, headless=False, log=print, api=None):
         self.perfil_dir, self.headless, self.log = perfil_dir or config.PERFIL_CHROME, headless, log
         self.api = api            # ml_api.ApiCatalogo (opcional)
         self._driver = None
+        self._navs = 0            # navegaciones desde que se abrió Chrome (para reciclarlo antes de que se quede sin memoria)
+        self.reinicios = 0        # cuántas veces se reabrió Chrome en esta corrida
 
     # ── navegador ────────────────────────────────────────────────────────────
     def driver(self):
@@ -154,11 +181,16 @@ class LectorML:
             o.add_argument('--lang=es-AR')
             o.add_argument('--window-size=1366,900')
             o.add_argument('--disable-blink-features=AutomationControlled')
+            o.add_argument('--disable-dev-shm-usage')
+            o.add_argument('--disable-background-timer-throttling')
+            o.add_argument('--disable-renderer-backgrounding')         # corrida desatendida: que Chrome no se "duerma" en segundo plano
             o.add_experimental_option('excludeSwitches', ['enable-automation'])
             o.add_experimental_option('useAutomationExtension', False)
             if self.headless:
                 o.add_argument('--headless=new')
             self._driver = webdriver.Chrome(options=o)    # Selenium Manager baja el chromedriver que corresponda solo
+            self._driver.set_page_load_timeout(config.TIMEOUT_PAGINA_SEG)
+            self._driver.set_script_timeout(config.TIMEOUT_PAGINA_SEG)
             self._driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         return self._driver
 
@@ -166,18 +198,60 @@ class LectorML:
         if self._driver is not None:
             try:
                 self._driver.quit()
+            except Exception:  # noqa: BLE001  (si Chrome ya murió, quit() también falla: no importa)
+                pass
             finally:
                 self._driver = None
 
+    def reiniciar(self, motivo):
+        """Cierra Chrome (esté como esté) y deja que se abra uno nuevo con el MISMO perfil: la sesión de ML sigue ahí."""
+        self.reinicios += 1
+        if self.reinicios > config.MAX_REINICIOS:
+            raise NavegadorCaido(f'Chrome se reinició {self.reinicios - 1} veces en esta corrida ({motivo}): algo anda mal con el navegador o la PC.')
+        self.log(f'  ↻ Reabriendo Chrome ({motivo}) · reinicio {self.reinicios}/{config.MAX_REINICIOS}')
+        self.cerrar()
+        self._navs = 0
+        time.sleep(3)
+
+    def _con_reintento(self, fn, fallo, *a, **k):
+        """Ejecuta una LECTURA completa; si Chrome se cae a la mitad, lo reabre y la reintenta (hasta REINTENTOS_SESION veces).
+        Si esa lectura sigue matando a Chrome, devuelve el resultado de `fallo` (se sigue con la próxima, no se corta todo)."""
+        for intento in range(config.REINTENTOS_SESION + 1):
+            try:
+                return fn(*a, **k)
+            except Exception as e:  # noqa: BLE001
+                if not es_error_de_sesion(e):
+                    raise
+                self.log(f'  ⚠ El navegador se cayó ({str(e).splitlines()[0][:110]})')
+                if intento >= config.REINTENTOS_SESION:
+                    self.reiniciar('sesión caída')       # lo deja listo para la próxima lectura
+                    return fallo(f'El navegador se cayó {intento + 1} veces leyendo esto')
+                self.reiniciar('sesión caída')
+        return fallo('El navegador no se pudo recuperar')
+
     def _ir(self, url, esperar_css=None, timeout=15):
+        self._navs += 1
+        if self._navs > config.RECICLAR_CADA_NAVEGACIONES:
+            self.reiniciar('reciclado preventivo')       # una sesión de Chrome muy larga termina sin memoria
+            self._navs = 1
         d = self.driver()
-        d.get(url)
+        try:
+            d.get(url)
+        except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e) or not es_timeout(e):
+                raise
+            try:
+                d.execute_script('window.stop()')          # la página tardó demasiado: se usa lo que alcanzó a cargar
+            except Exception:  # noqa: BLE001
+                pass
         fin = time.time() + timeout
         while time.time() < fin:
             try:
                 if d.execute_script('return document.readyState') == 'complete':
                     break
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                if es_error_de_sesion(e):
+                    raise
                 pass
             time.sleep(0.4)
         # ML arma el precio con JS: espero a que aparezca (o a que la página diga que no existe)
@@ -189,7 +263,9 @@ class LectorML:
                 cuerpo = (d.execute_script('return document.body ? document.body.innerText.slice(0, 4000) : ""') or '').lower()
                 if pml.detectar_bloqueo(d.current_url, cuerpo) or any(f in cuerpo for f in pml.CAIDA_FRASES):
                     return
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                if es_error_de_sesion(e):
+                    raise
                 pass
             time.sleep(0.5)
 
@@ -205,18 +281,24 @@ class LectorML:
         try:
             return self.driver().execute_script(JS_OFERTA_POR_WID, wid) or {'encontrada': False}
         except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
             return {'encontrada': False, 'motivo': f'JS: {e}'}
 
     def _evidencia(self, wid):
         try:
             return self.driver().execute_script(JS_EVIDENCIA, wid)
         except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
             return {'error': str(e)}
 
     def _abrir_opciones(self):
         try:
             r = self.driver().execute_script(JS_ABRIR_OPCIONES) or {'clic': False}
         except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
             return {'clic': False, 'error': str(e)}
         if r.get('clic'):
             time.sleep(2.5)          # el listado de ofertas se arma con JS (modal o página nueva)
@@ -224,6 +306,11 @@ class LectorML:
         return r
 
     def leer_publicacion(self, url, esperado=None, diagnostico=False):
+        return self._con_reintento(self._leer_publicacion_impl,
+                                   lambda msg: {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': msg, 'url_final': url},
+                                   url, esperado, diagnostico)
+
+    def _leer_publicacion_impl(self, url, esperado=None, diagnostico=False):
         """-> dict de paginas_ml (estado OK|Caida|Error|Sin lectura|Otro vendedor|Bloqueado, precio, vendedor,
         precio_ganador, vendedor_ganador, via, ...). En diagnóstico agrega 'pasos' y 'evidencia' (qué se intentó y qué vio).
         - Ítem directo: la página del ítem.
@@ -245,6 +332,8 @@ class LectorML:
         try:
             snap = self._snapshot(url)
         except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
             return {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': url}
         oferta = self._buscar_oferta(digitos)
         res = pml.clasificar_oferta_en_catalogo(snap, oferta, esperado, url)
@@ -271,6 +360,8 @@ class LectorML:
                     if res['estado'] != 'OK' and res2['estado'] == 'OK':
                         res = dict(res2, precio_ganador=ganador['precio_ganador'], vendedor_ganador=ganador['vendedor_ganador'])
                 except Exception as e:  # noqa: BLE001
+                    if es_error_de_sesion(e):
+                        raise
                     paso('opciones_de_compra', {'estado': 'Error', 'detalle': f'Selenium: {e}'}, {'clic': clic})
             else:
                 paso('opciones_de_compra', {'estado': 'Sin lectura', 'detalle': 'No encontré el botón de más opciones de compra'}, {'clic': clic})
@@ -290,6 +381,8 @@ class LectorML:
             try:
                 rd = pml.clasificar_publicacion(self._snapshot(directo_url), esperado, url, directo=True)
             except Exception as e:  # noqa: BLE001
+                if es_error_de_sesion(e):
+                    raise
                 rd = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': directo_url}
             paso('item_directo', rd, {'url_intentada': directo_url})
             if res['estado'] != 'OK' and rd['estado'] == 'OK':
@@ -313,6 +406,8 @@ class LectorML:
         try:
             res = pml.clasificar_publicacion(self._snapshot(url), esperado, url)
         except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
             res = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'Selenium: {e}', 'url_final': url}
         res['via'] = 'pagina_original' if res['estado'] == 'OK' else ''
         if diagnostico:
@@ -323,32 +418,43 @@ class LectorML:
 
     # ── tienda completa ──────────────────────────────────────────────────────
     def leer_tienda(self, url, max_paginas=40, diagnostico=False):
+        return self._con_reintento(self._leer_tienda_impl,
+                                   lambda msg: {'estado': 'error', 'items': [], 'detalle': msg, 'declaradas': None, 'paginas': 0,
+                                                'fin': 'excepcion', 'completa': False, 'motivo': msg},
+                                   url, max_paginas, diagnostico)
+
+    def _leer_tienda_impl(self, url, max_paginas=40, diagnostico=False):
         """-> {'estado': 'ok'|'sin_resultados'|'bloqueado'|'error', 'items': [...], 'detalle': str,
-               'declaradas': int|None, 'paginas': int, 'fin': str, 'completa': bool, 'motivo': str}.
+               'declaradas': int|None, 'paginas': int, 'fin': str, 'completa': bool, 'motivo': str, 'via_paginacion': {...}}
+        (+ 'evidencia_paginacion' si quedó incompleta o en diagnóstico).
         El link de cada tarjeta se guarda COMPLETO (con ?wid=...): el scraper viejo lo cortaba en '?' y perdía la
         identidad de las ofertas de catálogo. Se deduplica por identidad de publicación, no por título.
         `completa` (ver paginas_ml.evaluar_completitud) dice si se puede confiar en el conteo: sin bloqueo, llegó al final
-        y leyó al menos COMPLETITUD_MIN_PCT% de lo que ML declara."""
-        from selenium.webdriver.common.by import By
-        d = self.driver()
-        items, vistos_pag, vistos_item = [], set(), set()
-        declaradas, paginas, fin, evid = None, 0, 'excepcion', {}
+        y leyó al menos COMPLETITUD_MIN_PCT% de lo que ML declara.
+        Paginación: botón "Siguiente" (con clic normal y, si algo tapa el botón, clic por JavaScript) -> botón "Ver más" ->
+        URL por offset (`_Desde_n`) cuando ML declara más publicaciones de las leídas."""
+        items, vistos_pag, vistos_item, vias = [], set(), set(), {}
+        declaradas, paginas, fin, evid, por_pagina, via_prev = None, 0, 'excepcion', {}, 0, None
         try:
             self._ir(url, '.poly-card, .ui-search-result')
+            d = self.driver()
             b = pml.detectar_bloqueo(d.current_url, d.execute_script('return document.body.innerText.slice(0,3000)'))
             if b:
                 return {'estado': 'bloqueado', 'items': [], 'detalle': f'ML pidió {b} al abrir la tienda', 'declaradas': None,
-                        'paginas': 0, 'fin': 'bloqueado', 'completa': False, 'motivo': f'ML pidió {b}'}
+                        'paginas': 0, 'fin': 'bloqueado', 'completa': False, 'motivo': f'ML pidió {b}', 'via_paginacion': {}}
             try:
                 dec = d.execute_script(JS_DECLARADAS) or {}
                 declaradas = pml.parse_declaradas(dec.get('texto'))
                 if diagnostico:
                     evid = {'texto_declaradas': dec.get('texto'), 'candidatos': dec.get('candidatos')}
             except Exception as e:  # noqa: BLE001
+                if es_error_de_sesion(e):
+                    raise
                 evid = {'error_declaradas': str(e)}
             fin = 'tope_paginas'
             for pagina in range(1, max_paginas + 1):
-                if d.current_url in vistos_pag:
+                d = self.driver()
+                if via_prev != 'ver_mas' and d.current_url in vistos_pag:
                     fin = 'repetida'
                     break
                 vistos_pag.add(d.current_url)
@@ -366,24 +472,41 @@ class LectorML:
                     items.append(t)
                     nuevas += 1
                 self.log(f'    página {pagina}: {len(tarjetas)} tarjetas, {nuevas} nuevas (total {len(items)})')
+                if via_prev != 'ver_mas':
+                    por_pagina = max(por_pagina, len(tarjetas))
                 if not tarjetas:
                     fin = 'sin_tarjetas'
                     break
-                if not self._siguiente(By):
+                if via_prev in ('desde_url', 'ver_mas') and nuevas == 0:
+                    fin = 'sin_siguiente'              # la alternativa no trajo nada nuevo: se terminó
+                    break
+                via_prev = self._avanzar(url, pagina, por_pagina, len(items), declaradas)
+                if via_prev is None:
                     fin = 'sin_siguiente'
                     break
+                vias[via_prev] = vias.get(via_prev, 0) + 1
                 time.sleep(1)
         except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
             ok_, motivo = pml.evaluar_completitud(len(items), declaradas, 'excepcion')
             return {'estado': 'error', 'items': items, 'detalle': f'Selenium: {e}', 'declaradas': declaradas, 'paginas': paginas,
-                    'fin': 'excepcion', 'completa': False, 'motivo': motivo or f'Selenium: {e}'}
+                    'fin': 'excepcion', 'completa': False, 'motivo': motivo or f'Selenium: {e}', 'via_paginacion': vias}
         completa, motivo = pml.evaluar_completitud(len(items), declaradas, fin)
         if declaradas:
-            self.log(f'    ML declara {declaradas} · leídas {len(items)} · {"completa" if completa else "INCOMPLETA: " + motivo}')
+            self.log(f'    ML declara {declaradas} · leídas {len(items)} · {"completa" if completa else "INCOMPLETA: " + motivo}'
+                     + (f' · paginación: {vias}' if vias else ''))
         out = {'estado': 'ok' if items else 'sin_resultados', 'items': items, 'detalle': '', 'declaradas': declaradas,
-               'paginas': paginas, 'fin': fin, 'completa': completa, 'motivo': motivo}
+               'paginas': paginas, 'fin': fin, 'completa': completa, 'motivo': motivo, 'via_paginacion': vias}
         if diagnostico:
             out['evidencia'] = evid
+        if diagnostico or not completa:
+            try:   # qué controles de paginación hay en la página donde se frenó: es lo que hace falta para arreglarlo
+                out['evidencia_paginacion'] = self.driver().execute_script(JS_PAGINACION)
+            except Exception as e:  # noqa: BLE001
+                if es_error_de_sesion(e):
+                    raise
+                out['evidencia_paginacion'] = {'error': str(e)}
         return out
 
     def _scroll(self):
@@ -397,19 +520,55 @@ class LectorML:
                 break
             ultimo = nuevo
 
-    def _siguiente(self, By):
+    def _siguiente(self):
+        """Clic en "Siguiente". Si algo tapa el botón (cartel de cookies, widget de chat, banner fijo) el clic normal falla con
+        ElementClickIntercepted: antes eso se tomaba por "no hay más páginas"; ahora se reintenta con un clic por JavaScript."""
         d = self.driver()
         for sel in ('.andes-pagination__button--next a', 'a[title="Siguiente"]', 'a[aria-label="Siguiente"]'):
             try:
-                el = d.find_element(By.CSS_SELECTOR, sel)
-                if 'disabled' in (el.find_element(By.XPATH, '..').get_attribute('class') or ''):
-                    return False
-                el.click()
-                time.sleep(2)
-                return True
-            except Exception:  # noqa: BLE001
+                el = d.find_element('css selector', sel)
+            except Exception as e:  # noqa: BLE001  (no está ese selector: probar el siguiente)
+                if es_error_de_sesion(e):
+                    raise
                 continue
+            if 'disabled' in (el.find_element('xpath', '..').get_attribute('class') or ''):
+                return False
+            try:
+                d.execute_script('arguments[0].scrollIntoView({block: "center"});', el)
+                el.click()
+            except Exception as e:  # noqa: BLE001
+                if es_error_de_sesion(e):
+                    raise
+                d.execute_script('arguments[0].click();', el)     # lo tapa algo: clic directo sobre el elemento
+            time.sleep(2)
+            return True
         return False
+
+    def _ver_mas(self):
+        try:
+            clic = self.driver().execute_script(JS_VER_MAS)
+        except Exception as e:  # noqa: BLE001
+            if es_error_de_sesion(e):
+                raise
+            return False
+        if clic:
+            time.sleep(2.5)
+        return bool(clic)
+
+    def _avanzar(self, url_base, pagina, por_pagina, leidas, declaradas):
+        """Pasa a lo siguiente de la tienda. -> 'boton' | 'ver_mas' | 'desde_url' | None (no hay más).
+        Los planes B solo se prueban si ML declara MÁS publicaciones de las que se leyeron."""
+        if self._siguiente():
+            return 'boton'
+        if declaradas and leidas < declaradas * 0.98:
+            if self._ver_mas():
+                return 'ver_mas'
+            nxt = pml.url_pagina_siguiente(url_base, pagina, por_pagina)
+            if nxt:
+                self.log(f'    sin botón "Siguiente" pero ML declara {declaradas} y van {leidas}: pruebo la URL por offset {nxt[-40:]}')
+                self._ir(nxt, '.poly-card, .ui-search-result')
+                return 'desde_url'
+        return None
 
 
 def configurar_login(perfil_dir=None):

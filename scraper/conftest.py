@@ -11,5 +11,6 @@ def _sin_pausas(monkeypatch):
     import corrida
     import sheets_io
     import prueba
-    for m in (corrida, sheets_io, prueba):
+    import ml_selenium
+    for m in (corrida, sheets_io, prueba, ml_selenium):
         monkeypatch.setattr(m.time, 'sleep', lambda s: None)

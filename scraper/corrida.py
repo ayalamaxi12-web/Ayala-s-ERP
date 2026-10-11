@@ -15,6 +15,8 @@ import sincronizar as sy
 import paginas_ml as pml
 import celdas as cel
 import tiendas_conteo as tc
+import errores
+from errores import CorridaCortada, NavegadorCaido
 
 # Historial_Precios + las 2 columnas del precio de la oferta GANADORA del catálogo (se agregan al final de la hoja).
 HISTORIAL_HEADERS_V2 = cdb.HISTORIAL_HEADERS + ['Precio_Ganador', 'Vendedor_Ganador']
@@ -105,18 +107,53 @@ def _coincide_filtro(nombre, filtro):
 
 
 # ── Corrida ───────────────────────────────────────────────────────────────────
+def _refs_con_lectura_hoy(filas_hist, hoy):
+    if not filas_hist:
+        return set()
+    h = {x: i for i, x in enumerate(filas_hist[0])}
+    if 'Referencia_ID' not in h or 'Fecha' not in h:
+        return set()
+    return {f[h['Referencia_ID']] for f in filas_hist[1:] if len(f) > max(h['Referencia_ID'], h['Fecha']) and f[h['Fecha']].strip() == hoy}
+
+
+def _tiendas_completas_hoy(filas_conteo, hoy):
+    if not filas_conteo:
+        return set()
+    h = {x: i for i, x in enumerate(filas_conteo[0])}
+    try:
+        return {f[h['Entidad_ID']] for f in filas_conteo[1:]
+                if f[h['Fecha']].strip() == hoy and str(f[h['Completa']]).strip().lower() in ('si', 'sí')}
+    except (KeyError, IndexError):
+        return set()
+
+
+def _evidencia_corta(ev_):
+    """Una línea con lo esencial de la evidencia de paginación (el detalle completo queda en el JSON de la corrida)."""
+    if not ev_ or 'error' in ev_:
+        return ''
+    ctl = ev_.get('controles') or []
+    return (f"{len(ctl)} controles de siguiente/más en la página " + str([c.get('texto') or c.get('aria') for c in ctl][:4])
+            + f" · {ev_.get('tarjetas')} tarjetas · hay paginador: {'sí' if ev_.get('paginacion_html') else 'NO'}")
+
+
 def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, descubrir=True, hoy=None, ahora=None,
-           log=print, pausa=True):
+           log=print, pausa=True, reanudar=False, max_minutos=None):
     """ss: Spreadsheet del ERP. filas_maca: {'A': filas, 'B': filas}. lector: ver ml_selenium.LectorML.
     -> resumen (dict). Si ML bloquea, escribe lo que haya y levanta CorridaBloqueada."""
     ahora = ahora or datetime.now()
+    t_inicio = time.time()
+    limite_seg = (config.DURACION_MAXIMA_MIN if max_minutos is None else max_minutos) * 60
+
+    def tiempo_agotado():
+        return limite_seg and (time.time() - t_inicio) > limite_seg
     hoy = hoy or ahora.strftime('%d/%m/%Y')
     hora = ahora.strftime('%H:%M')
     R = {'fecha': hoy, 'escribir': escribir, 'vendedor': vendedor or 'todos', 'solo': solo or 'todo',
-         'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0},
+         'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0, 'saltados_reanudar': 0},
          'publicaciones': {'leidas': 0, 'ok': 0, 'caidas': 0, 'sin_lectura': 0, 'otro_vendedor': 0, 'error': 0,
-                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0, 'catalogo_sin_wid': 0},
-         'para_completar_en_la_planilla': [], 'tiendas': [], 'celdas': None,
+                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0, 'catalogo_sin_wid': 0, 'ya_hechas': 0},
+         'para_completar_en_la_planilla': [], 'tiendas': [], 'celdas': None, 'reanudar': reanudar, 'corte': None,
+         'navegador_reinicios': 0,
          'lecturas': 0, 'eventos': {}, 'descubrimiento_nuevas': 0, 'avisos': [], 'pendientes_stock': None}
 
     titulos = {w.title for w in ss.worksheets()}
@@ -225,7 +262,9 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
             emitir({'Tipo': t, 'Detalle': 'La publicación volvió a tener precio'}, ref, link=link)
             ultimo_caida[ref['id']] = t
 
-    bloqueo = None
+    bloqueo, corte = None, None
+    ya_hoy = _refs_con_lectura_hoy(hist_f, hoy) if reanudar else set()
+    tiendas_ok_hoy = _tiendas_completas_hoy(conteo_f, hoy) if reanudar else set()
     try:
         # 3) Perfiles de tienda
         if solo in (None, 'perfiles'):
@@ -233,10 +272,24 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
             for p in plan.perfiles:
                 if p['slug'] in vistos_perfil or p['excluida'] or not _coincide_filtro(p['entidad_nombre'], vendedor):
                     continue
+                if tiempo_agotado():
+                    corte = f'Se alcanzó el tiempo máximo de la corrida ({limite_seg // 60} min)'
+                    break
                 vistos_perfil.add(p['slug'])
+                if reanudar and p['entidad_id'] in tiendas_ok_hoy:
+                    R['perfiles']['saltados_reanudar'] += 1      # esta tienda ya se leyó COMPLETA hoy
+                    continue
                 R['perfiles']['leidos'] += 1
                 log(f"Perfil {p['entidad_nombre']}: {p['url_listado']}")
-                t = lector.leer_tienda(p['url_listado'])
+                try:
+                    t = lector.leer_tienda(p['url_listado'])
+                except NavegadorCaido as e:
+                    corte = f'Chrome se cayó demasiadas veces: {e}'
+                    break
+                except Exception as e:  # noqa: BLE001  (un error inesperado en una tienda no corta las demás)
+                    R['perfiles']['error'] += 1
+                    R['avisos'].append(f"Perfil {p['entidad_nombre']}: {type(e).__name__}: {str(e)[:120]}")
+                    continue
                 # Conteo diario de la tienda (Fase 1): también el día que no se pudo leer (queda como Completa=No)
                 n_leidas = len(t.get('items') or [])
                 completa, motivo_c = t.get('completa'), t.get('motivo', '')
@@ -249,7 +302,10 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                 conteos.append(fila_c)
                 R['tiendas'].append({'entidad': p['entidad_nombre'], 'leidas': n_leidas, 'declaradas': t.get('declaradas'),
                                      'completa': completa, 'motivo': motivo_c, 'mediana': fila_c['Mediana_7d'],
-                                     'var': fila_c['Var_vs_Mediana_Pct']})
+                                     'var': fila_c['Var_vs_Mediana_Pct'], 'via_paginacion': t.get('via_paginacion'),
+                                     'evidencia_paginacion': t.get('evidencia_paginacion')})
+                if not completa and t['estado'] != 'bloqueado':
+                    R['avisos'].append(f"{p['entidad_nombre']}: lectura INCOMPLETA ({motivo_c}). " + _evidencia_corta(t.get('evidencia_paginacion')))
                 if t['estado'] == 'bloqueado':
                     bloqueo = t.get('detalle', 'ML pidió login/verificación')
                     break
@@ -291,7 +347,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                     _pausa(config.PAUSA_ENTRE_PAGINAS)
 
         # 4) Publicaciones puntuales (links de B-SKU) que el perfil de hoy no cubrió
-        if bloqueo is None and solo in (None, 'publicaciones'):
+        if bloqueo is None and corte is None and solo in (None, 'publicaciones'):
             tareas = {}   # url -> [refs]
             for d in skus:
                 for l in d['links']:
@@ -300,11 +356,20 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                         if r['sku'] and cdb.norm_texto(r['sku']) == cdb.norm_texto(d['sku']) and r['rol']:
                             tareas.setdefault(l['url'], []).append(r)
             for url, rs in tareas.items():
+                if tiempo_agotado():
+                    corte = f'Se alcanzó el tiempo máximo de la corrida ({limite_seg // 60} min)'
+                    break
                 rs = list({x['id']: x for x in rs}.values())
                 if vendedor:   # "actualizar un vendedor": solo las referencias YA atribuidas a ese vendedor
                     rs = [r for r in rs if r['entidad'] and _coincide_filtro(r['entidad'], vendedor)]
                 if not rs:
                     continue
+                if reanudar:      # lo que ya tiene lectura de HOY no se vuelve a abrir
+                    rs_f = [r for r in rs if r['id'] not in ya_hoy]
+                    if not rs_f:
+                        R['publicaciones']['ya_hechas'] += 1
+                        continue
+                    rs = rs_f
                 pendientes = [r for r in rs if r['id'] not in leidas_por_perfil]
                 if not pendientes:
                     R['publicaciones']['saltadas_por_perfil'] += 1
@@ -320,7 +385,13 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                                                                    'falta': 'el wid de la oferta (link de catálogo sin ?wid=)'})
                     continue
                 R['publicaciones']['leidas'] += 1
-                res = lector.leer_publicacion(url, esperado)
+                try:
+                    res = lector.leer_publicacion(url, esperado)
+                except NavegadorCaido as e:
+                    corte = f'Chrome se cayó demasiadas veces: {e}'
+                    break
+                except Exception as e:  # noqa: BLE001  (una publicación que falla no corta las demás)
+                    res = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'{type(e).__name__}: {str(e)[:120]}'}
                 est = res['estado']
                 if est == 'Bloqueado':
                     bloqueo = res.get('detalle', 'ML pidió login/verificación')
@@ -380,12 +451,20 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
     finally:
         R['lecturas'] = len(lecturas)
         R['descubrimiento_nuevas'] = len(disc_nuevas)
+        R['navegador_reinicios'] = getattr(lector, 'reinicios', 0)
         if escribir:
             _escribir(ss, titulos, plan, ents_nuevas_por_lectura, cambios_ref, lecturas, eventos, disc_nuevas, conteos, R, log)
         R['celdas'] = cel.medir(ss)
     if bloqueo:
         R['bloqueo'] = bloqueo
-        raise CorridaBloqueada(bloqueo)
+        e = CorridaBloqueada(bloqueo)
+        e.resumen = R
+        raise e
+    if corte:
+        R['corte'] = corte
+        e = CorridaCortada(corte)
+        e.resumen = R
+        raise e
     return R
 
 
@@ -439,12 +518,19 @@ def texto_resumen(R):
          f"Lecturas a Historial_Precios: {R['lecturas']}" + (f" {R['lecturas_escritas']}" if R.get('lecturas_escritas') else ''),
          f"Eventos: {R['eventos'] or 'ninguno'}",
          f"Descubrimiento (publicaciones de tienda que no son referencias): {R['descubrimiento_nuevas']} nuevas"]
+    if R.get('reanudar'):
+        L.append(f"MODO REANUDAR: {pl.get('saltados_reanudar', 0)} tiendas y {pu.get('ya_hechas', 0)} publicaciones ya estaban hechas hoy y no se repitieron.")
+    if R.get('navegador_reinicios'):
+        L.append(f"Chrome se reabrió {R['navegador_reinicios']} vez/veces durante la corrida (reciclado preventivo o caída).")
+    if R.get('corte'):
+        L.append(f"⚠ CORRIDA CORTADA: {R['corte']}. Lo leído hasta acá se escribió; con --reanudar se retoma lo que falta.")
     if R.get('tiendas'):
         L.append('Conteo por tienda (Tiendas_Conteo):')
         for t in R['tiendas']:
             dec = f" / {t['declaradas']} declaradas" if t['declaradas'] else ''
             med = f" · mediana {t['mediana']} ({t['var']:+}%)" if t['mediana'] != '' and t['var'] != '' else (f" · mediana {t['mediana']}" if t['mediana'] != '' else ' · línea base en construcción')
-            L.append(f"   - {t['entidad']}: {t['leidas']} leídas{dec} · " + ('completa' if t['completa'] else f"INCOMPLETA ({t['motivo']})") + med)
+            via = f" · paginación {t['via_paginacion']}" if t.get('via_paginacion') else ''
+            L.append(f"   - {t['entidad']}: {t['leidas']} leídas{dec} · " + ('completa' if t['completa'] else f"INCOMPLETA ({t['motivo']})") + med + via)
     if R.get('celdas'):
         L.append(cel.texto(R['celdas']))
     if pu['catalogo_sin_wid']:

@@ -9,7 +9,10 @@
   python scraper.py --medir-celdas                # cuántas celdas de las 10.000.000 de Google Sheets se usan (no abre Chrome)
   python scraper.py --sembrar-linea-base          # una vez: carga el conteo histórico de las V-* en Tiendas_Conteo (--sin-escribir para ver)
 
-Códigos de salida: 0 ok · 1 error · 2 Mercado Libre pidió login/verificación (corrida cortada, ver el log)."""
+  python scraper.py --reanudar                    # retoma el día: NO repite las tiendas completas ni las publicaciones ya leídas hoy
+
+Códigos de salida: 0 ok · 1 error · 2 Mercado Libre pidió login/verificación · 3 corrida cortada (Chrome caído demasiadas veces o
+tiempo máximo): lo leído ya se escribió, con --reanudar se retoma lo que falta."""
 import argparse
 import json
 import os
@@ -18,6 +21,7 @@ import traceback
 from datetime import datetime
 
 import config
+from errores import CorridaCortada
 
 
 class _Tee:
@@ -55,6 +59,18 @@ def _filas_maca(planilla):
             'B': planilla.worksheet(config.TAB_SKU).get_all_values()}
 
 
+def _evitar_suspension():
+    """Windows: pide que la PC NO se suspenda mientras corre el scraper (una suspensión a mitad de corrida corta la sesión
+    de Chrome). Se libera sola al terminar el proceso. En otros sistemas no hace nada. -> True si lo pidió."""
+    try:
+        import ctypes
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+        ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _sembrar(erp, escribir, log):
     """Línea base de debilidad: cuántas publicaciones con precio tenía cada tienda de A en cada scrape viejo (V-*)."""
     import sheets_io as sio
@@ -85,6 +101,7 @@ def main(argv=None):
     ap.add_argument('--solo', choices=['perfiles', 'publicaciones'])
     ap.add_argument('--sin-escribir', action='store_true')
     ap.add_argument('--sin-descubrimiento', action='store_true')
+    ap.add_argument('--reanudar', action='store_true', help='no repetir lo que ya se leyó hoy (tiendas completas, publicaciones con lectura de hoy)')
     ap.add_argument('--medir-celdas', action='store_true')
     ap.add_argument('--sembrar-linea-base', action='store_true')
     ap.add_argument('--headless', action='store_true', help='Chrome sin ventana (ML puede bloquearlo: probar antes)')
@@ -122,15 +139,20 @@ def main(argv=None):
             return 0
         import corrida
         erp = _abrir(cliente, config.SPREADSHEET_ID, email, 'el Sheet del ERP')
+        if _evitar_suspension():
+            log('(Windows: se pidió que la PC no se suspenda mientras corre el scraper)')
         log(f"=== Corrida {datetime.now():%d/%m/%Y %H:%M} · vendedor={a.vendedor or 'todos'} · solo={a.solo or 'todo'} "
-            f"· {'SIN escribir' if a.sin_escribir else 'escribiendo'} ===")
+            f"· {'SIN escribir' if a.sin_escribir else 'escribiendo'}{' · REANUDAR' if a.reanudar else ''} ===")
         try:
             res = corrida.correr(erp, filas, lector, vendedor=a.vendedor, solo=a.solo, escribir=not a.sin_escribir,
-                                 descubrir=not a.sin_descubrimiento, log=log)
+                                 descubrir=not a.sin_descubrimiento, log=log, reanudar=a.reanudar)
             codigo = 0
         except corrida.CorridaBloqueada as e:
             log(f'\n⚠ CORRIDA CORTADA: {e}. Abrí Chrome con --configurar-login, resolvé el login/verificación y volvé a correr.')
-            res, codigo = {'bloqueo': str(e)}, 2
+            res, codigo = getattr(e, 'resumen', {'bloqueo': str(e)}), 2
+        except CorridaCortada as e:
+            log(f'\n⚠ CORRIDA CORTADA: {e}. Lo leído hasta acá ya se escribió. Volvé a correr con --reanudar para retomar lo que falta.')
+            res, codigo = getattr(e, 'resumen', {'corte': str(e)}), 3
         ruta = os.path.join(config.CARPETA_LOGS, f"corrida_{datetime.now().strftime('%Y%m%d_%H%M')}.json")
         with open(ruta, 'w', encoding='utf-8') as f:
             json.dump(res, f, ensure_ascii=False, indent=1, default=str)

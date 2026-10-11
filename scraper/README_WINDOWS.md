@@ -103,14 +103,50 @@ varios días de línea base: **por eso conviene correr el scraper todos los día
   `NO pude leer el "N resultados"`, pasame el JSON (`evidencia_declaradas`) y ajusto el selector. Mientras no se lea, la completitud se juzga solo por
   "llegó a la última página".
 
-## 5. Programar la tarea a las 17:30
-En `cmd` (como tu usuario):
+## 5. Programar la tarea a las 17:30 (corrida desatendida)
+**Antes de programarla**, verificá una corrida real a mano (paso 4) y que `Tiendas_Conteo` e `Historial_Precios` se hayan escrito bien.
+
+**Requisitos para que corra sola:** a las 17:30 la **PC encendida y tu usuario con la sesión iniciada** (la pantalla puede estar **bloqueada**;
+cerrar sesión o apagar la PC no sirve). Chrome corre en esa sesión con el perfil del scraper. Si necesitás que corra sin sesión iniciada, probá antes
+`--headless` (Mercado Libre puede bloquearlo) y programá la tarea como "Ejecutar tanto si el usuario inició sesión como si no".
+
+**Crear la tarea** (PowerShell, como tu usuario; ajustá la ruta si instalaste en otro lado):
+```powershell
+$accion = New-ScheduledTaskAction -Execute "C:\ayala-erp\scraper\ejecutar_scraper.bat" -Argument "--reanudar" -WorkingDirectory "C:\ayala-erp\scraper"
+$disparador = New-ScheduledTaskTrigger -Daily -At 17:30
+$ajustes = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+           -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 10) -ExecutionTimeLimit (New-TimeSpan -Hours 4)
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName "Ayala Scraper Competencia" -Action $accion -Trigger $disparador -Settings $ajustes -Principal $principal -Force
 ```
-schtasks /Create /TN "Ayala Scraper Competencia" /TR "C:\ayala-erp\scraper\ejecutar_scraper.bat" /SC DAILY /ST 17:30 /RL LIMITED /F
-```
-Requisitos: a las 17:30 la **PC encendida y tu usuario con la sesión iniciada** (la tarea corre "solo cuando el usuario haya
-iniciado sesión", necesario para que Chrome tenga el perfil). En el Programador de tareas podés tildar "Ejecutar lo antes
-posible si se perdió una ejecución programada". Probala con botón derecho → *Ejecutar*.
+Qué hace cada cosa: `--reanudar` hace que la tarea **no repita lo que ya se leyó hoy** (la corrida normal de las 17:30 lee todo, y si hay que
+reintentar retoma lo que falta); `-RestartCount 3 -RestartInterval 10 min` la **relanza si termina con error** (códigos 1, 2 o 3);
+`-StartWhenAvailable` la corre al encender la PC si estaba apagada a las 17:30; `-WakeToRun` despierta la PC de la suspensión;
+`-MultipleInstances IgnoreNew` evita dos corridas a la vez; `-ExecutionTimeLimit 4h` es el tope duro (el scraper además se corta solo a los
+`DURACION_MAXIMA_MIN` = 180 min escribiendo lo que tenga). Mientras corre, el scraper pide a Windows que **no suspenda la PC**.
+
+**Probarla ya** (sin esperar a las 17:30): `Start-ScheduledTask -TaskName "Ayala Scraper Competencia"` y mirá `scraper\logs\`.
+**Verificá el reintento:** que Task Scheduler relance por código de salida distinto de 0 puede variar según la versión de Windows; forzá un error
+una vez (por ejemplo cerrando Chrome a la fuerza durante una corrida de prueba) y mirá que a los 10 minutos arranque otra corrida que retome.
+
+**Alternativa sin PowerShell:** `schtasks /Create /TN "Ayala Scraper Competencia" /TR "C:\ayala-erp\scraper\ejecutar_scraper.bat --reanudar" /SC DAILY /ST 17:30 /RL LIMITED /F`
+(sin reintento automático: en ese caso podés crear una segunda tarea a las 18:30 con el mismo comando para retomar lo que haya quedado).
+
+### Qué hace el scraper si algo falla (corrida desatendida)
+- **Chrome se cae a mitad:** reabre Chrome con el mismo perfil (la sesión de ML sigue) y **reintenta esa lectura** hasta 2 veces; si una página
+  en particular mata a Chrome siempre, la marca como error y sigue con la próxima. Más de 8 reinicios en una corrida = algo anda mal: corta.
+- **Reciclado preventivo:** cada 60 navegaciones cierra y reabre Chrome, para que una sesión larga no se quede sin memoria.
+- **Páginas que no cargan:** tienen un tope de 60 s (no cuelgan la corrida).
+- **Una publicación o tienda que falla** no corta las demás.
+- **Cuando corta** (código 3): lo leído hasta ahí **ya se escribió** y el resumen lo dice; `--reanudar` retoma lo que falta. Una tienda leída
+  INCOMPLETA se vuelve a leer al reanudar.
+- **Para entender caídas de Chrome** miré en `logs\corrida_*.log` las líneas `⚠ El navegador se cayó (...)` y `↻ Reabriendo Chrome`, y en Windows el
+  Visor de eventos (Registros de Windows → Aplicación → "Error de aplicación" de `chrome.exe`) y `chrome://crashes`.
+
+### Si una tienda sale INCOMPLETA (por ejemplo GEOTEK)
+Corré solo esa tienda, sin escribir, y mirá el log (muestra por página cuántas tarjetas leyó, qué plan de paginación usó y, si quedó incompleta,
+qué controles de "siguiente/ver más" tiene la página): `python scraper.py --vendedor geotek --solo perfiles --sin-escribir`. Esa información
+también queda en `logs\corrida_*.json` (campo `evidencia_paginacion`).
 
 ## 6. Uso diario
 | Quiero… | Comando |
@@ -119,6 +155,7 @@ posible si se perdió una ejecución programada". Probala con botón derecho →
 | Actualizar UN vendedor ahora | `python scraper.py --vendedor tecnovibe` |
 | Solo tiendas completas / solo links puntuales | `--solo perfiles` / `--solo publicaciones` |
 | Ver qué haría sin escribir | `--sin-escribir` |
+| Retomar el día sin repetir lo hecho | `--reanudar` |
 | No registrar publicaciones nuevas de las tiendas | `--sin-descubrimiento` |
 
 Si corrés el mismo día dos veces, la lectura nueva **reemplaza** la del día (no duplica filas).

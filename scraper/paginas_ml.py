@@ -171,3 +171,19 @@ def evaluar_completitud(leidas, declaradas, fin, bloqueado=False, minimo_pct=Non
     if fin == 'sin_siguiente':
         return True, 'ML no declara el total: se asume completa porque llegó a la última página'
     return False, f'Lectura cortada ({fin}) y ML no declara el total'
+
+
+def url_pagina_siguiente(url, pagina, por_pagina):
+    """Plan B de paginación cuando no se encuentra el botón "Siguiente": los listados de ML se paginan por offset con el
+    sufijo `_Desde_<n>` (48 por página: 1, 49, 97...). `pagina` = la página en la que estamos (1-based).
+    Devuelve la URL de la siguiente o None. SUPOSICIÓN sobre el formato de ML: si la página resultante no trae tarjetas
+    nuevas, el lector se detiene (no se cuelga ni inventa)."""
+    if not por_pagina or por_pagina < 1:
+        return None
+    base = re.split(r'[?#]', str(url))[0].rstrip('/')
+    desde = pagina * por_pagina + 1
+    if re.search(r'_Desde_\d+', base):
+        return re.sub(r'_Desde_\d+', f'_Desde_{desde}', base)
+    if '_NoIndex_True' in base:
+        return base.replace('_NoIndex_True', f'_Desde_{desde}_NoIndex_True', 1)
+    return f'{base}_Desde_{desde}'

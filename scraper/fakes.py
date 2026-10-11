@@ -68,10 +68,16 @@ class LectorFalso:
 
     def leer_tienda(self, url, max_paginas=None, diagnostico=False):
         self.llamadas.append(('tienda', url))
-        return self.tiendas.get(url, {'estado': 'error', 'items': [], 'detalle': 'no mockeada'})
+        v = self.tiendas.get(url, {'estado': 'error', 'items': [], 'detalle': 'no mockeada'})
+        if isinstance(v, Exception):
+            raise v
+        return v
 
     def leer_publicacion(self, url, esperado=None, diagnostico=False):
         self.llamadas.append(('pub', url))
-        return self.pubs.get(url, {'estado': 'Error', 'detalle': 'no mockeada', 'precio': None, 'vendedor': ''})
+        v = self.pubs.get(url, {'estado': 'Error', 'detalle': 'no mockeada', 'precio': None, 'vendedor': ''})
+        if isinstance(v, Exception):
+            raise v
+        return v
 
     def cerrar(self): pass
