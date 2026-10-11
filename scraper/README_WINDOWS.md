@@ -20,10 +20,16 @@ lecturas en `Historial_Precios` (+ eventos en `Eventos_Competencia`).
 ```
 python scraper.py --configurar-login
 ```
-Se abre un Chrome **propio del scraper** (no tu Chrome de todos los días): iniciá sesión en Mercado Libre, abrí cualquier
-publicación para confirmar que ves precios y volvé a la consola a apretar ENTER. **No se guarda usuario ni contraseña**: queda
-solo la sesión en la carpeta `scraper\perfil_chrome\` (también fuera de git). Si ML vuelve a pedir login o verificación,
-repetí este paso.
+Se abre un Chrome **común** (sin Selenium, sin banderas de automatización) con la carpeta de perfil del scraper. Iniciá sesión en
+Mercado Libre, entrá a las tiendas que suelen pedir captcha (p. ej. GEOTEK) y resolvelos, abrí una publicación para confirmar que ves
+precios, y **volvé a la consola y escribí `LISTO` + ENTER**. Un ENTER suelto no hace nada (no cierra ni sigue): la ventana queda abierta
+hasta que escribas LISTO. Después cerrá Chrome. **No se guarda usuario ni contraseña**: queda solo la sesión en `scraper\perfil_chrome\`.
+Si quedó un Chrome viejo tomando el perfil, el scraper lo cierra solo (únicamente los que usan esa carpeta; tu Chrome diario no se toca).
+
+**Captcha durante la corrida:** si ML pide captcha en UNA tienda o publicación, esa se saltea (queda como "No completa" en `Tiendas_Conteo`,
+evento `Tienda_bloqueada`, y lo leído hasta ahí se guarda) y la corrida sigue con las demás. Corta (código 2) solo si hay 2 tiendas o 3
+publicaciones seguidas bloqueadas, o si ML pide login. Para una corrida con vos adelante: `python scraper.py --esperar-captcha 10`
+espera hasta 10 min en cada captcha a que lo resuelvas en la ventana y sigue.
 
 ## 3. Modo prueba (antes de la primera corrida real)
 ```

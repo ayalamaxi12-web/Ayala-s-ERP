@@ -149,9 +149,9 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
     hoy = hoy or ahora.strftime('%d/%m/%Y')
     hora = ahora.strftime('%H:%M')
     R = {'fecha': hoy, 'escribir': escribir, 'vendedor': vendedor or 'todos', 'solo': solo or 'todo',
-         'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0, 'saltados_reanudar': 0},
+         'sync': {}, 'perfiles': {'leidos': 0, 'ok': 0, 'sin_resultados': 0, 'error': 0, 'items': 0, 'saltados_reanudar': 0, 'bloqueadas': []},
          'publicaciones': {'leidas': 0, 'ok': 0, 'caidas': 0, 'sin_lectura': 0, 'otro_vendedor': 0, 'error': 0,
-                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0, 'catalogo_sin_wid': 0, 'ya_hechas': 0},
+                           'saltadas_por_perfil': 0, 'via': {}, 'solo_precio_ganador': 0, 'catalogo_sin_wid': 0, 'ya_hechas': 0, 'bloqueadas': 0},
          'para_completar_en_la_planilla': [], 'tiendas': [], 'celdas': None, 'reanudar': reanudar, 'corte': None,
          'navegador_reinicios': 0,
          'lecturas': 0, 'eventos': {}, 'descubrimiento_nuevas': 0, 'avisos': [], 'pendientes_stock': None}
@@ -263,6 +263,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
             ultimo_caida[ref['id']] = t
 
     bloqueo, corte = None, None
+    bloq_tiendas = bloq_pubs = 0      # bloqueos (captcha/verificación) SEGUIDOS: uno aislado se saltea; varios seguidos cortan la corrida
     ya_hoy = _refs_con_lectura_hoy(hist_f, hoy) if reanudar else set()
     tiendas_ok_hoy = _tiendas_completas_hoy(conteo_f, hoy) if reanudar else set()
     try:
@@ -307,8 +308,25 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                 if not completa and t['estado'] != 'bloqueado':
                     R['avisos'].append(f"{p['entidad_nombre']}: lectura INCOMPLETA ({motivo_c}). " + _evidencia_corta(t.get('evidencia_paginacion')))
                 if t['estado'] == 'bloqueado':
-                    bloqueo = t.get('detalle', 'ML pidió login/verificación')
-                    break
+                    tipo_b = t.get('bloqueo') or 'captcha'
+                    if tipo_b == 'login':      # sesión vencida: afecta a TODO, no tiene sentido seguir
+                        bloqueo = t.get('detalle', 'ML pidió login')
+                        break
+                    # captcha/verificación en ESTA tienda: se saltea y se sigue con las demás
+                    R['perfiles']['bloqueadas'].append({'entidad': p['entidad_nombre'], 'tipo': tipo_b, 'leidas': n_leidas, 'motivo': motivo_c})
+                    bloq_tiendas += 1
+                    emitir({'Tipo': ev.TIENDA_BLOQUEADA, 'Detalle': f'ML pidió {tipo_b}: {motivo_c}'}, entidad=p['entidad_nombre'], link=p['url_listado'])
+                    R['avisos'].append(f"{p['entidad_nombre']}: ML pidió {tipo_b} ({motivo_c}). Se saltea; hoy no hay conteo completo de esa tienda.")
+                    if bloq_tiendas >= config.MAX_BLOQUEOS_SEGUIDOS_TIENDAS:
+                        bloqueo = f'ML pidió {tipo_b} en {bloq_tiendas} tiendas seguidas: nos está frenando a nosotros, no a una tienda'
+                        break
+                    if pausa:
+                        time.sleep(config.PAUSA_TRAS_CAPTCHA_SEG)       # enfriamiento antes de la próxima tienda
+                    if not t['items']:
+                        continue
+                    # lo leído ANTES del captcha son lecturas válidas: se guardan (el conteo ya quedó como INCOMPLETO)
+                else:
+                    bloq_tiendas = 0
                 if t['estado'] == 'error':
                     R['perfiles']['error'] += 1
                     R['avisos'].append(f"Perfil {p['entidad_nombre']}: {t.get('detalle', 'error de lectura')}")
@@ -319,7 +337,8 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                     emitir({'Tipo': ev.SIN_RESULTADOS, 'Detalle': 'La tienda cargó y no trajo publicaciones (' + ', '.join(subs) + ')'},
                            entidad=p['entidad_nombre'], link=p['url_listado'])
                     continue
-                R['perfiles']['ok'] += 1
+                if t['estado'] == 'ok':
+                    R['perfiles']['ok'] += 1
                 R['perfiles']['items'] += len(t['items'])
                 for it in t['items']:
                     ident = sy.ident_publicacion(it['link'])
@@ -394,8 +413,19 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                     res = {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': f'{type(e).__name__}: {str(e)[:120]}'}
                 est = res['estado']
                 if est == 'Bloqueado':
-                    bloqueo = res.get('detalle', 'ML pidió login/verificación')
-                    break
+                    tipo_b = res.get('bloqueo') or 'captcha'
+                    R['publicaciones']['bloqueadas'] += 1
+                    if tipo_b == 'login':
+                        bloqueo = res.get('detalle', 'ML pidió login')
+                        break
+                    bloq_pubs += 1
+                    if bloq_pubs >= config.MAX_BLOQUEOS_SEGUIDOS_PUBLICACIONES:
+                        bloqueo = f'ML pidió {tipo_b} en {bloq_pubs} publicaciones seguidas: nos está frenando a nosotros'
+                        break
+                    if pausa:
+                        time.sleep(config.PAUSA_TRAS_CAPTCHA_SEG)
+                    continue
+                bloq_pubs = 0
                 if est == 'OK':
                     vend = res.get('vendedor', '')
                     if vend and sy.es_excluida(vend):
@@ -518,6 +548,11 @@ def texto_resumen(R):
          f"Lecturas a Historial_Precios: {R['lecturas']}" + (f" {R['lecturas_escritas']}" if R.get('lecturas_escritas') else ''),
          f"Eventos: {R['eventos'] or 'ninguno'}",
          f"Descubrimiento (publicaciones de tienda que no son referencias): {R['descubrimiento_nuevas']} nuevas"]
+    if pl.get('bloqueadas'):
+        L.append('Tiendas bloqueadas por captcha/verificación (se saltearon; el resto siguió):')
+        L += [f"   - {b['entidad']}: {b['tipo']} · {b['motivo']}" for b in pl['bloqueadas']]
+    if pu.get('bloqueadas'):
+        L.append(f"Publicaciones bloqueadas por captcha/verificación: {pu['bloqueadas']}")
     if R.get('reanudar'):
         L.append(f"MODO REANUDAR: {pl.get('saltados_reanudar', 0)} tiendas y {pu.get('ya_hechas', 0)} publicaciones ya estaban hechas hoy y no se repitieron.")
     if R.get('navegador_reinicios'):

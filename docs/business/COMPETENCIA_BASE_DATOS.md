@@ -69,3 +69,10 @@ Medidor: `scraper/celdas.py` (límite de Google Sheets: 10M celdas por archivo, 
 Si Chrome se cae, el scraper lo reabre y reintenta esa lectura; recicla Chrome cada 60 navegaciones; tope de 60 s por página y de 180 min por corrida;
 `--reanudar` retoma el día sin repetir lo ya leído; código de salida 3 = corrida cortada (lo leído ya se escribió). La paginación de tiendas prueba, en orden:
 botón "Siguiente" (con clic por JavaScript si algo lo tapa) → botón "Ver más" → URL por offset (`_Desde_n`) cuando ML declara más publicaciones de las leídas.
+
+### Etapa 2 — captcha / verificación de ML
+- Un captcha en una tienda o publicación NO corta la corrida: se saltea, se escribe lo leído (conteo `Completa = No`, motivo "ML pidió captcha en la página N")
+  y se emite `Tienda_bloqueada`. Cortan: login pedido, 2 tiendas seguidas (`MAX_BLOQUEOS_SEGUIDOS_TIENDAS`) o 3 publicaciones seguidas bloqueadas, con pausa de 60 s tras cada captcha.
+- El bloqueo se detecta al abrir la tienda **y en cada página siguiente** (antes solo al abrir: GEOTEK 48/122 era probablemente un captcha en la página 2).
+- `--configurar-login`: Chrome común + perfil del scraper, espera `LISTO`; limpia Chrome huérfanos del perfil. `--esperar-captcha [MIN]`: corrida asistida.
+- No se incluye resolución automática de captchas ni evasión. Alternativas a evaluar: leer los listados vía API de búsqueda de ML por `/ml-proxy`.

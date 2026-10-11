@@ -147,7 +147,7 @@ def test_la_linea_base_ignora_dias_incompletos_y_marca_la_variacion():
 def test_un_dia_bloqueado_queda_registrado_como_incompleto():
     ss = base()
     lec = _lector()
-    lec.tiendas[URL_AC] = {'estado': 'bloqueado', 'items': [], 'detalle': 'ML pidió login'}
+    lec.tiendas[URL_AC] = {'estado': 'bloqueado', 'bloqueo': 'login', 'items': [], 'detalle': 'ML pidió login'}
     with pytest.raises(corrida.CorridaBloqueada):
         correr(ss, lec, '05/10/2026')
     f = next(f for f in ss.tab(tc.CONTEO_SHEET)[1:] if f[3] == 'AMERICANCOMPUTERS')

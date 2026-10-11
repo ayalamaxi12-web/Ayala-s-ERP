@@ -10,6 +10,7 @@ EVENTOS_HEADERS = ['Fecha', 'Hora', 'Tipo', 'Referencia_ID', 'SKU', 'Entidad', '
 
 BAJO, SUBIO, CAIDA, REAPARECIO = 'Bajo', 'Subio', 'Publicacion_caida', 'Reaparecio'
 SIN_RESULTADOS, STOCK_BAJO = 'Vendedor_sin_resultados', 'Stock_bajo'
+TIENDA_BLOQUEADA = 'Tienda_bloqueada'     # ML pidió captcha/verificación al leer esa tienda hoy: hoy no hay dato (no es debilidad)
 
 
 def evento_precio(anterior, nuevo, umbral_pct=None):

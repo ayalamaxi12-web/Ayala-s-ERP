@@ -68,3 +68,11 @@ REINTENTOS_SESION = 2             # si Chrome se cae leyendo algo: reabrir y rei
 MAX_REINICIOS = 8                 # más reinicios que esto en una corrida = algo anda mal: se corta (lo leído ya se escribió)
 TIMEOUT_PAGINA_SEG = 60           # una página que no termina de cargar no cuelga la corrida
 DURACION_MAXIMA_MIN = 180         # tope de la corrida: si se pasa, escribe lo que tenga y corta (con --reanudar se retoma)
+
+# ── Captcha / verificación de ML ──────────────────────────────────────────────
+# Un captcha o verificación en UNA tienda o publicación NO corta la corrida: se saltea y se sigue. Si pasa varias veces seguidas es que
+# ML nos está frenando a nosotros (no a esa tienda): ahí sí se corta. Un pedido de LOGIN (sesión vencida) corta siempre.
+MAX_BLOQUEOS_SEGUIDOS_TIENDAS = 2
+MAX_BLOQUEOS_SEGUIDOS_PUBLICACIONES = 3
+PAUSA_TRAS_CAPTCHA_SEG = 60       # enfriamiento después de un captcha antes de pedir la página siguiente
+ESPERAR_CAPTCHA_MIN_DEFAULT = 10  # con --esperar-captcha (corrida CON vos adelante): cuánto esperar a que lo resuelvas

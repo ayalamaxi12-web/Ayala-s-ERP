@@ -83,7 +83,7 @@ def clasificar_publicacion(snap, esperado=None, url_original=None, directo=False
             'descuento': '', 'cuotas': '', 'detalle': ''}
     bloqueo = detectar_bloqueo(snap.get('url'), snap.get('texto'))
     if bloqueo:
-        return dict(base, estado='Bloqueado', detalle=f'ML pidió {bloqueo}')
+        return dict(base, estado='Bloqueado', bloqueo=bloqueo, detalle=f'ML pidió {bloqueo}')
     precio = cdb.parse_precio(snap.get('precio'))
     texto = str(snap.get('texto') or '').lower()
     if not precio:

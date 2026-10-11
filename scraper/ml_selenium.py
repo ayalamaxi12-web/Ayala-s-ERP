@@ -10,6 +10,7 @@ import time
 import config
 import competencia_db as cdb
 import paginas_ml as pml
+import perfil_chrome
 from errores import NavegadorCaido, es_error_de_sesion, es_timeout
 
 JS_PUBLICACION = r"""
@@ -161,8 +162,9 @@ return true;
 
 
 class LectorML:
-    def __init__(self, perfil_dir=None, headless=False, log=print, api=None):
+    def __init__(self, perfil_dir=None, headless=False, log=print, api=None, esperar_humano_seg=0):
         self.perfil_dir, self.headless, self.log = perfil_dir or config.PERFIL_CHROME, headless, log
+        self.esperar_humano_seg = esperar_humano_seg      # >0: corrida CON vos adelante: ante un captcha, esperar a que lo resuelvas
         self.api = api            # ml_api.ApiCatalogo (opcional)
         self._driver = None
         self._navs = 0            # navegaciones desde que se abrió Chrome (para reciclarlo antes de que se quede sin memoria)
@@ -188,7 +190,15 @@ class LectorML:
             o.add_experimental_option('useAutomationExtension', False)
             if self.headless:
                 o.add_argument('--headless=new')
-            self._driver = webdriver.Chrome(options=o)    # Selenium Manager baja el chromedriver que corresponda solo
+            try:
+                self._driver = webdriver.Chrome(options=o)    # Selenium Manager baja el chromedriver que corresponda solo
+            except Exception as e:  # noqa: BLE001
+                if not any(f in str(e).lower() for f in ('already in use', 'devtoolsactiveport', 'failed to start', 'session not created')):
+                    raise
+                # el perfil quedó tomado por un Chrome que se cayó a medias: se cierra solo ESE y se reintenta una vez
+                self.log(f'  ⚠ Chrome no pudo abrir el perfil ({str(e).splitlines()[0][:90]}). Libero el perfil y reintento.')
+                perfil_chrome.liberar_perfil(self.perfil_dir, self.log)
+                self._driver = webdriver.Chrome(options=o)
             self._driver.set_page_load_timeout(config.TIMEOUT_PAGINA_SEG)
             self._driver.set_script_timeout(config.TIMEOUT_PAGINA_SEG)
             self._driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -212,6 +222,28 @@ class LectorML:
         self.cerrar()
         self._navs = 0
         time.sleep(3)
+
+    def _bloqueo_actual(self):
+        d = self.driver()
+        return pml.detectar_bloqueo(d.current_url, d.execute_script('return document.body ? document.body.innerText.slice(0,3000) : ""'))
+
+    def _esperar_humano(self, tipo):
+        """Corrida CON vos adelante (--esperar-captcha): avisa y espera hasta N minutos a que resuelvas el captcha/verificación en la
+        ventana de Chrome. -> True si se resolvió. Sin esa opción (la tarea desatendida) no espera: el captcha se saltea."""
+        if not self.esperar_humano_seg:
+            return False
+        self.log(f'  🔔 ML pidió {tipo}. Resolvelo en la ventana de Chrome: espero hasta {self.esperar_humano_seg // 60} min...')
+        print('\a', end='')
+        fin = time.time() + self.esperar_humano_seg
+        while time.time() < fin:
+            time.sleep(3)
+            d = self.driver()
+            if not pml.detectar_bloqueo(d.current_url, d.execute_script('return document.body ? document.body.innerText.slice(0,3000) : ""')):
+                self.log('  ✓ Resuelto, sigo.')
+                time.sleep(2)
+                return True
+        self.log('  (se acabó el tiempo de espera)')
+        return False
 
     def _con_reintento(self, fn, fallo, *a, **k):
         """Ejecuta una LECTURA completa; si Chrome se cae a la mitad, lo reabre y la reintenta (hasta REINTENTOS_SESION veces).
@@ -306,9 +338,11 @@ class LectorML:
         return r
 
     def leer_publicacion(self, url, esperado=None, diagnostico=False):
-        return self._con_reintento(self._leer_publicacion_impl,
-                                   lambda msg: {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': msg, 'url_final': url},
-                                   url, esperado, diagnostico)
+        fallo = lambda msg: {'estado': 'Error', 'precio': None, 'vendedor': '', 'detalle': msg, 'url_final': url}  # noqa: E731
+        res = self._con_reintento(self._leer_publicacion_impl, fallo, url, esperado, diagnostico)
+        if res.get('estado') == 'Bloqueado' and self.esperar_humano_seg and self._esperar_humano(res.get('bloqueo') or 'captcha'):
+            res = self._con_reintento(self._leer_publicacion_impl, fallo, url, esperado, diagnostico)     # lo resolviste: se lee de nuevo
+        return res
 
     def _leer_publicacion_impl(self, url, esperado=None, diagnostico=False):
         """-> dict de paginas_ml (estado OK|Caida|Error|Sin lectura|Otro vendedor|Bloqueado, precio, vendedor,
@@ -438,10 +472,12 @@ class LectorML:
         try:
             self._ir(url, '.poly-card, .ui-search-result')
             d = self.driver()
-            b = pml.detectar_bloqueo(d.current_url, d.execute_script('return document.body.innerText.slice(0,3000)'))
+            b = self._bloqueo_actual()
+            if b and self._esperar_humano(b):
+                b = self._bloqueo_actual()
             if b:
-                return {'estado': 'bloqueado', 'items': [], 'detalle': f'ML pidió {b} al abrir la tienda', 'declaradas': None,
-                        'paginas': 0, 'fin': 'bloqueado', 'completa': False, 'motivo': f'ML pidió {b}', 'via_paginacion': {}}
+                return {'estado': 'bloqueado', 'items': [], 'detalle': f'ML pidió {b} al abrir la tienda', 'bloqueo': b, 'declaradas': None,
+                        'paginas': 0, 'fin': 'bloqueado', 'completa': False, 'motivo': f'ML pidió {b} al abrir la tienda', 'via_paginacion': {}}
             try:
                 dec = d.execute_script(JS_DECLARADAS) or {}
                 declaradas = pml.parse_declaradas(dec.get('texto'))
@@ -457,6 +493,14 @@ class LectorML:
                 if via_prev != 'ver_mas' and d.current_url in vistos_pag:
                     fin = 'repetida'
                     break
+                if pagina > 1:        # el captcha también puede aparecer AL PASAR de página (antes solo se miraba al abrir la tienda)
+                    b = self._bloqueo_actual()
+                    if b and self._esperar_humano(b):
+                        b = self._bloqueo_actual()
+                    if b:
+                        motivo = f'ML pidió {b} en la página {pagina}: leyó {len(items)}' + (f' de {declaradas} declaradas' if declaradas else '')
+                        return {'estado': 'bloqueado', 'items': items, 'detalle': motivo, 'bloqueo': b, 'declaradas': declaradas,
+                                'paginas': pagina - 1, 'fin': 'bloqueado', 'completa': False, 'motivo': motivo, 'via_paginacion': vias}
                 vistos_pag.add(d.current_url)
                 self._scroll()
                 tarjetas = d.execute_script(JS_TARJETAS) or []
@@ -572,13 +616,22 @@ class LectorML:
 
 
 def configurar_login(perfil_dir=None):
-    """Abre Chrome VISIBLE con el perfil del scraper para que te loguees en Mercado Libre UNA vez. No se guarda
-    ninguna contraseña: queda la sesión (cookies) en la carpeta del perfil."""
+    """Login manual de Mercado Libre. Abre un Chrome COMÚN (sin Selenium) con el perfil del scraper y espera a que escribas LISTO
+    (perfil_chrome.configurar_login). Solo si no se encuentra chrome.exe usa Selenium, y aun así NO se cierra por un error ni por un ENTER suelto."""
+    r = perfil_chrome.configurar_login(perfil_dir)
+    if r != 'sin_chrome':
+        return r
+    print('No encontré chrome.exe (probá definir la variable CHROME_EXE). Uso el modo con Selenium.')
+    perfil_chrome.liberar_perfil(perfil_dir or config.PERFIL_CHROME)
     lector = LectorML(perfil_dir, headless=False)
-    d = lector.driver()
-    d.get('https://www.mercadolibre.com.ar/')
-    print('\nSe abrió Chrome con el perfil del scraper.')
-    print('1) Iniciá sesión en Mercado Libre con tu cuenta (y resolvé cualquier verificación que te pida).')
-    print('2) Abrí cualquier publicación para confirmar que ves los precios.')
-    input('3) Cuando termines, volvé acá y apretá ENTER para cerrar Chrome y guardar la sesión... ')
-    lector.cerrar()
+    try:
+        d = lector.driver()
+        try:
+            d.get('https://www.mercadolibre.com.ar/')
+        except Exception as e:  # noqa: BLE001  (una página que tarda o un captcha no tiene que cerrar la ventana)
+            print(f'(la página no terminó de cargar: {str(e).splitlines()[0][:100]}; seguí a mano en la ventana de Chrome)')
+        print('\nSe abrió Chrome con el perfil del scraper. Iniciá sesión, resolvé los captchas y confirmá que ves los precios.')
+        perfil_chrome.esperar_listo()
+    finally:
+        lector.cerrar()
+    return 'ok'

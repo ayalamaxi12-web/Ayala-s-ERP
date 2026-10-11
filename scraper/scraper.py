@@ -9,6 +9,7 @@
   python scraper.py --medir-celdas                # cuántas celdas de las 10.000.000 de Google Sheets se usan (no abre Chrome)
   python scraper.py --sembrar-linea-base          # una vez: carga el conteo histórico de las V-* en Tiendas_Conteo (--sin-escribir para ver)
 
+  python scraper.py --esperar-captcha 10          # corrida CON vos adelante: si ML pide captcha, espera a que lo resuelvas (10 min)
   python scraper.py --reanudar                    # retoma el día: NO repite las tiendas completas ni las publicaciones ya leídas hoy
 
 Códigos de salida: 0 ok · 1 error · 2 Mercado Libre pidió login/verificación · 3 corrida cortada (Chrome caído demasiadas veces o
@@ -101,6 +102,8 @@ def main(argv=None):
     ap.add_argument('--solo', choices=['perfiles', 'publicaciones'])
     ap.add_argument('--sin-escribir', action='store_true')
     ap.add_argument('--sin-descubrimiento', action='store_true')
+    ap.add_argument('--esperar-captcha', nargs='?', const=config.ESPERAR_CAPTCHA_MIN_DEFAULT, type=int, metavar='MIN',
+                    help='corrida CON vos adelante: si ML pide captcha, espera hasta MIN minutos a que lo resuelvas en la ventana de Chrome')
     ap.add_argument('--reanudar', action='store_true', help='no repetir lo que ya se leyó hoy (tiendas completas, publicaciones con lectura de hoy)')
     ap.add_argument('--medir-celdas', action='store_true')
     ap.add_argument('--sembrar-linea-base', action='store_true')
@@ -128,7 +131,7 @@ def main(argv=None):
     from ml_api import ApiCatalogo
     api = ApiCatalogo(log=log)
     log('Vía API de catálogo: ' + ('configurada (ERP_BACKEND_URL / ERP_API_KEY)' if api.disponible() else 'NO configurada (solo páginas)'))
-    lector = LectorML(headless=a.headless, log=log, api=api)
+    lector = LectorML(headless=a.headless, log=log, api=api, esperar_humano_seg=(a.esperar_captcha or 0) * 60)
     try:
         if a.probar:
             import prueba

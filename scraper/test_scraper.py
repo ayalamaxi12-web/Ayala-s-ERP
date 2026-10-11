@@ -181,7 +181,7 @@ def test_corrida_completa_escribe_lecturas_eventos_descubrimiento_y_es_idempoten
     assert {f[4] for f in ss.tab('Referencias_Mercado')[1:] if f[1] == 'CAM-1'} == {'TECNOVIBEARG', 'GEOTEK'}   # entidad aprendida al leer
     assert len(hist) == 1 + 3 and r1['lecturas'] == 3                  # item (perfil) + WID + WID2 (publicación); sin-wid no
     assert ('tienda', 'https://listado.mercadolibre.com.ar/tienda/global-electronics-group') not in lector.llamadas   # propia: no se scrapea
-    assert r1['perfiles'] == {'leidos': 3, 'ok': 1, 'sin_resultados': 2, 'error': 0, 'items': 2, 'saltados_reanudar': 0}
+    assert r1['perfiles'] == {'leidos': 3, 'ok': 1, 'sin_resultados': 2, 'error': 0, 'items': 2, 'saltados_reanudar': 0, 'bloqueadas': []}
     assert r1['eventos'] == {'Vendedor_sin_resultados': 2}               # american-computers y geotek (tienda vacía)
     assert r1['descubrimiento_nuevas'] == 1 and len(ss.tab('Discovery_Sugerencias')) == 2
     assert r1['publicaciones']['catalogo_sin_wid'] == 1 and r1['pendientes_stock'].startswith('Stock bajo DESACTIVADO')   # sin wid: no se abre
@@ -233,7 +233,7 @@ def test_bloqueo_corta_la_corrida_pero_escribe_lo_leido():
     ss = base()
     lector = LectorFalso(
         tiendas={'https://listado.mercadolibre.com.ar/tienda/tecnovibe': tienda(('Cámara', L_ITEM, 1000)),
-                 'https://listado.mercadolibre.com.ar/tienda/american-computers': {'estado': 'bloqueado', 'items': [], 'detalle': 'ML pidió login'}})
+                 'https://listado.mercadolibre.com.ar/tienda/american-computers': {'estado': 'bloqueado', 'bloqueo': 'login', 'items': [], 'detalle': 'ML pidió login'}})
     with pytest.raises(corrida.CorridaBloqueada):
         corrida.correr(ss, maca(), lector, hoy=HOY, pausa=False, log=lambda m: None)
     assert len(ss.tab('Historial_Precios')) == 2                      # lo leído antes del bloqueo quedó guardado
