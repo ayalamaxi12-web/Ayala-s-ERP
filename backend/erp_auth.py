@@ -5,7 +5,8 @@ Qué protege (ver `requiere_clave`):
   - todo POST / PUT / PATCH / DELETE (escrituras a ML, Ecom, Sheets, la base y
     los jobs que gastan recursos);
   - `GET /ml/token` (devuelve el token OAuth vivo de ML);
-  - `GET /ml-proxy` (lecturas con el token del servidor).
+  - `GET /ml-proxy` (lecturas con el token del servidor);
+  - `GET /competencia/analisis` (datos de competencia: precios de rivales, no son públicos).
 
 Qué NO protege (sigue abierto):
   - `/`, `/health`, `/tc/bna` y el resto de los GET de solo lectura;
@@ -27,7 +28,7 @@ import os
 
 HEADER_CLAVE = "x-erp-key"
 
-_RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy")
+_RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy", "/competencia/analisis")
 _METODOS_ESCRITURA = ("POST", "PUT", "PATCH", "DELETE")
 
 _MAX_AVISADOS = 500

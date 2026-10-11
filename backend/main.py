@@ -2031,6 +2031,34 @@ def _migracion_competencia_job(job_id, ejecutar_real, plan_hash):
         _migracion_lock.release()
 
 
+# ── Análisis de Competencia (Etapa 3): datos para la pantalla unificada. Solo lectura, con caché; protegido por X-ERP-Key (erp_auth).
+def _analisis_leer_filas():
+    import competencia_db as cdb
+    import competencia_migracion as cm
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    titulos = {ws.title for ws in ss.worksheets()}
+    v = lambda n: cm._valores(ss, n, titulos)  # noqa: E731
+    return {"refs": v("Referencias_Mercado"), "hist": v(cdb.HISTORIAL_SHEET), "eventos": v("Eventos_Competencia"),
+            "conteo": v("Tiendas_Conteo"), "categorias": v("Categoria_Competidores")}
+
+
+_analisis_cache = None
+
+
+@app.get("/competencia/analisis")
+async def competencia_analisis(dias: int = 30, refrescar: bool = False):
+    """Datos de la pantalla Análisis de Competencia: por referencia (SKU x competidor) último precio, anterior, desde cuándo rige, precio ganador y
+    serie de `dias` días; eventos; conteo de tiendas; mapa de categorías. Caché 10 min (`refrescar=true` relee, máx. 1 cada 30 s)."""
+    global _analisis_cache
+    import competencia_analisis
+    if _analisis_cache is None:
+        _analisis_cache = competencia_analisis.CacheAnalisis(_analisis_leer_filas)
+    try:
+        return await run_in_threadpool(_analisis_cache.obtener, dias, refrescar)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"No se pudo leer el Sheet de competencia: {e}")
+
+
 @app.post("/competencia/migracion/run")
 async def competencia_migracion_run(request: Request):
     """Body: {"ejecutar": false|true, "plan_hash": "<hash del dry-run aprobado>"}. Sin `ejecutar` = dry-run."""

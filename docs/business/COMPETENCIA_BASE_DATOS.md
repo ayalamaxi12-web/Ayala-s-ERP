@@ -76,3 +76,19 @@ botón "Siguiente" (con clic por JavaScript si algo lo tapa) → botón "Ver má
 - El bloqueo se detecta al abrir la tienda **y en cada página siguiente** (antes solo al abrir: GEOTEK 48/122 era probablemente un captcha en la página 2).
 - `--configurar-login`: Chrome común + perfil del scraper, espera `LISTO`; limpia Chrome huérfanos del perfil. `--esperar-captcha [MIN]`: corrida asistida.
 - No se incluye resolución automática de captchas ni evasión. Alternativas a evaluar: leer los listados vía API de búsqueda de ML por `/ml-proxy`.
+
+### Etapa 3.0 — base de la pantalla "Análisis de Competencia"
+- **Costo fijo de ML (decisión de Maxx):** 1.330 / 2.740 / 3.320 (menos de $16k / $16–24k / $24–33k); desde $33.000 ML no cobra cargo fijo. Fuente única: el motor
+  (`pricing_tramo.ml_costo_fijo`), expuesto en `GET /rentabilidad/pricing/ml-costo-fijo`. El front (`ML_COSTO_FIJO` en `docs/index.html`) lo trae del backend, con el
+  seed como respaldo si no responde, y lo usan **Competidores** y **Ofertas ML**. Se sacaron los inputs `cfg-e1..e4` y los 1.255/2.500/3.030 (también los guardados en `localStorage`).
+  Los márgenes que se ven hoy en esas pantallas cambian (los viejos estaban mal).
+- **Paridad de márgenes:** `python backend/scripts/paridad_margenes.py` compara `compMargenAt` del front con `motor_precios.precio_a_margen` (30 casos) y el costo fijo
+  de `ofmMargenAt` (10 precios). Resultado: **0 casos fuera de tolerancia**. Correrlo después de tocar cualquiera de las dos fórmulas.
+  Ofertas ML mantiene su propia cuenta de envío por tramos y de cuotas (`OFM.envioTramos`, `OFM.cuotasPct`): NO está en la paridad, queda para revisar aparte.
+- **`GET /competencia/analisis?dias=30&refrescar=false`** (`backend/competencia_analisis.py`): requiere `X-ERP-Key`. Una lectura del Sheet servida a todos (caché 10 min; `refrescar`
+  relee, máx. 1 cada 30 s; si la relectura falla se sirve lo cacheado). Devuelve por referencia de competencia activa {sku, entidad, rol, cantidad, último precio, precio anterior,
+  `delta_pct`, `desde` (desde cuándo rige el precio actual), `ganador`, última lectura (estado/días), `serie`}, `eventos` de la ventana, `tiendas` (conteo y completitud),
+  `categorias` y `avisos`. No calcula márgenes ni categorías/PM: eso lo une el front por SKU.
+- **`Categoria_Competidores`** (escribe el scraper, `scraper/categorias_competidores.py`): `Subcategoria, Rol, Entidad_ID, Entidad, Slug, SKUs_Nuestros, Actualizado`. Upsert por
+  (Subcategoria, Rol, Slug); nunca borra: lo que Maca saque de A-CATEGORIAS queda con `Actualizado` viejo y el endpoint lo marca `desactualizada`. Requiere actualizar el scraper
+  en la PC y correr una vez (`python scraper.py --solo perfiles --sin-descubrimiento` alcanza para sincronizar).

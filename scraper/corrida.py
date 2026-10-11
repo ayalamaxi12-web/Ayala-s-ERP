@@ -8,6 +8,7 @@ from datetime import datetime
 
 import config
 import competencia_db as cdb
+import categorias_competidores as cc
 import eventos as ev
 import planilla_maca as pm
 import sheets_io as sio
@@ -513,6 +514,9 @@ def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, dis
         filas = {r[0]: n for n, r in enumerate(ref_ws.get_all_values(), start=1) if r}
         celdas = [(filas[u['Referencia_ID']], sy.COL_ROL, u['Rol']) for u in plan.rol_updates if u['Referencia_ID'] in filas]
         sio.actualizar_celdas(ref_ws, ref_h, celdas + list(cambios_ref))
+    if plan.perfiles:
+        nuevas, act = cc.registrar(ss, plan.perfiles, R['fecha'])
+        R['categoria_competidores'] = {'nuevas': nuevas, 'actualizadas': act}
     if lecturas:
         ws = cdb.asegurar_pestana(ss, cdb.HISTORIAL_SHEET, HISTORIAL_HEADERS_V2, 20000)
         hh = sio.asegurar_columnas(ws, HISTORIAL_HEADERS_V2)
