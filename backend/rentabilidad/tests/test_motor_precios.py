@@ -217,3 +217,21 @@ def test_migracion_del_motor_coincide_con_los_modelos():
             engine.dispose()
     del_motor = [x for x in diferencias if "pricing_" in repr(x)]
     assert del_motor == []
+
+
+def test_tramos_costo_fijo_ml_son_los_de_la_tabla_y_sobre_33000_no_hay_cargo(par):
+    t = m.tramos_costo_fijo_ml(par)
+    assert [(x["desde"], x["hasta"], x["valor"]) for x in t] == [(d("0"), d("16000"), d("1330")), (d("16000"), d("24000"), d("2740")), (d("24000"), d("33000"), d("3320"))]
+    assert m.precio_a_margen(d("33000"), _plancha(envio=d("0")), par).cargos["costo_fijo"] == d("0.00")
+
+
+def test_endpoint_ml_costo_fijo(monkeypatch, db_session):
+    from contextlib import contextmanager
+    from rentabilidad import api
+
+    @contextmanager
+    def _ses():
+        yield db_session
+    monkeypatch.setattr(api, "sesion", _ses)
+    j = api.pricing_ml_costo_fijo(date(2026, 9, 30))
+    assert [x["valor"] for x in j["tramos"]] == [1330, 2740, 3320] and j["sin_cargo_desde"] == 33000 and j["umbral_envio_gratis"] == 33000

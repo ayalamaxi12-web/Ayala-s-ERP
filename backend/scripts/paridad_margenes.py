@@ -12,7 +12,7 @@ from decimal import Decimal
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(AQUI, '..'))
 from rentabilidad import seed  # noqa: E402
-from rentabilidad.motor_precios import EntradaMotor, ParametrosMotor, Tramo, precio_a_margen  # noqa: E402
+from rentabilidad.motor_precios import EntradaMotor, ParametrosMotor, Tramo, precio_a_margen, tramos_costo_fijo_ml  # noqa: E402
 
 INDEX = os.path.join(AQUI, '..', '..', 'docs', 'index.html')
 PRECIOS = [5000, 15999, 16000, 23999, 24000, 32999, 33000, 45000, 120000, 300000]
@@ -33,10 +33,20 @@ def extraer_funcion(src, nombre):
 def margenes_js(casos):
     src = open(INDEX, encoding='utf-8').read()
     fn = '\n'.join(extraer_funcion(src, n) for n in ('cfgN', 'compExtraFijo', 'compMargenAt'))
-    js = ("global.window={};global.qs=()=>null;global.S={shippingThreshold:33000,shippingCost:8500};\n" + fn +
+    # El front toma los tramos del endpoint /rentabilidad/pricing/ml-costo-fijo: acá se le pasa la misma respuesta (desde la tabla del seed)
+    tramos = [[float(t['hasta']), float(t['valor'])] for t in tramos_costo_fijo_ml(parametros_seed()) if t['hasta'] is not None] + [[None, 0]]
+    js = ("global.window={};global.qs=()=>null;global.S={shippingThreshold:33000,shippingCost:8500};const ML_COSTO_FIJO={tramos:" + json.dumps(tramos) + "};\n" + fn +
           "\nconst c=JSON.parse(process.argv[1]);console.log(JSON.stringify(c.map(x=>compMargenAt(x[0],x[1],x[2],0).m)));")
     out = subprocess.run(['node', '-e', js, json.dumps(casos)], capture_output=True, text=True, check=True).stdout
     return json.loads(out)
+
+
+def costo_fijo_ofertas_js(precios):
+    src = open(INDEX, encoding='utf-8').read()
+    tramos = [[float(t['hasta']), float(t['valor'])] for t in tramos_costo_fijo_ml(parametros_seed()) if t['hasta'] is not None] + [[None, 0]]
+    js = ("const ML_COSTO_FIJO={tramos:" + json.dumps(tramos) + "};\n" + extraer_funcion(src, 'ofmPorTramo') +
+          "\nconsole.log(JSON.stringify(JSON.parse(process.argv[1]).map(p=>ofmPorTramo(p,ML_COSTO_FIJO.tramos))));")
+    return json.loads(subprocess.run(['node', '-e', js, json.dumps(precios)], capture_output=True, text=True, check=True).stdout)
 
 
 def parametros_seed():
@@ -62,7 +72,13 @@ def main():
         dif = (mj - mm) * 100
         malos += abs(mj - mm) > a.tolerancia
         print(f'{p:>8} {iva:>6} {costo:>10.2f} {mj * 100:>9.2f} {mm * 100:>9.2f} {dif:>+8.2f}{"  <<<" if abs(mj - mm) > a.tolerancia else ""}')
-    print(f'\n{len(casos)} casos, {malos} fuera de tolerancia ({a.tolerancia * 100:.2f} pp).')
+    # Ofertas ML (ofmMargenAt) usa su propia cuenta de envío/cuotas; acá se verifica solo el costo fijo, que ahora sale de la misma fuente.
+    cf_js = costo_fijo_ofertas_js(PRECIOS)
+    for p, cj in zip(PRECIOS, cf_js):
+        cm = float(precio_a_margen(Decimal(p), EntradaMotor(canal='ML', costo=Decimal(1000), iva_factor=Decimal('1.21'), envio=Decimal(0)), par).cargos['costo_fijo'])
+        malos += abs(cj - cm) > 0.005
+        print(f'costo fijo Ofertas @ {p:>7}: JS {cj:>7.2f} · motor {cm:>7.2f}{"  <<<" if abs(cj - cm) > 0.005 else ""}')
+    print(f'\n{len(casos)} casos de Competidores + {len(PRECIOS)} de costo fijo de Ofertas, {malos} fuera de tolerancia ({a.tolerancia * 100:.2f} pp).')
     sys.exit(1 if malos else 0)
 
 

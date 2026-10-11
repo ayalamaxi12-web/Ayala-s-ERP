@@ -638,7 +638,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <span style="font-weight:700;color:var(--accent)">Margen al P. Sugerido:</span>
       <span style="display:flex;gap:4px;align-items:center">Baja s/comp.<input type="text" id="cfg-baja" value="1" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.com=this.checked;renderCompetidores()">Comisión ML<input type="text" id="cfg-com" value="15.5" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.extra=this.checked;renderCompetidores()">Extra fijo<input type="text" id="cfg-e1" value="1255" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">&lt;16k</span><input type="text" id="cfg-e2" value="2500" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">16-24k</span><input type="text" id="cfg-e3" value="3030" onchange="compCfgSave();renderCompetidores()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">24-33k</span><input type="text" id="cfg-e4" value="0" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">≥33k</span></label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.extra=this.checked;renderCompetidores()">Extra fijo ML <span id="comp-costo-fijo-ml" style="color:var(--text3);font-family:'DM Mono',monospace;font-size:10px" title="Viene del motor de precios (backend): no se edita acá">…</span></label>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iva=this.checked;renderCompetidores()">IVA</label>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iibb=this.checked;renderCompetidores()">IIBB<input type="text" id="cfg-iibb" value="5" onchange="compCfgSave();renderCompetidores()" style="width:30px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.impch=this.checked;renderCompetidores()">Imp.CH<input type="text" id="cfg-impch" value="1.2" onchange="compCfgSave();renderCompetidores()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
@@ -1715,7 +1715,7 @@ function goPage(page,el){
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
   if(page==='intel-referencias'&&!referenciasPageLoaded)loadReferenciasPage();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
-  if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();}
+  if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarCostoFijoML().then(()=>{if(ofmResult)ofmRender();});}
   if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
   if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
 }
@@ -2116,7 +2116,7 @@ async function loadMLSheets(){
   btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';
 }
 // ── COMPETIDORES ──
-async function loadCompetidores(){const btn=qs('btn-load-competidores');const status=qs('competidores-status');cargarCostosEcom(true).then(()=>{if(COSTOS_ECOM.error)toast('Costos de Ecom: '+COSTOS_ECOM.error+' -- sin margen','error');if(COMPDESC_listo())renderCompetidores();});if(!S.tcBNA&&getBackendUrl()){fetch(`${getBackendUrl()}/tc/bna`).then(r=>r.json()).then(d=>{if(d.tc>0){S.tcBNA=d.tc;renderCompetidores();}}).catch(()=>{});}btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${S.sheetsKey}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${S.sheetsKey}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
+async function loadCompetidores(){{const el=qs('comp-costo-fijo-ml');if(el)el.textContent=mlCostoFijoTexto();}cargarCostoFijoML().then(()=>{if(COMPDESC_listo())renderCompetidores();});const btn=qs('btn-load-competidores');const status=qs('competidores-status');cargarCostosEcom(true).then(()=>{if(COSTOS_ECOM.error)toast('Costos de Ecom: '+COSTOS_ECOM.error+' -- sin margen','error');if(COMPDESC_listo())renderCompetidores();});if(!S.tcBNA&&getBackendUrl()){fetch(`${getBackendUrl()}/tc/bna`).then(r=>r.json()).then(d=>{if(d.tc>0){S.tcBNA=d.tc;renderCompetidores();}}).catch(()=>{});}btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';COMP.data=[];COMP.vendedores=[];try{if(!S.sheetsKey)throw new Error('Falta la API Key de Sheets (Configuración)');const metaUrl=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}?key=${S.sheetsKey}`;const meta=await(await fetch(metaUrl)).json();const sheets=(meta.sheets||[]).map(s=>s.properties.title);const vendorSheets=sheets.filter(s=>s.startsWith('V - '));if(!vendorSheets.length){status.textContent='No hay pestañas de vendedores (V - NOMBRE)';btn.disabled=false;btn.textContent='🔄 Cargar';return;}for(let vi=0;vi<vendorSheets.length;vi++){const sheetName=vendorSheets[vi];const vendedor=sheetName.replace('V - ','');const url=`https://sheets.googleapis.com/v4/spreadsheets/${COMP_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A1:ZZ2000?key=${S.sheetsKey}`;const resp=await(await fetch(url)).json();const rows=resp.values||[];if(rows.length<2)continue;
       // ml_vendedor.py agrega un bloque de 4 columnas (Precio/Tachado/Desc/Cuotas) con
       // fecha cada vez que re-scrapea un vendedor ya existente, a la derecha de las
       // columnas base A-I -- antes esto leía siempre A1:I2000 (el precio del primer
@@ -2240,12 +2240,29 @@ function cargarCostosEcom(force){
   }).catch(e=>{COSTOS_ECOM.error=String(e.message||e);}).finally(()=>{COSTOS_ECOM.cargando=null;});
   return COSTOS_ECOM.cargando;
 }
+// ── Costo fijo de ML por tramo de precio: FUENTE ÚNICA = motor de precios del backend (GET /rentabilidad/pricing/ml-costo-fijo). ──
+// CRITERIOS_MARGEN: nada de montos copiados en el front. Mientras no llega la respuesta (o si el backend no responde) rige el respaldo = seed del motor.
+const ML_COSTO_FIJO={tramos:[[16000,1330],[24000,2740],[33000,3320],[null,0]],origen:'respaldo',cargado:false,cargando:null};
+function cargarCostoFijoML(force){
+  if(ML_COSTO_FIJO.cargando)return ML_COSTO_FIJO.cargando;
+  if(ML_COSTO_FIJO.cargado&&!force)return Promise.resolve();
+  const bu=getBackendUrl();if(!bu)return Promise.resolve();
+  ML_COSTO_FIJO.cargando=fetch(`${bu}/rentabilidad/pricing/ml-costo-fijo`).then(async r=>{
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!Array.isArray(d.tramos)||!d.tramos.length)throw new Error(d.detail||('status '+r.status));
+    const t=d.tramos.filter(x=>x.hasta!==null).map(x=>[Number(x.hasta),Number(x.valor)]).sort((a,b)=>a[0]-b[0]);
+    ML_COSTO_FIJO.tramos=t.concat([[null,0]]);ML_COSTO_FIJO.origen='backend';ML_COSTO_FIJO.cargado=true;
+    const el=qs('comp-costo-fijo-ml');if(el)el.textContent=mlCostoFijoTexto();
+  }).catch(e=>{console.warn('Costo fijo ML: se usa el respaldo del motor ('+(e.message||e)+')');}).finally(()=>{ML_COSTO_FIJO.cargando=null;});
+  return ML_COSTO_FIJO.cargando;
+}
+function mlCostoFijoTexto(){const t=ML_COSTO_FIJO.tramos;let d=0;return t.filter(x=>x[0]!==null).map(x=>{const r=`${d/1000}-${x[0]/1000}k $${x[1]}`;d=x[0];return r;}).join(' · ')+` · ≥${d/1000}k sin cargo (${ML_COSTO_FIJO.origen})`;}
 // ── CONFIG MARGEN COMPETIDORES ──
 function cfgN(id,def){const el=qs(id);if(!el)return def;const v=parseFloat(String(el.value).replace(',','.'));return isNaN(v)?def:v;}
-function compCfgSave(){try{const ids=['cfg-baja','cfg-com','cfg-e1','cfg-e2','cfg-e3','cfg-e4','cfg-iibb','cfg-impch','cfg-envio','cfg-r3','cfg-q3','cfg-r6','cfg-q6','cfg-r9','cfg-q9','cfg-r12','cfg-q12'];const o={_v:2};ids.forEach(i=>{const el=qs(i);if(el)o[i]=el.value;});localStorage.setItem('comp_cfg',JSON.stringify(o));}catch(e){}}
-function compCfgLoad(){try{const o=JSON.parse(localStorage.getItem('comp_cfg')||'{}');if((o._v||1)<2){delete o['cfg-com'];delete o['cfg-iibb'];delete o['cfg-impch'];} // v2 (2026-10): comisión 15,5 / IIBB 5 / cheque 1,2 unificados -- se descartan los valores viejos guardados
+function compCfgSave(){try{const ids=['cfg-baja','cfg-com','cfg-iibb','cfg-impch','cfg-envio','cfg-r3','cfg-q3','cfg-r6','cfg-q6','cfg-r9','cfg-q9','cfg-r12','cfg-q12'];const o={_v:2};ids.forEach(i=>{const el=qs(i);if(el)o[i]=el.value;});localStorage.setItem('comp_cfg',JSON.stringify(o));}catch(e){}}
+function compCfgLoad(){try{const o=JSON.parse(localStorage.getItem('comp_cfg')||'{}');if((o._v||1)<2){delete o['cfg-com'];delete o['cfg-iibb'];delete o['cfg-impch'];}delete o['cfg-e1'];delete o['cfg-e2'];delete o['cfg-e3'];delete o['cfg-e4']; // v2 (2026-10): comisión 15,5 / IIBB 5 / cheque 1,2 unificados -- se descartan los valores viejos guardados
 Object.keys(o).forEach(i=>{const el=qs(i);if(el&&o[i]!=='')el.value=o[i];});}catch(e){}}
-function compExtraFijo(p){return p<16000?cfgN('cfg-e1',1255):p<24000?cfgN('cfg-e2',2500):p<33000?cfgN('cfg-e3',3030):cfgN('cfg-e4',0);}
+function compExtraFijo(p){for(const t of ML_COSTO_FIJO.tramos){if(t[0]===null||p<t[0])return t[1];}return 0;}
 // Margen % sobre el precio SIN IVA (CRITERIOS_MARGEN §1); antes era sobre el neto de cargos.
 function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',15.5)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&neto>0)?mars/neto:null,mars:mars};}
 function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=[['3 Cuotas','cfg-r3',1.15,'cfg-q3',4.08],['6 Cuotas','cfg-r6',1.20,'cfg-q6',9.48],['9 Cuotas','cfg-r9',1.25,'cfg-q9',15.12],['12 Cuotas','cfg-r12',1.35,'cfg-q12',18.24]];const cells=planes.map(pl=>{const p=pSug*cfgN(pl[1],pl[2]);const q=cfgN(pl[3],pl[4]);const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
@@ -3155,7 +3172,6 @@ const OFM={
     'MLA-SCREEN_PRINTERS':14.5,'MLA-CONTINUOUS_INK_SYSTEMS':15.5,'MLA-PRINTER_RIBBONS':15.5,'MLA-CALCULATORS':15.0,
     'MLA-HATS_AND_CAPS':15.5,'MLA-BINDING_COVERS':15.0,'MLA-COIL_BINDING_MACHINES':15.0},
   comisionGeneral:15.5,
-  costoFijoTramos:[[16000,1255],[24000,2500],[33000,3030],[null,0]],
   cuotasPct:{3:8.90,6:13.40,9:17.80,12:21.60},
   envioTramos:[[33000,0],[50000,7000],[null,7470]],
   impChequePct:1.2, iibbPct:5,
@@ -3175,7 +3191,7 @@ function ofmMargenAt(precioOferta,ivaFactor,costoARS,domainId,cuotasOfrecidas){
   // (futuro: comisión real por categoría) pero NO se usa.
   const comisionPct=p.comisionGeneral;
   const comision=p.usarComision?precioOferta*comisionPct/100:0;
-  const costoFijo=p.usarCostoFijo?ofmPorTramo(precioOferta,p.costoFijoTramos):0;
+  const costoFijo=p.usarCostoFijo?ofmPorTramo(precioOferta,ML_COSTO_FIJO.tramos):0;
   const cuotasPct=cuotasOfrecidas?(p.cuotasPct[cuotasOfrecidas]||0):0;
   const cuotas=p.usarCuotas?precioOferta*cuotasPct/100:0;
   const envio=p.usarEnvio?ofmPorTramo(precioOferta,p.envioTramos):0;
@@ -3191,7 +3207,7 @@ function ofmCfgSave(){try{localStorage.setItem('ofm_cfg',JSON.stringify(OFM));}c
 // v2 (2026-10): comisión única 15,5% / IIBB 5% / cheque 1,2% -- un `ofm_cfg` guardado antes de esto
 // traía la comisión por dominio y valores viejos; se descartan esos campos una vez.
 const OFM_CFG_VERSION=2;
-function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o){if((o.cfgVersion||1)<OFM_CFG_VERSION){delete o.comisionPorDominio;delete o.comisionGeneral;delete o.iibbPct;delete o.impChequePct;delete o.cuotasPct;}Object.assign(OFM,o);}OFM.cfgVersion=OFM_CFG_VERSION;const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
+function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o){if((o.cfgVersion||1)<OFM_CFG_VERSION){delete o.comisionPorDominio;delete o.comisionGeneral;delete o.iibbPct;delete o.impChequePct;delete o.cuotasPct;}delete o.costoFijoTramos;Object.assign(OFM,o);}OFM.cfgVersion=OFM_CFG_VERSION;const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
 // `ac-operador` sumado 2026-09-04: el panel "⚙ Gestionar" de Ofertas ML se
 // reutiliza tal cual dentro de Ayala Core (Maxx: "quiero que sea igual
 // que como se ven en Ofertas ML"), que no tiene el campo `ofm-operador`
@@ -5712,6 +5728,7 @@ function autoConnectPM(){
 async function autoConnectML(){
   const bu = getBackendUrl();
   if(!bu) return;
+  cargarCostoFijoML();
   try{
     const [r1,r2] = await Promise.all([
       fetch(`${bu}/ml/token?account=IT`),

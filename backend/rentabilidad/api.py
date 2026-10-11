@@ -1101,6 +1101,21 @@ def _periodo_en_curso() -> str:
     return _periodo_de_rango(inicio, fin)
 
 
+@router.get("/pricing/ml-costo-fijo")
+def pricing_ml_costo_fijo(fecha: date | None = None) -> dict:
+    """Costo fijo de ML por tramo de precio (fuente única: motor de precios). Sobre el último `hasta` ML no cobra cargo fijo."""
+    fecha = fecha or ayer_en_argentina() + timedelta(days=1)
+    try:
+        with sesion() as db:
+            par = pricing_pm.motor.cargar_parametros(db, fecha)
+            tramos = pricing_pm.motor.tramos_costo_fijo_ml(par)
+            umbral = par.valor("ML", "umbral_envio_gratis")
+    except pricing_pm.motor.ParametroFaltante as e:
+        raise HTTPException(503, str(e))
+    return {"fecha": fecha, "tramos": tramos, "sin_cargo_desde": max((t["hasta"] for t in tramos if t["hasta"] is not None), default=None),
+            "umbral_envio_gratis": umbral}
+
+
 @router.get("/pricing/skus")
 def pricing_skus(
     fecha: date | None = None,
