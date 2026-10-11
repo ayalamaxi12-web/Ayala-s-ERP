@@ -43,7 +43,11 @@
   }
   if (!sid) {
     const u = await pedir('1b users/search por nickname', `users/search?nickname=${encodeURIComponent(TIENDA)}`);
-    if (u.ok) sid = String((u.body.results && u.body.results[0] && u.body.results[0].id) || u.body.id || '');
+    if (u.ok) {   // la forma de la respuesta varía: buscar el primer "id" numérico del cuerpo
+      const hallar = o => { if (!o || typeof o !== 'object') return ''; if (typeof o.id === 'number' || /^\d{5,}$/.test(o.id || '')) return String(o.id); for (const v of Object.values(o)) { const r = hallar(v); if (r) return r; } return ''; };
+      sid = hallar(u.body);
+      log('users/search devolvió:', JSON.stringify(u.body).slice(0, 300));
+    }
   }
   log('seller_id:', sid || '(no se pudo resolver)');
 
@@ -70,6 +74,7 @@
 
   console.table(R.map(({ prueba, resultado, ms }) => ({ prueba, resultado, ms })));
   const listado = R.find(r => r.prueba.startsWith('2 search seller_id offset=0'));
+  const sinListado = !listado;   // si nunca se probó el listado por seller_id, NO se puede decir que está bloqueado
   const hay403 = R.some(r => /403|forbidden|PolicyAgent/i.test(r.resultado + JSON.stringify(r.ok ? '' : r.body)));
   let veredicto;
   if (listado && listado.ok) {
@@ -79,6 +84,8 @@
     const tope = R.find(r => r.prueba.endsWith('offset=1000'));
     log(tope && tope.ok ? 'offset 1000 también responde.' : 'offset ≥1000 NO responde: para tiendas de >1000 publicaciones hay que usar scan o varios órdenes.');
     log('Comparalo con lo que declara ML en la tienda (p. ej. 663 en Elephant) y con lo que lee Selenium.');
+  } else if (sinListado) {
+    veredicto = '⚠ INCONCLUSO: no se pudo resolver el seller_id, el listado nunca se probó. Poné SELLER_ID arriba y repetí.';
   } else if (hay403) {
     veredicto = '❌ BLOQUEADA (403): la API no deja listar publicaciones ajenas con tu token. Quedate con Selenium.';
   } else {
