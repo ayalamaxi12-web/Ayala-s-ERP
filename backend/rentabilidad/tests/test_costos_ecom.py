@@ -98,40 +98,119 @@ def _cache_limpio():
     ce.limpiar_cache()
 
 
-def test_cache_de_una_hora_no_vuelve_a_bajar_el_catalogo():
-    llamadas = []
+@pytest.fixture()
+def ses(db_session):
+    from contextlib import contextmanager
 
+    @contextmanager
+    def _ses():
+        yield db_session
+    return _ses
+
+
+def _bajador(llamadas, sku="A", costo=1):
     def bajar():
         llamadas.append(1)
-        return ce.armar_catalogo([_prod("A", [(None, 1)])])
+        return ce.armar_catalogo([_prod(sku, [(None, costo)])])
+    return bajar
 
-    t = {"n": 1000.0}
-    ce.obtener_catalogo(bajar, ahora=lambda: t["n"])
-    t["n"] += 1800
-    ce.obtener_catalogo(bajar, ahora=lambda: t["n"])
+
+def test_primer_uso_sin_ninguna_foto_baja_una_vez_la_guarda_y_despues_solo_lee(ses):
+    llamadas = []
+    cat = ce.obtener_catalogo(db_factory=ses, descargar=_bajador(llamadas))
+    assert cat.costo("A") == D("1") and len(llamadas) == 1
+    ce.obtener_catalogo(db_factory=ses, descargar=_bajador(llamadas))
+    ce.limpiar_cache()                                           # reinicio del proceso: la foto sale de la base, no de Ecom
+    assert ce.obtener_catalogo(db_factory=ses, descargar=_bajador(llamadas)).costo("A") == D("1")
     assert len(llamadas) == 1
-    t["n"] += 3700
-    ce.obtener_catalogo(bajar, ahora=lambda: t["n"])
-    assert len(llamadas) == 2
+    assert ce.estado()["origen"] == "primer-uso" and ce.estado()["cantidad"] == 1
 
 
-def test_si_el_refresco_falla_se_sigue_con_el_ultimo_catalogo_bueno():
+def test_un_request_nunca_baja_de_ecom_aunque_la_foto_sea_vieja_dispara_un_refresco_aparte(ses, monkeypatch):
+    llamadas = []
     t = {"n": 1000.0}
-    ce.obtener_catalogo(lambda: ce.armar_catalogo([_prod("A", [(None, 1)])]), ahora=lambda: t["n"])
-    t["n"] += 4000
+    ce.refrescar("cron", descargar=_bajador(llamadas), db_factory=ses, ahora=lambda: t["n"])
+    lanzados = []
+    monkeypatch.setattr(ce, "refrescar_en_segundo_plano", lambda origen, **kw: lanzados.append(origen) or True)
+    t["n"] += 3 * 3600
+    assert ce.obtener_catalogo(ahora=lambda: t["n"], db_factory=ses).costo("A") == D("1") and lanzados == []      # 3 h: foto buena
+    t["n"] += 30 * 3600
+    assert ce.obtener_catalogo(ahora=lambda: t["n"], db_factory=ses).costo("A") == D("1")                          # +30 h: sirve la vieja...
+    assert lanzados == ["auto"] and len(llamadas) == 1                                                             # ...y pide el refresco aparte
 
-    def roto():
-        raise RuntimeError("Ecom caído")
 
-    assert ce.obtener_catalogo(roto, ahora=lambda: t["n"]).costo("A") == D("1")
+def test_el_cron_escribe_y_otro_proceso_lo_toma_a_los_5_minutos(ses):
+    llamadas = []
+    t = {"n": 1000.0}
+    ce.refrescar("arranque", descargar=_bajador(llamadas, costo=1), db_factory=ses, ahora=lambda: t["n"])
+    assert ce.obtener_catalogo(ahora=lambda: t["n"], db_factory=ses).costo("A") == D("1")
+    # otro proceso (el cron) guarda una foto nueva directamente en la base
+    nuevo = ce.armar_catalogo([_prod("A", [(None, 2)])])
+    nuevo.obtenido_en = t["n"] + 10
+    ce.guardar_snapshot(nuevo, "cron", 80.0, ses)
+    t["n"] += 60
+    assert ce.obtener_catalogo(ahora=lambda: t["n"], db_factory=ses).costo("A") == D("1")          # < 5 min: sigue la de memoria
+    t["n"] += 300
+    assert ce.obtener_catalogo(ahora=lambda: t["n"], db_factory=ses).costo("A") == D("2")          # ya relee la base
+    assert len(llamadas) == 1
 
 
-def test_sin_catalogo_previo_y_ecom_caido_falla():
+def test_si_el_refresco_falla_se_conserva_la_foto_anterior_y_se_anota_el_error(ses):
+    ce.refrescar("cron", descargar=_bajador([]), db_factory=ses)
+
     def roto():
         raise RuntimeError("Ecom caído")
 
     with pytest.raises(RuntimeError):
-        ce.obtener_catalogo(roto)
+        ce.refrescar("manual", descargar=roto, db_factory=ses)
+    e = ce.estado()
+    assert "Ecom caído" in e["ultimo_error"] and e["en_curso"] is False and ce.obtener_catalogo(db_factory=ses).costo("A") == D("1")
+
+
+def test_sin_foto_y_ecom_caido_falla():
+    def roto():
+        raise RuntimeError("Ecom caído")
+
+    with pytest.raises(RuntimeError):
+        ce.refrescar("primer-uso", descargar=roto, db_factory=lambda: (_ for _ in ()).throw(RuntimeError("sin base")))
+
+
+def test_un_solo_refresco_a_la_vez(ses):
+    import threading
+    entro, soltar, llamadas = threading.Event(), threading.Event(), []
+
+    def lento():
+        llamadas.append(1)
+        entro.set()
+        soltar.wait(5)
+        return ce.armar_catalogo([_prod("A", [(None, 1)])])
+    hilo = threading.Thread(target=lambda: ce.refrescar("manual", descargar=lento, db_factory=ses))
+    hilo.start()
+    assert entro.wait(5)
+    r = ce.refrescar("manual", descargar=lento, db_factory=ses)          # mientras el primero corre: no arranca otro
+    assert r["ya_en_curso"] is True and r["en_curso"] is True and len(llamadas) == 1
+    assert ce.refrescar_en_segundo_plano("manual", db_factory=ses) is False
+    soltar.set(); hilo.join(5)
+    assert ce.estado()["en_curso"] is False
+
+
+def test_se_conservan_solo_las_ultimas_7_fotos(ses, db_session):
+    from rentabilidad.models import CostoEcomSnapshot
+    for i in range(10):
+        c = ce.armar_catalogo([_prod("A", [(None, i + 1)])])
+        c.obtenido_en = 1000.0 + i
+        ce.guardar_snapshot(c, "cron", 1.0, ses)
+    assert db_session.query(CostoEcomSnapshot).count() == 7
+    assert ce.leer_snapshot(ses)[0].costo("A") == D("10")
+
+
+def test_el_json_de_la_foto_ida_y_vuelta_conserva_costos_iva_ambiguos_y_sin_costo(ses):
+    cat = ce.armar_catalogo([_prod("A", [(None, "1.5")], tax=21), _prod("B", [(None, 1), (None, 2)]), _prod("C", [(None, 0)])])
+    cat.obtenido_en = 5000.0
+    ce.guardar_snapshot(cat, "cron", 1.0, ses)
+    vuelta, meta = ce.leer_snapshot(ses)
+    assert vuelta.costos == cat.costos and vuelta.iva == cat.iva and vuelta.ambiguos == cat.ambiguos and vuelta.sin_costo == cat.sin_costo
+    assert vuelta.obtenido_en == 5000.0 and meta["cantidad"] == 1
 
 
 def test_proveedor_de_costo_misma_interfaz_que_el_de_tactica():
@@ -182,3 +261,15 @@ def test_cruce_con_tactica_alerta_solo_las_diferencias_sobre_la_tolerancia():
     difs = ce.cruzar_costos(ecom, tactica, D("1"))
     assert [d["sku"] for d in difs] == ["C", "B"]  # A (0,5%) bajo tolerancia; D sin costo Ecom; X no está en Ecom
     assert difs[0]["dif_pct"] == D("-20.00") and difs[1]["dif_pct"] == D("10.00")
+
+
+def test_cargar_de_base_no_baja_nada_de_ecom_y_el_estado_informa_la_antiguedad(ses):
+    cat = ce.armar_catalogo([_prod("A", [(None, 1)])])
+    cat.obtenido_en = 5000.0
+    ce.guardar_snapshot(cat, "cron", 80.0, ses)
+    assert ce.estado()["hay_catalogo"] is False
+    assert ce.cargar_de_base(ses) is True
+    e = ce.estado(ahora=lambda: 5600.0)
+    assert e["hay_catalogo"] and e["antiguedad_seg"] == 600 and e["origen"] == "cron" and e["duracion_seg"] == 80.0 and e["en_curso"] is False
+    ce.limpiar_cache()
+    assert ce.cargar_de_base(lambda: (_ for _ in ()).throw(RuntimeError("sin base"))) is False

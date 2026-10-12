@@ -26,7 +26,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import costos_ecom, export_ventas_ecom, gsheets, pricing_pm, reportes_pricing, seed
+from . import costos_ecom, export_ventas_ecom, gsheets, pricing_config, pricing_pm, reportes_pricing, seed
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .adapters import (
     ClasificacionProvider,
@@ -1070,11 +1070,28 @@ def costos_catalogo_ecom() -> dict:
         raise HTTPException(503, f"No se pudo leer el catálogo de costos de Ecom: {e}")
     return {
         "obtenido_en": cat.obtenido_en,
+        "estado": costos_ecom.estado(),
         "costos": {k: float(v) for k, v in cat.costos.items()},
         "iva": {k: float(v) for k, v in cat.iva.items()},
         "sin_costo": sorted(cat.sin_costo),
         "ambiguos": {k: [float(x) for x in v] for k, v in cat.ambiguos.items()},
     }
+
+
+@router.get("/costos/ecom/estado")
+def costos_ecom_estado() -> dict:
+    """Antigüedad de la foto de costos, si hay un refresco en curso y el último error. Lo lee el botón de refresco del front."""
+    if not costos_ecom.estado()["hay_catalogo"]:
+        costos_ecom.cargar_de_base()  # recién arrancado el proceso: toma la foto de la base (sin bajar nada de Ecom)
+    return costos_ecom.estado()
+
+
+@router.post("/costos/ecom/refrescar")
+def costos_ecom_refrescar() -> dict:
+    """Refresco manual del catálogo de costos (X-ERP-Key): baja de Ecom en segundo plano (~80 s) y vuelve en seguida. Mientras tanto todos los
+    cálculos siguen usando la foto anterior; consultar `/costos/ecom/estado` hasta que `en_curso` sea false. Un solo refresco a la vez."""
+    lanzado = costos_ecom.refrescar_en_segundo_plano("manual")
+    return {"lanzado": lanzado, "estado": costos_ecom.estado()}
 
 
 @router.get("/costos/cruce-tactica")
@@ -1114,6 +1131,44 @@ def pricing_ml_costo_fijo(fecha: date | None = None) -> dict:
         raise HTTPException(503, str(e))
     return {"fecha": fecha, "tramos": tramos, "sin_cargo_desde": max((t["hasta"] for t in tramos if t["hasta"] is not None), default=None),
             "umbral_envio_gratis": umbral}
+
+
+class CuotasMLIn(BaseModel):
+    planes: dict[str, float]          # en %, ej. {"3": 8.9, "6": 13.4}
+    cargado_por: str
+    vigente_desde: date | None = None  # por defecto hoy (Argentina)
+    confirmar: bool = False            # sin confirmar = solo muestra qué cambiaría
+
+
+@router.get("/pricing/ml-cuotas")
+def pricing_ml_cuotas(fecha: date | None = None) -> dict:
+    """Cuotas de ML (% del precio que absorbe el vendedor) vigentes: fuente única para el motor, Competidores, Ofertas ML y Análisis de Competencia."""
+    fecha = fecha or ayer_en_argentina() + timedelta(days=1)
+    with sesion() as db:
+        planes = pricing_config.cuotas_ml(pricing_pm.motor.cargar_parametros(db, fecha))
+    if not planes:
+        raise HTTPException(503, "Falta la tabla de cuotas de ML (pricing_cuotas).")
+    return {"fecha": fecha, "planes": planes}
+
+
+@router.post("/pricing/ml-cuotas")
+def pricing_ml_cuotas_editar(payload: CuotasMLIn) -> dict:
+    """Edita las cuotas de ML en un solo lugar (X-ERP-Key). Sin `confirmar` solo muestra qué cambiaría; con `confirmar` agrega filas con `vigente_desde`
+    (por defecto hoy) y queda el historial. Los planes son "reducida", "3", "6", "9", "12", en %."""
+    vigente = payload.vigente_desde or (ayer_en_argentina() + timedelta(days=1))
+    if not payload.cargado_por.strip():
+        raise HTTPException(422, "Falta `cargado_por` (quién hace el cambio).")
+    try:
+        with sesion() as db:
+            par = pricing_pm.motor.cargar_parametros(db, vigente)
+            cambios = pricing_config.previsualizar(par, payload.planes)
+            if not payload.confirmar:
+                return {"confirmado": False, "vigente_desde": vigente, "cambios": cambios}
+            escritas = pricing_config.guardar(db, payload.planes, vigente, payload.cargado_por.strip())
+            planes = pricing_config.cuotas_ml(pricing_pm.motor.cargar_parametros(db, vigente))
+    except pricing_config.CuotasInvalidas as e:
+        raise HTTPException(422, str(e))
+    return {"confirmado": True, "vigente_desde": vigente, "filas_escritas": escritas, "cambios": cambios, "planes": planes}
 
 
 @router.get("/pricing/skus")

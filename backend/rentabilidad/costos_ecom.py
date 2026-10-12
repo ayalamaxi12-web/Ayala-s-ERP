@@ -9,8 +9,10 @@ hay diferencia entre las dos fuentes, se informa.
 Origen: GraphQL de Ecom, `products.find` paginado (30 por página, ~115 páginas
 y ~80 s para los ~3.400 artículos), `Variant.cost` en USD — el mismo campo que
 ya usa la ingesta de ventas (`ingesta_ecom_api`). Como bajar todo cuesta
-~80 s, el catálogo se cachea en el proceso (`obtener_catalogo`, TTL 1 h) y si
-el refresco falla se sigue con el último catálogo bueno.
+~80 s, se baja UNA vez por día (cron de las 06:00), o a mano, y la foto se
+guarda en la base (`costo_ecom_snapshot`): un request solo la lee, nunca baja
+nada de Ecom (ver "Foto guardada en la base + caché de proceso"). Si el
+refresco falla se sigue con la última foto buena.
 
 Producto con varias variantes: el SKU es del producto y cada variante trae su
 propio costo. Si todas valen lo mismo, ese es el costo; si difieren y la
@@ -39,7 +41,6 @@ query CatalogoCostos($page: Int) {
 }
 """
 
-_TTL_SEGUNDOS = 3600
 _REINTENTOS_PAGINA = 3
 _MAX_PAGINAS = 1000  # tope de seguridad contra un paginado que no termina
 
@@ -151,42 +152,192 @@ def descargar_catalogo(cliente: EcomApiClient | None = None, log: Callable[[str]
     return cat
 
 
-# ── Cache de proceso ──
+# ── Foto guardada en la base + caché de proceso ──
+#
+# El catálogo se baja de Ecom (~80 s) UNA vez por día (cron de las 06:00, `scripts/ecom_diario.py`), en el arranque si no hay una foto reciente, o
+# a mano (`refrescar`, botón del front). Cada foto queda guardada en la base (`costo_ecom_snapshot`); un request SOLO lee la más reciente
+# (memoria → base, milisegundos) y nunca baja nada de Ecom. Si Ecom falla se sigue con la última foto buena. La única excepción: la primera vez
+# que no existe ninguna foto, `obtener_catalogo` la baja en el momento (una sola vez en la vida del sistema).
 
-_lock = threading.Lock()
+import json
+
+_REFRESCO_MEMORIA_SEG = 300      # cada cuánto se vuelve a mirar la base (toma la foto que dejó el cron)
+_MAX_EDAD_SEG = 24 * 3600        # una foto más vieja dispara un refresco en segundo plano (mientras se sigue sirviendo la vieja)
+_CONSERVAR = 7
+
+_lock = threading.Lock()            # protege la memoria
+_refresco_lock = threading.Lock()   # un solo refresco a la vez
 _cache: CatalogoCostos | None = None
+_meta: dict = {}                    # origen / duracion_seg / cantidad de la foto en memoria
+_leido_en = 0.0
+_estado = {"en_curso": False, "ultimo_error": None, "ultimo_intento": None}
 
 
-def obtener_catalogo(descargar: Callable[[], CatalogoCostos] | None = None, ttl: float = _TTL_SEGUNDOS,
-                     ahora: Callable[[], float] = time.time) -> CatalogoCostos:
-    """Catálogo cacheado (TTL 1 h). Si el refresco falla y hay uno anterior, se
-    sigue con ese (más vale un costo de hace unas horas que cortar todo)."""
-    global _cache
-    with _lock:
-        if _cache is not None and ahora() - _cache.obtenido_en < ttl:
-            return _cache
+def _sesion_default():
+    from .db import sesion
+    return sesion()
+
+
+def catalogo_a_json(cat: CatalogoCostos) -> str:
+    return json.dumps({
+        "costos": {k: str(v) for k, v in cat.costos.items()}, "iva": {k: str(v) for k, v in cat.iva.items()},
+        "ambiguos": {k: [str(x) for x in v] for k, v in cat.ambiguos.items()}, "sin_costo": sorted(cat.sin_costo),
+    }, separators=(",", ":"))
+
+
+def _armar(d: dict, obtenido_en: float) -> CatalogoCostos:
+    return CatalogoCostos(
+        costos={k: Decimal(v) for k, v in d["costos"].items()}, iva={k: Decimal(v) for k, v in d["iva"].items()},
+        ambiguos={k: [Decimal(x) for x in v] for k, v in d["ambiguos"].items()}, sin_costo=set(d["sin_costo"]), obtenido_en=obtenido_en)
+
+
+def guardar_snapshot(cat: CatalogoCostos, origen: str, duracion_seg: float, db_factory: Callable = _sesion_default) -> None:
+    """Escribe la foto y poda las más viejas (deja las últimas `_CONSERVAR`)."""
+    from datetime import datetime, timezone
+    from .models import CostoEcomSnapshot
+    with db_factory() as db:
+        db.add(CostoEcomSnapshot(obtenido_en=datetime.fromtimestamp(cat.obtenido_en, timezone.utc).replace(tzinfo=None), origen=origen,
+                                 duracion_seg=Decimal(str(round(duracion_seg, 2))), cantidad=len(cat.costos), payload=catalogo_a_json(cat)))
+        db.flush()
+        viejas = db.query(CostoEcomSnapshot).order_by(CostoEcomSnapshot.obtenido_en.desc()).offset(_CONSERVAR).all()
+        for f in viejas:
+            db.delete(f)
+
+
+def leer_snapshot(db_factory: Callable = _sesion_default) -> tuple[CatalogoCostos, dict] | None:
+    """La foto más reciente de la base, o None si no hay."""
+    from datetime import timezone
+    from .models import CostoEcomSnapshot
+    with db_factory() as db:
+        f = db.query(CostoEcomSnapshot).order_by(CostoEcomSnapshot.obtenido_en.desc()).first()
+        if f is None:
+            return None
+        t = f.obtenido_en.replace(tzinfo=timezone.utc).timestamp()
+        return _armar(json.loads(f.payload), t), {"origen": f.origen, "duracion_seg": float(f.duracion_seg), "cantidad": f.cantidad}
+
+
+def _poner_en_memoria(cat: CatalogoCostos, meta: dict, ahora: float) -> None:
+    global _cache, _meta, _leido_en
+    _cache, _meta, _leido_en = cat, meta, ahora
+
+
+def refrescar(origen: str = "manual", descargar: Callable[[], CatalogoCostos] | None = None, db_factory: Callable = _sesion_default,
+              ahora: Callable[[], float] = time.time, log: Callable[[str], None] | None = None) -> dict:
+    """Baja el catálogo de Ecom, lo guarda en la base y lo pone en memoria. UN solo refresco a la vez (si ya hay uno corriendo devuelve el estado
+    sin esperar). Si Ecom falla se conserva la foto anterior, se anota el error y se propaga la excepción (el que llama decide: el cron/arranque la
+    registran, el botón la muestra)."""
+    if not _refresco_lock.acquire(blocking=False):
+        return {**estado(ahora), "ya_en_curso": True}
+    try:
+        _estado.update(en_curso=True, ultimo_intento=ahora())
+        t0 = time.monotonic()
         try:
-            nuevo = (descargar or descargar_catalogo)()
-            nuevo.obtenido_en = ahora()
-            _cache = nuevo
+            cat = (descargar or descargar_catalogo)()
+            cat.obtenido_en = ahora()
+            dur = time.monotonic() - t0
+            meta = {"origen": origen, "duracion_seg": round(dur, 1), "cantidad": len(cat.costos)}
+            try:
+                guardar_snapshot(cat, origen, dur, db_factory)
+            except Exception as e:  # la base no escribió: se sirve igual desde memoria, pero se avisa
+                _estado["ultimo_error"] = f"No se pudo guardar la foto en la base: {type(e).__name__}: {str(e)[:150]}"
+            else:
+                _estado["ultimo_error"] = None
+            with _lock:
+                _poner_en_memoria(cat, meta, ahora())
+            if log:
+                log(f"Catálogo de costos de Ecom: {meta['cantidad']} SKU con costo, {meta['duracion_seg']} s, origen {origen}")
+        except Exception as e:
+            _estado["ultimo_error"] = f"{type(e).__name__}: {str(e)[:180]}"
+            raise
+    finally:
+        _estado["en_curso"] = False
+        _refresco_lock.release()
+    return estado(ahora)
+
+
+def refrescar_en_segundo_plano(origen: str = "manual", **kw) -> bool:
+    """Lanza `refrescar` en un hilo y vuelve en seguida. False si ya hay uno corriendo."""
+    if _refresco_lock.locked():
+        return False
+
+    def _correr():
+        try:
+            refrescar(origen, **kw)
         except Exception:
-            if _cache is None:
-                raise
-        return _cache
+            pass  # el error ya quedó en `estado()["ultimo_error"]`
+    threading.Thread(target=_correr, daemon=True).start()
+    return True
+
+
+def estado(ahora: Callable[[], float] = time.time) -> dict:
+    with _lock:
+        cat, meta = _cache, dict(_meta)
+    return {"hay_catalogo": cat is not None, "obtenido_en": cat.obtenido_en if cat else None,
+            "antiguedad_seg": round(ahora() - cat.obtenido_en) if cat else None, "origen": meta.get("origen"),
+            "duracion_seg": meta.get("duracion_seg"), "cantidad": meta.get("cantidad"), "en_curso": _estado["en_curso"],
+            "ultimo_error": _estado["ultimo_error"], "ultimo_intento": _estado["ultimo_intento"]}
+
+
+def obtener_catalogo(ahora: Callable[[], float] = time.time, db_factory: Callable = _sesion_default,
+                     descargar: Callable[[], CatalogoCostos] | None = None) -> CatalogoCostos:
+    """El catálogo vigente, SIN bajar nada de Ecom (salvo la primera vez de la historia, cuando no existe ninguna foto). Memoria → base (cada 5 min)."""
+    with _lock:
+        fresco = _cache is not None and ahora() - _leido_en < _REFRESCO_MEMORIA_SEG
+        if not fresco:
+            try:
+                f = leer_snapshot(db_factory)
+            except Exception:
+                f = None  # la base no responde: se sigue con lo que haya en memoria
+            if f is not None and (_cache is None or f[0].obtenido_en >= _cache.obtenido_en):
+                _poner_en_memoria(f[0], f[1], ahora())
+            elif _cache is not None:
+                _poner_en_memoria(_cache, _meta, ahora())
+        cat = _cache
+    if cat is None:
+        refrescar("primer-uso", descargar=descargar, db_factory=db_factory, ahora=ahora)  # única bajada dentro de un request
+        with _lock:
+            cat = _cache
+        if cat is None:   # otro refresco estaba corriendo: se espera a que termine
+            with _refresco_lock:
+                pass
+            with _lock:
+                cat = _cache
+        if cat is None:
+            raise CatalogoEcomError("El catálogo de costos todavía no está disponible.")
+    elif ahora() - cat.obtenido_en > _MAX_EDAD_SEG:
+        refrescar_en_segundo_plano("auto", descargar=descargar, db_factory=db_factory, ahora=ahora)
+    return cat
 
 
 def limpiar_cache() -> None:
-    global _cache
+    global _cache, _meta, _leido_en
     with _lock:
-        _cache = None
+        _cache, _meta, _leido_en = None, {}, 0.0
+        _estado.update(en_curso=False, ultimo_error=None, ultimo_intento=None)
 
 
-def precalentar() -> None:
-    """Para el arranque del backend (hilo aparte): la primera descarga tarda ~80 s."""
+def cargar_de_base(db_factory: Callable = _sesion_default) -> bool:
+    """Pone en memoria la foto más reciente de la base SIN bajar nada de Ecom. False si no hay (o la base no responde)."""
     try:
-        obtener_catalogo()
+        with _lock:
+            f = leer_snapshot(db_factory)
+            if f is None:
+                return False
+            _poner_en_memoria(f[0], f[1], time.time())
+            return True
     except Exception:
-        pass  # sin credenciales / sin red: se reintenta en el primer uso
+        return False
+
+
+def precalentar(db_factory: Callable = _sesion_default) -> None:
+    """Para el arranque del backend (hilo aparte): carga la foto de la base a memoria (milisegundos) y, si no hay o tiene más de 24 h, baja una nueva
+    en este mismo hilo (el resto del ERP sigue sirviendo la foto vieja mientras tanto)."""
+    cargar_de_base(db_factory)
+    try:
+        if _cache is None or time.time() - _cache.obtenido_en > _MAX_EDAD_SEG:
+            refrescar("arranque", db_factory=db_factory)
+    except Exception:
+        pass  # sin credenciales / sin red: el error queda en estado(); se reintenta con el cron o a mano
 
 
 # ── Proveedores con la misma interfaz que los de Táctica (adapters.py) ──

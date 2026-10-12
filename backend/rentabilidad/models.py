@@ -566,3 +566,18 @@ class TcBnaGuardado(Base):
     id: Mapped[str] = mapped_column(String(16), primary_key=True, default="ultimo")
     valor: Mapped[Decimal] = mapped_column(MONEY)
     obtenido_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class CostoEcomSnapshot(Base):
+    """Foto del catálogo de costos de Ecom (costos USD, IVA, ambiguos y sin costo por SKU), una por refresco. El backend LEE la más reciente
+    (milisegundos) y nunca baja el catálogo de Ecom dentro de un request: lo baja el cron diario, el arranque (si no hay foto reciente) o el
+    botón de refresco manual. Se conservan las últimas ~7 para ver qué cambió y poder volver atrás."""
+
+    __tablename__ = "costo_ecom_snapshot"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    obtenido_en: Mapped[datetime] = mapped_column(DateTime, index=True)
+    origen: Mapped[str] = mapped_column(String(16))  # cron | manual | arranque | primer-uso | auto
+    duracion_seg: Mapped[Decimal] = mapped_column(MONEY)
+    cantidad: Mapped[int] = mapped_column(Integer)  # SKU con costo
+    payload: Mapped[str] = mapped_column(Text)  # JSON

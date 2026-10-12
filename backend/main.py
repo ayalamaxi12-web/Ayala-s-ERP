@@ -63,8 +63,8 @@ def _rentabilidad_startup():
         migrar_y_sembrar()
     except Exception as e:
         print(f"Rentabilidad: no se pudo migrar/sembrar en el arranque: {e}")
-    # El catálogo de costos de Ecom tarda ~80 s en bajar: se precalienta en un
-    # hilo aparte para que el primer uso no espere.
+    # El catálogo de costos de Ecom se guarda en la base (una foto por refresco). Acá solo se carga a memoria
+    # (milisegundos) y, si no hay una foto de las últimas 24 h, se baja una nueva en este hilo aparte (~80 s).
     import threading
     threading.Thread(target=costos_ecom.precalentar, daemon=True).start()
 
@@ -2057,6 +2057,16 @@ async def competencia_analisis(dias: int = 30, refrescar: bool = False):
         return await run_in_threadpool(_analisis_cache.obtener, dias, refrescar)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudo leer el Sheet de competencia: {e}")
+
+
+@app.get("/competencia/publicaciones-propias")
+async def competencia_publicaciones_propias(sku: str):
+    """NUESTRAS publicaciones de ML (cuentas IT y MT) de un SKU: para actuar (oferta / precio) desde la pantalla de competencia. Solo lectura; X-ERP-Key (erp_auth)."""
+    import competencia_publicaciones
+    try:
+        return await run_in_threadpool(competencia_publicaciones.publicaciones_por_sku, sku)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @app.post("/competencia/migracion/run")
