@@ -23,7 +23,7 @@ def _fn(src, nombre):
 
 def correr(D, filtros, orden='sku'):
     src = open(INDEX, encoding='utf-8').read()
-    fns = '\n'.join(_fn(src, n) for n in ('acAgregar', 'acArmar', 'acFiltrar', 'acOrdenar'))
+    fns = '\n'.join(_fn(src, n) for n in ('acComparable', 'acAgregar', 'acArmar', 'acFiltrar', 'acOrdenar'))
     js = fns + """
 const D=JSON.parse(process.argv[1]),F=JSON.parse(process.argv[2]);F.vend=new Set(F.vend||[]);
 // margenAt de prueba: margen = (precio/iva - costoARS)/(precio/iva): suficiente para ver que se llama con el precio y el costo correctos
