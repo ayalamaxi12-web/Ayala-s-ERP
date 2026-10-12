@@ -1,0 +1,8 @@
+# Nunca al repo: credenciales y datos locales del scraper
+credentials.json
+*.json.bak
+perfil_chrome/
+logs/
+prueba_scraper_*.json
+__pycache__/
+.pytest_cache/

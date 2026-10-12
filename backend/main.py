@@ -2031,6 +2031,34 @@ def _migracion_competencia_job(job_id, ejecutar_real, plan_hash):
         _migracion_lock.release()
 
 
+# ── Análisis de Competencia (Etapa 3): datos para la pantalla unificada. Solo lectura, con caché; protegido por X-ERP-Key (erp_auth).
+def _analisis_leer_filas():
+    import competencia_db as cdb
+    import competencia_migracion as cm
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    titulos = {ws.title for ws in ss.worksheets()}
+    v = lambda n: cm._valores(ss, n, titulos)  # noqa: E731
+    return {"refs": v("Referencias_Mercado"), "hist": v(cdb.HISTORIAL_SHEET), "eventos": v("Eventos_Competencia"),
+            "conteo": v("Tiendas_Conteo"), "categorias": v("Categoria_Competidores")}
+
+
+_analisis_cache = None
+
+
+@app.get("/competencia/analisis")
+async def competencia_analisis(dias: int = 30, refrescar: bool = False):
+    """Datos de la pantalla Análisis de Competencia: por referencia (SKU x competidor) último precio, anterior, desde cuándo rige, precio ganador y
+    serie de `dias` días; eventos; conteo de tiendas; mapa de categorías. Caché 10 min (`refrescar=true` relee, máx. 1 cada 30 s)."""
+    global _analisis_cache
+    import competencia_analisis
+    if _analisis_cache is None:
+        _analisis_cache = competencia_analisis.CacheAnalisis(_analisis_leer_filas)
+    try:
+        return await run_in_threadpool(_analisis_cache.obtener, dias, refrescar)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"No se pudo leer el Sheet de competencia: {e}")
+
+
 @app.post("/competencia/migracion/run")
 async def competencia_migracion_run(request: Request):
     """Body: {"ejecutar": false|true, "plan_hash": "<hash del dry-run aprobado>"}. Sin `ejecutar` = dry-run."""
@@ -2057,6 +2085,90 @@ def competencia_migracion_status(job_id: str, request: Request):
     _exigir_clave_estricta(request)
     return job_status.get(job_id, {"status": "not_found"})
 
+
+# ── Cambios masivos y reversibles sobre Referencias_Mercado (Etapa 2): desactivar las referencias de una entidad
+# (Global Electronics: somos nosotros). Dry-run por defecto; la real exige la cantidad esperada. Misma clave estricta.
+
+def _desactivar_entidad_sync(entidad, ejecutar, esperado):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.desactivar_entidad(ss, entidad, ejecutar, esperado, operador="endpoint")
+
+
+def _revertir_lote_sync(lote, ejecutar):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.revertir_lote(ss, lote, ejecutar)
+
+
+async def _cambio_referencias(request: Request, fn):
+    _exigir_clave_estricta(request)
+    if not _migracion_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Hay una migración/cambio masivo en curso")
+    try:
+        return await run_in_threadpool(fn)
+    except Exception as e:
+        if e.__class__.__name__ == "CambioError":
+            raise HTTPException(status_code=400, detail=str(e))
+        raise
+    finally:
+        _migracion_lock.release()
+
+
+@app.post("/competencia/referencias/desactivar-entidad")
+async def competencia_desactivar_entidad(request: Request):
+    """Body: {"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": 1927}. Sin `ejecutar` = dry-run."""
+    body = await request.json()
+    entidad = str(body.get("entidad", "")).strip()
+    ejecutar = bool(body.get("ejecutar", False))
+    esperado = body.get("esperado")
+    if ejecutar and esperado is None:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere `esperado` (la cantidad que mostró el dry-run)")
+    return await _cambio_referencias(request, lambda: _desactivar_entidad_sync(entidad, ejecutar, esperado))
+
+
+def _borrar_lecturas_sync(entidad, ejecutar, esperado):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.borrar_lecturas_entidad(ss, entidad, ejecutar, esperado, operador="endpoint")
+
+
+def _borrar_respaldo_sync(nombre, ejecutar, confirmar):
+    import competencia_referencias
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return competencia_referencias.borrar_pestana_respaldo(ss, nombre, ejecutar, confirmar, operador="endpoint")
+
+
+@app.post("/competencia/historial/borrar-lecturas-entidad")
+async def competencia_borrar_lecturas_entidad(request: Request):
+    """Body: {"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": 7073}. IRREVERSIBLE: dry-run primero;
+    no correrlo mientras el scraper está escribiendo."""
+    body = await request.json()
+    entidad, ejecutar, esperado = str(body.get("entidad", "")).strip(), bool(body.get("ejecutar", False)), body.get("esperado")
+    if ejecutar and esperado is None:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere `esperado` (la cantidad que mostró el dry-run)")
+    return await _cambio_referencias(request, lambda: _borrar_lecturas_sync(entidad, ejecutar, esperado))
+
+
+@app.post("/competencia/pestanas/borrar-respaldo")
+async def competencia_borrar_respaldo(request: Request):
+    """Body: {"nombre": "Respaldo_Hist_Competidores_20261005", "ejecutar": false, "confirmar": "<mismo nombre>"}. Solo borra
+    pestañas con ese patrón de nombre."""
+    body = await request.json()
+    nombre, ejecutar, confirmar = str(body.get("nombre", "")).strip(), bool(body.get("ejecutar", False)), body.get("confirmar")
+    if ejecutar and not confirmar:
+        raise HTTPException(status_code=400, detail="ejecutar=true requiere `confirmar` con el nombre exacto de la pestaña")
+    return await _cambio_referencias(request, lambda: _borrar_respaldo_sync(nombre, ejecutar, confirmar))
+
+
+@app.post("/competencia/referencias/revertir-lote")
+async def competencia_revertir_lote(request: Request):
+    """Body: {"lote": "LOTE-...", "ejecutar": false}. Deshace un cambio masivo registrado en Cambios_Referencias."""
+    body = await request.json()
+    lote, ejecutar = str(body.get("lote", "")).strip(), bool(body.get("ejecutar", False))
+    if not lote:
+        raise HTTPException(status_code=400, detail="Falta `lote`")
+    return await _cambio_referencias(request, lambda: _revertir_lote_sync(lote, ejecutar))
 
 # ══════════════════════════════════════════════════════
 # ML OFERTAS — dashboard de ofertas/promos activas (docs/business/

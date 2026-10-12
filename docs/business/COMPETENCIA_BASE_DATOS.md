@@ -31,3 +31,73 @@ Las lecturas SIN precio no se migran (se cuentan aparte en el informe); antes de
 ## Doble escritura (transitoria)
 Los monitores, `/competidores/refresh` y `/ml/tracker/run` siguen escribiendo a los históricos viejos (el front
 todavía los lee) y además a `Historial_Precios`. Se cortan los viejos en la Etapa 3, cuando la pantalla lea el nuevo.
+
+## Etapa 2: scraper automático (carpeta `scraper/`)
+Lee la **planilla de Maca** (`PLANILLA_MACA_ID` en `scraper/config.py`; pestañas `A-CATEGORIAS` y `B-SKU-COMPETENCIA`, encabezados en la
+fila 3) en lugar de la pestaña `Vendedores`. Sincroniza `Entidades` y `Referencias_Mercado` (columna nueva `Rol_Competidor`), scrapea
+perfiles de tienda y publicaciones puntuales con Selenium (perfil de Chrome persistente) y escribe en `Historial_Precios` con las mismas
+reglas de la Etapa 1. Eventos en `Eventos_Competencia`; tiendas con publicaciones que no son referencias, en `Discovery_Sugerencias`.
+Instalación, modo prueba y tarea de las 17:30: `scraper/README_WINDOWS.md`.
+
+Pendiente: alertas de **stock bajo** (< 5) — lógica lista pero desactivada hasta que la columna de stock de B-SKU tenga el dato real.
+
+Cambios masivos reversibles (`backend/competencia_referencias.py`): `POST /competencia/referencias/desactivar-entidad` (dry-run por defecto;
+la real exige `esperado` = cantidad del dry-run y registra cada valor anterior en `Cambios_Referencias`) y
+`POST /competencia/referencias/revertir-lote`. Misma clave `X-ERP-Key` estricta que la migración.
+
+### Etapa 2 — catálogo y precio ganador
+`Historial_Precios` suma dos columnas al final: `Precio_Ganador` y `Vendedor_Ganador` (lo que ML muestra primero en un `/p/`). El precio del
+competidor que sigue Maca (`Precio`) y el de la ganadora son datos separados; los eventos de cambio de precio miran solo `Precio`.
+Un link de catálogo con `wid` se resuelve buscando la tarjeta de esa oferta en la página (o en "Más opciones de compra"), por API si está
+configurada, o en el ítem directo (que solo existe para ofertas que no son de catálogo).
+
+### Etapa 2 — Fase 1 del diseño B: `Tiendas_Conteo`
+Una fila por (Fecha, Entidad_ID): `Leidas, Declaradas_ML, Paginas, Completa, Motivo, Nuevas, Desaparecidas, Mediana_7d, Var_vs_Mediana_Pct,
+Estado_Debilidad, Fuente`. `Nuevas`/`Desaparecidas` se completan en la Fase 2 (`Tiendas_Estado`/`Tiendas_Cambios`) y `Estado_Debilidad` en la Fase 3.
+Solo las lecturas `Completa = Si` forman la línea base. Esquema pensado para Postgres (`comp_tienda_conteo`, clave `(fecha, entidad_id)`).
+Medidor: `scraper/celdas.py` (límite de Google Sheets: 10M celdas por archivo, cuentan también las vacías).
+
+### Limpieza (Etapa 2) — endpoints protegidos, dry-run por defecto
+- `POST /competencia/historial/borrar-lecturas-entidad` `{"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": N}`: borra de `Historial_Precios`
+  las lecturas de esa entidad (somos nosotros, no es competencia). **Irreversible**; la real exige `esperado` = la cantidad del dry-run, registra el lote en
+  `Cambios_Referencias`, borra por tandas de filas consecutivas y verifica. No correrlo mientras el scraper está escribiendo.
+- `POST /competencia/pestanas/borrar-respaldo` `{"nombre": "Respaldo_Hist_Competidores_AAAAMMDD", "ejecutar": false, "confirmar": "<mismo nombre>"}`: borra
+  **solo** pestañas con ese patrón de nombre (el respaldo de la migración de la Etapa 1).
+- Pendiente de OK puntual, después de la Etapa 3: `Historial Competidores` y las `V-*` (las leen dos pantallas y guardan títulos/ventas que la base nueva no tiene).
+
+### Etapa 2 — corrida desatendida
+Si Chrome se cae, el scraper lo reabre y reintenta esa lectura; recicla Chrome cada 60 navegaciones; tope de 60 s por página y de 180 min por corrida;
+`--reanudar` retoma el día sin repetir lo ya leído; código de salida 3 = corrida cortada (lo leído ya se escribió). La paginación de tiendas prueba, en orden:
+botón "Siguiente" (con clic por JavaScript si algo lo tapa) → botón "Ver más" → URL por offset (`_Desde_n`) cuando ML declara más publicaciones de las leídas.
+
+### Etapa 2 — captcha / verificación de ML
+- Un captcha en una tienda o publicación NO corta la corrida: se saltea, se escribe lo leído (conteo `Completa = No`, motivo "ML pidió captcha en la página N")
+  y se emite `Tienda_bloqueada`. Cortan: login pedido, 2 tiendas seguidas (`MAX_BLOQUEOS_SEGUIDOS_TIENDAS`) o 3 publicaciones seguidas bloqueadas, con pausa de 60 s tras cada captcha.
+- El bloqueo se detecta al abrir la tienda **y en cada página siguiente** (antes solo al abrir: GEOTEK 48/122 era probablemente un captcha en la página 2).
+- `--configurar-login`: Chrome común + perfil del scraper, espera `LISTO`; limpia Chrome huérfanos del perfil. `--esperar-captcha [MIN]`: corrida asistida.
+- No se incluye resolución automática de captchas ni evasión. Alternativas a evaluar: leer los listados vía API de búsqueda de ML por `/ml-proxy`.
+
+### Etapa 3.0 — base de la pantalla "Análisis de Competencia"
+- **Costo fijo de ML (decisión de Maxx):** 1.330 / 2.740 / 3.320 (menos de $16k / $16–24k / $24–33k); desde $33.000 ML no cobra cargo fijo. Fuente única: el motor
+  (`pricing_tramo.ml_costo_fijo`), expuesto en `GET /rentabilidad/pricing/ml-costo-fijo`. El front (`ML_COSTO_FIJO` en `docs/index.html`) lo trae del backend, con el
+  seed como respaldo si no responde, y lo usan **Competidores** y **Ofertas ML**. Se sacaron los inputs `cfg-e1..e4` y los 1.255/2.500/3.030 (también los guardados en `localStorage`).
+  Los márgenes que se ven hoy en esas pantallas cambian (los viejos estaban mal).
+- **Paridad de márgenes:** `python backend/scripts/paridad_margenes.py` compara `compMargenAt` del front con `motor_precios.precio_a_margen` (30 casos) y el costo fijo
+  de `ofmMargenAt` (10 precios). Resultado: **0 casos fuera de tolerancia**. Correrlo después de tocar cualquiera de las dos fórmulas.
+  Ofertas ML mantiene su propia cuenta de envío por tramos y de cuotas (`OFM.envioTramos`, `OFM.cuotasPct`): NO está en la paridad, queda para revisar aparte.
+- **`GET /competencia/analisis?dias=30&refrescar=false`** (`backend/competencia_analisis.py`): requiere `X-ERP-Key`. Una lectura del Sheet servida a todos (caché 10 min; `refrescar`
+  relee, máx. 1 cada 30 s; si la relectura falla se sirve lo cacheado). Devuelve por referencia de competencia activa {sku, entidad, rol, cantidad, último precio, precio anterior,
+  `delta_pct`, `desde` (desde cuándo rige el precio actual), `ganador`, última lectura (estado/días), `serie`}, `eventos` de la ventana, `tiendas` (conteo y completitud),
+  `categorias` y `avisos`. No calcula márgenes ni categorías/PM: eso lo une el front por SKU.
+- **`Categoria_Competidores`** (escribe el scraper, `scraper/categorias_competidores.py`): `Subcategoria, Rol, Entidad_ID, Entidad, Slug, SKUs_Nuestros, Actualizado`. Upsert por
+  (Subcategoria, Rol, Slug); nunca borra: lo que Maca saque de A-CATEGORIAS queda con `Actualizado` viejo y el endpoint lo marca `desactualizada`. Requiere actualizar el scraper
+  en la PC y correr una vez (`python scraper.py --solo perfiles --sin-descubrimiento` alcanza para sincronizar).
+
+### Etapa 3.1 — pantalla "Análisis de Competencia" (por SKU, modo reciente)
+Sidebar → **Análisis de Competencia** (`page-analisis-competencia`, en `docs/index.html`; funciones `ac*`). Convive con Competidores ML / Intel. Competitiva (no se jubila nada).
+- Una fila por SKU: nuestro precio (PM, columna ML) con su margen, y columnas **Rey / Media / Barato** (según `Rol_Competidor`; refs sin rol van a "Otros"). Cada competidor: último precio,
+  variación vs. la lectura anterior (▼/▲ y desde cuándo rige), `Precio_Ganador` si difiere, diferencia % vs. nuestro precio, y **margen si igualamos** (`compMargenAt`, costo de Ecom × cantidad × TC).
+- Kits (`Cantidad` > 1): se compara contra nuestro precio × cantidad (+ envío desde $33.000, igual que Competidores) y el costo × cantidad.
+- Filtros: vendedores (cuadritos, uno/varios/todos), categoría (`GRAL CATEGORIAS`), PM (planillas PM), buscador (SKU / vendedor / link), "solo con cambios", "solo donde nos ganan", orden y TC.
+- Los márgenes usan los parámetros del panel de Competidores (la pantalla avisa si ahí hay algo desactivado). Sin costo o sin TC muestra "—", no inventa.
+- Tests: `backend/test_front_analisis.py` (lógica pura extraída del HTML, corre en node). Verificado además en Chromium con datos de prueba (filtros, ▲▼, kits, caídas).

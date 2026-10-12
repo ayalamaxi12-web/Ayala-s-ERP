@@ -219,6 +219,14 @@ def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor) -> _Estructur
     )
 
 
+def tramos_costo_fijo_ml(par: ParametrosMotor) -> list[dict]:
+    """Costo fijo por publicación de ML según el precio (la misma tabla `ml_costo_fijo` que usa `_estructura`). Desde el último `hasta`
+    ML no cobra cargo fijo. Lo consume el front (Competidores / Ofertas / Análisis de Competencia) para no tener los montos copiados."""
+    if "ml_costo_fijo" not in par.tramos:
+        raise ParametroFaltante("Falta la tabla 'ml_costo_fijo' (pricing_tramo).")
+    return [{"desde": t.desde, "hasta": t.hasta, "valor": t.valor} for t in par.tramos["ml_costo_fijo"]]
+
+
 def precio_a_margen(precio: Decimal, e: EntradaMotor, par: ParametrosMotor) -> Desglose:
     """Modo precio → margen: cada descuento por separado y el margen que queda."""
     p = Decimal(precio)
