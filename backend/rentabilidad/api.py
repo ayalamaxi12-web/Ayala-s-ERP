@@ -26,7 +26,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import costos_ecom, export_ventas_ecom, gsheets, pricing_pm, reportes_pricing, seed
+from . import costos_ecom, export_ventas_ecom, gsheets, pricing_config, pricing_pm, reportes_pricing, seed
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .adapters import (
     ClasificacionProvider,
@@ -1114,6 +1114,44 @@ def pricing_ml_costo_fijo(fecha: date | None = None) -> dict:
         raise HTTPException(503, str(e))
     return {"fecha": fecha, "tramos": tramos, "sin_cargo_desde": max((t["hasta"] for t in tramos if t["hasta"] is not None), default=None),
             "umbral_envio_gratis": umbral}
+
+
+class CuotasMLIn(BaseModel):
+    planes: dict[str, float]          # en %, ej. {"3": 8.9, "6": 13.4}
+    cargado_por: str
+    vigente_desde: date | None = None  # por defecto hoy (Argentina)
+    confirmar: bool = False            # sin confirmar = solo muestra qué cambiaría
+
+
+@router.get("/pricing/ml-cuotas")
+def pricing_ml_cuotas(fecha: date | None = None) -> dict:
+    """Cuotas de ML (% del precio que absorbe el vendedor) vigentes: fuente única para el motor, Competidores, Ofertas ML y Análisis de Competencia."""
+    fecha = fecha or ayer_en_argentina() + timedelta(days=1)
+    with sesion() as db:
+        planes = pricing_config.cuotas_ml(pricing_pm.motor.cargar_parametros(db, fecha))
+    if not planes:
+        raise HTTPException(503, "Falta la tabla de cuotas de ML (pricing_cuotas).")
+    return {"fecha": fecha, "planes": planes}
+
+
+@router.post("/pricing/ml-cuotas")
+def pricing_ml_cuotas_editar(payload: CuotasMLIn) -> dict:
+    """Edita las cuotas de ML en un solo lugar (X-ERP-Key). Sin `confirmar` solo muestra qué cambiaría; con `confirmar` agrega filas con `vigente_desde`
+    (por defecto hoy) y queda el historial. Los planes son "reducida", "3", "6", "9", "12", en %."""
+    vigente = payload.vigente_desde or (ayer_en_argentina() + timedelta(days=1))
+    if not payload.cargado_por.strip():
+        raise HTTPException(422, "Falta `cargado_por` (quién hace el cambio).")
+    try:
+        with sesion() as db:
+            par = pricing_pm.motor.cargar_parametros(db, vigente)
+            cambios = pricing_config.previsualizar(par, payload.planes)
+            if not payload.confirmar:
+                return {"confirmado": False, "vigente_desde": vigente, "cambios": cambios}
+            escritas = pricing_config.guardar(db, payload.planes, vigente, payload.cargado_por.strip())
+            planes = pricing_config.cuotas_ml(pricing_pm.motor.cargar_parametros(db, vigente))
+    except pricing_config.CuotasInvalidas as e:
+        raise HTTPException(422, str(e))
+    return {"confirmado": True, "vigente_desde": vigente, "filas_escritas": escritas, "cambios": cambios, "planes": planes}
 
 
 @router.get("/pricing/skus")
