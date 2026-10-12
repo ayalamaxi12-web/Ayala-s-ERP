@@ -128,3 +128,14 @@ No bloquea por margen bajo (CRITERIOS §8): solo colorea. Sin costo o sin TC no 
   Un solo panel a la vez; cambiar de SKU lo redibuja; mientras se tipea el precio solo se actualiza la salida (no pierde el foco).
 - **Diseño del panel:** márgenes por forma de pago en tarjetas (3×2), desglose del contado plegable, rivales en una lista compacta (rol, vendedor, "yo $X", su precio, chip ▼/▲ con la diferencia) y chip de posición ("2 de 3 rivales más baratos" / "sos el más barato").
 - **Buscador de SKU predictivo:** desplegable con hasta 10 sugerencias mientras se tipea (SKU, categoría, PM, cantidad de rivales); ↑/↓ + Enter, clic, Esc. Ignora mayúsculas, espacios y guiones ("pv12" encuentra "PV-120"), y el filtro de la tabla usa el mismo criterio para el SKU.
+
+### Simulador "Jugar mi precio" — tanda 2 (precio por forma, cantidad, combos, Otros plegable, vendedores únicos)
+Los márgenes siguen saliendo de `compMargenAt` (paridad con el motor); `backend/test_front_jugar.py` los compara contra `precio_a_margen` / `margen_a_precio`.
+- **Precio por forma de venta:** una fila por forma (Contado, Reducida, 3c, 6c, 9c, 12c) con su casillero de precio, el margen y un solo desplegable **«fijar ▾»** con las 3 maneras: a mano (el casillero), **igualar a un rival** (o «1 % bajo el más barato») y
+  **margen objetivo** (10/15/20/25/30 % u «otro %…»: calcula el precio MÁS BAJO que deja ese margen, tramo por tramo, usando `compMargenAt`; si no hay precio posible o falta costo, avisa). Una forma sin precio propio sigue al contado; «↺ volver» la suelta.
+- **Cantidad:** selector **Unid.** (auto, ×1…×12). «auto» = como antes (cada rival a la cantidad de SU publicación). Con N fijo: mi precio y mi costo se multiplican por N (el margen es el del pack) y el precio del rival se escala a N unidades
+  (supuesto: precio lineal por unidad); se compara a igual cantidad. Con «×1» una publicación ×2 de $52.000 se ve como $26.000 la unidad.
+- **Combos:** botón **＋ SKU** (busca entre los SKU de la planilla PM): suma precio (PM por defecto, editable), costo y cantidad de cada SKU; el margen del combo usa el IVA ponderado (venta sin IVA = suma de las de cada SKU). Los rivales se ven por SKU suelto, así que
+  para comparar un combo se carga a mano **«Combo del rival»** (chip ▼/▲ con la diferencia; «igualar» ajusta el precio de este SKU para igualarlo).
+- **Otros plegable:** la columna «Otros» de la tabla (rivales sin rol) viene cerrada («▸ 15 sin rol · 4 vendedores») y se expande por fila; en el panel, «Otros vendedores (n)» también viene cerrado.
+- **Rivales = vendedores únicos:** se cuenta por vendedor (nombre normalizado), no por publicación: «6 de 7 vendedores más baratos». De cada vendedor se muestra su publicación más barata (y «12 pub.») con el rol más alto que tenga.
