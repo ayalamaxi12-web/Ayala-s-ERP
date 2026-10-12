@@ -2353,7 +2353,7 @@ function compCfgLoad(){try{const o=JSON.parse(localStorage.getItem('comp_cfg')||
 Object.keys(o).forEach(i=>{const el=qs(i);if(el&&o[i]!=='')el.value=o[i];});}catch(e){}}
 function compExtraFijo(p){for(const t of ML_COSTO_FIJO.tramos){if(t[0]===null||p<t[0])return t[1];}return 0;}
 // Margen % sobre el precio SIN IVA (CRITERIOS_MARGEN §1); antes era sobre el neto de cargos.
-function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',15.5)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&neto>0)?mars/neto:null,mars:mars};}
+function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;const com=d.com!==false?precio*cfgN('cfg-com',15.5)/100:0;const extra=d.extra!==false?compExtraFijo(precio):0;const iibb=d.iibb!==false?neto*cfgN('cfg-iibb',5)/100:0;const impch=d.impch!==false?precio*cfgN('cfg-impch',1.2)/100:0;const envio=d.envio!==false?(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0):0;const cuota=qPct?precio*qPct/100:0;const mars=neto-com-extra-iibb-impch-envio-cuota-costoARS;return{m:(costoARS>0&&neto>0)?mars/neto:null,mars:mars,d:{neto,com,extra,iibb,impch,envio,cuota,costo:costoARS}};}
 function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElementSibling;if(next&&next.classList.contains('comp-cuotas-row')){next.remove();return;}document.querySelectorAll('.comp-cuotas-row').forEach(x=>x.remove());const pSug=parseFloat(btn.dataset.psug)||0;const costo=parseFloat(btn.dataset.costo)||0;const iva=parseFloat(btn.dataset.iva)||1.21;const planes=Object.keys(ML_CUOTAS.planes).map(Number).sort((a,b)=>a-b).map(n=>[n+' Cuotas',1,ML_CUOTAS.planes[n]]);const cells=planes.map(pl=>{const p=pSug*pl[1];const q=pl[2];const x=compMargenAt(p,iva,costo,q);const col=x.m===null?'var(--text3)':x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)';return`<div style="text-align:center"><div style="font-size:9px;color:var(--text3)">${pl[0]}</div><div class="mono" style="font-size:11px;color:var(--accent)">$${fmtN(Math.round(p))}</div><div class="mono" style="font-size:10px;color:${col}">${x.m===null?'—':(x.m*100).toFixed(1)+'%'}<span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span></div></div>`;}).join('');const row=document.createElement('tr');row.className='comp-cuotas-row';row.innerHTML=`<td colspan="15" style="background:var(--surface2);padding:10px 16px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${cells}</div></td>`;tr.after(row);}
 function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').forEach(row=>{const btn=row.previousElementSibling&&row.previousElementSibling.querySelector('button[data-psug]');if(btn){compToggleCuotas(btn);compToggleCuotas(btn);}});} document.addEventListener('change',e=>{if(e.target&&/^cfg-(r|q)\d+$/.test(e.target.id))compUpdateCuotasRows();}); const _oRC=renderCompetidores;renderCompetidores=function(){let openLink=null;const op=document.querySelector('.comp-cuotas-row');if(op){const b=op.previousElementSibling&&op.previousElementSibling.querySelector('button[data-link]');if(b)openLink=b.dataset.link;}_oRC();if(openLink){const nb=Array.from(document.querySelectorAll('#competidores-tbody button[data-link]')).find(x=>x.dataset.link===openLink);if(nb)compToggleCuotas(nb);}}; compCfgLoad();
 
@@ -2364,8 +2364,12 @@ let intelComercialLoaded=false;
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
 // (igual que Competidores) y el margen sale de compMargenAt (paridad con el motor: backend/scripts/paridad_margenes.py). Convive con los módulos viejos.
-const AC={data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false};
+const AC={data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,jugadas:{},abierto:null,keys:[]};
 function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// Nuestro precio "comparable" contra una publicación por `c` unidades: precio × c (+ envío desde el umbral), igual que Competidores ("Mi Precio = PM×Cant+Envío").
+function acComparable(X,c,ctx){const t=(X||0)*(c>0?c:1);return t>=ctx.umbral?t+ctx.envio:t;}
+// Precio por unidad que deja nuestro comparable IGUAL al precio de una publicación (por `c` unidades). En la franja [umbral, umbral+envío) no existe uno exacto: se toma el más cercano por debajo del umbral.
+function acPrecioParaIgualar(precioComp,c,ctx){c=c>0?c:1;if(precioComp<ctx.umbral)return Math.round(precioComp/c);if(precioComp-ctx.envio>=ctx.umbral)return Math.round((precioComp-ctx.envio)/c);return Math.round((ctx.umbral-1)/c);}
 function acAgregar(f){const vis=f.Rey.concat(f.Media,f.Barato,f.Otros);f.refs=vis;
   const dif=vis.map(r=>r._diff).filter(x=>x!=null),mg=vis.map(r=>r._mg).filter(x=>x!=null);
   f._minDif=dif.length?Math.min(...dif):null;f._mgMin=mg.length?Math.min(...mg):null;
@@ -2380,7 +2384,7 @@ function acArmar(D,ctx){
     if(!f){const pm=ctx.pm[k]||null,iva=ctx.iva(ref.sku,pm),cu=ctx.costoUsd(ref.sku);
       f={key:k,sku:ref.sku||'',cat:ctx.cat(ref.sku)||'Sin categoría',pmName:(pm&&pm.pmName)||'Sin PM',pmML:(pm&&pm.ml>0)?pm.ml:null,iva,costoUsd:cu,Rey:[],Media:[],Barato:[],Otros:[]};
       f.mgActual=(f.pmML&&cu>0&&ctx.tc>0)?ctx.margenAt(f.pmML,iva,cu*ctx.tc,0).m:null;por.set(k,f);}
-    const c=ref.cantidad>0?ref.cantidad:1,pmT=f.pmML?f.pmML*c:0,mi=pmT>0?(pmT>=ctx.umbral?pmT+ctx.envio:pmT):0,precio=ref.ultimo?ref.ultimo.precio:null;
+    const c=ref.cantidad>0?ref.cantidad:1,mi=f.pmML?acComparable(f.pmML,c,ctx):0,precio=ref.ultimo?ref.ultimo.precio:null;
     const r=Object.assign({},ref,{precio,_mi:mi||null,_diff:(mi&&precio)?(precio-mi)/mi*100:null,
       _mg:(precio&&f.costoUsd>0&&ctx.tc>0)?ctx.margenAt(precio,f.iva,f.costoUsd*c*ctx.tc,0).m:null,
       _cambioHoy:!!(ref.ultimo&&ref.anterior&&ref.desde===ref.ultimo.fecha)});
@@ -2411,8 +2415,21 @@ function acOrdenar(filas,modo){
     dif:(a,b)=>nulosAlFinal(a._minDif,b._minDif,1)||a.sku.localeCompare(b.sku),margen:(a,b)=>nulosAlFinal(a._mgMin,b._mgMin,1)||a.sku.localeCompare(b.sku)}[modo]||((a,b)=>a.sku.localeCompare(b.sku));
   return filas.slice().sort(c);
 }
+// ── "Jugar mi precio" (B1, sin escribir nada): margen de un precio propio X (por unidad) por forma de pago, contra el PM y contra cada rival. ──
+// ctx.cuotas = {reducida, planes:{3:8.9,...}} (tabla única del motor). Todo el margen sale de ctx.margenAt (= compMargenAt, paridad con el motor).
+function acJugarCalcular(f,X,ctx){
+  const out={X,ok:X>0,sinCosto:!(f.costoUsd>0&&ctx.tc>0)};if(!out.ok)return out;
+  const costo=f.costoUsd*ctx.tc,mk=q=>out.sinCosto?{m:null,mars:null,d:null}:ctx.margenAt(X,f.iva,costo,q);
+  out.contado=mk(0);
+  out.planes=[['Reducida',ctx.cuotas.reducida]].concat(Object.keys(ctx.cuotas.planes).map(Number).sort((a,b)=>a-b).map(n=>[n+'c',ctx.cuotas.planes[n]])).map(([label,q])=>Object.assign({label,pct:q},mk(q)));
+  out.pm=f.pmML?{precio:f.pmML,deltaPct:(X-f.pmML)/f.pmML*100,m:out.sinCosto?null:ctx.margenAt(f.pmML,f.iva,costo,0).m}:null;
+  out.rivales=f.Rey.concat(f.Media,f.Barato,f.Otros).filter(r=>r.precio>0).map(r=>{const c=r.cantidad>0?r.cantidad:1,mio=acComparable(X,c,ctx);
+    return {id:r.id,rol:r.rol||'',entidad:r.entidad,precio:r.precio,cantidad:c,mio,difPct:(r.precio-mio)/mio*100,masBarato:r.precio<mio,igualar:acPrecioParaIgualar(r.precio,c,ctx)};});
+  out.masBaratos=out.rivales.filter(r=>r.masBarato).length;
+  return out;
+}
 function acCtx(){const tcIn=parseFloat(((qs('ac-tc')||{}).value||'').replace(',','.'))||0;
-  return {pm:S.pmData||{},cat:getCat,costoUsd:costoUsdSku,iva:ivaSku,tc:tcIn||S.tcBNA||0,margenAt:compMargenAt,umbral:S.shippingThreshold||33000,envio:S.shippingCost||8500,normSku};}
+  return {pm:S.pmData||{},cat:getCat,costoUsd:costoUsdSku,iva:ivaSku,tc:tcIn||S.tcBNA||0,margenAt:compMargenAt,cuotas:ML_CUOTAS,umbral:S.shippingThreshold||33000,envio:S.shippingCost||8500,normSku};}
 function acMgHtml(m,pre){if(m==null)return '<span style="color:var(--text3)" title="Falta costo (Ecom) o TC">—</span>';return `<span style="color:${m>0.25?'var(--green)':m>0.15?'var(--yellow)':'var(--red)'}">${pre||''}${(m*100).toFixed(1)}%</span>`;}
 function acFechaCorta(iso){return iso?iso.slice(8,10)+'/'+iso.slice(5,7):'';}
 function acCelda(r){
@@ -2440,15 +2457,53 @@ function acRender(){
   const pages=Math.ceil(filas.length/AC.pageSize)||1;AC.page=Math.min(AC.page,pages);
   const pag=filas.slice((AC.page-1)*AC.pageSize,AC.page*AC.pageSize);
   const hayOtros=filas.some(f=>f.Otros.length);qs('ac-th-otros').style.display=hayOtros?'':'none';
-  qs('ac-tbody').innerHTML=pag.map(f=>{
+  AC.keys=pag.map(f=>f.key);
+  qs('ac-tbody').innerHTML=pag.map((f,i)=>{
     const col=b=>`<td style="vertical-align:top;min-width:170px">${f[b].map(acCelda).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
     const mi=f.pmML?`${fmt$(f.pmML)} · ${acMgHtml(f.mgActual)}`:'<span style="color:var(--text3)" title="Sin precio ML en la planilla PM">sin PM</span>';
-    return `<tr><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b></td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?col('Otros'):''}</tr>`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
+    const sim=AC.jugadas[f.key]>0?`<div style="font-size:10px;color:var(--accent)">simulando ${fmt$(AC.jugadas[f.key])}</div>`:'';
+    const ncol=hayOtros?7:6;
+    return `<tr><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b></td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?col('Otros'):''}</tr>`+(AC.abierto===f.key?`<tr><td colspan="${ncol}" style="background:var(--surface2);padding:10px 14px">${acJugarPanelHtml(i,f)}</td></tr>`:'');}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
   qs('ac-count').textContent=filas.length+' SKU';
   S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
   const c=window.COMPDESC||{},raro=[];if(c.com===false)raro.push('comisión');if(c.iva===false)raro.push('IVA');if(c.iibb===false)raro.push('IIBB');if(c.impch===false)raro.push('cheque');if(c.envio===false)raro.push('envío');if(c.extra===false)raro.push('costo fijo ML');
   qs('ac-margen-info').innerHTML=`Margen con los parámetros de Competidores: comisión ${cfgN('cfg-com',15.5)}% · IIBB ${cfgN('cfg-iibb',5)}% · cheque ${cfgN('cfg-impch',1.2)}% · envío $${cfgN('cfg-envio',8500)} desde ${fmt$(ctx.umbral)} · costo fijo ML ${mlCostoFijoTexto()}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>')+(raro.length?` · <span style="color:var(--yellow)">⚠ en Competidores tenés desactivado: ${raro.join(', ')}</span>`:'');
 }
+function acFilaCompleta(key){return AC.filas.find(x=>x.key===key);}   // la fila SIN filtros de vendedor: el simulador compara contra todos los rivales
+function acPrecioInicial(f){return AC.jugadas[f.key]>0?AC.jugadas[f.key]:(f.pmML||0);}
+function acJugarPanelHtml(i,fv){
+  const f=acFilaCompleta(fv.key)||fv,X=acPrecioInicial(f),btn=(txt,js,tit)=>`<button class="btn-xs" onclick="${js}" ${tit?`title="${acEsc(tit)}"`:''}>${txt}</button>`;
+  const rivales=f.Rey.concat(f.Media,f.Barato,f.Otros).filter(r=>r.precio>0);
+  const iguala=['Rey','Media','Barato'].map(rol=>{const r=(f[rol]||[]).find(x=>x.precio>0);return r?btn('= '+rol,`acJugarIgualar(${i},'${r.id}')`,'Iguala el precio de '+r.entidad+(r.cantidad>1?' (publicación ×'+r.cantidad+')':'')):'';}).join('');
+  return `<div style="font-family:'DM Mono',monospace;font-size:11px">
+    <div style="font-weight:700;color:var(--accent);margin-bottom:6px">🎯 Jugar mi precio — ${acEsc(f.sku)} <span style="font-weight:400;color:var(--text3)">· simulación: no escribe nada en Ecom ni en ML</span></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <span>Mi precio (por unidad, con IVA):</span><input type="text" id="ac-jx-${i}" value="${X?Math.round(X):''}" oninput="acJugarInput(${i})" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:right">
+      ${btn('−5%',`acJugarPaso(${i},-5)`)}${btn('−1%',`acJugarPaso(${i},-1)`)}${btn('+1%',`acJugarPaso(${i},1)`)}${btn('+5%',`acJugarPaso(${i},5)`)}
+      <span style="color:var(--text3)">|</span>${iguala}${rivales.length?btn('1% bajo el más barato',`acJugarIgualar(${i},'min')`,'Deja mi precio 1% por debajo del rival más barato'):''}
+      ${f.pmML?btn('↺ Volver a PM ('+fmt$(f.pmML)+')',`acJugarPM(${i})`):''}</div>
+    <div id="ac-jout-${i}">${acJugarSalidaHtml(f,X)}</div></div>`;
+}
+function acJugarSalidaHtml(f,X){
+  const ctx=acCtx(),r=acJugarCalcular(f,X,ctx);
+  if(!r.ok)return '<span style="color:var(--text3)">Ingresá un precio para ver el margen.</span>';
+  const mg=(x,pre)=>x.m==null?'<span style="color:var(--text3)">—</span>':`<span style="color:${x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)'};font-weight:700">${(x.m*100).toFixed(1)}%</span><span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span>`;
+  const aviso=r.sinCosto?`<div style="color:var(--yellow);margin-bottom:6px">⚠ Sin ${f.costoUsd>0?'TC':'costo de Ecom'}: no se puede calcular el margen (no se inventa).</div>`:'';
+  const pm=r.pm?`<div style="margin-bottom:6px">vs. PM ${fmt$(r.pm.precio)}: <b style="color:${r.pm.deltaPct<0?'var(--red)':'var(--green)'}">${r.pm.deltaPct>0?'+':''}${r.pm.deltaPct.toFixed(1)}%</b>${r.pm.m!=null&&r.contado.m!=null?` · margen en PM ${(r.pm.m*100).toFixed(1)}% → ${(r.contado.m*100).toFixed(1)}% (${((r.contado.m-r.pm.m)*100>=0?'+':'')}${((r.contado.m-r.pm.m)*100).toFixed(1)} pp)`:''}</div>`:'';
+  const cab=['Contado'].concat(r.planes.map(p=>`${p.label} <span style="color:var(--text3)">${p.pct}%</span>`)),fila=[mg(r.contado)].concat(r.planes.map(p=>mg(p)));
+  const tabla=`<table style="border-collapse:collapse;margin-bottom:8px;width:auto"><tr>${cab.map(c=>`<th style="text-align:left;padding:2px 14px 2px 0;font-size:9px;color:var(--text3);font-weight:400">${c}</th>`).join('')}</tr><tr>${fila.map(c=>`<td style="padding:2px 14px 2px 0">${c}</td>`).join('')}</tr></table>`;
+  const d=r.contado.d,des=d?`<div style="font-size:10px;color:var(--text3);margin-bottom:8px">Contado: venta sin IVA ${fmt$(d.neto)} − comisión ${fmt$(d.com)} − costo fijo ML ${fmt$(d.extra)} − envío ${fmt$(d.envio)} − IIBB ${fmt$(d.iibb)} − cheque ${fmt$(d.impch)} − costo ${fmt$(d.costo)} = <b>${fmt$(r.contado.mars)}</b></div>`:'';
+  const riv=r.rivales.length?`<table style="border-collapse:collapse;width:auto"><tr><th style="text-align:left;font-size:9px;color:var(--text3);font-weight:400;padding-right:14px">Rival</th><th style="text-align:right;font-size:9px;color:var(--text3);font-weight:400;padding-right:14px">Su precio</th><th style="text-align:right;font-size:9px;color:var(--text3);font-weight:400;padding-right:14px">Mi precio comparable</th><th style="text-align:right;font-size:9px;color:var(--text3);font-weight:400">Diferencia</th></tr>${r.rivales.map(v=>`<tr><td style="padding:1px 14px 1px 0">${v.rol?`<span class="badge badge-gray">${acEsc(v.rol)}</span> `:''}${acEsc(v.entidad)}${v.cantidad>1?' ×'+v.cantidad:''}</td><td style="text-align:right;padding-right:14px">${fmt$(v.precio)}</td><td style="text-align:right;padding-right:14px">${fmt$(v.mio)}</td><td style="text-align:right;color:${v.masBarato?'var(--red)':'var(--green)'}">${v.difPct>0?'+':''}${v.difPct.toFixed(1)}% ${v.masBarato?'(él más barato)':'(yo más barato)'}</td></tr>`).join('')}</table><div style="margin-top:6px;color:var(--text2)">${r.masBaratos===0?'✅ Con este precio sos el más barato.':`Tenés ${r.masBaratos} de ${r.rivales.length} rival${r.rivales.length>1?'es':''} más barato${r.masBaratos>1?'s':''}.`}</div>`:'<span style="color:var(--text3)">Sin rivales con precio para comparar.</span>';
+  return aviso+pm+tabla+des+riv;
+}
+function acJugarRefrescar(i){const f=acFilaCompleta(AC.keys[i]);if(!f)return;const el=qs('ac-jout-'+i);if(el)el.innerHTML=acJugarSalidaHtml(f,acPrecioInicial(f));}
+function acJugarFijar(i,X,mover){const key=AC.keys[i];if(!key)return;AC.jugadas[key]=X>0?X:0;if(mover){const inp=qs('ac-jx-'+i);if(inp)inp.value=X>0?Math.round(X):'';}acJugarRefrescar(i);}
+function acJugarInput(i){const v=parseFloat(String((qs('ac-jx-'+i)||{}).value||'').replace(/\./g,'').replace(',','.'))||0;acJugarFijar(i,v,false);}
+function acJugarPaso(i,pct){const f=acFilaCompleta(AC.keys[i]);if(!f)return;const X=acPrecioInicial(f);if(X>0)acJugarFijar(i,Math.round(X*(1+pct/100)),true);}
+function acJugarPM(i){const f=acFilaCompleta(AC.keys[i]);if(!f||!f.pmML)return;delete AC.jugadas[f.key];acJugarFijar(i,f.pmML,true);delete AC.jugadas[f.key];}
+function acJugarIgualar(i,quien){const f=acFilaCompleta(AC.keys[i]);if(!f)return;const ctx=acCtx(),rv=acJugarCalcular(f,acPrecioInicial(f)||1,ctx).rivales;if(!rv.length)return;
+  const X=quien==='min'?Math.round(Math.min(...rv.map(v=>v.igualar))*0.99):(rv.find(v=>v.id===quien)||{}).igualar;if(X>0)acJugarFijar(i,X,true);}
+function acJugarToggle(i){const key=AC.keys[i];AC.abierto=AC.abierto===key?null:key;acRender();}
 function acIrPagina(){AC.page=S.acPage;acRender();}
 function acVendBtns(){const ents=[...new Set((AC.data.referencias||[]).map(r=>r.entidad).filter(Boolean))].sort();
   qs('ac-vendedores').innerHTML=ents.map(v=>`<button class="btn-xs" data-v="${acEsc(v)}" onclick="acToggleVend(this.dataset.v)" style="opacity:${AC.vend.size&&!AC.vend.has(v)?0.4:1};${AC.vend.has(v)?'border-color:var(--accent);color:var(--accent)':''}">${acEsc(v)}</button>`).join('');}

@@ -116,3 +116,9 @@ Sidebar → **Análisis de Competencia** (`page-analisis-competencia`, en `docs/
   La paridad (`backend/scripts/paridad_margenes.py`) ahora también compara el margen por cuota de Competidores y de Ofertas contra el motor.
 - **SKU → nuestras publicaciones (B0):** `GET /competencia/publicaciones-propias?sku=` (X-ERP-Key): busca en las cuentas IT y MT (`users/{seller}/items/search?seller_sku=`) y confirma el SKU exacto
   (`seller_custom_field` o atributo `SELLER_SKU`). Un error en una cuenta no corta la otra. **Sin verificar contra ML real** (probado con respuestas simuladas).
+
+### Etapa B1 — simulador "Jugar mi precio" (Análisis de Competencia; no escribe nada)
+En cada SKU, botón **🎯 Jugar** → panel con: campo "mi precio" (por unidad, con IVA; arranca en el de PM), pasos ±1 % / ±5 %, atajos **= Rey / = Media / = Barato**, **1 % bajo el más barato** y **↺ volver a PM**.
+Muestra el margen en vivo por forma de pago (contado, reducida 5 %, 3c, 6c, 9c, 12c; cuotas de la tabla única del motor), el desglose del contado (venta sin IVA − comisión − costo fijo ML − envío − IIBB − cheque − costo),
+la diferencia contra el PM (precio y puntos de margen) y la tabla de rivales (su precio, mi precio comparable y quién es más barato). Kits: se compara contra nuestro precio × cantidad (+ envío desde el umbral) y "igualar" calcula el precio por unidad.
+No bloquea por margen bajo (CRITERIOS §8): solo colorea. Sin costo o sin TC no inventa margen. `backend/test_front_jugar.py` compara el margen de cada forma de pago contra `precio_a_margen` del motor.
