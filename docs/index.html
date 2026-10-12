@@ -632,6 +632,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <button class="btn" onclick="compRefreshHistorial()" id="btn-refresh-hist" style="border-color:rgba(0,229,160,0.4);color:var(--green)">⚡ Refrescar historial de precios</button>
     <div id="comp-refresh-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
     <div id="competidores-vendor-btns" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
     <span id="competidores-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-left:4px"></span>
   </div>
   <div id="comp-desc-panel" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
@@ -683,6 +684,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
     <button class="btn primary" id="btn-ac-load" onclick="acCargar(false)">🔄 Cargar</button>
     <button class="btn" onclick="acCargar(true)" title="Relee el Sheet (máx. 1 vez cada 30 s)">⟳ Releer Sheet</button>
+    <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
     <span id="ac-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
   <div id="ac-avisos" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6"></div>
@@ -1273,6 +1275,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
         </select>
       </span>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace" title="Suma el descuento propio por publicación (PRICE_DISCOUNT) -- no tiene listado masivo en la API de ML, escanea publicación por publicación de las ~6.200 activas"><input type="checkbox" id="ofm-incluir-propias">Incluir ofertas propias (lento)</label>
+      <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
       <button class="btn primary" onclick="ofmRun()" id="btn-ofm-run">🔄 Cargar ofertas activas</button>
     </div>
   </div>
@@ -1369,6 +1372,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
     <div class="section-hdr" style="margin-bottom:4px">📊 Precios &amp; Márgenes — motor unificado</div>
     <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Margen proyectado por canal = rentabilidad / venta sin IVA (mismo criterio que la rentabilidad real). Costo e IVA de Táctica, TC BNA del día. "Real" = ventas del ciclo en curso, solo órdenes de un SKU.</div>
   </div>
+  <div style="margin:6px 0"><span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span></div>
   <div class="erp-filters" style="margin:10px 0">
     <input type="text" id="pr-buscar" class="fi" placeholder="Buscar SKU..." style="width:160px" onkeydown="if(event.key==='Enter')pricingLoad()">
     <select id="pr-pm" class="fi"><option value="">Todos los PM</option></select>
@@ -1408,6 +1412,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
     <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Etapa 1 (solo lectura) -- motor propio de reverse-markup para los SKU piloto, reemplaza el precio de Ecom para estos SKU. Costo/IVA reales de Táctica, TC del BNA. No escribe nada a ML todavía.</div>
   </div>
 
+  <div style="margin:6px 0"><span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span></div>
   <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:10px 0;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
     <span style="display:flex;flex-direction:column;gap:3px">SKU
       <select id="ac-sku" class="fi" style="min-width:200px"></select>
@@ -1734,6 +1739,7 @@ function goPage(page,el){
   if(page==='dashboard')goVentasTab(ventasTab);
   else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
+  if(['competidores','analisis-competencia','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
@@ -2257,6 +2263,35 @@ const fPM=getMSValues('ms-comp-pm'),fCat=getMSValues('ms-comp-cat');let data=COM
 // El costo sale del catálogo de artículos de Ecom, vía el backend (/rentabilidad/costos/ecom), NO de la planilla PM
 // (la PM sigue siendo la fuente de PRECIOS). El TC es el del BNA del día, o el último guardado: nunca un valor fijo.
 const COSTOS_ECOM={usd:{},iva:{},cargado:false,cargando:null,error:null};
+// ── Costos de Ecom: el backend los baja UNA vez por día (06:00) y los guarda; todas las pantallas leen esa misma foto. Acá: antigüedad + refresco a mano. ──
+const COSTOS_UI={estado:null,poll:null};
+function costosEdadTxt(seg){if(seg==null)return 'sin datos';if(seg<90)return 'recién';if(seg<5400)return 'hace '+Math.round(seg/60)+' min';if(seg<172800)return 'hace '+Math.round(seg/3600)+' h';return 'hace '+Math.round(seg/86400)+' días';}
+function costosEcomUI(){
+  const e=COSTOS_UI.estado||{},edad=e.obtenido_en?Math.max(0,Date.now()/1000-e.obtenido_en):null;
+  const vieja=edad!=null&&edad>36*3600,color=e.ultimo_error||vieja?'var(--yellow)':'var(--text3)';
+  const tit=`Costos de Ecom: se actualizan solos todos los días a la mañana y se guardan; todos los cálculos usan esa misma foto.${e.ultimo_error?' Último error: '+e.ultimo_error:''}${vieja?' ATENCIÓN: tiene más de 36 h.':''}`;
+  document.querySelectorAll('.js-costos-ecom').forEach(el=>{el.innerHTML=`<span style="color:${color}" title="${acEsc(tit)}">💲 Costos Ecom: ${e.en_curso?'actualizando… (~80 s)':costosEdadTxt(edad)}${e.ultimo_error?' ⚠':''}</span><button class="btn-xs" onclick="costosRefrescar()" ${e.en_curso?'disabled':''} title="Baja el catálogo de Ecom ahora (~80 s). Mientras tanto se siguen usando los costos actuales. Usalo si entró una importación nueva en el día.">⟳ Refrescar costos</button>`;});
+}
+async function costosEstadoCargar(){const bu=getBackendUrl();if(!bu)return;try{const e=await(await fetch(`${bu}/rentabilidad/costos/ecom/estado`)).json();if(e&&typeof e==='object'&&!e.detail){COSTOS_UI.estado=e;costosEcomUI();}}catch(e){}}
+async function costosRefrescar(){
+  const bu=getBackendUrl();if(!bu){toast('Falta la URL del backend (Configuración)','error');return;}
+  if(!confirm('Esto baja el catálogo de costos de Ecom ahora (~80 s). Mientras tanto se siguen usando los costos actuales. ¿Refrescar?'))return;
+  try{
+    const r=await fetch(`${bu}/rentabilidad/costos/ecom/refrescar`,{method:'POST'});
+    if(r.status===401){toast('Clave del backend inválida o ausente (Configuración)','error');return;}
+    const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||('status '+r.status));
+    COSTOS_UI.estado=d.estado;costosEcomUI();toast(d.lanzado?'Actualizando costos de Ecom (~80 s)...':'Ya hay una actualización en curso');
+    clearInterval(COSTOS_UI.poll);const t0=Date.now();
+    COSTOS_UI.poll=setInterval(async()=>{
+      try{const e=await(await fetch(`${bu}/rentabilidad/costos/ecom/estado`)).json();COSTOS_UI.estado=e;costosEcomUI();
+        if(!e.en_curso||Date.now()-t0>6*60*1000){clearInterval(COSTOS_UI.poll);
+          if(e.ultimo_error&&!e.en_curso)toast('No se pudo actualizar: '+e.ultimo_error+' (se siguen usando los costos anteriores)','error');
+          else{toast('Costos de Ecom actualizados');await cargarCostosEcom(true);
+            if(typeof COMPDESC_listo==='function'&&COMPDESC_listo())renderCompetidores();if(AC.data)acRender();if(typeof ofmResult!=='undefined'&&ofmResult)ofmRender();}}
+      }catch(e){}
+    },5000);
+  }catch(e){toast('Error: '+(e.message||e),'error');}
+}
 function COMPDESC_listo(){return !!qs('competidores-tbody')&&COMP.data&&COMP.data.length>0;}
 function costoUsdSku(sku){const v=COSTOS_ECOM.usd[normSku(sku||'')];return v>0?v:0;}
 function ivaSku(sku,pm){return COSTOS_ECOM.iva[normSku(sku||'')]||(pm&&pm.iva)||1.21;}
@@ -2271,7 +2306,7 @@ function cargarCostosEcom(force){
     const usd={},iva={};
     Object.keys(d.costos||{}).forEach(k=>{usd[normSku(k)]=d.costos[k];});
     Object.keys(d.iva||{}).forEach(k=>{iva[normSku(k)]=d.iva[k];});
-    COSTOS_ECOM.usd=usd;COSTOS_ECOM.iva=iva;COSTOS_ECOM.cargado=true;COSTOS_ECOM.error=null;
+    COSTOS_ECOM.usd=usd;COSTOS_ECOM.iva=iva;COSTOS_ECOM.cargado=true;COSTOS_ECOM.error=null;COSTOS_UI.estado=d.estado||{obtenido_en:d.obtenido_en,en_curso:false};costosEcomUI();
   }).catch(e=>{COSTOS_ECOM.error=String(e.message||e);}).finally(()=>{COSTOS_ECOM.cargando=null;});
   return COSTOS_ECOM.cargando;
 }

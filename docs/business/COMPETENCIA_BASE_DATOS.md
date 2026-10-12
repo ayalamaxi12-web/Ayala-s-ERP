@@ -101,3 +101,18 @@ Sidebar → **Análisis de Competencia** (`page-analisis-competencia`, en `docs/
 - Filtros: vendedores (cuadritos, uno/varios/todos), categoría (`GRAL CATEGORIAS`), PM (planillas PM), buscador (SKU / vendedor / link), "solo con cambios", "solo donde nos ganan", orden y TC.
 - Los márgenes usan los parámetros del panel de Competidores (la pantalla avisa si ahí hay algo desactivado). Sin costo o sin TC muestra "—", no inventa.
 - Tests: `backend/test_front_analisis.py` (lógica pura extraída del HTML, corre en node). Verificado además en Chromium con datos de prueba (filtros, ▲▼, kits, caídas).
+
+### Costo de Ecom guardado + tabla única de cuotas + resolver SKU → publicaciones (A y B0)
+- **Costo cacheado (A):** el catálogo de costos de Ecom (~80 s) se baja UNA vez por día y queda guardado en la base (`costo_ecom_snapshot`, migración `h2c3d4e5f6a7`, últimas 7 fotos).
+  Un request nunca baja de Ecom: lee la foto más reciente (memoria → base, se vuelve a mirar la base cada 5 min). Quién baja: el cron de las 06:00 (`scripts/ecom_diario.py`, primer paso, no fatal),
+  el arranque del backend si no hay foto de las últimas 24 h, o el botón. Si una foto tiene más de 24 h se dispara un refresco en segundo plano mientras se sigue sirviendo la vieja. Si Ecom falla se conserva
+  la foto anterior y el error queda en el estado. Única excepción: la primera vez de la historia (sin ninguna foto) se baja dentro del request.
+  Endpoints: `GET /rentabilidad/costos/ecom` (ahora con `estado`), `GET /rentabilidad/costos/ecom/estado`, `POST /rentabilidad/costos/ecom/refrescar` (X-ERP-Key; en segundo plano, uno a la vez).
+  Front: "💲 Costos Ecom: hace 3 h  ⟳ Refrescar costos" en Competidores, Análisis, Ofertas ML, Motor de Precios (Ayala Core) y Precios & Márgenes; amarillo si pasó de 36 h o hubo error.
+  Todo lo que usa costo pasa por `costos_ecom.obtener_catalogo()`: motor, Ofertas, Ayala Core, `/costos/ecom` (Competidores y Análisis).
+- **Cuotas de ML (B0):** una sola tabla, la del motor (`pricing_cuotas`): reducida 5 % · 3c 8,9 % · 6c 13,4 % · 9c 17,8 % · 12c 21,6 % (datos oficiales de ML confirmados por Maxx). `GET /rentabilidad/pricing/ml-cuotas`.
+  **Se edita en un solo lugar:** `POST /rentabilidad/pricing/ml-cuotas` (X-ERP-Key) `{"planes": {"3": 9.1}, "cargado_por": "maxx", "confirmar": false}`: sin `confirmar` muestra qué cambiaría; con `confirmar: true` agrega filas
+  con `vigente_desde` (hoy por defecto) y queda el historial. Competidores y Ofertas ML la leen de ahí (se sacaron los recargos ×1,15/1,20/1,25/1,35 y los % propios de Competidores, y `OFM.cuotasPct`).
+  La paridad (`backend/scripts/paridad_margenes.py`) ahora también compara el margen por cuota de Competidores y de Ofertas contra el motor.
+- **SKU → nuestras publicaciones (B0):** `GET /competencia/publicaciones-propias?sku=` (X-ERP-Key): busca en las cuentas IT y MT (`users/{seller}/items/search?seller_sku=`) y confirma el SKU exacto
+  (`seller_custom_field` o atributo `SELLER_SKU`). Un error en una cuenta no corta la otra. **Sin verificar contra ML real** (probado con respuestas simuladas).

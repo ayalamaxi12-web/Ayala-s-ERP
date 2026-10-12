@@ -84,6 +84,16 @@ def main() -> int:
         api.migrar_y_sembrar()
         log("Migraciones OK")
 
+        # Catálogo de costos de Ecom: se baja UNA vez por día acá (~80 s) y queda guardado en la base; el backend solo lo lee. No frena la corrida si falla
+        # (el backend sigue con la foto anterior).
+        if not args.solo_consulta:
+            log("Refrescando el catálogo de costos de Ecom")
+            try:
+                from rentabilidad import costos_ecom
+                costos_ecom.refrescar("cron", log=log)
+            except Exception as e:
+                log(f"AVISO: no se pudo refrescar el catálogo de costos ({type(e).__name__}: {e}) — el backend sigue con la foto anterior")
+
         # Motor de precios: trae los precios de cada PM desde su Sheet (solo
         # lo que cambió). No frena la corrida de rentabilidad si falla.
         if not args.solo_consulta:

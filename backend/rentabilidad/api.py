@@ -1070,11 +1070,28 @@ def costos_catalogo_ecom() -> dict:
         raise HTTPException(503, f"No se pudo leer el catálogo de costos de Ecom: {e}")
     return {
         "obtenido_en": cat.obtenido_en,
+        "estado": costos_ecom.estado(),
         "costos": {k: float(v) for k, v in cat.costos.items()},
         "iva": {k: float(v) for k, v in cat.iva.items()},
         "sin_costo": sorted(cat.sin_costo),
         "ambiguos": {k: [float(x) for x in v] for k, v in cat.ambiguos.items()},
     }
+
+
+@router.get("/costos/ecom/estado")
+def costos_ecom_estado() -> dict:
+    """Antigüedad de la foto de costos, si hay un refresco en curso y el último error. Lo lee el botón de refresco del front."""
+    if not costos_ecom.estado()["hay_catalogo"]:
+        costos_ecom.cargar_de_base()  # recién arrancado el proceso: toma la foto de la base (sin bajar nada de Ecom)
+    return costos_ecom.estado()
+
+
+@router.post("/costos/ecom/refrescar")
+def costos_ecom_refrescar() -> dict:
+    """Refresco manual del catálogo de costos (X-ERP-Key): baja de Ecom en segundo plano (~80 s) y vuelve en seguida. Mientras tanto todos los
+    cálculos siguen usando la foto anterior; consultar `/costos/ecom/estado` hasta que `en_curso` sea false. Un solo refresco a la vez."""
+    lanzado = costos_ecom.refrescar_en_segundo_plano("manual")
+    return {"lanzado": lanzado, "estado": costos_ecom.estado()}
 
 
 @router.get("/costos/cruce-tactica")
