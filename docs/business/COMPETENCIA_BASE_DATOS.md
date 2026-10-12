@@ -122,3 +122,9 @@ En cada SKU, botón **🎯 Jugar** → panel con: campo "mi precio" (por unidad,
 Muestra el margen en vivo por forma de pago (contado, reducida 5 %, 3c, 6c, 9c, 12c; cuotas de la tabla única del motor), el desglose del contado (venta sin IVA − comisión − costo fijo ML − envío − IIBB − cheque − costo),
 la diferencia contra el PM (precio y puntos de margen) y la tabla de rivales (su precio, mi precio comparable y quién es más barato). Kits: se compara contra nuestro precio × cantidad (+ envío desde el umbral) y "igualar" calcula el precio por unidad.
 No bloquea por margen bajo (CRITERIOS §8): solo colorea. Sin costo o sin TC no inventa margen. `backend/test_front_jugar.py` compara el margen de cada forma de pago contra `precio_a_margen` del motor.
+
+### Ajustes de UX de Análisis de Competencia (solo presentación; los cálculos no cambian)
+- **Panel "Jugar" lateral y pegado (sticky):** ya no se abre abajo de la fila; vive en un costado y acompaña el scroll de la tabla, así se juega el precio mirando a los rivales. La fila del SKU queda resaltada. En pantallas angostas (<1100 px) el panel pasa arriba de la tabla.
+  Un solo panel a la vez; cambiar de SKU lo redibuja; mientras se tipea el precio solo se actualiza la salida (no pierde el foco).
+- **Diseño del panel:** márgenes por forma de pago en tarjetas (3×2), desglose del contado plegable, rivales en una lista compacta (rol, vendedor, "yo $X", su precio, chip ▼/▲ con la diferencia) y chip de posición ("2 de 3 rivales más baratos" / "sos el más barato").
+- **Buscador de SKU predictivo:** desplegable con hasta 10 sugerencias mientras se tipea (SKU, categoría, PM, cantidad de rivales); ↑/↓ + Enter, clic, Esc. Ignora mayúsculas, espacios y guiones ("pv12" encuentra "PV-120"), y el filtro de la tabla usa el mismo criterio para el SKU.
