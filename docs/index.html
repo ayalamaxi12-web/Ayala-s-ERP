@@ -238,6 +238,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
     <div class="sidebar-item" data-page="ofertas-margen" onclick="goPage('ofertas-margen',this)"><span class="icon">🏷️</span> Ofertas ML</div>
+    <div class="sidebar-item" data-page="analisis-competencia" onclick="goPage('analisis-competencia',this)"><span class="icon">📊</span> Análisis de Competencia</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
     <div class="sidebar-item" data-page="intel-competitiva" onclick="goPage('intel-competitiva',this)"><span class="icon">🎯</span> Intel. Competitiva</div>
   </div>
@@ -676,6 +677,39 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <tbody id="competidores-tbody"></tbody>
     </table>
     <div class="pagination" id="competidores-pag"></div>
+  </div>
+</div>
+
+<!-- ANÁLISIS DE COMPETENCIA (Etapa 3.1: por SKU, modo reciente). Convive con Competidores ML / Intel. Competitiva (no los reemplaza todavía). -->
+<div id="page-analisis-competencia" class="page">
+  <div class="section-hdr">Análisis de Competencia — por SKU <span style="font-size:10px;font-weight:400;color:var(--text3)">(modo reciente · último precio leído por el scraper)</span></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <button class="btn primary" id="btn-ac-load" onclick="acCargar(false)">🔄 Cargar</button>
+    <button class="btn" onclick="acCargar(true)" title="Relee el Sheet (máx. 1 vez cada 30 s)">⟳ Releer Sheet</button>
+    <span id="ac-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div id="ac-avisos" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6"></div>
+  <div class="stats-row" id="ac-stats" style="display:none"></div>
+  <div id="ac-filtros" style="display:none">
+    <div class="erp-filters" style="flex-wrap:wrap">
+      <div style="position:relative;flex:1;min-width:200px"><input type="text" id="ac-search" placeholder="Buscar SKU, vendedor o link..." autocomplete="off" oninput="AC.page=1;acRender()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none"></div>
+      <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-ac-cat"><div class="ms-trigger" onclick="toggleMS('ms-ac-cat')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ac-cat')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ac-cat')">Todos</button><button onclick="clearMS('ms-ac-cat')">Ninguno</button></div></div></div></div>
+      <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-ac-pm"><div class="ms-trigger" onclick="toggleMS('ms-ac-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ac-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ac-pm')">Todos</button><button onclick="clearMS('ms-ac-pm')">Ninguno</button></div></div></div></div>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="ac-solo-cambios" onchange="AC.page=1;acRender()">Solo con cambios</label>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="ac-solo-ganan" onchange="AC.page=1;acRender()">Solo donde nos ganan</label>
+      <select id="ac-sort" class="fi" onchange="AC.page=1;acRender()"><option value="sku">SKU A-Z</option><option value="cambio">Mayor cambio</option><option value="dif">Más barato que yo</option><option value="margen">Menor margen si igualo</option></select>
+      <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">TC:<input type="text" id="ac-tc" placeholder="BNA auto" oninput="acRender()" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;outline:none"></span>
+      <span id="ac-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0 10px"><span class="filter-label" style="margin-right:4px">Vendedores</span><span id="ac-vendedores" style="display:flex;gap:6px;flex-wrap:wrap"></span><button class="btn-xs" onclick="acVendTodos()">Todos</button></div>
+    <div id="ac-margen-info" style="margin-bottom:8px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
+  </div>
+  <div class="table-wrap" id="ac-table-wrap" style="display:none">
+    <table id="ac-table">
+      <thead><tr><th>SKU</th><th>Categoría · PM</th><th>Nuestro precio<br><span style="font-size:8px;font-weight:400">(PM ML · margen)</span></th><th>👑 Rey</th><th>Media</th><th>Barato</th><th id="ac-th-otros" style="display:none">Otros</th></tr></thead>
+      <tbody id="ac-tbody"></tbody>
+    </table>
+    <div class="pagination" id="ac-pag"></div>
   </div>
 </div>
 
@@ -1710,6 +1744,7 @@ function goPage(page,el){
   if(page==='verificar-ecom')renderEcom();
   if(page==='verificar-ml')renderML();
   if(page==='verificar-tactica')renderTactica();
+  if(page==='analisis-competencia')acEntrar();
   if(page==='intel-competitiva'){intelLoadHistory();intelTab('cambios');if(intelChanges.length)intelRenderCambios();}
   if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
@@ -2153,6 +2188,9 @@ function compAcSelect(sku){const inp=qs('competidores-search');if(inp)inp.value=
 function compAcHide(){const dd=qs('comp-ac-dropdown');if(dd)dd.style.display='none';}
 document.addEventListener('click',e=>{const dd=qs('comp-ac-dropdown');if(dd&&e.target.id!=='competidores-search')dd.style.display='none';});
 const _oTMV=toggleMSValue;toggleMSValue=function(id,v){_oTMV(id,v);if(id==='ms-comp-pm'||id==='ms-comp-cat')renderCompetidores();};
+const _oTMV2=toggleMSValue;toggleMSValue=function(id,v){_oTMV2(id,v);if(id==='ms-ac-pm'||id==='ms-ac-cat'){AC.page=1;acRender();}};
+const _oCMS2=clearMS;clearMS=function(id){_oCMS2(id);if(id==='ms-ac-pm'||id==='ms-ac-cat'){AC.page=1;acRender();}};
+const _oSAMS2=selectAllMS;selectAllMS=function(id){_oSAMS2(id);if(id==='ms-ac-pm'||id==='ms-ac-cat'){AC.page=1;acRender();}};
 const _oCMS=clearMS;clearMS=function(id){_oCMS(id);if(id==='ms-comp-pm'||id==='ms-comp-cat')renderCompetidores();};
 const _oSAMS=selectAllMS;selectAllMS=function(id){_oSAMS(id);if(id==='ms-comp-pm'||id==='ms-comp-cat')renderCompetidores();};  
 function renderCompetidores(){
@@ -2272,6 +2310,126 @@ function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').fo
 const INTEL={referencias:[],entidades:[],bySku:{}};
 let intelComercialLoaded=false;
 
+// ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
+// Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
+// (igual que Competidores) y el margen sale de compMargenAt (paridad con el motor: backend/scripts/paridad_margenes.py). Convive con los módulos viejos.
+const AC={data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false};
+function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function acAgregar(f){const vis=f.Rey.concat(f.Media,f.Barato,f.Otros);f.refs=vis;
+  const dif=vis.map(r=>r._diff).filter(x=>x!=null),mg=vis.map(r=>r._mg).filter(x=>x!=null);
+  f._minDif=dif.length?Math.min(...dif):null;f._mgMin=mg.length?Math.min(...mg):null;
+  f._cambio=vis.reduce((m,r)=>(r._cambioHoy&&r.delta_pct!=null)?Math.max(m,Math.abs(r.delta_pct)):m,0);
+  f._hayCambio=vis.some(r=>r._cambioHoy);f._ganan=vis.some(r=>r._diff!=null&&r._diff<0);return f;}
+// ctx = {pm, cat(sku), costoUsd(sku), iva(sku,pm), tc, margenAt, umbral, envio, normSku}  (se arma en acCtx(); acá no se toca ningún global)
+function acArmar(D,ctx){
+  const por=new Map();
+  (D.referencias||[]).forEach(ref=>{
+    const k=ctx.normSku(ref.sku||'')||('sin-sku-'+ref.id);
+    let f=por.get(k);
+    if(!f){const pm=ctx.pm[k]||null,iva=ctx.iva(ref.sku,pm),cu=ctx.costoUsd(ref.sku);
+      f={key:k,sku:ref.sku||'',cat:ctx.cat(ref.sku)||'Sin categoría',pmName:(pm&&pm.pmName)||'Sin PM',pmML:(pm&&pm.ml>0)?pm.ml:null,iva,costoUsd:cu,Rey:[],Media:[],Barato:[],Otros:[]};
+      f.mgActual=(f.pmML&&cu>0&&ctx.tc>0)?ctx.margenAt(f.pmML,iva,cu*ctx.tc,0).m:null;por.set(k,f);}
+    const c=ref.cantidad>0?ref.cantidad:1,pmT=f.pmML?f.pmML*c:0,mi=pmT>0?(pmT>=ctx.umbral?pmT+ctx.envio:pmT):0,precio=ref.ultimo?ref.ultimo.precio:null;
+    const r=Object.assign({},ref,{precio,_mi:mi||null,_diff:(mi&&precio)?(precio-mi)/mi*100:null,
+      _mg:(precio&&f.costoUsd>0&&ctx.tc>0)?ctx.margenAt(precio,f.iva,f.costoUsd*c*ctx.tc,0).m:null,
+      _cambioHoy:!!(ref.ultimo&&ref.anterior&&ref.desde===ref.ultimo.fecha)});
+    (f[ref.rol]&&['Rey','Media','Barato'].includes(ref.rol)?f[ref.rol]:f.Otros).push(r);
+  });
+  return [...por.values()].map(acAgregar);
+}
+// filtros = {search, cats:[..]|null, pms:[..]|null, vend:Set, soloCambios, soloGanan}. Devuelve filas NUEVAS con solo las referencias visibles.
+function acFiltrar(filas,fl){
+  const q=(fl.search||'').trim().toLowerCase(),hayV=fl.vend&&fl.vend.size>0,out=[];
+  filas.forEach(f=>{
+    if(fl.cats&&!fl.cats.includes(f.cat))return;if(fl.pms&&!fl.pms.includes(f.pmName))return;
+    const skuOk=q&&(f.sku||'').toLowerCase().includes(q);
+    const g=Object.assign({},f);
+    ['Rey','Media','Barato','Otros'].forEach(b=>{g[b]=f[b].filter(r=>{
+      if(hayV&&!fl.vend.has(r.entidad))return false;
+      if(q&&!skuOk&&!((r.entidad||'').toLowerCase().includes(q)||(r.link||'').toLowerCase().includes(q)||(r.id||'').toLowerCase().includes(q)))return false;
+      return true;});});
+    acAgregar(g);
+    if(!g.refs.length)return;
+    if(fl.soloCambios&&!g._hayCambio)return;if(fl.soloGanan&&!g._ganan)return;
+    out.push(g);});
+  return out;
+}
+function acOrdenar(filas,modo){
+  const nulosAlFinal=(a,b,dir)=>(a==null&&b==null)?0:a==null?1:b==null?-1:dir*(a-b);
+  const c={sku:(a,b)=>a.sku.localeCompare(b.sku),cambio:(a,b)=>b._cambio-a._cambio||a.sku.localeCompare(b.sku),
+    dif:(a,b)=>nulosAlFinal(a._minDif,b._minDif,1)||a.sku.localeCompare(b.sku),margen:(a,b)=>nulosAlFinal(a._mgMin,b._mgMin,1)||a.sku.localeCompare(b.sku)}[modo]||((a,b)=>a.sku.localeCompare(b.sku));
+  return filas.slice().sort(c);
+}
+function acCtx(){const tcIn=parseFloat(((qs('ac-tc')||{}).value||'').replace(',','.'))||0;
+  return {pm:S.pmData||{},cat:getCat,costoUsd:costoUsdSku,iva:ivaSku,tc:tcIn||S.tcBNA||0,margenAt:compMargenAt,umbral:S.shippingThreshold||33000,envio:S.shippingCost||8500,normSku};}
+function acMgHtml(m,pre){if(m==null)return '<span style="color:var(--text3)" title="Falta costo (Ecom) o TC">—</span>';return `<span style="color:${m>0.25?'var(--green)':m>0.15?'var(--yellow)':'var(--red)'}">${pre||''}${(m*100).toFixed(1)}%</span>`;}
+function acFechaCorta(iso){return iso?iso.slice(8,10)+'/'+iso.slice(5,7):'';}
+function acCelda(r){
+  const ent=`<span class="badge badge-blue" style="font-size:9px">${acEsc(r.entidad||'?')}</span>`+(r.cantidad>1?` <span class="badge badge-gray" title="Publicación por ${r.cantidad} unidades: se compara contra nuestro precio × ${r.cantidad} y el costo × ${r.cantidad}">×${r.cantidad}</span>`:'');
+  const lnk=r.link?` <a href="${acEsc(r.link)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none" title="Abrir publicación">↗</a>`:'';
+  const ul=r.ultima_lectura;
+  if(r.precio==null){const est=ul?(ul.estado||'sin precio'):'sin lecturas';return `<div style="margin-bottom:6px">${ent}${lnk}<div style="font-size:10px;color:var(--text3)">${acEsc(est)}${ul?' · '+acFechaCorta(ul.fecha):''}</div></div>`;}
+  let d='';
+  if(r.delta_pct==null)d='<span class="badge badge-gray" title="Primera lectura: todavía no hay con qué comparar">nuevo</span>';
+  else if(r.delta_pct===0)d=`<span class="badge badge-gray" title="Sin cambios desde ${acFechaCorta(r.desde)}">＝ ${acFechaCorta(r.desde)}</span>`;
+  else d=`<span class="badge ${r.delta_pct<0?'badge-red':'badge-green'}" title="Antes ${fmt$(r.anterior.precio)} (${acFechaCorta(r.anterior.fecha)}); rige desde ${acFechaCorta(r.desde)}">${r.delta_pct<0?'▼':'▲'} ${Math.abs(r.delta_pct).toFixed(1)}%</span>`;
+  const viejo=ul&&ul.dias>2?` <span title="Última lectura hace ${ul.dias} días" style="color:var(--yellow)">⏱${ul.dias}d</span>`:'';
+  const caida=ul&&ul.estado&&!/^ok$/i.test(ul.estado)&&ul.fecha>r.ultimo.fecha?` <span class="badge badge-red" title="Última lectura (${acFechaCorta(ul.fecha)}): ${acEsc(ul.estado)}">${acEsc(ul.estado)}</span>`:'';
+  const g=r.ganador&&r.ganador.precio!==r.precio?`<div style="font-size:10px;color:var(--text3)" title="Precio que muestra ML como ganador de la ficha de catálogo">Gan. ${fmt$(r.ganador.precio)}${r.ganador.vendedor?' · '+acEsc(r.ganador.vendedor):''}</div>`:'';
+  const dif=r._diff!=null?`<span style="color:${r._diff<0?'var(--red)':'var(--green)'}" title="vs. nuestro precio${r.cantidad>1?' ×'+r.cantidad:''}${r._mi?' ('+fmt$(r._mi)+')':''}">${r._diff>0?'+':''}${r._diff.toFixed(1)}%</span>`:'';
+  return `<div style="margin-bottom:8px;line-height:1.5"><div>${ent}${lnk}</div>
+    <div style="font-family:'DM Mono',monospace"><b>${fmt$(r.precio)}</b> ${d}${viejo}${caida}</div>${g}
+    <div style="font-size:10px;color:var(--text3)">vs. nosotros ${dif||'—'} · margen si igualo ${acMgHtml(r._mg)}</div></div>`;
+}
+function acRender(){
+  if(!AC.data)return;
+  const ctx=acCtx();AC.filas=acArmar(AC.data,ctx);
+  const fl={search:qs('ac-search').value,cats:getMSValues('ms-ac-cat'),pms:getMSValues('ms-ac-pm'),vend:AC.vend,soloCambios:qs('ac-solo-cambios').checked,soloGanan:qs('ac-solo-ganan').checked};
+  const filas=acOrdenar(acFiltrar(AC.filas,fl),qs('ac-sort').value);
+  const pages=Math.ceil(filas.length/AC.pageSize)||1;AC.page=Math.min(AC.page,pages);
+  const pag=filas.slice((AC.page-1)*AC.pageSize,AC.page*AC.pageSize);
+  const hayOtros=filas.some(f=>f.Otros.length);qs('ac-th-otros').style.display=hayOtros?'':'none';
+  qs('ac-tbody').innerHTML=pag.map(f=>{
+    const col=b=>`<td style="vertical-align:top;min-width:170px">${f[b].map(acCelda).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
+    const mi=f.pmML?`${fmt$(f.pmML)} · ${acMgHtml(f.mgActual)}`:'<span style="color:var(--text3)" title="Sin precio ML en la planilla PM">sin PM</span>';
+    return `<tr><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b></td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?col('Otros'):''}</tr>`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
+  qs('ac-count').textContent=filas.length+' SKU';
+  S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
+  const c=window.COMPDESC||{},raro=[];if(c.com===false)raro.push('comisión');if(c.iva===false)raro.push('IVA');if(c.iibb===false)raro.push('IIBB');if(c.impch===false)raro.push('cheque');if(c.envio===false)raro.push('envío');if(c.extra===false)raro.push('costo fijo ML');
+  qs('ac-margen-info').innerHTML=`Margen con los parámetros de Competidores: comisión ${cfgN('cfg-com',15.5)}% · IIBB ${cfgN('cfg-iibb',5)}% · cheque ${cfgN('cfg-impch',1.2)}% · envío $${cfgN('cfg-envio',8500)} desde ${fmt$(ctx.umbral)} · costo fijo ML ${mlCostoFijoTexto()}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>')+(raro.length?` · <span style="color:var(--yellow)">⚠ en Competidores tenés desactivado: ${raro.join(', ')}</span>`:'');
+}
+function acIrPagina(){AC.page=S.acPage;acRender();}
+function acVendBtns(){const ents=[...new Set((AC.data.referencias||[]).map(r=>r.entidad).filter(Boolean))].sort();
+  qs('ac-vendedores').innerHTML=ents.map(v=>`<button class="btn-xs" data-v="${acEsc(v)}" onclick="acToggleVend(this.dataset.v)" style="opacity:${AC.vend.size&&!AC.vend.has(v)?0.4:1};${AC.vend.has(v)?'border-color:var(--accent);color:var(--accent)':''}">${acEsc(v)}</button>`).join('');}
+function acToggleVend(v){if(AC.vend.has(v))AC.vend.delete(v);else AC.vend.add(v);AC.page=1;acVendBtns();acRender();}
+function acVendTodos(){AC.vend.clear();AC.page=1;acVendBtns();acRender();}
+async function acEntrar(){if(!AC.cargado&&!AC.cargando)acCargar(false);}
+async function acCargar(refrescar){
+  const st=qs('ac-status'),bu=getBackendUrl();
+  if(!bu){st.textContent='❌ Falta la URL del backend (Configuración).';return;}
+  if(AC.cargando)return;AC.cargando=true;qs('btn-ac-load').disabled=true;st.textContent='Leyendo competencia...';
+  try{
+    cargarCostoFijoML();
+    if(!S.tcBNA)fetch(`${bu}/tc/bna`).then(r=>r.json()).then(d=>{if(d.tc>0){S.tcBNA=d.tc;acRender();}}).catch(()=>{});
+    cargarCostosEcom(false).then(()=>{if(COSTOS_ECOM.error)toast('Costos de Ecom: '+COSTOS_ECOM.error+' -- sin margen','error');acRender();});
+    if(!Object.keys(S.catData||{}).length&&S.sheetsKey)await loadCats().catch(()=>{});
+    const r=await fetch(`${bu}/competencia/analisis?dias=30${refrescar?'&refrescar=true':''}`);
+    const d=await r.json().catch(()=>({}));
+    if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
+    if(!r.ok)throw new Error(d.detail||('status '+r.status));
+    AC.data=d;AC.cargado=true;
+    const cats=new Set(),pms=new Set();(d.referencias||[]).forEach(x=>{cats.add(getCat(x.sku)||'Sin categoría');const p=(S.pmData||{})[normSku(x.sku||'')];pms.add((p&&p.pmName)||'Sin PM');});
+    initMS('ms-ac-cat',cats);initMS('ms-ac-pm',pms);acVendBtns();
+    ['ac-filtros','ac-table-wrap','ac-stats'].forEach(id=>qs(id).style.display='');
+    const refs=d.referencias||[],conPrecio=refs.filter(x=>x.ultimo).length,cambios=refs.filter(x=>x.ultimo&&x.anterior&&x.desde===x.ultimo.fecha).length;
+    const ult=refs.reduce((m,x)=>x.ultima_lectura&&x.ultima_lectura.fecha>m?x.ultima_lectura.fecha:m,'');
+    qs('ac-stats').innerHTML=[[new Set(refs.map(x=>x.sku)).size,'SKU con competencia'],[refs.length,'Referencias activas'],[conPrecio,'Con precio leído'],[cambios,'Cambiaron en la última lectura'],[ult?acFechaCorta(ult):'—','Última lectura']].map(([v,l])=>`<div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`).join('');
+    const av=qs('ac-avisos');av.style.display=(d.avisos&&d.avisos.length)?'block':'none';av.innerHTML=(d.avisos||[]).map(a=>'⚠ '+acEsc(a)).join('<br>');
+    st.textContent=`Datos leídos hace ${d.cache?d.cache.leido_hace_seg:0}s${d.cache&&d.cache.refresco_ignorado?' (releer ignorado: muy reciente o el Sheet falló)':''}`;
+    acRender();
+  }catch(e){st.textContent='❌ '+(e.message||e);}
+  AC.cargando=false;qs('btn-ac-load').disabled=false;
+}
 async function loadIntelComercial(){
   const btn=qs('btn-load-intel-comercial'),status=qs('intel-comercial-status');
   btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';

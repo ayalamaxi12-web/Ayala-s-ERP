@@ -92,3 +92,12 @@ botón "Siguiente" (con clic por JavaScript si algo lo tapa) → botón "Ver má
 - **`Categoria_Competidores`** (escribe el scraper, `scraper/categorias_competidores.py`): `Subcategoria, Rol, Entidad_ID, Entidad, Slug, SKUs_Nuestros, Actualizado`. Upsert por
   (Subcategoria, Rol, Slug); nunca borra: lo que Maca saque de A-CATEGORIAS queda con `Actualizado` viejo y el endpoint lo marca `desactualizada`. Requiere actualizar el scraper
   en la PC y correr una vez (`python scraper.py --solo perfiles --sin-descubrimiento` alcanza para sincronizar).
+
+### Etapa 3.1 — pantalla "Análisis de Competencia" (por SKU, modo reciente)
+Sidebar → **Análisis de Competencia** (`page-analisis-competencia`, en `docs/index.html`; funciones `ac*`). Convive con Competidores ML / Intel. Competitiva (no se jubila nada).
+- Una fila por SKU: nuestro precio (PM, columna ML) con su margen, y columnas **Rey / Media / Barato** (según `Rol_Competidor`; refs sin rol van a "Otros"). Cada competidor: último precio,
+  variación vs. la lectura anterior (▼/▲ y desde cuándo rige), `Precio_Ganador` si difiere, diferencia % vs. nuestro precio, y **margen si igualamos** (`compMargenAt`, costo de Ecom × cantidad × TC).
+- Kits (`Cantidad` > 1): se compara contra nuestro precio × cantidad (+ envío desde $33.000, igual que Competidores) y el costo × cantidad.
+- Filtros: vendedores (cuadritos, uno/varios/todos), categoría (`GRAL CATEGORIAS`), PM (planillas PM), buscador (SKU / vendedor / link), "solo con cambios", "solo donde nos ganan", orden y TC.
+- Los márgenes usan los parámetros del panel de Competidores (la pantalla avisa si ahí hay algo desactivado). Sin costo o sin TC muestra "—", no inventa.
+- Tests: `backend/test_front_analisis.py` (lógica pura extraída del HTML, corre en node). Verificado además en Chromium con datos de prueba (filtros, ▲▼, kits, caídas).
