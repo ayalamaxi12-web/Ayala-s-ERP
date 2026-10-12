@@ -107,6 +107,25 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .table-wrap td{padding:7px 10px;border-bottom:1px solid rgba(30,37,53,.7);vertical-align:middle;}
 .table-wrap tr:last-child td{border-bottom:none;}
 .table-wrap tr:hover td{background:rgba(0,157,188,.04);}
+/* Análisis de Competencia: panel "Jugar" pegado al costado (sigue visible al scrollear la tabla) + fila seleccionada + sugerencias del buscador */
+#ac-main{display:flex;gap:14px;align-items:flex-start;}
+.ac-aside{position:sticky;top:70px;flex:none;width:420px;max-height:calc(100vh - 82px);overflow-y:auto;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;font-family:'DM Mono',monospace;font-size:11px;}
+.table-wrap tr.ac-sel td{background:rgba(0,157,188,.09);}
+.table-wrap tr.ac-sel td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
+.ac-chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;}
+.ac-mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0;}
+.ac-mcard{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;}
+.ac-mcard .l{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;}
+.ac-mcard .v{font-size:14px;font-weight:700;line-height:1.3;}
+.ac-mcard .d{font-size:9px;color:var(--text3);}
+.ac-riv{display:grid;grid-template-columns:auto 1fr auto auto;gap:0;align-items:center;}
+.ac-riv>div{padding:5px 10px 5px 0;border-bottom:1px solid rgba(30,37,53,.7);}
+.ac-riv>div:nth-child(4n){padding-right:0;}
+.ac-sug{position:absolute;left:0;right:0;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;z-index:60;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.45);}
+.ac-sug div.it{padding:6px 10px;cursor:pointer;display:flex;gap:10px;align-items:baseline;border-bottom:1px solid rgba(30,37,53,.7);font-family:'DM Mono',monospace;}
+.ac-sug div.it:last-child{border-bottom:none;}
+.ac-sug div.it.on,.ac-sug div.it:hover{background:rgba(0,157,188,.15);}
+@media(max-width:1100px){#ac-main{flex-direction:column-reverse;}.ac-aside{position:static;width:auto;max-height:none;align-self:stretch;}}
 .badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:9px;font-weight:700;font-family:'DM Mono',monospace;}
 .badge-green{background:rgba(0,229,160,.15);color:var(--green);}
 .badge-red{background:rgba(255,107,107,.15);color:var(--red);}
@@ -691,7 +710,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="stats-row" id="ac-stats" style="display:none"></div>
   <div id="ac-filtros" style="display:none">
     <div class="erp-filters" style="flex-wrap:wrap">
-      <div style="position:relative;flex:1;min-width:200px"><input type="text" id="ac-search" placeholder="Buscar SKU, vendedor o link..." autocomplete="off" oninput="AC.page=1;acRender()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none"></div>
+      <div style="position:relative;flex:1;min-width:200px"><div id="ac-sug" class="ac-sug" style="display:none"></div><input type="text" id="ac-search" placeholder="Buscar SKU, vendedor o link..." autocomplete="off" oninput="AC.page=1;acRender();acSugerir()" onkeydown="acSugKey(event)" onfocus="acSugerir()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none"></div>
       <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-ac-cat"><div class="ms-trigger" onclick="toggleMS('ms-ac-cat')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ac-cat')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ac-cat')">Todos</button><button onclick="clearMS('ms-ac-cat')">Ninguno</button></div></div></div></div>
       <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-ac-pm"><div class="ms-trigger" onclick="toggleMS('ms-ac-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ac-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ac-pm')">Todos</button><button onclick="clearMS('ms-ac-pm')">Ninguno</button></div></div></div></div>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="ac-solo-cambios" onchange="AC.page=1;acRender()">Solo con cambios</label>
@@ -703,12 +722,15 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0 10px"><span class="filter-label" style="margin-right:4px">Vendedores</span><span id="ac-vendedores" style="display:flex;gap:6px;flex-wrap:wrap"></span><button class="btn-xs" onclick="acVendTodos()">Todos</button></div>
     <div id="ac-margen-info" style="margin-bottom:8px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
   </div>
-  <div class="table-wrap" id="ac-table-wrap" style="display:none">
+  <div id="ac-main">
+  <div class="table-wrap" id="ac-table-wrap" style="display:none;flex:1;min-width:0">
     <table id="ac-table">
       <thead><tr><th>SKU</th><th>Categoría · PM</th><th>Nuestro precio<br><span style="font-size:8px;font-weight:400">(PM ML · margen)</span></th><th>👑 Rey</th><th>Media</th><th>Barato</th><th id="ac-th-otros" style="display:none">Otros</th></tr></thead>
       <tbody id="ac-tbody"></tbody>
     </table>
     <div class="pagination" id="ac-pag"></div>
+  </div>
+  <aside id="ac-aside" class="ac-aside" style="display:none"></aside>
   </div>
 </div>
 
@@ -2397,7 +2419,7 @@ function acFiltrar(filas,fl){
   const q=(fl.search||'').trim().toLowerCase(),hayV=fl.vend&&fl.vend.size>0,out=[];
   filas.forEach(f=>{
     if(fl.cats&&!fl.cats.includes(f.cat))return;if(fl.pms&&!fl.pms.includes(f.pmName))return;
-    const skuOk=q&&(f.sku||'').toLowerCase().includes(q);
+    const skuOk=q&&acNormBusq(f.sku).includes(acNormBusq(q));   // el SKU se busca sin importar mayúsculas, espacios ni guiones (igual que las sugerencias)
     const g=Object.assign({},f);
     ['Rey','Media','Barato','Otros'].forEach(b=>{g[b]=f[b].filter(r=>{
       if(hayV&&!fl.vend.has(r.entidad))return false;
@@ -2462,8 +2484,8 @@ function acRender(){
     const col=b=>`<td style="vertical-align:top;min-width:170px">${f[b].map(acCelda).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
     const mi=f.pmML?`${fmt$(f.pmML)} · ${acMgHtml(f.mgActual)}`:'<span style="color:var(--text3)" title="Sin precio ML en la planilla PM">sin PM</span>';
     const sim=AC.jugadas[f.key]>0?`<div style="font-size:10px;color:var(--accent)">simulando ${fmt$(AC.jugadas[f.key])}</div>`:'';
-    const ncol=hayOtros?7:6;
-    return `<tr><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b></td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?col('Otros'):''}</tr>`+(AC.abierto===f.key?`<tr><td colspan="${ncol}" style="background:var(--surface2);padding:10px 14px">${acJugarPanelHtml(i,f)}</td></tr>`:'');}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
+    return `<tr${AC.abierto===f.key?' class="ac-sel"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b></td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?col('Otros'):''}</tr>`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
+  acAsideRender();
   qs('ac-count').textContent=filas.length+' SKU';
   S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
   const c=window.COMPDESC||{},raro=[];if(c.com===false)raro.push('comisión');if(c.iva===false)raro.push('IVA');if(c.iibb===false)raro.push('IIBB');if(c.impch===false)raro.push('cheque');if(c.envio===false)raro.push('envío');if(c.extra===false)raro.push('costo fijo ML');
@@ -2471,39 +2493,67 @@ function acRender(){
 }
 function acFilaCompleta(key){return AC.filas.find(x=>x.key===key);}   // la fila SIN filtros de vendedor: el simulador compara contra todos los rivales
 function acPrecioInicial(f){return AC.jugadas[f.key]>0?AC.jugadas[f.key]:(f.pmML||0);}
-function acJugarPanelHtml(i,fv){
-  const f=acFilaCompleta(fv.key)||fv,X=acPrecioInicial(f),btn=(txt,js,tit)=>`<button class="btn-xs" onclick="${js}" ${tit?`title="${acEsc(tit)}"`:''}>${txt}</button>`;
+// Panel "Jugar": vive en un costado PEGADO (sticky) al lado de la tabla, así se juega el precio mirando a los rivales sin scrollear. Solo presentación: el cálculo es acJugarCalcular.
+function acJugarPanelHtml(f){
+  const X=acPrecioInicial(f),btn=(txt,js,tit)=>`<button class="btn-xs" onclick="${js}" ${tit?`title="${acEsc(tit)}"`:''}>${txt}</button>`;
   const rivales=f.Rey.concat(f.Media,f.Barato,f.Otros).filter(r=>r.precio>0);
-  const iguala=['Rey','Media','Barato'].map(rol=>{const r=(f[rol]||[]).find(x=>x.precio>0);return r?btn('= '+rol,`acJugarIgualar(${i},'${r.id}')`,'Iguala el precio de '+r.entidad+(r.cantidad>1?' (publicación ×'+r.cantidad+')':'')):'';}).join('');
-  return `<div style="font-family:'DM Mono',monospace;font-size:11px">
-    <div style="font-weight:700;color:var(--accent);margin-bottom:6px">🎯 Jugar mi precio — ${acEsc(f.sku)} <span style="font-weight:400;color:var(--text3)">· simulación: no escribe nada en Ecom ni en ML</span></div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <span>Mi precio (por unidad, con IVA):</span><input type="text" id="ac-jx-${i}" value="${X?Math.round(X):''}" oninput="acJugarInput(${i})" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:right">
-      ${btn('−5%',`acJugarPaso(${i},-5)`)}${btn('−1%',`acJugarPaso(${i},-1)`)}${btn('+1%',`acJugarPaso(${i},1)`)}${btn('+5%',`acJugarPaso(${i},5)`)}
-      <span style="color:var(--text3)">|</span>${iguala}${rivales.length?btn('1% bajo el más barato',`acJugarIgualar(${i},'min')`,'Deja mi precio 1% por debajo del rival más barato'):''}
-      ${f.pmML?btn('↺ Volver a PM ('+fmt$(f.pmML)+')',`acJugarPM(${i})`):''}</div>
-    <div id="ac-jout-${i}">${acJugarSalidaHtml(f,X)}</div></div>`;
+  const iguala=['Rey','Media','Barato'].map(rol=>{const r=(f[rol]||[]).find(x=>x.precio>0);return r?btn('= '+rol,`acJugarIgualar('${r.id}')`,'Iguala el precio de '+r.entidad+(r.cantidad>1?' (publicación ×'+r.cantidad+')':'')):'';}).join('');
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
+      <div><div style="font-weight:700;color:var(--accent);font-size:12px">🎯 ${acEsc(f.sku)}</div><div style="font-size:9px;color:var(--text3)">${acEsc(f.cat)} · ${acEsc(f.pmName)} · simulación: no escribe nada</div></div>
+      <button class="btn-xs" onclick="acJugarCerrar()" title="Cerrar el panel">✕</button></div>
+    <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <span style="color:var(--text3);font-size:10px">Mi precio</span><input type="text" id="ac-jx" value="${X?Math.round(X):''}" oninput="acJugarInput()" style="width:92px;background:var(--surface2);border:1px solid var(--accent);border-radius:4px;padding:4px 7px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;font-weight:700;text-align:right" title="Por unidad, con IVA">
+      ${btn('−5%','acJugarPaso(-5)')}${btn('−1%','acJugarPaso(-1)')}${btn('+1%','acJugarPaso(1)')}${btn('+5%','acJugarPaso(5)')}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${iguala}${rivales.length?btn('1% bajo el más barato','acJugarIgualar(\'min\')','Deja mi precio 1% por debajo del rival más barato'):''}${f.pmML?btn('↺ PM '+fmt$(f.pmML),'acJugarPM()','Volver al precio de la planilla PM'):''}</div>
+    <div id="ac-jout">${acJugarSalidaHtml(f,X)}</div>`;
 }
 function acJugarSalidaHtml(f,X){
   const ctx=acCtx(),r=acJugarCalcular(f,X,ctx);
   if(!r.ok)return '<span style="color:var(--text3)">Ingresá un precio para ver el margen.</span>';
-  const mg=(x,pre)=>x.m==null?'<span style="color:var(--text3)">—</span>':`<span style="color:${x.m>0.25?'var(--green)':x.m>0.15?'var(--yellow)':'var(--red)'};font-weight:700">${(x.m*100).toFixed(1)}%</span><span style="color:var(--text3);font-size:9px"> ($${fmtN(Math.round(x.mars))})</span>`;
+  const col=m=>m>0.25?'var(--green)':m>0.15?'var(--yellow)':'var(--red)';
+  const card=(l,x)=>`<div class="ac-mcard"><div class="l">${l}</div><div class="v" style="color:${x.m==null?'var(--text3)':col(x.m)}">${x.m==null?'—':(x.m*100).toFixed(1)+'%'}</div><div class="d">${x.mars==null?'&nbsp;':'$'+fmtN(Math.round(x.mars))}</div></div>`;
   const aviso=r.sinCosto?`<div style="color:var(--yellow);margin-bottom:6px">⚠ Sin ${f.costoUsd>0?'TC':'costo de Ecom'}: no se puede calcular el margen (no se inventa).</div>`:'';
-  const pm=r.pm?`<div style="margin-bottom:6px">vs. PM ${fmt$(r.pm.precio)}: <b style="color:${r.pm.deltaPct<0?'var(--red)':'var(--green)'}">${r.pm.deltaPct>0?'+':''}${r.pm.deltaPct.toFixed(1)}%</b>${r.pm.m!=null&&r.contado.m!=null?` · margen en PM ${(r.pm.m*100).toFixed(1)}% → ${(r.contado.m*100).toFixed(1)}% (${((r.contado.m-r.pm.m)*100>=0?'+':'')}${((r.contado.m-r.pm.m)*100).toFixed(1)} pp)`:''}</div>`:'';
-  const cab=['Contado'].concat(r.planes.map(p=>`${p.label} <span style="color:var(--text3)">${p.pct}%</span>`)),fila=[mg(r.contado)].concat(r.planes.map(p=>mg(p)));
-  const tabla=`<table style="border-collapse:collapse;margin-bottom:8px;width:auto"><tr>${cab.map(c=>`<th style="text-align:left;padding:2px 14px 2px 0;font-size:9px;color:var(--text3);font-weight:400">${c}</th>`).join('')}</tr><tr>${fila.map(c=>`<td style="padding:2px 14px 2px 0">${c}</td>`).join('')}</tr></table>`;
-  const d=r.contado.d,des=d?`<div style="font-size:10px;color:var(--text3);margin-bottom:8px">Contado: venta sin IVA ${fmt$(d.neto)} − comisión ${fmt$(d.com)} − costo fijo ML ${fmt$(d.extra)} − envío ${fmt$(d.envio)} − IIBB ${fmt$(d.iibb)} − cheque ${fmt$(d.impch)} − costo ${fmt$(d.costo)} = <b>${fmt$(r.contado.mars)}</b></div>`:'';
-  const riv=r.rivales.length?`<table style="border-collapse:collapse;width:auto"><tr><th style="text-align:left;font-size:9px;color:var(--text3);font-weight:400;padding-right:14px">Rival</th><th style="text-align:right;font-size:9px;color:var(--text3);font-weight:400;padding-right:14px">Su precio</th><th style="text-align:right;font-size:9px;color:var(--text3);font-weight:400;padding-right:14px">Mi precio comparable</th><th style="text-align:right;font-size:9px;color:var(--text3);font-weight:400">Diferencia</th></tr>${r.rivales.map(v=>`<tr><td style="padding:1px 14px 1px 0">${v.rol?`<span class="badge badge-gray">${acEsc(v.rol)}</span> `:''}${acEsc(v.entidad)}${v.cantidad>1?' ×'+v.cantidad:''}</td><td style="text-align:right;padding-right:14px">${fmt$(v.precio)}</td><td style="text-align:right;padding-right:14px">${fmt$(v.mio)}</td><td style="text-align:right;color:${v.masBarato?'var(--red)':'var(--green)'}">${v.difPct>0?'+':''}${v.difPct.toFixed(1)}% ${v.masBarato?'(él más barato)':'(yo más barato)'}</td></tr>`).join('')}</table><div style="margin-top:6px;color:var(--text2)">${r.masBaratos===0?'✅ Con este precio sos el más barato.':`Tenés ${r.masBaratos} de ${r.rivales.length} rival${r.rivales.length>1?'es':''} más barato${r.masBaratos>1?'s':''}.`}</div>`:'<span style="color:var(--text3)">Sin rivales con precio para comparar.</span>';
-  return aviso+pm+tabla+des+riv;
+  const pm=r.pm?`<div style="font-size:10px;color:var(--text2)">vs. PM ${fmt$(r.pm.precio)}: <b style="color:${r.pm.deltaPct<0?'var(--red)':'var(--green)'}">${r.pm.deltaPct>0?'+':''}${r.pm.deltaPct.toFixed(1)}%</b>${r.pm.m!=null&&r.contado.m!=null?` · margen ${(r.pm.m*100).toFixed(1)}% → <b>${(r.contado.m*100).toFixed(1)}%</b> (${((r.contado.m-r.pm.m)*100>=0?'+':'')}${((r.contado.m-r.pm.m)*100).toFixed(1)} pp)`:''}</div>`:'';
+  const tarjetas=`<div class="ac-mgrid">${card('Contado',r.contado)}${r.planes.map(p=>card(`${p.label} · ${p.pct}%`,p)).join('')}</div>`;
+  const d=r.contado.d,fila=(l,v,neg)=>`<div style="display:flex;justify-content:space-between"><span style="color:var(--text3)">${l}</span><span>${neg?'− ':''}${fmt$(v)}</span></div>`;
+  const des=d?`<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:10px;color:var(--text3)">Desglose contado</summary><div style="font-size:10px;line-height:1.6;padding:4px 2px">${fila('Venta sin IVA',d.neto)}${fila('Comisión ML',d.com,1)}${fila('Costo fijo ML',d.extra,1)}${fila('Envío',d.envio,1)}${fila('IIBB',d.iibb,1)}${fila('Imp. cheque',d.impch,1)}${fila('Costo',d.costo,1)}<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:2px;padding-top:2px;font-weight:700"><span>Ganancia</span><span>${fmt$(r.contado.mars)}</span></div></div></details>`:'';
+  const pos=r.rivales.length?(r.masBaratos===0?'<span class="ac-chip" style="background:rgba(0,229,160,.15);color:var(--green)">✅ sos el más barato</span>':`<span class="ac-chip" style="background:rgba(255,107,107,.15);color:var(--red)">${r.masBaratos} de ${r.rivales.length} rival${r.rivales.length>1?'es':''} más barato${r.masBaratos>1?'s':''}</span>`):'';
+  const riv=r.rivales.length?`<div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 2px"><span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Rivales</span>${pos}</div>
+    <div class="ac-riv">${r.rivales.map(v=>{const c=v.masBarato?'var(--red)':'var(--green)',bg=v.masBarato?'rgba(255,107,107,.15)':'rgba(0,229,160,.15)';
+      return `<div>${v.rol?`<span class="badge badge-gray">${acEsc(v.rol)}</span>`:''}</div><div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Mi precio comparable: ${fmt$(v.mio)}">${acEsc(v.entidad)}${v.cantidad>1?' <span style="color:var(--text3)">×'+v.cantidad+'</span>':''}<div style="font-size:9px;color:var(--text3)">yo ${fmt$(v.mio)}</div></div><div style="text-align:right;font-weight:700">${fmt$(v.precio)}</div><div><span class="ac-chip" style="background:${bg};color:${c}" title="${v.masBarato?'El rival está más barato que mi precio comparable':'Yo estoy más barato que el rival'}">${v.masBarato?'▼':'▲'} ${Math.abs(v.difPct).toFixed(1)}%</span></div>`;}).join('')}</div>
+    <div style="font-size:9px;color:var(--text3);margin-top:4px">▼ rival más barato que yo · ▲ yo más barato</div>`:'<span style="color:var(--text3)">Sin rivales con precio para comparar.</span>';
+  return aviso+pm+tarjetas+des+riv;
 }
-function acJugarRefrescar(i){const f=acFilaCompleta(AC.keys[i]);if(!f)return;const el=qs('ac-jout-'+i);if(el)el.innerHTML=acJugarSalidaHtml(f,acPrecioInicial(f));}
-function acJugarFijar(i,X,mover){const key=AC.keys[i];if(!key)return;AC.jugadas[key]=X>0?X:0;if(mover){const inp=qs('ac-jx-'+i);if(inp)inp.value=X>0?Math.round(X):'';}acJugarRefrescar(i);}
-function acJugarInput(i){const v=parseFloat(String((qs('ac-jx-'+i)||{}).value||'').replace(/\./g,'').replace(',','.'))||0;acJugarFijar(i,v,false);}
-function acJugarPaso(i,pct){const f=acFilaCompleta(AC.keys[i]);if(!f)return;const X=acPrecioInicial(f);if(X>0)acJugarFijar(i,Math.round(X*(1+pct/100)),true);}
-function acJugarPM(i){const f=acFilaCompleta(AC.keys[i]);if(!f||!f.pmML)return;delete AC.jugadas[f.key];acJugarFijar(i,f.pmML,true);delete AC.jugadas[f.key];}
-function acJugarIgualar(i,quien){const f=acFilaCompleta(AC.keys[i]);if(!f)return;const ctx=acCtx(),rv=acJugarCalcular(f,acPrecioInicial(f)||1,ctx).rivales;if(!rv.length)return;
-  const X=quien==='min'?Math.round(Math.min(...rv.map(v=>v.igualar))*0.99):(rv.find(v=>v.id===quien)||{}).igualar;if(X>0)acJugarFijar(i,X,true);}
+function acJugarRefrescar(){const f=acFilaCompleta(AC.abierto);if(!f)return;const el=qs('ac-jout');if(el)el.innerHTML=acJugarSalidaHtml(f,acPrecioInicial(f));}
+function acJugarFijar(X,mover){if(!AC.abierto)return;AC.jugadas[AC.abierto]=X>0?X:0;if(mover){const inp=qs('ac-jx');if(inp)inp.value=X>0?Math.round(X):'';}acJugarRefrescar();}
+function acJugarInput(){const v=parseFloat(String((qs('ac-jx')||{}).value||'').replace(/\./g,'').replace(',','.'))||0;acJugarFijar(v,false);}
+function acJugarPaso(pct){const f=acFilaCompleta(AC.abierto);if(!f)return;const X=acPrecioInicial(f);if(X>0)acJugarFijar(Math.round(X*(1+pct/100)),true);}
+function acJugarPM(){const f=acFilaCompleta(AC.abierto);if(!f||!f.pmML)return;acJugarFijar(f.pmML,true);delete AC.jugadas[f.key];}
+function acJugarIgualar(quien){const f=acFilaCompleta(AC.abierto);if(!f)return;const ctx=acCtx(),rv=acJugarCalcular(f,acPrecioInicial(f)||1,ctx).rivales;if(!rv.length)return;
+  const X=quien==='min'?Math.round(Math.min(...rv.map(v=>v.igualar))*0.99):(rv.find(v=>v.id===quien)||{}).igualar;if(X>0)acJugarFijar(X,true);}
 function acJugarToggle(i){const key=AC.keys[i];AC.abierto=AC.abierto===key?null:key;acRender();}
+function acJugarCerrar(){AC.abierto=null;acRender();}
+// Panel lateral: se redibuja entero al abrir/cerrar o cambiar de SKU; mientras se tipea el precio solo se actualiza la salida (no pierde el foco).
+function acAsideRender(){const as=qs('ac-aside');if(!as)return;const f=AC.abierto?acFilaCompleta(AC.abierto):null;
+  if(!f){as.style.display='none';as.innerHTML='';AC.asideKey=null;return;}
+  as.style.display='block';if(AC.asideKey!==f.key){as.innerHTML=acJugarPanelHtml(f);AC.asideKey=f.key;}else{acJugarRefrescar();}}
+// Sugerencias del buscador (predictivo): por SKU, ignorando mayúsculas, espacios y guiones ("pv100" encuentra "PV-100"). Pura.
+function acNormBusq(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+function acSugerencias(q,filas,max){const n=acNormBusq(q);if(!n)return [];const out=[];
+  filas.forEach(f=>{const k=acNormBusq(f.sku);const i=k.indexOf(n);if(i>=0)out.push({f,orden:k===n?0:i===0?1:2});});
+  out.sort((a,b)=>a.orden-b.orden||a.f.sku.localeCompare(b.f.sku));return out.slice(0,max||10).map(x=>x.f);}
+function acSugerir(){const box=qs('ac-sug'),q=(qs('ac-search')||{}).value||'';if(!box)return;
+  const l=q.trim().length>=1?acSugerencias(q,AC.filas,10):[];AC.sug=l;AC.sugSel=-1;
+  if(!l.length){box.style.display='none';box.innerHTML='';return;}
+  box.style.display='block';
+  box.innerHTML=l.map((f,i)=>`<div class="it" data-i="${i}" onmousedown="event.preventDefault();acSugElegir(${i})"><b style="color:var(--accent)">${acEsc(f.sku)}</b><span style="color:var(--text3);font-size:10px">${acEsc(f.cat)} · ${acEsc(f.pmName)}</span><span style="margin-left:auto;color:var(--text3);font-size:10px">${f.refs.length} rival${f.refs.length===1?'':'es'}</span></div>`).join('');}
+function acSugCerrar(){const box=qs('ac-sug');if(box){box.style.display='none';box.innerHTML='';}AC.sug=[];AC.sugSel=-1;}
+function acSugElegir(i){const f=(AC.sug||[])[i];if(!f)return;qs('ac-search').value=f.sku;acSugCerrar();AC.page=1;acRender();}
+function acSugKey(e){const box=qs('ac-sug');if(e.key==='Escape'){acSugCerrar();return;}if(!box||box.style.display==='none'||!(AC.sug||[]).length)return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const n=AC.sug.length;AC.sugSel=((AC.sugSel+1+(e.key==='ArrowDown'?1:-1)+n+1)%(n+1))-1;
+    box.querySelectorAll('.it').forEach((el,i)=>el.classList.toggle('on',i===AC.sugSel));}
+  else if(e.key==='Enter'&&AC.sugSel>=0){e.preventDefault();acSugElegir(AC.sugSel);}}
+document.addEventListener('click',e=>{if(!e.target.closest('#ac-sug')&&e.target.id!=='ac-search')acSugCerrar();});
 function acIrPagina(){AC.page=S.acPage;acRender();}
 function acVendBtns(){const ents=[...new Set((AC.data.referencias||[]).map(r=>r.entidad).filter(Boolean))].sort();
   qs('ac-vendedores').innerHTML=ents.map(v=>`<button class="btn-xs" data-v="${acEsc(v)}" onclick="acToggleVend(this.dataset.v)" style="opacity:${AC.vend.size&&!AC.vend.has(v)?0.4:1};${AC.vend.has(v)?'border-color:var(--accent);color:var(--accent)':''}">${acEsc(v)}</button>`).join('');}

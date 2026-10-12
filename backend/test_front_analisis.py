@@ -23,7 +23,7 @@ def _fn(src, nombre):
 
 def correr(D, filtros, orden='sku'):
     src = open(INDEX, encoding='utf-8').read()
-    fns = '\n'.join(_fn(src, n) for n in ('acComparable', 'acAgregar', 'acArmar', 'acFiltrar', 'acOrdenar'))
+    fns = '\n'.join(_fn(src, n) for n in ('acNormBusq', 'acSugerencias', 'acComparable', 'acAgregar', 'acArmar', 'acFiltrar', 'acOrdenar'))
     js = fns + """
 const D=JSON.parse(process.argv[1]),F=JSON.parse(process.argv[2]);F.vend=new Set(F.vend||[]);
 // margenAt de prueba: margen = (precio/iva - costoARS)/(precio/iva): suficiente para ver que se llama con el precio y el costo correctos
@@ -78,6 +78,25 @@ def test_filtros_vendedor_categoria_pm_buscador_y_solo_cambios():
     assert [x['sku'] for x in correr(D, {'search': 'tecno'})] == ['PV-1']        # también busca por vendedor
     assert [x['sku'] for x in correr(D, {'soloCambios': True})] == ['PV-1']
     assert [x['sku'] for x in correr(D, {'soloGanan': True})] == ['PV-1', 'PV-2']   # PV-3 sin PM/precio: no se puede decir que nos ganan
+
+
+def _sug(q, skus, maxn=10):
+    src = open(INDEX, encoding='utf-8').read()
+    fns = '\n'.join(_fn(src, n) for n in ('acNormBusq', 'acSugerencias'))
+    js = fns + "\nconsole.log(JSON.stringify(acSugerencias(process.argv[1],JSON.parse(process.argv[2]).map(s=>({sku:s})),Number(process.argv[3])).map(f=>f.sku)));"
+    return json.loads(subprocess.run(['node', '-e', js, q, json.dumps(skus), str(maxn)], capture_output=True, text=True, check=True).stdout)
+
+
+def test_sugerencias_del_buscador_ignoran_guiones_espacios_y_mayusculas_y_ordenan_exacto_prefijo_contiene():
+    skus = ['PV-120', 'PV-12', 'XPV-12B', 'PV-1', 'KG002BK', 'pv-125']
+    assert _sug('pv12', skus) == ['PV-12', 'PV-120', 'pv-125', 'XPV-12B']       # exacto, luego por prefijo, luego "contiene"
+    assert _sug('PV 12', skus)[0] == 'PV-12' and _sug('pv-1', skus)[0] == 'PV-1'
+    assert _sug('kg00', skus) == ['KG002BK'] and _sug('zzz', skus) == [] and _sug('', skus) == [] and _sug('  ', skus) == []
+    assert len(_sug('pv', [f'PV-{i}' for i in range(30)], 8)) == 8
+
+
+def test_el_filtro_por_sku_tambien_ignora_guiones_y_espacios():
+    assert [x['sku'] for x in correr(D, {'search': 'pv1'})] == ['PV-1'] and [x['sku'] for x in correr(D, {'search': 'PV 3'})] == ['PV-3']
 
 
 def test_orden_por_cambio_y_por_diferencia():
