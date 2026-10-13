@@ -260,6 +260,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
     <div class="sidebar-item" data-page="ofertas-margen" onclick="goPage('ofertas-margen',this)"><span class="icon">🏷️</span> Ofertas ML</div>
+    <div class="sidebar-item" data-page="campanas-ml" onclick="goPage('campanas-ml',this)"><span class="icon">🎪</span> Campañas ML</div>
     <div class="sidebar-item" data-page="analisis-competencia" onclick="goPage('analisis-competencia',this)"><span class="icon">📊</span> Análisis de Competencia</div>
     <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
     <div class="sidebar-item" data-page="intel-competitiva" onclick="goPage('intel-competitiva',this)"><span class="icon">🎯</span> Intel. Competitiva</div>
@@ -734,6 +735,48 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="pagination" id="ac-pag"></div>
   </div>
   <aside id="ac-aside" class="ac-aside" style="display:none"></aside>
+  </div>
+</div>
+
+<!-- CAMPAÑAS ML (C2: simulador de campañas — lee el Excel de la Central de Promociones, no escribe nada) -->
+<div id="page-campanas-ml" class="page">
+  <div class="section-hdr">Campañas ML — simulador de descuento <span style="font-size:10px;font-weight:400;color:var(--text3)">(sube el Excel de la campaña · calcula el margen con el aporte de ML · no escribe nada en ML)</span></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <input type="file" id="cp-file" accept=".xlsx" style="display:none" onchange="cpSubir(this)">
+    <button class="btn primary" id="btn-cp-subir" onclick="qs('cp-file').click()">📂 Subir Excel de campaña</button>
+    <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Margen objetivo %<input type="text" id="cp-obj" value="20" oninput="cpRender()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
+    <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuota de referencia<select id="cp-plan" class="fi" onchange="cpRender()"><option value="contado">Contado</option><option value="3">3 cuotas</option><option value="6">6 cuotas</option><option value="9">9 cuotas</option><option value="12">12 cuotas</option></select></span>
+    <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">TC:<input type="text" id="cp-tc" placeholder="BNA auto" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
+    <span id="cp-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div id="cp-avisos" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6"></div>
+  <div class="stats-row" id="cp-stats" style="display:none"></div>
+  <div id="cp-cuenta" style="display:none;margin:8px 0;font-size:11px;color:var(--text2);align-items:center;gap:8px;flex-wrap:wrap"></div>
+  <div id="cp-filtros" style="display:none">
+    <div class="erp-filters" style="flex-wrap:wrap">
+      <input type="text" id="cp-search" placeholder="Buscar SKU, MLA o título..." autocomplete="off" oninput="CP.page=1;cpRender()" style="flex:1;min-width:200px">
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-edit" onchange="CP.page=1;cpRender()">Solo editables</label>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-bajo" onchange="CP.page=1;cpRender()">Margen bajo el objetivo</label>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-mod" onchange="CP.page=1;cpRender()">Solo modificadas</label>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-aviso" onchange="CP.page=1;cpRender()">Con avisos</label>
+      <select id="cp-sort" class="fi" onchange="CP.page=1;cpRender()"><option value="excel">Orden del Excel</option><option value="margen_asc">Menor margen primero</option><option value="margen_desc">Mayor margen primero</option><option value="sku">SKU A-Z</option></select>
+      <span id="cp-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:10px;color:var(--text2)">
+      <b style="color:var(--accent)">Lote</b> (sobre las filas editables filtradas):
+      <input type="text" id="cp-lote-pct" placeholder="%" style="width:44px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+      <button class="btn-xs" onclick="cpLoteFijo()">Poner ese % a todas</button>
+      <button class="btn-xs" onclick="cpLoteMargen()" title="Para cada fila, el mayor % entero (5–80) que deja el margen de la cuota de referencia en el objetivo">Máx. descuento que cumple el margen</button>
+      <button class="btn-xs" onclick="cpLoteOriginal()">Volver al % del Excel</button>
+      <span id="cp-lote-info" style="color:var(--text3)"></span>
+    </div>
+  </div>
+  <div class="table-wrap" id="cp-table-wrap" style="display:none">
+    <table id="cp-table">
+      <thead><tr><th>MLA · SKU</th><th>PM</th><th>Lista</th><th>% vendedor<br><span style="font-size:8px;font-weight:400">(a copiar en ML)</span></th><th>% ML</th><th>Paga el cliente</th><th>PM ML<br><span style="font-size:8px;font-weight:400">(dif.)</span></th><th>Contado</th><th>3 c.</th><th>6 c.</th><th>9 c.</th><th>12 c.</th><th>⚠</th></tr></thead>
+      <tbody id="cp-tbody"></tbody>
+    </table>
+    <div class="pagination" id="cp-pag"></div>
   </div>
 </div>
 
@@ -1681,7 +1724,7 @@ function sortTableByColumn(table,idx){
   if(ths[idx]) ths[idx].classList.add(dir===1?'sort-asc':'sort-desc');
 }
 // Tablas que ya tienen su propio mecanismo -- nunca pisarlo con el genérico.
-const _TABLAS_CON_SORT_PROPIO=new Set(['ecom-table','ml-table','tactica-table','comp-table']);
+const _TABLAS_CON_SORT_PROPIO=new Set(['ecom-table','ml-table','tactica-table','comp-table','cp-table']);
 function makeSortable(table){
   if(!table||table._sortableInit||_TABLAS_CON_SORT_PROPIO.has(table.id)) return;
   const thead=table.querySelector('thead');
@@ -1764,7 +1807,7 @@ function goPage(page,el){
   if(page==='dashboard')goVentasTab(ventasTab);
   else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
-  if(['competidores','analisis-competencia','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
+  if(['competidores','analisis-competencia','campanas-ml','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
@@ -1782,6 +1825,139 @@ function goPage(page,el){
   if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
   if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
 }
+
+// ══ CAMPAÑAS ML (C2) — simulador del descuento sobre el Excel de la Central de Promociones. Solo lectura: no escribe nada en ML.
+// El margen lo calcula el backend (/campanas-ml/analizar y /simular, mismo motor que Precios & Márgenes); acá solo hay filtros, lote y presentación.
+const CP={data:null,filas:[],orig:{},page:1,pageSize:50,cuentaManual:null,pend:new Set(),tmr:null,ocupado:false};
+function cpPctValido(p){return Number.isInteger(p)&&p>=5&&p<=80;}
+function cpMargen(f,plan){const m=f.margenes&&f.margenes[plan];return m?m.margen:null;}
+function cpModificada(f,orig){return orig[f.fila]!=null&&f.seller_pct!==orig[f.fila];}
+function cpClaseMargen(m,obj){return m==null?'var(--text3)':m<0?'var(--red)':m<obj?'var(--yellow)':'var(--green)';}
+function cpFiltrar(filas,fl,orig){
+  const q=String(fl.search||'').toLowerCase().trim();
+  return filas.filter(f=>{
+    if(q&&!((f.sku||'')+' '+(f.item_id||'')+' '+(f.titulo||'')).toLowerCase().includes(q))return false;
+    if(fl.soloEdit&&!f.editable)return false;
+    if(fl.soloMod&&!cpModificada(f,orig))return false;
+    if(fl.soloAviso&&!(f.avisos&&f.avisos.length))return false;
+    if(fl.soloBajo){const m=cpMargen(f,fl.plan);if(m==null||m>=fl.obj)return false;}
+    return true;
+  });
+}
+function cpOrdenar(filas,modo,plan){
+  const a=filas.slice(),m=f=>{const v=cpMargen(f,plan);return v==null?null:v;};
+  if(modo==='sku')a.sort((x,y)=>(!x.sku)-(!y.sku)||String(x.sku||'').localeCompare(String(y.sku||'')));
+  else if(modo==='margen_asc'||modo==='margen_desc'){const d=modo==='margen_asc'?1:-1;a.sort((x,y)=>{const u=m(x),v=m(y);if(u==null&&v==null)return 0;if(u==null)return 1;if(v==null)return -1;return(u-v)*d;});}
+  return a;
+}
+function cpObj(){const v=parseFloat(String(qs('cp-obj').value).replace(',','.'));return isNaN(v)?0:v;}
+function cpPlan(){return qs('cp-plan').value;}
+function cpCuentaEfectiva(){return CP.cuentaManual||(CP.data&&CP.data.cuentas&&CP.data.cuentas.sugerida)||null;}
+function cpFilaSim(f){return {fila:f.fila,item_id:f.item_id,sku:f.sku,titulo:f.titulo,precio_original:f.precio_original,seller_pct:f.seller_pct,meli_pct:f.meli_pct,editable:f.editable,cuenta:f.cuenta};}
+async function cpPost(ruta,opts){
+  const bu=getBackendUrl();if(!bu)throw new Error('Falta la URL del backend (Configuración).');
+  const r=await fetch(bu.replace(/\/$/,'')+ruta,opts);const d=await r.json().catch(()=>({}));
+  if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
+  if(!r.ok)throw new Error(d.detail||('Error '+r.status));return d;
+}
+function cpQuery(){const p=new URLSearchParams();p.set('margen_objetivo',String(cpObj()));p.set('plan_objetivo',cpPlan());const tc=qs('cp-tc').value.trim();if(tc)p.set('tc',tc.replace(',','.'));return '?'+p.toString();}
+async function cpSubir(inp){
+  const file=inp.files[0];inp.value='';if(!file)return;
+  const st=qs('cp-status');qs('btn-cp-subir').disabled=true;st.textContent='Leyendo el Excel, cruzando con el PM y los costos y detectando la cuenta en ML (puede tardar unos segundos)...';
+  try{
+    const fd=new FormData();fd.append('archivo',file);
+    const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
+    CP.data=d;CP.filas=d.filas;CP.orig={};CP.pend=new Set();CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;
+    d.filas.forEach(f=>{CP.orig[f.fila]=f.seller_pct;});
+    st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
+    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
+    cpRender();
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+  finally{qs('btn-cp-subir').disabled=false;}
+}
+// Recalcula en el backend las filas con el % del vendedor que se está jugando.
+async function cpSimular(filas){
+  const lista=filas||CP.filas.filter(f=>CP.pend.has(f.fila));if(!lista.length)return;
+  const st=qs('cp-status');st.textContent=`Recalculando ${lista.length} fila(s)...`;
+  try{
+    const d=await cpPost('/campanas-ml/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filas:lista.map(cpFilaSim),margen_objetivo:String(cpObj()),plan_objetivo:cpPlan(),tc:qs('cp-tc').value.trim().replace(',','.')||null})});
+    const por={};d.filas.forEach(r=>{por[r.fila]=r;});
+    lista.forEach(f=>{const r=por[f.fila];if(r){Object.assign(f,r,{cuenta:f.cuenta,sku_origen:f.sku_origen});}CP.pend.delete(f.fila);delete f._stale;});
+    st.textContent=`${CP.data.campana||''} · ${CP.filas.length} filas · recalculadas ${lista.length}`;
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+  cpRender();
+}
+function cpOnPct(fila,txt){
+  const f=CP.filas.find(x=>x.fila===fila);if(!f||!f.editable)return;
+  const t=String(txt).trim().replace(',','.');
+  if(t===''){f.seller_pct=CP.orig[fila];}else{const v=Number(t);if(isNaN(v)){cpRender();return;}f.seller_pct=v;}
+  if(!cpPctValido(f.seller_pct)&&CP.orig[fila]!==f.seller_pct)toast('ML pide un % ENTERO entre 5 y 80 (no se puede copiar '+f.seller_pct+')','error');
+  CP.pend.add(fila);f._stale=true;clearTimeout(CP.tmr);CP.tmr=setTimeout(()=>cpSimular(),250);cpRender();
+}
+function cpFiltradasEditables(){
+  const orig=CP.orig,fl={search:qs('cp-search').value,soloEdit:true,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan:cpPlan(),obj:cpObj()};
+  return cpFiltrar(CP.filas,fl,orig);
+}
+function cpLoteFijo(){
+  const v=Number(String(qs('cp-lote-pct').value).replace(',','.'));
+  if(!cpPctValido(v)){toast('Poné un % entero entre 5 y 80','error');return;}
+  const fs=cpFiltradasEditables();if(!fs.length){toast('No hay filas editables con ese filtro','error');return;}
+  fs.forEach(f=>{f.seller_pct=v;f._stale=true;});qs('cp-lote-info').textContent=`${v}% a ${fs.length} filas`;cpSimular(fs);
+}
+function cpLoteOriginal(){
+  const fs=cpFiltradasEditables().filter(f=>cpModificada(f,CP.orig));if(!fs.length){toast('Ninguna fila filtrada está modificada','error');return;}
+  fs.forEach(f=>{f.seller_pct=CP.orig[f.fila];f._stale=true;});qs('cp-lote-info').textContent=`${fs.length} filas vuelven al % del Excel`;cpSimular(fs);
+}
+async function cpLoteMargen(){
+  const fs=cpFiltradasEditables();if(!fs.length){toast('No hay filas editables con ese filtro','error');return;}
+  const st=qs('cp-status');st.textContent=`Buscando el máximo descuento que cumple ${cpObj()}% en ${fs.length} filas...`;
+  try{
+    const d=await cpPost('/campanas-ml/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filas:fs.map(cpFilaSim),margen_objetivo:String(cpObj()),plan_objetivo:cpPlan(),tc:qs('cp-tc').value.trim().replace(',','.')||null})});
+    const por={};d.filas.forEach(r=>{por[r.fila]=r;});let ok=0,no=0,sin=0;
+    fs.forEach(f=>{const r=por[f.fila];if(!r||r.margenes==null||!Object.keys(r.margenes).length){sin++;return;}if(r.pct_max_para_margen==null){no++;return;}f.seller_pct=r.pct_max_para_margen;f._stale=true;ok++;});
+    qs('cp-lote-info').textContent=`${ok} ajustadas · ${no} no llegan al objetivo ni con 5% (sin tocar) · ${sin} sin costo/PM`;
+    await cpSimular(fs.filter(f=>f._stale));
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+}
+function cpCuentaHtml(){
+  const c=CP.data.cuentas||{},con=c.conteo||{},ef=cpCuentaEfectiva();
+  const det=Object.entries(con).map(([k,v])=>`${k==='?'?'sin dato':k}: <b>${v}</b>`).join(' · ');
+  const opt=['',...(c.cuentas||['IT','MT'])].map(k=>`<option value="${k}"${(CP.cuentaManual||'')===k?' selected':''}>${k||'Auto ('+(c.sugerida||'sin detectar')+')'}</option>`).join('');
+  const av=!ef?'<span style="color:var(--yellow)">⚠ No se pudo detectar la cuenta: elegila a mano.</span>':c.mixta?'<span style="color:var(--yellow)">⚠ El Excel mezcla cuentas: revisá las filas marcadas.</span>':'';
+  return `<b style="color:var(--accent)">Cuenta de la campaña:</b> <b style="font-size:13px">${ef||'—'}</b> <span style="color:var(--text3)">(detectada por ITEM_ID — ${det})</span> <span>Corregir: <select class="fi" onchange="CP.cuentaManual=this.value||null;cpRender()">${opt}</select></span> ${av}`;
+}
+function cpRender(){
+  if(!CP.data)return;
+  const obj=cpObj(),plan=cpPlan(),d=CP.data;
+  const todas=CP.filas,mod=todas.filter(f=>cpModificada(f,CP.orig)).length;
+  const bajo=todas.filter(f=>{const m=cpMargen(f,plan);return m!=null&&m<obj;}).length;
+  qs('cp-stats').innerHTML=[[todas.length,'Publicaciones'],[todas.filter(f=>f.editable).length,'Editables en ML'],[todas.filter(f=>cpMargen(f,plan)!=null).length,'Con margen calculado'],[bajo,`Margen < ${obj}% (${plan==='contado'?'contado':plan+' cuotas'})`],[mod,'Modificadas por mí']].map(([v,l])=>`<div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`).join('');
+  const fijos=(d.avisos_generales||[]).concat(d.avisos||[]);
+  const av=qs('cp-avisos');av.style.display=fijos.length?'':'none';av.innerHTML=fijos.map(a=>'⚠ '+acEsc(a)).join('<br>');
+  qs('cp-cuenta').innerHTML=cpCuentaHtml();
+  const fl={search:qs('cp-search').value,soloEdit:qs('cp-solo-edit').checked,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan,obj};
+  const filas=cpOrdenar(cpFiltrar(todas,fl,CP.orig),qs('cp-sort').value,plan);
+  const pages=Math.ceil(filas.length/CP.pageSize)||1;CP.page=Math.min(CP.page,pages);S.cpPage=CP.page;
+  const ef=cpCuentaEfectiva();
+  qs('cp-tbody').innerHTML=filas.slice((CP.page-1)*CP.pageSize,CP.page*CP.pageSize).map(f=>{
+    const mTd=p=>{const m=cpMargen(f,p);return `<td style="font-family:'DM Mono',monospace;color:${cpClaseMargen(m,obj)};${p===plan?'font-weight:800;background:rgba(0,157,188,.08)':''}">${m==null?'—':m.toFixed(1)+'%'}</td>`;};
+    const mod=cpModificada(f,CP.orig),inv=f.editable&&!cpPctValido(f.seller_pct);
+    const pctCel=f.editable?`<input type="text" value="${f.seller_pct==null?'':f.seller_pct}" onchange="cpOnPct(${f.fila},this.value)" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide un % entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.seller_pct==null?'—':f.seller_pct+'%'} 🔒</span>`;
+    const dif=f.precio_pm&&f.precio_cliente?((f.precio_cliente/f.precio_pm-1)*100):null;
+    const cuentaChip=f.cuenta&&ef&&f.cuenta!==ef?` <span style="color:var(--yellow)" title="Esta publicación es de la cuenta ${f.cuenta}, no de ${ef}">⚠${f.cuenta}</span>`:'';
+    const avisos=f.avisos||[];
+    return `<tr${mod?' style="background:rgba(0,157,188,.05)"':''}${f._stale?' class="ac-stale" style="opacity:.55"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
+      +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}</td><td>${pctCel}</td>`
+      +`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?f.meli_pct+'%':'—'}</td>`
+      +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
+      +`<td style="font-family:'DM Mono',monospace">${f.precio_pm?fmt$(f.precio_pm)+(dif!=null?` <span style="font-size:9px;color:${Math.abs(dif)<=1?'var(--green)':dif<0?'var(--red)':'var(--yellow)'}">${dif>0?'+':''}${dif.toFixed(1)}%</span>`:''):'<span style="color:var(--text3)">sin PM</span>'}</td>`
+      +['contado','3','6','9','12'].map(mTd).join('')
+      +`<td style="font-size:10px;color:var(--yellow);cursor:help" title="${acEsc(avisos.join('\n'))}">${avisos.length?'⚠ '+avisos.length:''}</td></tr>`;
+  }).join('');
+  qs('cp-count').textContent=filas.length+' filas';
+  renderPag('cp-pag',pages,filas.length,'cpPage','cpIrPagina');
+}
+function cpIrPagina(){CP.page=S.cpPage;cpRender();}
 
 // ── MULTI-SELECT ──
 const msState={};
