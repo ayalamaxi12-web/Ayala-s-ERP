@@ -146,6 +146,12 @@ class EntradaMotor:
     # Costo de cuotas YA con IVA, como fracción del precio (ej. el cargo real
     # que cobró ML en una venta / su precio). Si viene, reemplaza al del plan.
     cuotas_pct_final: Decimal | None = None
+    # Campañas ML con aporte de ML: lo que paga el cliente (menor al `precio` que
+    # entra a `precio_a_margen`, que es el precio con SOLO el descuento del
+    # vendedor = cliente + crédito de ML). Comisión, cuotas, costo fijo y envío se
+    # calculan sobre este precio; la venta, el cheque y el IIBB sobre el otro.
+    # None = no hay aporte de ML (todo sobre el mismo precio).
+    precio_cliente: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -233,8 +239,9 @@ def precio_a_margen(precio: Decimal, e: EntradaMotor, par: ParametrosMotor) -> D
     if p <= 0:
         raise ValueError("El precio tiene que ser mayor a 0.")
     n = p / e.iva_factor
-    est = _estructura(p, e, par)
-    cargos = {k: p * v for k, v in est.pct.items()}
+    pc = Decimal(e.precio_cliente) if e.precio_cliente is not None else p
+    est = _estructura(pc, e, par)
+    cargos = {k: pc * v for k, v in est.pct.items()}
     cargos.update(est.fijos)
     cargos["imp_cheque"] = p * par.valor(e.canal, "imp_cheque")
     cargos["iibb"] = n * par.valor(e.canal, "iibb")
@@ -261,6 +268,8 @@ def margen_a_precio(margen: Decimal, e: EntradaMotor, par: ParametrosMotor, redo
     del fee): se calcula, se mira en qué tramo cayó y se recalcula hasta que
     no cambie."""
     m = Decimal(margen)
+    if e.precio_cliente is not None:
+        raise ValueError("margen_a_precio no admite `precio_cliente` (aporte de ML): usar precio_a_margen.")
     cheque, iibb = par.valor(e.canal, "imp_cheque"), par.valor(e.canal, "iibb")
     p = Decimal("1e12")  # arranca como precio alto (sin costo fijo ML, con envío)
     vistos = set()

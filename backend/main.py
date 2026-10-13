@@ -520,6 +520,35 @@ async def campanas_ml_probar_hoja(archivo: UploadFile = File(...)):
                              "Access-Control-Expose-Headers": "X-Integridad",
                              "Content-Disposition": 'attachment; filename="campana_con_hoja_prueba.xlsx"'})
 
+def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None) -> dict:
+    from rentabilidad import campanas_ml, motor_precios
+    from rentabilidad.api import _datos_sku_fn, _resolver_tc
+    from rentabilidad.cierre_ecom_diario import ayer_en_argentina
+    from rentabilidad.db import sesion
+    from datetime import timedelta
+    try:
+        leido = campanas_ml_xlsx.leer_promociones(contenido)
+    except campanas_ml_xlsx.ExcelInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    try:
+        objetivo = Decimal(margen_objetivo) / 100 if margen_objetivo else None
+    except Exception:
+        raise HTTPException(status_code=422, detail=f"margen_objetivo no numérico: {margen_objetivo!r}")
+    fecha, avisos = ayer_en_argentina() + timedelta(days=1), []
+    tc_valor = _resolver_tc(tc)
+    datos = _datos_sku_fn(avisos)
+    with sesion() as db:
+        r = campanas_ml.analizar(db, leido["filas"], fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
+                                 margen_objetivo=objetivo)
+    return {**r, "campana": leido["campana"], "avisos": avisos}
+
+@app.post("/campanas-ml/analizar")
+async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None):
+    """C1: cruza cada fila del Excel con el PM y el costo de Ecom y devuelve el margen
+    a precio de oferta (contado/3/6/9/12) con la regla del aporte de ML. Solo lectura.
+    `margen_objetivo` (en %, ej. 20) agrega el mayor % entero de descuento que lo cumple."""
+    return await run_in_threadpool(_campanas_analizar_sync, await archivo.read(), tc, margen_objetivo)
+
 # ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)
 # ══════════════════════════════════════════════════════

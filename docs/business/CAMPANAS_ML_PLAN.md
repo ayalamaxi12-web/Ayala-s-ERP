@@ -62,3 +62,12 @@ Hay que fijar con un archivo real qué significa SELLER_PERCENTAGE (¿% del ORIG
 
 ## C0 — implementado
 `backend/campanas_ml_xlsx.py` (`leer_promociones`, `agregar_hoja`, `verificar_integridad`), endpoints `POST /campanas-ml/leer` y `/campanas-ml/probar-hoja`, snippet `backend/scripts/c0_probar_hoja.js`, tests `backend/test_campanas_ml_xlsx.py`. Pendiente: que el usuario suba a ML el archivo con la hoja de prueba.
+
+## C0 validado
+ML aceptó el Excel con la hoja extra (prueba de 1 fila, 2026-10-13). El formato de agregado a nivel ZIP queda validado.
+
+## C1 — implementado
+- `rentabilidad/campanas_ml.py`: `precios_oferta` (montos de ML mandan sobre el %, que viene redondeado), `margen_oferta`, `pct_max_para_margen` (mayor % entero 5–80 que cumple un margen objetivo; recorre todos los enteros porque el margen no es monótono por el costo fijo/envío), `analizar`.
+- Motor: `EntradaMotor.precio_cliente` (opcional, None = igual que antes). Con aporte de ML: venta, cheque e IIBB sobre el precio del vendedor (cliente + crédito de ML); comisión, cuotas, costo fijo y envío sobre el precio que paga el cliente. `margen_a_precio` lo rechaza. Paridad con el front intacta (60/60).
+- `POST /campanas-ml/analizar` (xlsx, `tc`, `margen_objetivo` en %): por fila, PM, precio PM, costo, margen contado/3/6/9/12, margen sin aporte de ML, `descuento_que_cuadra_pct`, avisos. Snippet `backend/scripts/c1_analizar.js`.
+- Pendiente de confirmar con datos reales: base de la comisión de ML en ofertas cofinanciadas; envío real por ítem (hoy 0 con aviso desde $33.000); 213 filas sin SKU en el Excel de Día de la Madre.
