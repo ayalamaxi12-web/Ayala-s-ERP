@@ -232,3 +232,25 @@ def test_la_hoja_nueva_es_la_misma_venga_el_tipo_que_venga():
         assert c.verificar_integridad(xl, n, info["hoja"])["ok"]
         ws = openpyxl.load_workbook(io.BytesIO(n))["ERP Análisis"]
         assert [x.value for x in ws[1]] == ["ITEM_ID", "SKU", "LISTA", "% ACTUAL"]
+
+
+# Excels reales de 6 campañas de ML (si están en el scratchpad de la sesión; se saltea si no).
+_CAMP = "/tmp/claude-0/-home-user/f12170ee-4e93-5b42-a699-852f592134b3/scratchpad/camp/"
+_ESPERADO = {"1_Dia_de_la_Madre": ("reparto", 1885), "1_Con_aporte_de_Mercado_Libre": ("reparto", 191),
+             "1_Sumate_al_Dia_de_la_Madre": ("simple", 4), "1_SEMANA_DEL_MUEBLE": ("simple", 2),
+             "1_Acelera_tus_ventas_de_stock_Full": ("simple", 3), "1_Lo_mejor_de_todos_los_dias": ("simple", 79)}
+
+
+@pytest.mark.parametrize("nombre", sorted(_ESPERADO))
+def test_campanas_reales_de_ml(nombre):
+    path = _CAMP + nombre + ".xlsx"
+    if not os.path.exists(path):
+        pytest.skip("Excel real no disponible")
+    o = open(path, "rb").read()
+    r = c.leer_promociones(o)
+    tipo, n = _ESPERADO[nombre]
+    assert r["tipo"] == tipo and len(r["filas"]) == n
+    assert r["col_editable"] == ("SELLER_PERCENTAGE" if tipo == "reparto" else "DISCOUNT_PERCENTAGE")
+    assert all(f["ORIGINAL_PRICE"] and f["SELLER_PERCENTAGE"] is not None for f in r["filas"]) and any(f["editable"] for f in r["filas"])
+    nuevo, info = c.agregar_hoja(o, "ERP Análisis", ["ITEM_ID"], [[f["ITEM_ID"]] for f in r["filas"]])
+    assert c.verificar_integridad(o, nuevo, info["hoja"])["ok"]

@@ -28,7 +28,8 @@ COMUNES = ("TITLE", "ITEM_ID", "SKU", "ORIGINAL_PRICE", "DISCOUNT_PERCENTAGE", "
            "STATUS", "ACTION", "ERRORS", "PROMO_TYPE")
 # Sin estas tres no se puede calcular nada: único caso en que se corta.
 INDISPENSABLES = ("ITEM_ID", "ORIGINAL_PRICE")
-_CELESTE = "FFCADDF8"
+_CELESTE = "FFCADDF8"  # celda editable
+_GRIS = "FFF3F3F3"  # celda no editable (ya participa)
 
 _NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _TIPO_HOJA = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
@@ -59,8 +60,12 @@ def _celda(fila, i):
     return fila[i] if i is not None and i < len(fila) else None
 
 
+def _color(c) -> str:
+    return (c.fill.fgColor.rgb or "").upper() if c is not None and c.fill and c.fill.fill_type else ""
+
+
 def _es_celeste(c) -> bool:
-    return bool(c is not None and c.fill and c.fill.fill_type and (c.fill.fgColor.rgb or "").upper() == _CELESTE)
+    return _color(c) == _CELESTE
 
 
 def leer_promociones(xlsx: bytes, hoja: str = HOJA_PROMOCIONES) -> dict:
@@ -116,6 +121,7 @@ def leer_promociones(xlsx: bytes, hoja: str = HOJA_PROMOCIONES) -> dict:
                 d[n] = c.value if c is not None else None
         d["ITEM_ID"] = d["ITEM_ID"].strip()
         d["_celeste"] = _es_celeste(_celda(fila, cab[col_editable]))
+        d["_gris"] = _color(_celda(fila, cab[col_editable])) == _GRIS
         for n in ("ORIGINAL_PRICE", "SELLER_AMOUNT", "SELLER_PERCENTAGE", "MELI_AMOUNT",
                   "MELI_PERCENTAGE", "DISCOUNT_PERCENTAGE", "FINAL_PRICE"):
             if n in d:
@@ -126,19 +132,20 @@ def leer_promociones(xlsx: bytes, hoja: str = HOJA_PROMOCIONES) -> dict:
             d["SELLER_AMOUNT"] = round(op - fp, 2) if fp is not None and op is not None else None
             d["MELI_PERCENTAGE"] = d["MELI_AMOUNT"] = None
         filas.append(d)
-    # Editable = celda celeste. Si ninguna fila la trae (otro formato de campaña), se asume editable todo lo que
-    # no esté ya participando, y se avisa.
+    # Editable = celda celeste. Algunas campañas (ej. "Lo mejor de todos los días") pintan la columna con otro
+    # celeste (FFECF3FC) y ninguna celda con el celeste de siempre: ahí se asume editable lo que no es gris ni está
+    # participando, y se avisa.
     if any(f["_celeste"] for f in filas):
         for f in filas:
             f["editable"] = f["_celeste"]
     else:
         if filas:
-            avisos.append("No encontré celdas celestes (editables) en la columna del descuento: se asumen editables las filas que no están participando.")
+            avisos.append("No encontré celdas celestes (editables) en la columna del descuento: se asumen editables las filas que no están grises ni participando.")
         for f in filas:
             part = str(f.get("STATUS") or "").lower().startswith("particip") or str(f.get("ACTION") or "").lower() == "participar"
-            f["editable"] = not part
+            f["editable"] = not part and not f["_gris"]
     for f in filas:
-        del f["_celeste"]
+        del f["_celeste"], f["_gris"]
     campana = next((f.get("PROMO_NAME") for f in filas if f.get("PROMO_NAME")), None)
     return {"filas": filas, "columnas": cab, "campana": campana, "hojas": wb.sheetnames,
             "tipo": tipo, "col_editable": col_editable, "avisos": avisos}

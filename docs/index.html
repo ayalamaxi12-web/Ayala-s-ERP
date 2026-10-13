@@ -773,7 +773,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
   <div class="table-wrap" id="cp-table-wrap" style="display:none">
     <table id="cp-table">
-      <thead><tr><th>MLA · SKU</th><th>PM</th><th>Lista</th><th id="cp-th-pct">% vendedor<br><span style="font-size:8px;font-weight:400">(a copiar en ML)</span></th><th id="cp-th-ml">% ML</th><th>Paga el cliente</th><th>PM ML<br><span style="font-size:8px;font-weight:400">(dif.)</span></th><th>Contado</th><th>3 c.</th><th>6 c.</th><th>9 c.</th><th>12 c.</th><th>⚠</th></tr></thead>
+      <thead><tr><th>MLA · SKU</th><th>PM</th><th>Lista</th><th id="cp-th-pct">% descuento total<br><span style="font-size:8px;font-weight:400">(entero 5–80)</span></th><th id="cp-th-ml">% ML</th><th>Paga el cliente</th><th>PM ML<br><span style="font-size:8px;font-weight:400">(dif.)</span></th><th>Contado</th><th>3 c.</th><th>6 c.</th><th>9 c.</th><th>12 c.</th><th>⚠</th></tr></thead>
       <tbody id="cp-tbody"></tbody>
     </table>
     <div class="pagination" id="cp-pag"></div>
@@ -1831,7 +1831,7 @@ function goPage(page,el){
 const CP={data:null,filas:[],orig:{},page:1,pageSize:50,cuentaManual:null,pend:new Set(),tmr:null,ocupado:false};
 function cpPctValido(p){return Number.isInteger(p)&&p>=5&&p<=80;}
 function cpMargen(f,plan){const m=f.margenes&&f.margenes[plan];return m?m.margen:null;}
-function cpModificada(f,orig){return orig[f.fila]!=null&&f.seller_pct!==orig[f.fila];}
+function cpModificada(f,orig){return orig[f.fila]!=null&&f.descuento_total_pct!==orig[f.fila];}
 function cpClaseMargen(m,obj){return m==null?'var(--text3)':m<0?'var(--red)':m<obj?'var(--yellow)':'var(--green)';}
 function cpFiltrar(filas,fl,orig){
   const q=String(fl.search||'').toLowerCase().trim();
@@ -1853,7 +1853,7 @@ function cpOrdenar(filas,modo,plan){
 function cpObj(){const v=parseFloat(String(qs('cp-obj').value).replace(',','.'));return isNaN(v)?0:v;}
 function cpPlan(){return qs('cp-plan').value;}
 function cpCuentaEfectiva(){return CP.cuentaManual||(CP.data&&CP.data.cuentas&&CP.data.cuentas.sugerida)||null;}
-function cpFilaSim(f){return {fila:f.fila,item_id:f.item_id,sku:f.sku,titulo:f.titulo,precio_original:f.precio_original,seller_pct:f.seller_pct,meli_pct:f.meli_pct,editable:f.editable,cuenta:f.cuenta};}
+function cpFilaSim(f){return {fila:f.fila,item_id:f.item_id,sku:f.sku,titulo:f.titulo,precio_original:f.precio_original,descuento_pct:f.descuento_total_pct,meli_pct:f.meli_pct,meli_monto:f.meli_monto,editable:f.editable,cuenta:f.cuenta};}
 async function cpPost(ruta,opts){
   const bu=getBackendUrl();if(!bu)throw new Error('Falta la URL del backend (Configuración).');
   const r=await fetch(bu.replace(/\/$/,'')+ruta,opts);const d=await r.json().catch(()=>({}));
@@ -1868,7 +1868,7 @@ async function cpSubir(inp){
     const fd=new FormData();fd.append('archivo',file);
     const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
     CP.data=d;CP.filas=d.filas;CP.orig={};CP.pend=new Set();CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;
-    d.filas.forEach(f=>{CP.orig[f.fila]=f.seller_pct;});
+    d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;});
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
     ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
@@ -1890,8 +1890,8 @@ async function cpSimular(filas){
 function cpOnPct(fila,txt){
   const f=CP.filas.find(x=>x.fila===fila);if(!f||!f.editable)return;
   const t=String(txt).trim().replace(',','.');
-  if(t===''){f.seller_pct=CP.orig[fila];}else{const v=Number(t);if(isNaN(v)){cpRender();return;}f.seller_pct=v;}
-  if(!cpPctValido(f.seller_pct)&&CP.orig[fila]!==f.seller_pct)toast('ML pide un % ENTERO entre 5 y 80 (no se puede copiar '+f.seller_pct+')','error');
+  if(t===''){f.descuento_total_pct=CP.orig[fila];}else{const v=Number(t);if(isNaN(v)){cpRender();return;}f.descuento_total_pct=v;}
+  if(!cpPctValido(f.descuento_total_pct)&&CP.orig[fila]!==f.descuento_total_pct)toast('ML pide el descuento total ENTERO entre 5 y 80 (no se puede usar '+f.descuento_total_pct+')','error');
   CP.pend.add(fila);f._stale=true;clearTimeout(CP.tmr);CP.tmr=setTimeout(()=>cpSimular(),250);cpRender();
 }
 function cpFiltradasEditables(){
@@ -1902,11 +1902,11 @@ function cpLoteFijo(){
   const v=Number(String(qs('cp-lote-pct').value).replace(',','.'));
   if(!cpPctValido(v)){toast('Poné un % entero entre 5 y 80','error');return;}
   const fs=cpFiltradasEditables();if(!fs.length){toast('No hay filas editables con ese filtro','error');return;}
-  fs.forEach(f=>{f.seller_pct=v;f._stale=true;});qs('cp-lote-info').textContent=`${v}% a ${fs.length} filas`;cpSimular(fs);
+  fs.forEach(f=>{f.descuento_total_pct=v;f._stale=true;});qs('cp-lote-info').textContent=`${v}% a ${fs.length} filas`;cpSimular(fs);
 }
 function cpLoteOriginal(){
   const fs=cpFiltradasEditables().filter(f=>cpModificada(f,CP.orig));if(!fs.length){toast('Ninguna fila filtrada está modificada','error');return;}
-  fs.forEach(f=>{f.seller_pct=CP.orig[f.fila];f._stale=true;});qs('cp-lote-info').textContent=`${fs.length} filas vuelven al % del Excel`;cpSimular(fs);
+  fs.forEach(f=>{f.descuento_total_pct=CP.orig[f.fila];f._stale=true;});qs('cp-lote-info').textContent=`${fs.length} filas vuelven al % del Excel`;cpSimular(fs);
 }
 async function cpLoteMargen(){
   const fs=cpFiltradasEditables();if(!fs.length){toast('No hay filas editables con ese filtro','error');return;}
@@ -1914,7 +1914,7 @@ async function cpLoteMargen(){
   try{
     const d=await cpPost('/campanas-ml/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filas:fs.map(cpFilaSim),margen_objetivo:String(cpObj()),plan_objetivo:cpPlan(),tc:qs('cp-tc').value.trim().replace(',','.')||null})});
     const por={};d.filas.forEach(r=>{por[r.fila]=r;});let ok=0,no=0,sin=0;
-    fs.forEach(f=>{const r=por[f.fila];if(!r||r.margenes==null||!Object.keys(r.margenes).length){sin++;return;}if(r.pct_max_para_margen==null){no++;return;}f.seller_pct=r.pct_max_para_margen;f._stale=true;ok++;});
+    fs.forEach(f=>{const r=por[f.fila];if(!r||r.margenes==null||!Object.keys(r.margenes).length){sin++;return;}if(r.pct_max_para_margen==null){no++;return;}f.descuento_total_pct=r.pct_max_para_margen;f._stale=true;ok++;});
     qs('cp-lote-info').textContent=`${ok} ajustadas · ${no} no llegan al objetivo ni con 5% (sin tocar) · ${sin} sin costo/PM`;
     await cpSimular(fs.filter(f=>f._stale));
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
@@ -1934,22 +1934,22 @@ function cpRender(){
   qs('cp-stats').innerHTML=[[todas.length,'Publicaciones'],[todas.filter(f=>f.editable).length,'Editables en ML'],[todas.filter(f=>cpMargen(f,plan)!=null).length,'Con margen calculado'],[bajo,`Margen < ${obj}% (${plan==='contado'?'contado':plan+' cuotas'})`],[mod,'Modificadas por mí']].map(([v,l])=>`<div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`).join('');
   const fijos=(d.avisos_generales||[]).concat(d.avisos||[]);
   const av=qs('cp-avisos');av.style.display=fijos.length?'':'none';av.innerHTML=fijos.map(a=>'⚠ '+acEsc(a)).join('<br>');
-  qs('cp-cuenta').innerHTML=cpCuentaHtml()+`<div style="flex-basis:100%;font-size:10px;color:var(--text3)">Tipo de campaña: <b style="color:var(--text2)">${simple?'simple — se edita DISCOUNT_PERCENTAGE; el descuento es todo del vendedor (sin aporte de ML, criterio conservador)':'con reparto — se edita SELLER_PERCENTAGE; ML aporta MELI_PERCENTAGE'}</b></div>`;
-  qs('cp-th-ml').style.display=simple?'none':'';qs('cp-th-pct').firstChild.textContent=simple?'% descuento':'% vendedor';
+  qs('cp-cuenta').innerHTML=cpCuentaHtml()+`<div style="flex-basis:100%;font-size:10px;color:var(--text3)">Tipo de campaña: <b style="color:var(--text2)">${simple?'simple — se edita DISCOUNT_PERCENTAGE (entero 5–80); el descuento es todo del vendedor (sin aporte de ML, criterio conservador)':'con reparto — se juega el descuento TOTAL (entero 5–80); ML mantiene su aporte (MELI_PERCENTAGE) y vos ponés el resto, que es lo que se copia en SELLER_PERCENTAGE'}</b></div>`;
+  qs('cp-th-ml').style.display=simple?'none':'';
   const fl={search:qs('cp-search').value,soloEdit:qs('cp-solo-edit').checked,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan,obj};
   const filas=cpOrdenar(cpFiltrar(todas,fl,CP.orig),qs('cp-sort').value,plan);
   const pages=Math.ceil(filas.length/CP.pageSize)||1;CP.page=Math.min(CP.page,pages);S.cpPage=CP.page;
   const ef=cpCuentaEfectiva();
   qs('cp-tbody').innerHTML=filas.slice((CP.page-1)*CP.pageSize,CP.page*CP.pageSize).map(f=>{
     const mTd=p=>{const m=cpMargen(f,p);return `<td style="font-family:'DM Mono',monospace;color:${cpClaseMargen(m,obj)};${p===plan?'font-weight:800;background:rgba(0,157,188,.08)':''}">${m==null?'—':m.toFixed(1)+'%'}</td>`;};
-    const mod=cpModificada(f,CP.orig),inv=f.editable&&!cpPctValido(f.seller_pct);
-    const pctCel=f.editable?`<input type="text" value="${f.seller_pct==null?'':f.seller_pct}" onchange="cpOnPct(${f.fila},this.value)" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide un % entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.seller_pct==null?'—':f.seller_pct+'%'} 🔒</span>`;
+    const mod=cpModificada(f,CP.orig),inv=f.editable&&!cpPctValido(f.descuento_total_pct);
+    const pctCel=f.editable?`<input type="text" value="${f.descuento_total_pct==null?'':f.descuento_total_pct}" onchange="cpOnPct(${f.fila},this.value)" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide el descuento total entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}${!simple&&f.seller_pct!=null?`<div style="font-size:9px;color:var(--accent)" title="Es el valor a copiar en SELLER_PERCENTAGE">vos ${Math.round(f.seller_pct*1000)/1000}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.descuento_total_pct==null?'—':f.descuento_total_pct+'%'} 🔒</span>`;
     const dif=f.precio_pm&&f.precio_cliente?((f.precio_cliente/f.precio_pm-1)*100):null;
     const cuentaChip=f.cuenta&&ef&&f.cuenta!==ef?` <span style="color:var(--yellow)" title="Esta publicación es de la cuenta ${f.cuenta}, no de ${ef}">⚠${f.cuenta}</span>`:'';
     const avisos=f.avisos||[];
     return `<tr${mod?' style="background:rgba(0,157,188,.05)"':''}${f._stale?' class="ac-stale" style="opacity:.55"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
       +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}</td><td>${pctCel}</td>`
-      +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?f.meli_pct+'%':'—'}</td>`)
+      +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?Math.round(f.meli_pct*1000)/1000+'%':'—'}</td>`)
       +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
       +`<td style="font-family:'DM Mono',monospace">${f.precio_pm?fmt$(f.precio_pm)+(dif!=null?` <span style="font-size:9px;color:${Math.abs(dif)<=1?'var(--green)':dif<0?'var(--red)':'var(--yellow)'}">${dif>0?'+':''}${dif.toFixed(1)}%</span>`:''):'<span style="color:var(--text3)">sin PM</span>'}</td>`
       +['contado','3','6','9','12'].map(mTd).join('')

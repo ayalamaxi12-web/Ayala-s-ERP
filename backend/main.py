@@ -584,17 +584,26 @@ class _SimularIn(BaseModel):
     plan_objetivo: str = "contado"
 
 def _campanas_simular_sync(body: "_SimularIn") -> dict:
-    """Recalcula filas con el % del vendedor que se está jugando. Cada fila: item_id, sku, precio_original,
-    seller_pct, meli_pct (el aporte de ML se mantiene), editable, titulo."""
+    """Recalcula filas con el descuento TOTAL que se está jugando (`descuento_pct`, entero 5–80). ML mantiene su aporte
+    (`meli_pct` / `meli_monto`) y el vendedor pone el resto. Cada fila: item_id, sku, precio_original, descuento_pct,
+    meli_pct, meli_monto, editable, titulo."""
     from rentabilidad import campanas_ml
     from rentabilidad.db import sesion
     motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
     if len(body.filas) > 3000:
         raise HTTPException(status_code=422, detail="Demasiadas filas en un pedido (máx. 3000).")
-    filas = [{"fila": f.get("fila"), "ITEM_ID": f.get("item_id"), "SKU": f.get("sku"), "TITLE": f.get("titulo"),
-              "ORIGINAL_PRICE": f.get("precio_original"), "SELLER_PERCENTAGE": f.get("seller_pct"),
-              "MELI_PERCENTAGE": f.get("meli_pct"), "editable": f.get("editable", True), "cuenta": f.get("cuenta")}
-             for f in body.filas if f.get("item_id") and f.get("precio_original")]
+    def fila(f):
+        # Lo que se juega es el descuento TOTAL (entero); ML mantiene su aporte y el vendedor pone el resto.
+        orig = f["precio_original"]
+        meli = f.get("meli_pct") or 0
+        if f.get("meli_monto"):
+            meli = f["meli_monto"] / orig * 100
+        total = f.get("descuento_pct")
+        seller = f.get("seller_pct") if total is None else total - meli
+        return {"fila": f.get("fila"), "ITEM_ID": f.get("item_id"), "SKU": f.get("sku"), "TITLE": f.get("titulo"),
+                "ORIGINAL_PRICE": orig, "SELLER_PERCENTAGE": seller, "MELI_PERCENTAGE": meli or None,
+                "DISCOUNT_PERCENTAGE": total, "editable": f.get("editable", True), "cuenta": f.get("cuenta")}
+    filas = [fila(f) for f in body.filas if f.get("item_id") and f.get("precio_original")]
     avisos = []
     tc_valor, objetivo = resolver_tc(body.tc), _campanas_objetivo(body.margen_objetivo)
     datos = datos_sku_fn(avisos)

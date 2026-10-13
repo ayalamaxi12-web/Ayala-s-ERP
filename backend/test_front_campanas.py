@@ -24,7 +24,7 @@ def _js(expr, datos):
 
 def _f(fila, sku, margen, edit=True, avisos=(), pct=5, titulo='T'):
     return {'fila': fila, 'sku': sku, 'item_id': 'MLA%d' % fila, 'titulo': titulo, 'editable': edit, 'avisos': list(avisos),
-            'seller_pct': pct, 'margenes': ({'contado': {'margen': margen}, '3': {'margen': (margen or 0) - 5}} if margen is not None else {})}
+            'descuento_total_pct': pct, 'margenes': ({'contado': {'margen': margen}, '3': {'margen': (margen or 0) - 5}} if margen is not None else {})}
 
 
 FILAS = [_f(6, 'AAA', 30), _f(7, 'BBB', 12, avisos=['x']), _f(8, 'CCC', -3, edit=False), _f(9, None, None), _f(10, 'DDD', 18, pct=9)]

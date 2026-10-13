@@ -113,7 +113,7 @@ def test_analizar_cruza_pm_costo_y_margenes_por_cuota(db_session):
 def test_analizar_avisos(db_session):
     datos = {"PV-AB1": DatosSku(None, None, None, None, None)}
     filas = [_fila(SKU=None), _fila(ITEM_ID="MLA2"), _fila(ITEM_ID="MLA3", SELLER_PERCENTAGE=None, MELI_PERCENTAGE=None),
-             _fila(ITEM_ID="MLA4", SELLER_PERCENTAGE=4.5, editable=False)]
+             _fila(ITEM_ID="MLA4", SELLER_PERCENTAGE=4.5, MELI_PERCENTAGE=None, DISCOUNT_PERCENTAGE=4.5, editable=False)]
     r = _analizar(db_session, filas, datos)
     a = [x["avisos"] for x in r["filas"]]
     assert any("Sin SKU" in x for x in a[0])
@@ -172,3 +172,22 @@ def test_analizar_expone_recibis_motor_vs_ml(db_session):
               FINAL_PRICE=9974.05, NEW_RECEIVES="$\xa06,947.91")
     r = _analizar(db_session, [f], {"PV-AB1": DatosSku(d("1"), d("1.21"), None, None, None)})["filas"][0]
     assert r["recibis_ml"] == 6947.91 and r["recibis_motor"] == 7098.07 and r["recibis_dif"] == 150.16
+
+
+def test_la_regla_de_enteros_de_ml_es_sobre_el_descuento_total_no_sobre_el_del_vendedor(db_session):
+    # real (Con aporte de ML): vendedor 4,5% + ML 0,5% = 5% total → válido aunque el vendedor tenga decimales
+    ok = _fila(SELLER_PERCENTAGE=4.5, MELI_PERCENTAGE=0.5, DISCOUNT_PERCENTAGE=5.0)
+    mal = _fila(ITEM_ID="MLA2", SELLER_PERCENTAGE=4.5, MELI_PERCENTAGE=0.7, DISCOUNT_PERCENTAGE=5.2)
+    r = _analizar(db_session, [ok, mal], {})["filas"]
+    assert not any("TOTAL" in a for a in r[0]["avisos"]) and r[0]["descuento_total_pct"] == 5.0
+    assert any("TOTAL entero" in a for a in r[1]["avisos"])
+
+
+def test_pct_max_es_el_total_y_el_vendedor_pone_el_resto(par):
+    costo, iva = d("2000"), d("1.21")
+    sin_ml = cm.pct_max_para_margen(10000, 0, d("0.20"), "contado", costo, iva, par)
+    con_ml = cm.pct_max_para_margen(10000, 2, d("0.20"), "contado", costo, iva, par)
+    assert isinstance(con_ml, int) and con_ml >= sin_ml  # con aporte de ML se puede dar más descuento total
+    o = cm.precios_oferta(10000, seller_pct=con_ml - 2, meli_pct=2)
+    assert cm.margen_oferta(o["precio_vendedor"], o["precio_cliente"], "contado", costo, iva, par).margen >= d("0.20")
+    assert cm.pct_max_para_margen(10000, 6, d("0.20"), "contado", d("9500"), iva, par) is None
