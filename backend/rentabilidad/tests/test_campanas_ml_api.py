@@ -1,0 +1,66 @@
+"""Endpoints /campanas-ml/analizar y /simular, con ML, Ecom y la base simulados."""
+import io
+from contextlib import contextmanager
+from datetime import date
+
+import openpyxl
+import pytest
+from fastapi.testclient import TestClient
+
+import campanas_ml_cuentas
+from ml_auth import SELLERS
+from rentabilidad.models import PricingSku
+from rentabilidad.pricing_pm import DatosSku
+
+from .conftest import d
+from test_campanas_ml_xlsx import _ml_sintetico
+from .test_fravega import db_multihilo  # noqa: F401 (fixture)
+
+
+@pytest.fixture()
+def cli(db_multihilo, monkeypatch):
+    db_session = db_multihilo
+    import main
+    from rentabilidad import api, db as rdb
+    db_session.add(PricingSku(sku="SKU-1", precio_web=d("7000"), pct_ml=d("1.3"), forma_pago_web="1", condicion_ml="contado",
+                              vigente_desde=date(2026, 9, 1), cargado_por="Sheet Laura"))
+    db_session.flush()
+
+    @contextmanager
+    def sesion():
+        yield db_session
+
+    monkeypatch.setattr(rdb, "sesion", sesion)
+    monkeypatch.setattr(api, "_datos_sku_fn", lambda avisos: (lambda sku: DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None)))
+    monkeypatch.setattr(api, "_resolver_tc", lambda tc: d("1500"))
+    monkeypatch.setattr(campanas_ml_cuentas, "detectar", lambda ids: (
+        {"MLA1": {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": None},
+         "MLA2": {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": "SKU-1"}}, []))
+    monkeypatch.delenv("ERP_API_KEY", raising=False)
+    return TestClient(main.app)
+
+
+def test_analizar_detecta_cuenta_completa_sku_y_calcula(cli):
+    r = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_sintetico())})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["cuentas"]["sugerida"] == "IT" and j["cuentas"]["conteo"] == {"IT": 2}
+    f1, f2 = j["filas"]
+    assert f1["cuenta"] == "IT" and f1["sku"] == "SKU-1" and f1["sku_origen"] is None  # MLA1 ya traía SKU en el Excel
+    assert f2["sku"] == "SKU-1" and f2["sku_origen"] == "ml" and f2["margenes"]["contado"]["margen"] is not None
+    assert any("completaron con el SKU" in a for a in j["avisos"])
+    assert len(j["avisos_generales"]) == 2 and "1.330" in j["avisos_generales"][0] and "envío" in j["avisos_generales"][1]
+
+
+def test_simular_recalcula_con_el_porcentaje_jugado(cli):
+    fila = {"item_id": "MLA9", "sku": "SKU-1", "precio_original": 10000, "seller_pct": 10, "meli_pct": 0, "editable": True}
+    a = cli.post("/campanas-ml/simular", json={"filas": [fila]}).json()["filas"][0]
+    b = cli.post("/campanas-ml/simular", json={"filas": [dict(fila, seller_pct=20)]}).json()["filas"][0]
+    assert a["precio_cliente"] == 9000 and b["precio_cliente"] == 8000
+    assert b["margenes"]["contado"]["margen"] < a["margenes"]["contado"]["margen"]
+    c = cli.post("/campanas-ml/simular", json={"filas": [fila], "margen_objetivo": "30", "plan_objetivo": "6"}).json()["filas"][0]
+    assert c["pct_max_para_margen"] is None or 5 <= c["pct_max_para_margen"] <= 80
+
+
+def test_simular_valida_entrada(cli):
+    assert cli.post("/campanas-ml/simular", json={"filas": [], "margen_objetivo": "abc"}).status_code == 422

@@ -1,6 +1,7 @@
 """
 Ayala's ERP - Backend API
 """
+from pydantic import BaseModel
 from fastapi import FastAPI, BackgroundTasks, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -520,34 +521,89 @@ async def campanas_ml_probar_hoja(archivo: UploadFile = File(...)):
                              "Access-Control-Expose-Headers": "X-Integridad",
                              "Content-Disposition": 'attachment; filename="campana_con_hoja_prueba.xlsx"'})
 
-def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None) -> dict:
-    from rentabilidad import campanas_ml, motor_precios
+def _campanas_contexto(db_fn):
+    from rentabilidad import motor_precios
     from rentabilidad.api import _datos_sku_fn, _resolver_tc
     from rentabilidad.cierre_ecom_diario import ayer_en_argentina
-    from rentabilidad.db import sesion
     from datetime import timedelta
+    return motor_precios, _datos_sku_fn, _resolver_tc, ayer_en_argentina() + timedelta(days=1)
+
+def _campanas_objetivo(margen_objetivo: str | None):
+    try:
+        return Decimal(margen_objetivo) / 100 if margen_objetivo else None
+    except Exception:
+        raise HTTPException(status_code=422, detail=f"margen_objetivo no numérico: {margen_objetivo!r}")
+
+def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None, plan_objetivo: str = "contado") -> dict:
+    from rentabilidad import campanas_ml
+    from rentabilidad.db import sesion
+    import campanas_ml_cuentas
+    motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
     try:
         leido = campanas_ml_xlsx.leer_promociones(contenido)
     except campanas_ml_xlsx.ExcelInvalido as e:
         raise HTTPException(status_code=422, detail=str(e))
+    objetivo, avisos = _campanas_objetivo(margen_objetivo), []
+    filas = leido["filas"]
+    ids = [f["ITEM_ID"] for f in filas]
     try:
-        objetivo = Decimal(margen_objetivo) / 100 if margen_objetivo else None
-    except Exception:
-        raise HTTPException(status_code=422, detail=f"margen_objetivo no numérico: {margen_objetivo!r}")
-    fecha, avisos = ayer_en_argentina() + timedelta(days=1), []
-    tc_valor = _resolver_tc(tc)
-    datos = _datos_sku_fn(avisos)
+        det, av = campanas_ml_cuentas.detectar(ids)
+        avisos += av
+    except Exception as e:  # sin token / ML caído: se sigue sin cuenta
+        det = {}
+        avisos.append(f"No se pudo detectar la cuenta ni completar SKUs desde ML ({type(e).__name__}: {e}).")
+    completados = 0
+    for f in filas:
+        d = det.get(f["ITEM_ID"]) or {}
+        f["cuenta"] = d.get("cuenta")
+        if not f.get("SKU") and d.get("sku_ml"):
+            f["SKU"], f["sku_origen"], completados = d["sku_ml"], "ml", completados + 1
+    if completados:
+        avisos.append(f"{completados} filas sin SKU en el Excel se completaron con el SKU de la publicación en ML.")
+    tc_valor = resolver_tc(tc)
+    datos = datos_sku_fn(avisos)
     with sesion() as db:
-        r = campanas_ml.analizar(db, leido["filas"], fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
-                                 margen_objetivo=objetivo)
-    return {**r, "campana": leido["campana"], "avisos": avisos}
+        r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
+                                 margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
+    return {**r, "campana": leido["campana"], "avisos": avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids)}
 
 @app.post("/campanas-ml/analizar")
-async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None):
-    """C1: cruza cada fila del Excel con el PM y el costo de Ecom y devuelve el margen
-    a precio de oferta (contado/3/6/9/12) con la regla del aporte de ML. Solo lectura.
-    `margen_objetivo` (en %, ej. 20) agrega el mayor % entero de descuento que lo cumple."""
-    return await run_in_threadpool(_campanas_analizar_sync, await archivo.read(), tc, margen_objetivo)
+async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None,
+                               plan_objetivo: str = "contado"):
+    """C1/C2: cruza cada fila del Excel con el PM y el costo de Ecom, detecta la cuenta (IT/MT) por ITEM_ID
+    y devuelve el margen a precio de oferta (contado/3/6/9/12) con la regla del aporte de ML. Solo lectura.
+    `margen_objetivo` (en %, ej. 20) agrega el mayor % entero de descuento que lo cumple para `plan_objetivo`."""
+    return await run_in_threadpool(_campanas_analizar_sync, await archivo.read(), tc, margen_objetivo, plan_objetivo)
+
+class _SimularIn(BaseModel):
+    filas: list[dict]
+    tc: str | None = None
+    margen_objetivo: str | None = None
+    plan_objetivo: str = "contado"
+
+def _campanas_simular_sync(body: "_SimularIn") -> dict:
+    """Recalcula filas con el % del vendedor que se está jugando. Cada fila: item_id, sku, precio_original,
+    seller_pct, meli_pct (el aporte de ML se mantiene), editable, titulo."""
+    from rentabilidad import campanas_ml
+    from rentabilidad.db import sesion
+    motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
+    if len(body.filas) > 3000:
+        raise HTTPException(status_code=422, detail="Demasiadas filas en un pedido (máx. 3000).")
+    filas = [{"fila": f.get("fila"), "ITEM_ID": f.get("item_id"), "SKU": f.get("sku"), "TITLE": f.get("titulo"),
+              "ORIGINAL_PRICE": f.get("precio_original"), "SELLER_PERCENTAGE": f.get("seller_pct"),
+              "MELI_PERCENTAGE": f.get("meli_pct"), "editable": f.get("editable", True), "cuenta": f.get("cuenta")}
+             for f in body.filas if f.get("item_id") and f.get("precio_original")]
+    avisos = []
+    tc_valor, objetivo = resolver_tc(body.tc), _campanas_objetivo(body.margen_objetivo)
+    datos = datos_sku_fn(avisos)
+    with sesion() as db:
+        r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
+                                 margen_objetivo=objetivo, plan_objetivo=body.plan_objetivo)
+    return {**r, "avisos": avisos}
+
+@app.post("/campanas-ml/simular")
+async def campanas_ml_simular(body: _SimularIn):
+    return await run_in_threadpool(_campanas_simular_sync, body)
 
 # ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)

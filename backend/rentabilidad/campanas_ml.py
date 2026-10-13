@@ -24,6 +24,12 @@ PLANES = ("contado", "3", "6", "9", "12")
 PCT_MIN, PCT_MAX = 5, 80  # ML: enteros entre 5% y 80%
 _D = lambda x: Decimal(str(x))
 
+# Pendientes conocidos que la pantalla muestra siempre (Maxx, 2026-10-14).
+AVISOS_GENERALES = [
+    "Primer tramo de costo fijo (lista < $16.000): se usa $1.330 de la tabla. El Recibís del Excel sugiere ~$60 más (¿$1.390?); a confirmar con una venta real de ese tramo.",
+    "Envío real desde $33.000 de lista: todavía no se trae de ML por ítem; esos márgenes NO descuentan el envío y salen más altos que los reales.",
+]
+
 
 def dinero(v) -> float | None:
     """'$\xa06,947.91' (formato de ML) → 6947.91."""
@@ -92,7 +98,7 @@ def pct_max_para_margen(
 
 def analizar(
     db: Session, filas: list[dict], fecha: date, tc: Decimal, datos_fn, par: motor.ParametrosMotor,
-    envios: dict[str, Decimal] | None = None, margen_objetivo: Decimal | None = None,
+    envios: dict[str, Decimal] | None = None, margen_objetivo: Decimal | None = None, plan_objetivo: str = "contado",
 ) -> dict:
     """`filas`: las de `campanas_ml_xlsx.leer_promociones`. `datos_fn(sku) -> DatosSku`."""
     precios = vigentes(db, fecha)
@@ -111,7 +117,8 @@ def analizar(
             "seller_monto": _n(o["seller_monto"]), "meli_monto": _n(o["meli_monto"]),
             "precio_vendedor": _n(o["precio_vendedor"]), "precio_cliente": _n(o["precio_cliente"]),
             "descuento_total_pct": f.get("DISCOUNT_PERCENTAGE"), "precio_final_ml": f.get("FINAL_PRICE"),
-                        "pm": None, "precio_pm": None, "costo": None, "margenes": {}, "avisos": av,
+                        "cuenta": f.get("cuenta"), "sku_origen": f.get("sku_origen"),
+            "pm": None, "precio_pm": None, "costo": None, "margenes": {}, "avisos": av,
         }
         sp = f.get("SELLER_PERCENTAGE")
         if sp is not None and not (float(sp).is_integer() and PCT_MIN <= sp <= PCT_MAX):
@@ -162,7 +169,7 @@ def analizar(
                     r["margen_contado_sin_aporte_ml"] = _pct(sin.margen)
                 if margen_objetivo is not None:
                     r["pct_max_para_margen"] = pct_max_para_margen(
-                        orig, f.get("MELI_PERCENTAGE") or 0, margen_objetivo, "contado", costo, datos.iva_factor, par, envio)
+                        orig, f.get("MELI_PERCENTAGE") or 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio)
                 if base:
                     r["margen_a_precio_pm_contado"] = _pct(margen_oferta(base, base, "contado", costo, datos.iva_factor, par, envio).margen)
             except (motor.ParametroFaltante, ValueError) as e:
@@ -170,7 +177,7 @@ def analizar(
         out.append(r)
     con_margen = [x for x in out if x["margenes"]]
     return {
-        "fecha": fecha.isoformat(), "tc": float(tc), "planes": list(PLANES),
+        "fecha": fecha.isoformat(), "tc": float(tc), "planes": list(PLANES), "avisos_generales": AVISOS_GENERALES,
         "resumen": {
             "filas": len(out), "con_margen": len(con_margen),
             "sin_sku": sum(1 for x in out if not x["sku"]),
