@@ -128,3 +128,46 @@ def test_analizar_usa_los_montos_de_ml_porque_el_porcentaje_viene_redondeado(db_
               MELI_AMOUNT=4614.2, FINAL_PRICE=92284.1)
     r = _analizar(db_session, [f], {"PV-AB1": DatosSku(d("2"), d("1.21"), None, None, None)})
     assert r["filas"][0]["precio_cliente"] == 92284.1 and r["filas"][0]["precio_vendedor"] == 96898.3
+
+
+# ── Validación contra el "Recibís" (NEW_RECEIVES) del Excel real de Día de la Madre ──
+# (precio de lista, precio final, Recibís de ML). Todas sin aporte de ML, contado.
+_RECIBIS_ML = [(10499, "9974.05", "6947.91"), (19459, "18486.05", "12713.59"), (10499, "8159", "5430.60"),
+               (22499, "15117", "9897.21")]
+
+
+def _par_ajustado(par):
+    """Parámetros que reproducen el Recibís de ML: comisión efectiva 16,404% y costo fijo
+    del primer tramo 1.390 (la tabla de seed trae 15,5% y 1.330)."""
+    import dataclasses
+    valores = {**par.valores, ("ML", "comision_general"): d("0.16404")}
+    tramos = {**par.tramos, "ml_costo_fijo": [dataclasses.replace(t, valor=d("1390")) if t.valor == d("1330") else t
+                                              for t in par.tramos["ml_costo_fijo"]]}
+    return dataclasses.replace(par, valores=valores, tramos=tramos)
+
+
+@pytest.mark.parametrize("lista,final,recibis", _RECIBIS_ML)
+def test_recibis_de_ml_se_reproduce_con_comision_y_tramo_por_precio_de_lista(par, lista, final, recibis):
+    r = cm.margen_oferta(d(final), d(final), "contado", d("1000"), d("1.21"), _par_ajustado(par), d(0), lista)
+    assert abs(float(cm.recibis(r, d(final))) - float(recibis)) < 1.0
+
+
+def test_el_tramo_del_costo_fijo_es_el_de_la_lista_no_el_rebajado(par):
+    # fila #5: lista 22.499 (tramo 2.740) con precio final 15.117 (< 16.000, tramo 1.330 si fuera por el final)
+    r = cm.margen_oferta(d("15117"), d("15117"), "contado", d("1000"), d("1.21"), par, d(0), 22499)
+    assert r.cargos["costo_fijo"] == 2740
+    assert cm.margen_oferta(d("15117"), d("15117"), "contado", d("1000"), d("1.21"), par, d(0)).cargos["costo_fijo"] == 1330
+
+
+def test_envio_por_umbral_de_la_lista(par):
+    # fila #4: lista 34.403 (≥ 33.000) con final 32.682,85: ML cobra envío y no costo fijo
+    r = cm.margen_oferta(d("32682.85"), d("32682.85"), "contado", d("1000"), d("1.21"), par, d("14265.7"), 34403)
+    assert r.cargos["envio"] == d("14265.70") and r.cargos["costo_fijo"] == 0
+    assert abs(float(cm.recibis(r, d("32682.85")) ) - float(d("32682.85") - d("0.155") * d("32682.85") - d("14265.7"))) < 0.01
+
+
+def test_analizar_expone_recibis_motor_vs_ml(db_session):
+    f = _fila(ORIGINAL_PRICE=10499.0, SELLER_PERCENTAGE=5.0, SELLER_AMOUNT=524.95, MELI_PERCENTAGE=None, MELI_AMOUNT=None,
+              FINAL_PRICE=9974.05, NEW_RECEIVES="$\xa06,947.91")
+    r = _analizar(db_session, [f], {"PV-AB1": DatosSku(d("1"), d("1.21"), None, None, None)})["filas"][0]
+    assert r["recibis_ml"] == 6947.91 and r["recibis_motor"] == 7098.07 and r["recibis_dif"] == 150.16

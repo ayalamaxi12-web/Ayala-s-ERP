@@ -25,6 +25,25 @@ PCT_MIN, PCT_MAX = 5, 80  # ML: enteros entre 5% y 80%
 _D = lambda x: Decimal(str(x))
 
 
+def dinero(v) -> float | None:
+    """'$\xa06,947.91' (formato de ML) → 6947.91."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = str(v).replace("\xa0", "").replace("$", "").replace(",", "").strip()
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def recibis(d: motor.Desglose, precio_vendedor) -> Decimal:
+    """Lo que ML llama "Recibís": el precio del vendedor menos comisión, cuotas, costo fijo y envío."""
+    c = d.cargos
+    return _D(precio_vendedor) - c["comision"] - c["cuotas"] - c["costo_fijo"] - c["envio"]
+
+
 def precios_oferta(original, seller_pct=None, seller_monto=None, meli_pct=None, meli_monto=None) -> dict:
     """Montos de la oferta. Si ML informa el monto, manda sobre el %. Todo en pesos."""
     orig = _D(original)
@@ -37,12 +56,15 @@ def precios_oferta(original, seller_pct=None, seller_monto=None, meli_pct=None, 
 
 def margen_oferta(
     precio_vendedor, precio_cliente, plan: str, costo: Decimal, iva: Decimal, par: motor.ParametrosMotor,
-    envio: Decimal = Decimal(0),
+    envio: Decimal = Decimal(0), precio_lista=None,
 ) -> motor.Desglose:
+    """`precio_lista`: el de la publicación sin promo; define el tramo del costo fijo y
+    el umbral de envío (validado contra el "Recibís" de ML)."""
     pv, pc = _D(precio_vendedor), _D(precio_cliente)
+    pl = _D(precio_lista) if precio_lista is not None else None
     e = motor.EntradaMotor(
         canal="ML", costo=costo, iva_factor=iva, plan=plan, envio=envio,
-        precio_cliente=pc if pc != pv else None,
+        precio_cliente=pc if pc != pv else None, precio_lista=pl if pl is not None and pl != pc else None,
     )
     return motor.precio_a_margen(pv, e, par)
 
@@ -60,7 +82,7 @@ def pct_max_para_margen(
         if o["precio_cliente"] <= 0:
             break
         try:
-            r = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, iva, par, envio)
+            r = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, iva, par, envio, orig)
         except (motor.ParametroFaltante, ValueError):
             continue
         if r.margen >= _D(objetivo):
@@ -89,8 +111,7 @@ def analizar(
             "seller_monto": _n(o["seller_monto"]), "meli_monto": _n(o["meli_monto"]),
             "precio_vendedor": _n(o["precio_vendedor"]), "precio_cliente": _n(o["precio_cliente"]),
             "descuento_total_pct": f.get("DISCOUNT_PERCENTAGE"), "precio_final_ml": f.get("FINAL_PRICE"),
-            "recibis_ml": f.get("NEW_RECEIVES"),
-            "pm": None, "precio_pm": None, "costo": None, "margenes": {}, "avisos": av,
+                        "pm": None, "precio_pm": None, "costo": None, "margenes": {}, "avisos": av,
         }
         sp = f.get("SELLER_PERCENTAGE")
         if sp is not None and not (float(sp).is_integer() and PCT_MIN <= sp <= PCT_MAX):
@@ -129,10 +150,15 @@ def analizar(
                 av.append("Sin envío: el margen de esta oferta no descuenta el costo de envío")
             try:
                 for plan in PLANES:
-                    d = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, datos.iva_factor, par, envio)
+                    d = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, datos.iva_factor, par, envio, orig)
                     r["margenes"][plan] = {"margen": _pct(d.margen), "rentabilidad": _n(d.rentabilidad)}
+                    if plan == "contado":
+                        r["recibis_motor"] = _n(recibis(d, o["precio_vendedor"]))
+                        rm = dinero(f.get("NEW_RECEIVES"))
+                        r["recibis_ml"] = rm
+                        r["recibis_dif"] = None if rm is None else round(r["recibis_motor"] - rm, 2)
                 if o["meli_monto"]:
-                    sin = margen_oferta(o["precio_cliente"], o["precio_cliente"], "contado", costo, datos.iva_factor, par, envio)
+                    sin = margen_oferta(o["precio_cliente"], o["precio_cliente"], "contado", costo, datos.iva_factor, par, envio, orig)
                     r["margen_contado_sin_aporte_ml"] = _pct(sin.margen)
                 if margen_objetivo is not None:
                     r["pct_max_para_margen"] = pct_max_para_margen(

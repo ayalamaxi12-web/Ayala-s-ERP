@@ -71,3 +71,16 @@ ML aceptó el Excel con la hoja extra (prueba de 1 fila, 2026-10-13). El formato
 - Motor: `EntradaMotor.precio_cliente` (opcional, None = igual que antes). Con aporte de ML: venta, cheque e IIBB sobre el precio del vendedor (cliente + crédito de ML); comisión, cuotas, costo fijo y envío sobre el precio que paga el cliente. `margen_a_precio` lo rechaza. Paridad con el front intacta (60/60).
 - `POST /campanas-ml/analizar` (xlsx, `tc`, `margen_objetivo` en %): por fila, PM, precio PM, costo, margen contado/3/6/9/12, margen sin aporte de ML, `descuento_que_cuadra_pct`, avisos. Snippet `backend/scripts/c1_analizar.js`.
 - Pendiente de confirmar con datos reales: base de la comisión de ML en ofertas cofinanciadas; envío real por ítem (hoy 0 con aviso desde $33.000); 213 filas sin SKU en el Excel de Día de la Madre.
+
+## Validación contra el "Recibís" de ML (2026-10-14, 5 filas del Excel de Día de la Madre, sin aporte de ML, contado)
+| lista | final | Recibís ML | motor actual (15,5% · tabla) | diferencia |
+|---|---|---|---|---|
+| 10.499 | 9.974,05 | 6.947,91 | 7.098,07 | +150,16 |
+| 19.459 | 18.486,05 | 12.713,59 | 12.880,71 | +167,12 |
+| 10.499 | 8.159 | 5.430,60 | 5.564,35 | +133,75 |
+| 34.403 | 32.682,85 | 13.055,99 | 27.617,01 (sin envío) | +14.561 |
+| 22.499 | 15.117 | 9.897,21 | 10.033,86 | +136,65 |
+- Ajuste (filas 2 y 5, que comparten tramo, dan EXACTAMENTE el mismo %): comisión efectiva **16,404%** sobre el precio final; costo fijo del tramo 16.000–24.000 = **2.740** (coincide con la tabla); costo fijo del primer tramo = **1.390** (filas 1 y 3 → 1.390,1 y 1.390,0; la tabla trae 1.330). Con eso las 4 filas cierran a < $1.
+- El **tramo del costo fijo y el umbral de envío se definen por el precio de LISTA**, no por el rebajado (fila 5: final 15.117 < 16.000 pero ML cobra 2.740; fila 4: final 32.682,85 < 33.000 pero lista 34.403 ≥ 33.000 → sin costo fijo y con envío; el envío implícito es ≈ $14.266). Implementado: `EntradaMotor.precio_lista`.
+- Falta decidir (Maxx): comisión 15,5% → 16,4% en Insumo de Impresión y costo fijo 1.330 → 1.390. No se tocó la tabla.
+- El caso con aporte de ML sigue sin dato real (las 9 filas con MELI tienen precio final pero no su Recibís comparable por categoría).

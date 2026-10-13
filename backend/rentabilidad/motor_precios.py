@@ -152,6 +152,10 @@ class EntradaMotor:
     # calculan sobre este precio; la venta, el cheque y el IIBB sobre el otro.
     # None = no hay aporte de ML (todo sobre el mismo precio).
     precio_cliente: Decimal | None = None
+    # Precio de lista (sin la promo). ML define el tramo del costo fijo y el umbral de
+    # envío por el precio de la publicación, no por el rebajado (validado con 5 filas
+    # del Excel de Día de la Madre, 2026-10-14). None = el mismo precio de la cuenta.
+    precio_lista: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -184,8 +188,9 @@ def _cuotas(e: EntradaMotor, par: ParametrosMotor, mas_iva: Decimal) -> Decimal:
     return par.cuota(e.canal, e.plan) * mas_iva
 
 
-def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor) -> _Estructura:
+def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor, p_lista: Decimal | None = None) -> _Estructura:
     canal = e.canal
+    p_lista = p if p_lista is None else p_lista
     if canal not in CANALES:
         raise ValueError(f"Canal desconocido: {canal!r}")
     mas_iva = 1 + par.valor(canal, "iva_cargos")
@@ -194,8 +199,8 @@ def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor) -> _Estructur
         # por categoría (`par.comision_categoria`, pricing_comision_categoria)
         # queda cargada y sin usar: es el futuro (comisión real por categoría).
         comision = par.valor(canal, "comision_general")
-        fijo = e.costo_fijo_ml if e.costo_fijo_ml is not None else (par.tramo("ml_costo_fijo", p) or Decimal(0))
-        envio = e.envio if p >= par.valor(canal, "umbral_envio_gratis") else Decimal(0)
+        fijo = e.costo_fijo_ml if e.costo_fijo_ml is not None else (par.tramo("ml_costo_fijo", p_lista) or Decimal(0))
+        envio = e.envio if p_lista >= par.valor(canal, "umbral_envio_gratis") else Decimal(0)
         return _Estructura(
             pct={"comision": comision * mas_iva, "cuotas": _cuotas(e, par, mas_iva)},
             fijos={"costo_fijo": fijo * mas_iva, "envio": envio},
@@ -240,7 +245,7 @@ def precio_a_margen(precio: Decimal, e: EntradaMotor, par: ParametrosMotor) -> D
         raise ValueError("El precio tiene que ser mayor a 0.")
     n = p / e.iva_factor
     pc = Decimal(e.precio_cliente) if e.precio_cliente is not None else p
-    est = _estructura(pc, e, par)
+    est = _estructura(pc, e, par, Decimal(e.precio_lista) if e.precio_lista is not None else None)
     cargos = {k: pc * v for k, v in est.pct.items()}
     cargos.update(est.fijos)
     cargos["imp_cheque"] = p * par.valor(e.canal, "imp_cheque")
@@ -268,8 +273,8 @@ def margen_a_precio(margen: Decimal, e: EntradaMotor, par: ParametrosMotor, redo
     del fee): se calcula, se mira en qué tramo cayó y se recalcula hasta que
     no cambie."""
     m = Decimal(margen)
-    if e.precio_cliente is not None:
-        raise ValueError("margen_a_precio no admite `precio_cliente` (aporte de ML): usar precio_a_margen.")
+    if e.precio_cliente is not None or e.precio_lista is not None:
+        raise ValueError("margen_a_precio no admite `precio_cliente`/`precio_lista` (campañas ML): usar precio_a_margen.")
     cheque, iibb = par.valor(e.canal, "imp_cheque"), par.valor(e.canal, "iibb")
     p = Decimal("1e12")  # arranca como precio alto (sin costo fijo ML, con envío)
     vistos = set()
