@@ -80,7 +80,8 @@ ML aceptó el Excel con la hoja extra (prueba de 1 fila, 2026-10-13). El formato
 | 10.499 | 8.159 | 5.430,60 | 5.564,35 | +133,75 |
 | 34.403 | 32.682,85 | 13.055,99 | 27.617,01 (sin envío) | +14.561 |
 | 22.499 | 15.117 | 9.897,21 | 10.033,86 | +136,65 |
-- Ajuste (filas 2 y 5, que comparten tramo, dan EXACTAMENTE el mismo %): comisión efectiva **16,404%** sobre el precio final; costo fijo del tramo 16.000–24.000 = **2.740** (coincide con la tabla); costo fijo del primer tramo = **1.390** (filas 1 y 3 → 1.390,1 y 1.390,0; la tabla trae 1.330). Con eso las 4 filas cierran a < $1.
-- El **tramo del costo fijo y el umbral de envío se definen por el precio de LISTA**, no por el rebajado (fila 5: final 15.117 < 16.000 pero ML cobra 2.740; fila 4: final 32.682,85 < 33.000 pero lista 34.403 ≥ 33.000 → sin costo fijo y con envío; el envío implícito es ≈ $14.266). Implementado: `EntradaMotor.precio_lista`.
-- Falta decidir (Maxx): comisión 15,5% → 16,4% en Insumo de Impresión y costo fijo 1.330 → 1.390. No se tocó la tabla.
-- El caso con aporte de ML sigue sin dato real (las 9 filas con MELI tienen precio final pero no su Recibís comparable por categoría).
+- **CORRECCIÓN (2026-10-14, con una venta real de ML, toner TN1060COMP, $21.202,80: cargo por vender 15,5% = 3.286,43 + costo fijo 2.740, impuestos 245,62):** la comisión ES 15,5% y el costo fijo de 2.740 coincide con la tabla. La hipótesis de "16,404%" era un error: salía de atribuir al cargo de venta una diferencia que está en otro lado.
+- Descomposición del "Recibís" del Excel: `final − 15,5% − costo fijo − 0,904% del final` (filas 2 y 5, exacto al centavo) y, en el primer tramo (filas 1 y 3), además **$60** fijos. Ese 0,904% se parece a los "Impuestos" que ML muestra aparte de la venta (en la venta real fueron 1,158% del precio): son retenciones, no comisión. El motor ya contempla IIBB y cheque por su cuenta, así que no se agrega.
+- Los $60 del primer tramo (se vería como costo fijo 1.390 en vez de 1.330) NO están verificados: hace falta una venta real de un producto de ese tramo (< $16.000) con el desglose de ML. No se tocó la tabla.
+- El **tramo del costo fijo y el umbral de envío se definen por el precio de LISTA**, no por el rebajado (fila 5: final 15.117 < 16.000 pero ML cobra 2.740; fila 4: final 32.682,85 < 33.000 pero lista 34.403 ≥ 33.000 → sin costo fijo y con envío; envío implícito ≈ $14.266 tras el 0,904%). Implementado: `EntradaMotor.precio_lista`.
+- El caso con aporte de ML sigue sin dato real.

@@ -131,25 +131,26 @@ def test_analizar_usa_los_montos_de_ml_porque_el_porcentaje_viene_redondeado(db_
 
 
 # ── Validación contra el "Recibís" (NEW_RECEIVES) del Excel real de Día de la Madre ──
-# (precio de lista, precio final, Recibís de ML). Todas sin aporte de ML, contado.
-_RECIBIS_ML = [(10499, "9974.05", "6947.91"), (19459, "18486.05", "12713.59"), (10499, "8159", "5430.60"),
-               (22499, "15117", "9897.21")]
+# (precio de lista, precio final, Recibís de ML, extra fijo del primer tramo). Sin aporte de ML, contado.
+# El "Recibís" del Excel = final − comisión 15,5% − costo fijo − 0,904% del final (impuestos/retenciones
+# que ML descuenta aparte) y, en el primer tramo, $60 más (a verificar con una venta real). La comisión
+# 15,5% y el costo fijo de 2.740 coinciden con una venta real desglosada por ML.
+_RECIBIS_ML = [(10499, "9974.05", "6947.91", 60), (19459, "18486.05", "12713.59", 0),
+               (10499, "8159", "5430.60", 60), (22499, "15117", "9897.21", 0)]
 
 
-def _par_ajustado(par):
-    """Parámetros que reproducen el Recibís de ML: comisión efectiva 16,404% y costo fijo
-    del primer tramo 1.390 (la tabla de seed trae 15,5% y 1.330)."""
-    import dataclasses
-    valores = {**par.valores, ("ML", "comision_general"): d("0.16404")}
-    tramos = {**par.tramos, "ml_costo_fijo": [dataclasses.replace(t, valor=d("1390")) if t.valor == d("1330") else t
-                                              for t in par.tramos["ml_costo_fijo"]]}
-    return dataclasses.replace(par, valores=valores, tramos=tramos)
+@pytest.mark.parametrize("lista,final,recibis,extra", _RECIBIS_ML)
+def test_recibis_de_ml_es_el_motor_menos_0_904_pct_del_precio(par, lista, final, recibis, extra):
+    r = cm.margen_oferta(d(final), d(final), "contado", d("1000"), d("1.21"), par, d(0), lista)
+    assert abs(r.cargos["comision"] - d(final) * d("0.155")) <= d("0.01")  # la comisión NO cambia: 15,5%
+    esperado = cm.recibis(r, d(final)) - d(final) * d("0.00904") - extra
+    assert abs(float(esperado) - float(recibis)) < 0.05
 
 
-@pytest.mark.parametrize("lista,final,recibis", _RECIBIS_ML)
-def test_recibis_de_ml_se_reproduce_con_comision_y_tramo_por_precio_de_lista(par, lista, final, recibis):
-    r = cm.margen_oferta(d(final), d(final), "contado", d("1000"), d("1.21"), _par_ajustado(par), d(0), lista)
-    assert abs(float(cm.recibis(r, d(final))) - float(recibis)) < 1.0
+def test_venta_real_de_ml_comision_y_costo_fijo(par):
+    # Venta real TN1060COMP: $21.202,80 → cargo por vender 15,5% = 3.286,43 + costo fijo 2.740
+    r = cm.margen_oferta(d("21202.80"), d("21202.80"), "contado", d("1000"), d("1.21"), par)
+    assert r.cargos["comision"] == d("3286.43") and r.cargos["costo_fijo"] == d("2740.00")
 
 
 def test_el_tramo_del_costo_fijo_es_el_de_la_lista_no_el_rebajado(par):
