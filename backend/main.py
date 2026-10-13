@@ -478,6 +478,49 @@ async def ml_full_reposicion_pdf(archivo: UploadFile = File(...)):
     return await run_in_threadpool(_reposicion_pdf_sync, contenido)
 
 # ══════════════════════════════════════════════════════
+# CAMPAÑAS ML (Excel de la Central de Promociones)
+# ══════════════════════════════════════════════════════
+import campanas_ml_xlsx
+
+def _campanas_leer_sync(contenido: bytes) -> dict:
+    try:
+        r = campanas_ml_xlsx.leer_promociones(contenido)
+    except campanas_ml_xlsx.ExcelInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    f = r["filas"]
+    return {"campana": r["campana"], "hojas": r["hojas"], "filas": len(f),
+            "editables": sum(1 for x in f if x["editable"]),
+            "con_aporte_ml": sum(1 for x in f if x.get("MELI_PERCENTAGE")),
+            "sin_sku": sum(1 for x in f if not x.get("SKU")), "muestra": f[:3]}
+
+@app.post("/campanas-ml/leer")
+async def campanas_ml_leer(archivo: UploadFile = File(...)):
+    """Lee el Excel de una campaña (solo lectura, no guarda nada)."""
+    return await run_in_threadpool(_campanas_leer_sync, await archivo.read())
+
+def _campanas_probar_hoja_sync(contenido: bytes) -> tuple[bytes, dict]:
+    try:
+        r = campanas_ml_xlsx.leer_promociones(contenido)
+        filas = [[x["ITEM_ID"], x.get("SKU"), x.get("ORIGINAL_PRICE"), x.get("SELLER_PERCENTAGE"),
+                  (x.get("SELLER_PERCENTAGE"), "copiar"), "prueba C0"] for x in r["filas"]]
+        nuevo, info = campanas_ml_xlsx.agregar_hoja(
+            contenido, "ERP Prueba", ["ITEM_ID", "SKU", "PRECIO ORIGINAL", "% ACTUAL", "VALOR A COPIAR", "NOTA"], filas)
+    except campanas_ml_xlsx.ExcelInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return nuevo, {**info, **campanas_ml_xlsx.verificar_integridad(contenido, nuevo, info["hoja"])}
+
+@app.post("/campanas-ml/probar-hoja")
+async def campanas_ml_probar_hoja(archivo: UploadFile = File(...)):
+    """C0: devuelve el MISMO xlsx con una hoja de prueba agregada, para verificar
+    que ML lo acepta al subirlo. El informe de integridad va en `X-Integridad`."""
+    from fastapi.responses import Response
+    nuevo, rep = await run_in_threadpool(_campanas_probar_hoja_sync, await archivo.read())
+    return Response(nuevo, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"X-Integridad": json.dumps({"ok": rep["ok"], "problemas": rep["problemas"]}),
+                             "Access-Control-Expose-Headers": "X-Integridad",
+                             "Content-Disposition": 'attachment; filename="campana_con_hoja_prueba.xlsx"'})
+
+# ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)
 # ══════════════════════════════════════════════════════
 

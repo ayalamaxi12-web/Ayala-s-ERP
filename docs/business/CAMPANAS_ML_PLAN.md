@@ -44,3 +44,21 @@ Hay que fijar con un archivo real qué significa SELLER_PERCENTAGE (¿% del ORIG
 3. Qué significa y cómo se recalcula **SELLER_PERCENTAGE** (y cuándo ML pide monto en vez de %).
 4. ¿Opción **A** o **B** para jugar el descuento?
 5. ¿Cuenta por **elección al subir** o por **detección con los ITEM_ID**?
+
+
+## Decisiones del usuario (2026-10-13)
+- Opción A: se juega el descuento en la pantalla del ERP; se descarga el mismo Excel con la hoja nueva + columna "VALOR A COPIAR". Sin fórmulas vivas.
+- Cuenta (IT/MT): se detecta con los ITEM_ID, corregible a mano.
+- Aporte de ML: el margen se calcula sobre el precio que resulta del descuento del vendedor (SELLER_PERCENTAGE); ML acredita su parte (MELI_PERCENTAGE). La comisión de ML se calcularía sobre el precio final que paga el cliente (por confirmar con un dato real).
+- SELLER_PERCENTAGE = % que pone el vendedor; MELI_PERCENTAGE = lo que pone ML; juntos = DISCOUNT_PERCENTAGE. ML pide enteros entre 5% y 80%; puede pedir % o monto (SELLER_AMOUNT): soportar ambos.
+
+## Hallazgos del Excel real (Día de la Madre, 1885 filas)
+- Hojas: `Ayuda`, `hidden` (veryHidden, trae el id de campaña que ML valida) y `Promociones`. Es una exportación de Google Sheets.
+- `Promociones`: fila 1 OCULTA con los nombres técnicos (TITLE, ITEM_ID, SKU, …, FLEX_ID); filas 2–5 son encabezados/ayudas; datos desde la fila 6; columnas U–AJ ocultas; paneles congelados en C6; una validación de datos en ACTION ("Aplicar propuesta,No aplicar").
+- Editables = celdas con relleno celeste FFCADDF8 en G/H: 1877 filas; las 8 "Participando" tienen relleno gris (no editables).
+- SELLER_AMOUNT/SELLER_PERCENTAGE vienen como TEXTO ('524.95', '5') en las filas nuevas y como número en las 9 ya participando; MELI_* vienen '-' salvo en 9 filas (aporte ML 3,5%/3,75%/3,154%).
+- 213 filas sin SKU. NEW_RECEIVES ("Recibís") viene como texto con formato `$ 6,947.91`: sirve como dato real para validar la comisión.
+- Sin protección de hoja/libro, sin sharedStrings que tocar: el agregado a nivel ZIP deja idénticas las demás entradas.
+
+## C0 — implementado
+`backend/campanas_ml_xlsx.py` (`leer_promociones`, `agregar_hoja`, `verificar_integridad`), endpoints `POST /campanas-ml/leer` y `/campanas-ml/probar-hoja`, snippet `backend/scripts/c0_probar_hoja.js`, tests `backend/test_campanas_ml_xlsx.py`. Pendiente: que el usuario suba a ML el archivo con la hoja de prueba.
