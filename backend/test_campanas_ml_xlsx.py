@@ -139,3 +139,118 @@ def test_endpoints(monkeypatch):
     assert r.status_code == 200 and '"ok": true' in r.headers["x-integridad"]
     assert "ERP Prueba" in openpyxl.load_workbook(io.BytesIO(r.content)).sheetnames
     assert cli.post("/campanas-ml/leer", files={"archivo": ("a.xlsx", b"basura")}).status_code == 422
+
+
+# ── Campañas SIMPLES (solo DISCOUNT_PERCENTAGE) y variantes de columnas ──
+COMUNES = ["TITLE", "ITEM_ID", "SKU", "PROMO_NAME", "ORIGINAL_PRICE", "DISCOUNT_PERCENTAGE", "FINAL_PRICE", "NEW_RECEIVES",
+           "STATUS", "ACTION", "ERRORS", "PROMO_TYPE"]
+
+
+def _ml_simple(cols=None, extra=(), celeste=True, filas=None):
+    """Excel de campaña simple como los de ML: fila 1 con nombres, 4 filas de ayuda, datos desde la 6."""
+    cols = list(cols or COMUNES) + list(extra)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Promociones"
+    ws.append(cols)
+    for _ in range(4):
+        ws.append(["ayuda"])
+    datos = filas or [
+        {"TITLE": "Silla", "ITEM_ID": "MLA10", "SKU": "SIL-1", "PROMO_NAME": "Sumate", "ORIGINAL_PRICE": 20000.0,
+         "DISCOUNT_PERCENTAGE": 10.0, "FINAL_PRICE": 18000.0, "NEW_RECEIVES": "$ 12,000.50", "STATUS": "Nueva propuesta",
+         "ACTION": "Aplicar propuesta", "PROMO_TYPE": "SMART_CAMPAIGN"},
+        {"TITLE": "Mesa", "ITEM_ID": "MLA11", "SKU": None, "PROMO_NAME": "Sumate", "ORIGINAL_PRICE": 50000.0,
+         "DISCOUNT_PERCENTAGE": 15, "FINAL_PRICE": 42500.0, "STATUS": "Participando", "ACTION": "Participar", "PROMO_TYPE": "SMART_CAMPAIGN"}]
+    for d in datos:
+        ws.append([d.get(c) for c in cols])
+    if celeste and "DISCOUNT_PERCENTAGE" in cols:
+        ws.cell(6, cols.index("DISCOUNT_PERCENTAGE") + 1).fill = PatternFill("solid", fgColor="FFCADDF8")
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def test_campana_simple_se_detecta_y_el_descuento_es_todo_del_vendedor():
+    r = c.leer_promociones(_ml_simple())
+    assert r["tipo"] == "simple" and r["col_editable"] == "DISCOUNT_PERCENTAGE" and r["avisos"] == []
+    f1, f2 = r["filas"]
+    assert (f1["SELLER_PERCENTAGE"], f1["SELLER_AMOUNT"], f1["MELI_PERCENTAGE"], f1["MELI_AMOUNT"]) == (10.0, 2000.0, None, None)
+    assert f1["editable"] is True and f2["editable"] is False and f2["SELLER_PERCENTAGE"] == 15.0
+    assert r["campana"] == "Sumate"
+
+
+def test_reparto_sigue_siendo_reparto():
+    r = c.leer_promociones(_ml_sintetico())
+    assert r["tipo"] == "reparto" and r["col_editable"] == "SELLER_PERCENTAGE"
+
+
+def test_sin_celdas_celestes_asume_editable_lo_que_no_participa_y_avisa():
+    r = c.leer_promociones(_ml_simple(celeste=False))
+    assert [f["editable"] for f in r["filas"]] == [True, False]
+    assert any("celestes" in a for a in r["avisos"])
+
+
+def test_columnas_opcionales_faltantes_son_aviso_no_error():
+    cols = ["ITEM_ID", "ORIGINAL_PRICE", "DISCOUNT_PERCENTAGE"]  # sin TITLE, SKU, FINAL_PRICE, ERRORS, ...
+    datos = [{"ITEM_ID": "MLA10", "ORIGINAL_PRICE": 100.0, "DISCOUNT_PERCENTAGE": 8.0}]
+    r = c.leer_promociones(_ml_simple(cols=cols, filas=datos))
+    assert len(r["filas"]) == 1 and r["filas"][0]["SELLER_AMOUNT"] is None
+    assert any("Faltan columnas que traen todas las campañas" in a and "SKU" in a for a in r["avisos"])
+
+
+@pytest.mark.parametrize("extra", [(), tuple(f"EXTRA_{i}" for i in range(8))])
+def test_28_a_36_columnas_con_columnas_desconocidas(extra):
+    r = c.leer_promociones(_ml_simple(cols=COMUNES + [f"RELLENO_{i}" for i in range(16)], extra=extra))
+    assert len(r["filas"]) == 2 and r["tipo"] == "simple"
+
+
+def test_sin_lo_indispensable_si_falla_con_mensaje_claro():
+    with pytest.raises(c.ExcelInvalido, match="ORIGINAL_PRICE"):
+        c.leer_promociones(_ml_simple(cols=["ITEM_ID", "DISCOUNT_PERCENTAGE"], filas=[{"ITEM_ID": "MLA1", "DISCOUNT_PERCENTAGE": 5}]))
+    with pytest.raises(c.ExcelInvalido, match="DISCOUNT_PERCENTAGE"):
+        c.leer_promociones(_ml_simple(cols=["ITEM_ID", "ORIGINAL_PRICE"], filas=[{"ITEM_ID": "MLA1", "ORIGINAL_PRICE": 5}]))
+
+
+def test_filas_cortas_no_rompen_la_lectura():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Promociones"
+    ws.append(COMUNES)
+    ws.append(["x"]); ws.append(["x"]); ws.append(["x"]); ws.append(["x"])
+    ws.append(["Silla", "MLA10"])  # fila truncada: faltan todas las demás celdas
+    ws.append(["Mesa", "MLA11", "S", "P", 100.0, 5.0])
+    b = io.BytesIO(); wb.save(b)
+    r = c.leer_promociones(b.getvalue())
+    assert [f["ITEM_ID"] for f in r["filas"]] == ["MLA10", "MLA11"] and r["filas"][0]["ORIGINAL_PRICE"] is None
+
+
+def test_la_hoja_nueva_es_la_misma_venga_el_tipo_que_venga():
+    for xl in (_ml_simple(), _ml_sintetico()):
+        r = c.leer_promociones(xl)
+        filas = [[f["ITEM_ID"], f.get("SKU"), f["ORIGINAL_PRICE"], f["SELLER_PERCENTAGE"]] for f in r["filas"]]
+        n, info = c.agregar_hoja(xl, "ERP Análisis", ["ITEM_ID", "SKU", "LISTA", "% ACTUAL"], filas)
+        assert c.verificar_integridad(xl, n, info["hoja"])["ok"]
+        ws = openpyxl.load_workbook(io.BytesIO(n))["ERP Análisis"]
+        assert [x.value for x in ws[1]] == ["ITEM_ID", "SKU", "LISTA", "% ACTUAL"]
+
+
+# Excels reales de 6 campañas de ML (si están en el scratchpad de la sesión; se saltea si no).
+_CAMP = "/tmp/claude-0/-home-user/f12170ee-4e93-5b42-a699-852f592134b3/scratchpad/camp/"
+_ESPERADO = {"1_Dia_de_la_Madre": ("reparto", 1885), "1_Con_aporte_de_Mercado_Libre": ("reparto", 191),
+             "1_Sumate_al_Dia_de_la_Madre": ("simple", 4), "1_SEMANA_DEL_MUEBLE": ("simple", 2),
+             "1_Acelera_tus_ventas_de_stock_Full": ("simple", 3), "1_Lo_mejor_de_todos_los_dias": ("simple", 79)}
+
+
+@pytest.mark.parametrize("nombre", sorted(_ESPERADO))
+def test_campanas_reales_de_ml(nombre):
+    path = _CAMP + nombre + ".xlsx"
+    if not os.path.exists(path):
+        pytest.skip("Excel real no disponible")
+    o = open(path, "rb").read()
+    r = c.leer_promociones(o)
+    tipo, n = _ESPERADO[nombre]
+    assert r["tipo"] == tipo and len(r["filas"]) == n
+    assert r["col_editable"] == ("SELLER_PERCENTAGE" if tipo == "reparto" else "DISCOUNT_PERCENTAGE")
+    assert all(f["ORIGINAL_PRICE"] and f["SELLER_PERCENTAGE"] is not None for f in r["filas"]) and any(f["editable"] for f in r["filas"])
+    nuevo, info = c.agregar_hoja(o, "ERP Análisis", ["ITEM_ID"], [[f["ITEM_ID"]] for f in r["filas"]])
+    assert c.verificar_integridad(o, nuevo, info["hoja"])["ok"]

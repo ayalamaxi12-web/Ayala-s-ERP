@@ -53,9 +53,9 @@ def test_analizar_detecta_cuenta_completa_sku_y_calcula(cli):
 
 
 def test_simular_recalcula_con_el_porcentaje_jugado(cli):
-    fila = {"item_id": "MLA9", "sku": "SKU-1", "precio_original": 10000, "seller_pct": 10, "meli_pct": 0, "editable": True}
+    fila = {"item_id": "MLA9", "sku": "SKU-1", "precio_original": 10000, "descuento_pct": 10, "meli_pct": 0, "editable": True}
     a = cli.post("/campanas-ml/simular", json={"filas": [fila]}).json()["filas"][0]
-    b = cli.post("/campanas-ml/simular", json={"filas": [dict(fila, seller_pct=20)]}).json()["filas"][0]
+    b = cli.post("/campanas-ml/simular", json={"filas": [dict(fila, descuento_pct=20)]}).json()["filas"][0]
     assert a["precio_cliente"] == 9000 and b["precio_cliente"] == 8000
     assert b["margenes"]["contado"]["margen"] < a["margenes"]["contado"]["margen"]
     c = cli.post("/campanas-ml/simular", json={"filas": [fila], "margen_objetivo": "30", "plan_objetivo": "6"}).json()["filas"][0]
@@ -64,3 +64,27 @@ def test_simular_recalcula_con_el_porcentaje_jugado(cli):
 
 def test_simular_valida_entrada(cli):
     assert cli.post("/campanas-ml/simular", json={"filas": [], "margen_objetivo": "abc"}).status_code == 422
+
+
+def test_campana_simple_calcula_el_margen_sobre_el_descuento_total(cli):
+    from test_campanas_ml_xlsx import _ml_simple
+    r = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_simple())})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["tipo"] == "simple" and j["col_editable"] == "DISCOUNT_PERCENTAGE"
+    f = j["filas"][0]
+    assert f["seller_pct"] == 10.0 and f["meli_pct"] is None and f["meli_monto"] == 0
+    assert f["precio_vendedor"] == f["precio_cliente"] == 18000.0  # sin aporte de ML: todo del vendedor
+    assert "margen_contado_sin_aporte_ml" not in f
+    # mismo margen que una campaña con reparto de ML en 0
+    s = cli.post("/campanas-ml/simular", json={"filas": [{"item_id": "MLA9", "sku": "SKU-1", "precio_original": 20000, "descuento_pct": 10, "meli_pct": 0}]}).json()["filas"][0]
+    assert s["margenes"] == f["margenes"]
+
+
+def test_simular_juega_el_total_y_ml_mantiene_su_aporte(cli):
+    fila = {"item_id": "MLA9", "sku": "SKU-1", "precio_original": 10000, "descuento_pct": 10, "meli_pct": 0.5, "editable": True}
+    f = cli.post("/campanas-ml/simular", json={"filas": [fila]}).json()["filas"][0]
+    assert f["precio_cliente"] == 9000 and f["precio_vendedor"] == 9050 and f["seller_pct"] == 9.5 and f["descuento_total_pct"] == 10
+    # si ML informó el monto, manda sobre el %
+    g = cli.post("/campanas-ml/simular", json={"filas": [dict(fila, meli_pct=None, meli_monto=100)]}).json()["filas"][0]
+    assert g["meli_monto"] == 100 and g["seller_pct"] == 9.0 and g["precio_cliente"] == 9000

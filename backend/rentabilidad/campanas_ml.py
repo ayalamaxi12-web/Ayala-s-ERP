@@ -79,20 +79,20 @@ def pct_max_para_margen(
     original, meli_pct, objetivo, plan: str, costo: Decimal, iva: Decimal, par: motor.ParametrosMotor,
     envio: Decimal = Decimal(0),
 ) -> int | None:
-    """Mayor % ENTERO de descuento del vendedor (5–80) que deja el margen ≥ `objetivo`
-    (fracción). Supone que ML mantiene su %. Recorre todos los enteros: el margen no es
-    monótono (el costo fijo y el envío cambian por tramo de precio). None si ni el 5% alcanza."""
-    orig, mejor = _D(original), None
-    for pct in range(PCT_MIN, PCT_MAX + 1):
-        o = precios_oferta(orig, seller_pct=pct, meli_pct=meli_pct)
-        if o["precio_cliente"] <= 0:
-            break
+    """Mayor % de descuento TOTAL entero (5–80, la regla de ML es sobre el total) que deja el margen ≥
+    `objetivo` (fracción). El vendedor pone total − % de ML (supone que ML mantiene el suyo). Recorre todos los
+    enteros: el margen no es monótono (el costo fijo y el envío cambian por tramo de precio). None si ni el 5% alcanza."""
+    orig, mejor, meli = _D(original), None, _D(meli_pct or 0)
+    for total in range(PCT_MIN, PCT_MAX + 1):
+        if total < meli:  # ML ya cubre más que el total pedido
+            continue
+        o = precios_oferta(orig, seller_pct=_D(total) - meli, meli_pct=meli)
         try:
             r = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, iva, par, envio, orig)
         except (motor.ParametroFaltante, ValueError):
             continue
         if r.margen >= _D(objetivo):
-            mejor = pct
+            mejor = total
     return mejor
 
 
@@ -116,13 +116,15 @@ def analizar(
             "precio_original": _n(orig), "seller_pct": f.get("SELLER_PERCENTAGE"), "meli_pct": f.get("MELI_PERCENTAGE"),
             "seller_monto": _n(o["seller_monto"]), "meli_monto": _n(o["meli_monto"]),
             "precio_vendedor": _n(o["precio_vendedor"]), "precio_cliente": _n(o["precio_cliente"]),
-            "descuento_total_pct": f.get("DISCOUNT_PERCENTAGE"), "precio_final_ml": f.get("FINAL_PRICE"),
+            "precio_final_ml": f.get("FINAL_PRICE"),
                         "cuenta": f.get("cuenta"), "sku_origen": f.get("sku_origen"),
             "pm": None, "precio_pm": None, "costo": None, "margenes": {}, "avisos": av,
         }
-        sp = f.get("SELLER_PERCENTAGE")
-        if sp is not None and not (float(sp).is_integer() and PCT_MIN <= sp <= PCT_MAX):
-            av.append(f"ML pide % entero entre {PCT_MIN} y {PCT_MAX}: {sp}")
+        sp, mp = f.get("SELLER_PERCENTAGE"), f.get("MELI_PERCENTAGE")
+        total = f.get("DISCOUNT_PERCENTAGE") if f.get("DISCOUNT_PERCENTAGE") is not None else (None if sp is None else sp + (mp or 0))
+        r["descuento_total_pct"] = None if total is None else round(float(total), 3)
+        if total is not None and not (abs(total - round(total)) < 1e-6 and PCT_MIN <= total <= PCT_MAX):
+            av.append(f"ML pide el descuento TOTAL entero entre {PCT_MIN} y {PCT_MAX}: {total}")
         if not f.get("editable"):
             av.append("Celda no editable en ML (ya participa)")
         if not sku:
@@ -169,7 +171,7 @@ def analizar(
                     r["margen_contado_sin_aporte_ml"] = _pct(sin.margen)
                 if margen_objetivo is not None:
                     r["pct_max_para_margen"] = pct_max_para_margen(
-                        orig, f.get("MELI_PERCENTAGE") or 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio)
+                        orig, float(o["meli_monto"] / orig * 100) if o["meli_monto"] else 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio)
                 if base:
                     r["margen_a_precio_pm_contado"] = _pct(margen_oferta(base, base, "contado", costo, datos.iva_factor, par, envio).margen)
             except (motor.ParametroFaltante, ValueError) as e:

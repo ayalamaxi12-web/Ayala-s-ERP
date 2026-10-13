@@ -489,7 +489,8 @@ def _campanas_leer_sync(contenido: bytes) -> dict:
     except campanas_ml_xlsx.ExcelInvalido as e:
         raise HTTPException(status_code=422, detail=str(e))
     f = r["filas"]
-    return {"campana": r["campana"], "hojas": r["hojas"], "filas": len(f),
+    return {"campana": r["campana"], "hojas": r["hojas"], "filas": len(f), "tipo": r["tipo"],
+            "col_editable": r["col_editable"], "avisos": r["avisos"],
             "editables": sum(1 for x in f if x["editable"]),
             "con_aporte_ml": sum(1 for x in f if x.get("MELI_PERCENTAGE")),
             "sin_sku": sum(1 for x in f if not x.get("SKU")), "muestra": f[:3]}
@@ -565,7 +566,8 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
     with sesion() as db:
         r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
                                  margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
-    return {**r, "campana": leido["campana"], "avisos": avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids)}
+    return {**r, "campana": leido["campana"], "tipo": leido["tipo"], "col_editable": leido["col_editable"],
+            "avisos": leido["avisos"] + avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids)}
 
 @app.post("/campanas-ml/analizar")
 async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None,
@@ -582,17 +584,26 @@ class _SimularIn(BaseModel):
     plan_objetivo: str = "contado"
 
 def _campanas_simular_sync(body: "_SimularIn") -> dict:
-    """Recalcula filas con el % del vendedor que se está jugando. Cada fila: item_id, sku, precio_original,
-    seller_pct, meli_pct (el aporte de ML se mantiene), editable, titulo."""
+    """Recalcula filas con el descuento TOTAL que se está jugando (`descuento_pct`, entero 5–80). ML mantiene su aporte
+    (`meli_pct` / `meli_monto`) y el vendedor pone el resto. Cada fila: item_id, sku, precio_original, descuento_pct,
+    meli_pct, meli_monto, editable, titulo."""
     from rentabilidad import campanas_ml
     from rentabilidad.db import sesion
     motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
     if len(body.filas) > 3000:
         raise HTTPException(status_code=422, detail="Demasiadas filas en un pedido (máx. 3000).")
-    filas = [{"fila": f.get("fila"), "ITEM_ID": f.get("item_id"), "SKU": f.get("sku"), "TITLE": f.get("titulo"),
-              "ORIGINAL_PRICE": f.get("precio_original"), "SELLER_PERCENTAGE": f.get("seller_pct"),
-              "MELI_PERCENTAGE": f.get("meli_pct"), "editable": f.get("editable", True), "cuenta": f.get("cuenta")}
-             for f in body.filas if f.get("item_id") and f.get("precio_original")]
+    def fila(f):
+        # Lo que se juega es el descuento TOTAL (entero); ML mantiene su aporte y el vendedor pone el resto.
+        orig = f["precio_original"]
+        meli = f.get("meli_pct") or 0
+        if f.get("meli_monto"):
+            meli = f["meli_monto"] / orig * 100
+        total = f.get("descuento_pct")
+        seller = f.get("seller_pct") if total is None else total - meli
+        return {"fila": f.get("fila"), "ITEM_ID": f.get("item_id"), "SKU": f.get("sku"), "TITLE": f.get("titulo"),
+                "ORIGINAL_PRICE": orig, "SELLER_PERCENTAGE": seller, "MELI_PERCENTAGE": meli or None,
+                "DISCOUNT_PERCENTAGE": total, "editable": f.get("editable", True), "cuenta": f.get("cuenta")}
+    filas = [fila(f) for f in body.filas if f.get("item_id") and f.get("precio_original")]
     avisos = []
     tc_valor, objetivo = resolver_tc(body.tc), _campanas_objetivo(body.margen_objetivo)
     datos = datos_sku_fn(avisos)

@@ -15,13 +15,21 @@ import zipfile
 from xml.sax.saxutils import escape
 
 HOJA_PROMOCIONES = "Promociones"
-# Nombres de columna de ML (fila 1, oculta). Se buscan por nombre, nunca por posición.
+# Nombres de columna de ML (fila oculta con los nombres técnicos). Se buscan por nombre, nunca por posición.
+# Hay dos tipos de campaña: "reparto" (SELLER_* + MELI_*; se edita SELLER_PERCENTAGE) y "simple"
+# (solo DISCOUNT_PERCENTAGE, que se edita; sin aporte de ML separado).
 COLUMNAS_LECTURA = (
     "TITLE", "ITEM_ID", "SKU", "PROMO_NAME", "DATE", "ORIGINAL_PRICE", "SELLER_AMOUNT",
     "SELLER_PERCENTAGE", "MELI_AMOUNT", "MELI_PERCENTAGE", "DISCOUNT_PERCENTAGE",
-    "FINAL_PRICE", "NEW_RECEIVES", "STATUS", "ACTION", "TARGET_TYPE", "PROMO_ID",
+    "FINAL_PRICE", "NEW_RECEIVES", "STATUS", "ACTION", "TARGET_TYPE", "PROMO_ID", "PROMO_TYPE", "ERRORS",
 )
-OBLIGATORIAS = ("ITEM_ID", "ORIGINAL_PRICE", "SELLER_PERCENTAGE")
+# Las que traen TODAS las campañas (las que se conocen; si falta alguna es un aviso, no un corte).
+COMUNES = ("TITLE", "ITEM_ID", "SKU", "ORIGINAL_PRICE", "DISCOUNT_PERCENTAGE", "FINAL_PRICE", "NEW_RECEIVES",
+           "STATUS", "ACTION", "ERRORS", "PROMO_TYPE")
+# Sin estas tres no se puede calcular nada: único caso en que se corta.
+INDISPENSABLES = ("ITEM_ID", "ORIGINAL_PRICE")
+_CELESTE = "FFCADDF8"  # celda editable
+_GRIS = "FFF3F3F3"  # celda no editable (ya participa)
 
 _NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _TIPO_HOJA = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
@@ -48,9 +56,28 @@ def _num(v):
         return None
 
 
+def _celda(fila, i):
+    return fila[i] if i is not None and i < len(fila) else None
+
+
+def _color(c) -> str:
+    return (c.fill.fgColor.rgb or "").upper() if c is not None and c.fill and c.fill.fill_type else ""
+
+
+def _es_celeste(c) -> bool:
+    return _color(c) == _CELESTE
+
+
 def leer_promociones(xlsx: bytes, hoja: str = HOJA_PROMOCIONES) -> dict:
-    """Lee la hoja de ML. Devuelve {'filas': [...], 'columnas': {...}, 'campana': ...}.
-    Falla fuerte si falta la hoja o una columna obligatoria (ML cambió el formato)."""
+    """Lee la hoja de ML de cualquier tipo de campaña. Devuelve
+    {'filas', 'columnas', 'campana', 'hojas', 'tipo', 'col_editable', 'avisos'}.
+
+    - tipo = "reparto" si hay SELLER_PERCENTAGE, si no "simple".
+    - col_editable = SELLER_PERCENTAGE (reparto) o DISCOUNT_PERCENTAGE (simple).
+    - Cada fila sale con el mismo formato: en las simples SELLER_PERCENTAGE = DISCOUNT_PERCENTAGE, SELLER_AMOUNT =
+      lista − precio final y MELI_* vacío (el descuento es todo del vendedor).
+    - Solo se corta si no es un xlsx, falta la hoja, la fila de nombres o ITEM_ID / ORIGINAL_PRICE / el % de
+      descuento. Cualquier otra columna que falte es un aviso."""
     import openpyxl
 
     try:
@@ -63,35 +90,65 @@ def leer_promociones(xlsx: bytes, hoja: str = HOJA_PROMOCIONES) -> dict:
     cab = None
     for r in range(1, 11):
         vals = [c.value for c in ws[r]]
-        if "ITEM_ID" in vals:
-            cab, fila_cab = {str(v): i for i, v in enumerate(vals) if v}, r
+        if "ITEM_ID" in [str(v).strip() for v in vals if v]:
+            cab, fila_cab = {str(v).strip(): i for i, v in enumerate(vals) if v}, r
             break
     if cab is None:
         raise ExcelInvalido("No encontré la fila con los nombres de columna (ITEM_ID).")
-    faltan = [c for c in OBLIGATORIAS if c not in cab]
+    tipo = "reparto" if "SELLER_PERCENTAGE" in cab else "simple"
+    col_editable = "SELLER_PERCENTAGE" if tipo == "reparto" else "DISCOUNT_PERCENTAGE"
+    faltan = [c for c in (*INDISPENSABLES, col_editable) if c not in cab]
     if faltan:
-        raise ExcelInvalido(f"Faltan columnas obligatorias de ML: {faltan}")
-    # Primera fila de datos: la que tiene un ITEM_ID tipo MLA…
+        raise ExcelInvalido(f"Faltan columnas sin las que no se puede calcular ({tipo}): {faltan}")
+    avisos = []
+    sin = [c for c in COMUNES if c not in cab]
+    if sin:
+        avisos.append(f"Faltan columnas que traen todas las campañas (se sigue sin ellas): {', '.join(sin)}")
+    if tipo == "reparto":
+        sin = [c for c in ("SELLER_AMOUNT", "MELI_PERCENTAGE", "MELI_AMOUNT") if c not in cab]
+        if sin:
+            avisos.append(f"Campaña con reparto sin las columnas {', '.join(sin)}: se calcula con lo que haya")
     filas = []
     for r in range(fila_cab + 1, ws.max_row + 1):
         fila = [c for c in ws[r]]
-        item = fila[cab["ITEM_ID"]].value
+        item = (_celda(fila, cab["ITEM_ID"]).value if _celda(fila, cab["ITEM_ID"]) is not None else None)
         if not (isinstance(item, str) and re.match(r"^ML[A-Z]\d+$", item.strip())):
             continue
         d = {"fila": r}
         for n in COLUMNAS_LECTURA:
             if n in cab:
-                d[n] = fila[cab[n]].value
-        c_pct = fila[cab["SELLER_PERCENTAGE"]]
-        # Celda celeste = editable (ML marca así las promos donde se puede cambiar).
-        d["editable"] = bool(c_pct.fill and c_pct.fill.fill_type and (c_pct.fill.fgColor.rgb or "").upper() == "FFCADDF8")
+                c = _celda(fila, cab[n])
+                d[n] = c.value if c is not None else None
+        d["ITEM_ID"] = d["ITEM_ID"].strip()
+        d["_celeste"] = _es_celeste(_celda(fila, cab[col_editable]))
+        d["_gris"] = _color(_celda(fila, cab[col_editable])) == _GRIS
         for n in ("ORIGINAL_PRICE", "SELLER_AMOUNT", "SELLER_PERCENTAGE", "MELI_AMOUNT",
                   "MELI_PERCENTAGE", "DISCOUNT_PERCENTAGE", "FINAL_PRICE"):
             if n in d:
                 d[n] = _num(d[n])
+        if tipo == "simple":
+            d["SELLER_PERCENTAGE"] = d.get("DISCOUNT_PERCENTAGE")
+            fp, op = d.get("FINAL_PRICE"), d.get("ORIGINAL_PRICE")
+            d["SELLER_AMOUNT"] = round(op - fp, 2) if fp is not None and op is not None else None
+            d["MELI_PERCENTAGE"] = d["MELI_AMOUNT"] = None
         filas.append(d)
-    campana = filas[0].get("PROMO_NAME") if filas else None
-    return {"filas": filas, "columnas": cab, "campana": campana, "hojas": wb.sheetnames}
+    # Editable = celda celeste. Algunas campañas (ej. "Lo mejor de todos los días") pintan la columna con otro
+    # celeste (FFECF3FC) y ninguna celda con el celeste de siempre: ahí se asume editable lo que no es gris ni está
+    # participando, y se avisa.
+    if any(f["_celeste"] for f in filas):
+        for f in filas:
+            f["editable"] = f["_celeste"]
+    else:
+        if filas:
+            avisos.append("No encontré celdas celestes (editables) en la columna del descuento: se asumen editables las filas que no están grises ni participando.")
+        for f in filas:
+            part = str(f.get("STATUS") or "").lower().startswith("particip") or str(f.get("ACTION") or "").lower() == "participar"
+            f["editable"] = not part and not f["_gris"]
+    for f in filas:
+        del f["_celeste"], f["_gris"]
+    campana = next((f.get("PROMO_NAME") for f in filas if f.get("PROMO_NAME")), None)
+    return {"filas": filas, "columnas": cab, "campana": campana, "hojas": wb.sheetnames,
+            "tipo": tipo, "col_editable": col_editable, "avisos": avisos}
 
 
 # ── agregado de hoja a nivel ZIP ────────────────────────────────────────────
