@@ -489,7 +489,8 @@ def _campanas_leer_sync(contenido: bytes) -> dict:
     except campanas_ml_xlsx.ExcelInvalido as e:
         raise HTTPException(status_code=422, detail=str(e))
     f = r["filas"]
-    return {"campana": r["campana"], "hojas": r["hojas"], "filas": len(f),
+    return {"campana": r["campana"], "hojas": r["hojas"], "filas": len(f), "tipo": r["tipo"],
+            "col_editable": r["col_editable"], "avisos": r["avisos"],
             "editables": sum(1 for x in f if x["editable"]),
             "con_aporte_ml": sum(1 for x in f if x.get("MELI_PERCENTAGE")),
             "sin_sku": sum(1 for x in f if not x.get("SKU")), "muestra": f[:3]}
@@ -565,7 +566,8 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
     with sesion() as db:
         r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
                                  margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
-    return {**r, "campana": leido["campana"], "avisos": avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids)}
+    return {**r, "campana": leido["campana"], "tipo": leido["tipo"], "col_editable": leido["col_editable"],
+            "avisos": leido["avisos"] + avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids)}
 
 @app.post("/campanas-ml/analizar")
 async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None,

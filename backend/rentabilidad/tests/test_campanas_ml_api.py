@@ -64,3 +64,18 @@ def test_simular_recalcula_con_el_porcentaje_jugado(cli):
 
 def test_simular_valida_entrada(cli):
     assert cli.post("/campanas-ml/simular", json={"filas": [], "margen_objetivo": "abc"}).status_code == 422
+
+
+def test_campana_simple_calcula_el_margen_sobre_el_descuento_total(cli):
+    from test_campanas_ml_xlsx import _ml_simple
+    r = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_simple())})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["tipo"] == "simple" and j["col_editable"] == "DISCOUNT_PERCENTAGE"
+    f = j["filas"][0]
+    assert f["seller_pct"] == 10.0 and f["meli_pct"] is None and f["meli_monto"] == 0
+    assert f["precio_vendedor"] == f["precio_cliente"] == 18000.0  # sin aporte de ML: todo del vendedor
+    assert "margen_contado_sin_aporte_ml" not in f
+    # mismo margen que una campaña con reparto de ML en 0
+    s = cli.post("/campanas-ml/simular", json={"filas": [{"item_id": "MLA9", "sku": "SKU-1", "precio_original": 20000, "seller_pct": 10, "meli_pct": 0}]}).json()["filas"][0]
+    assert s["margenes"] == f["margenes"]
