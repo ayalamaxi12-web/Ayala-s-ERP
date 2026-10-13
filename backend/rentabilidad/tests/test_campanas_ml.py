@@ -191,3 +191,16 @@ def test_pct_max_es_el_total_y_el_vendedor_pone_el_resto(par):
     o = cm.precios_oferta(10000, seller_pct=con_ml - 2, meli_pct=2)
     assert cm.margen_oferta(o["precio_vendedor"], o["precio_cliente"], "contado", costo, iva, par).margen >= d("0.20")
     assert cm.pct_max_para_margen(10000, 6, d("0.20"), "contado", d("9500"), iva, par) is None
+
+
+def test_el_aporte_de_ml_es_un_monto_fijo_y_el_pct_max_lo_respeta(db_session):
+    # real (Con aporte de ML): lista 41.699, ML pone $202,35 (el 0,5% del Excel viene redondeado: es 0,4853%)
+    f = _fila(ORIGINAL_PRICE=41699.0, SELLER_PERCENTAGE=4.5, SELLER_AMOUNT=1882.6, MELI_PERCENTAGE=0.5, MELI_AMOUNT=202.35,
+              DISCOUNT_PERCENTAGE=5.0, FINAL_PRICE=39614.05)
+    r = _analizar(db_session, [f], {"PV-AB1": DatosSku(d("2"), d("1.21"), None, None, None)}, margen_objetivo=d("0.05"))["filas"][0]
+    assert r["meli_monto"] == 202.35 and r["precio_cliente"] == 39614.05
+    t = r["pct_max_para_margen"]
+    assert t is not None
+    # con ese total, ML sigue poniendo $202,35 (no el 0,5% redondeado): vendedor = total − 0,4853%
+    o = cm.precios_oferta(41699, seller_pct=t - 202.35 / 41699 * 100, meli_monto=202.35)
+    assert abs(float(o["precio_cliente"]) - 41699 * (1 - t / 100)) < 0.01

@@ -171,7 +171,7 @@ def analizar(
                     r["margen_contado_sin_aporte_ml"] = _pct(sin.margen)
                 if margen_objetivo is not None:
                     r["pct_max_para_margen"] = pct_max_para_margen(
-                        orig, f.get("MELI_PERCENTAGE") or 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio)
+                        orig, float(o["meli_monto"] / orig * 100) if o["meli_monto"] else 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio)
                 if base:
                     r["margen_a_precio_pm_contado"] = _pct(margen_oferta(base, base, "contado", costo, datos.iva_factor, par, envio).margen)
             except (motor.ParametroFaltante, ValueError) as e:
