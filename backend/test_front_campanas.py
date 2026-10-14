@@ -13,14 +13,14 @@ import paridad_margenes as pm  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
 FUNS = ('cpPctValido', 'cpMargen', 'cpModificada', 'cpClaseMargen', 'cpFiltrar', 'cpValorOrden', 'cpOrdenar', 'cpTramoFijo', 'cpMargenLocal', 'cpR2',
-        'cpRecalcular', 'cpPctMax')
+        'cpRecalcular', 'cpPctMax', 'cpDifMargenes')
 
 
 def _js(expr, datos):
     src = open(pm.INDEX, encoding='utf-8').read()
     fns = '\n'.join(pm.extraer_funcion(src, n) for n in FUNS)
-    js = "const CP_PLANES=['contado','3','6','9','12'];\n" + fns + "\nconst D=JSON.parse(process.argv[1]);console.log(JSON.stringify(" + expr + "));"
-    return json.loads(subprocess.run(['node', '-e', js, json.dumps(datos)], capture_output=True, text=True, check=True).stdout)
+    js = "const CP_PLANES=['contado','3','6','9','12'];\n" + fns + "\nconst D=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log(JSON.stringify(" + expr + "));"
+    return json.loads(subprocess.run(['node', '-e', js], input=json.dumps(datos), capture_output=True, text=True, check=True).stdout)
 
 
 def _f(fila, sku, margen, edit=True, avisos=(), pct=5, titulo='T'):
@@ -143,3 +143,35 @@ def test_pct_max_del_front_coincide_con_el_del_backend():
     T = _js('cpPctMax(D.f,D.M,"3",D.o,1500)', {'f': f, 'M': _M(), 'o': 12})
     ref = cm.pct_max_para_margen(20000, 202.35 / 20000 * 100, Decimal('0.12'), '3', Decimal(3000), Decimal('1.21'), par)
     assert T == ref
+
+
+def test_paridad_aleatoria_del_margen_local_con_el_motor():
+    """3.000 casos al azar (lista, descuento, aporte de ML, costo, IVA, cuota, envío): el navegador nunca difiere del motor en más de 0,005 pp,
+    que es el redondeo del margen a 4 decimales del motor. Igual, el valor que manda es el del backend (cpConfirmar)."""
+    import random
+    random.seed(11)
+    par, tc = pm.parametros_seed(), 1500
+    cs = []
+    for _ in range(3000):
+        lista = round(random.choice([random.uniform(3000, 16500), random.uniform(15000, 34000), random.uniform(30000, 250000)]), 2)
+        T = random.randint(5, 80)
+        meli = round(random.choice([0, 0, random.uniform(0, lista * T / 100)]), 2)
+        cs.append({'lista': lista, 'T': T, 'meli': meli, 'usd': round(random.uniform(0.5, 120), 2), 'iva': random.choice([1.21, 1.105]),
+                   'plan': random.choice(['contado', '3', '6', '9', '12']), 'envio': random.choice([0, 8500, 14000])})
+    out = _js('D.c.map(c=>{const r=cpMargenLocal({costo_usd:c.usd,costo:c.usd*D.tc,iva:c.iva,envio:c.envio},c.lista,c.meli,c.T,D.M,c.plan,D.tc);return r&&[r.margen,r.rentabilidad];})',
+              {'c': cs, 'M': _M(), 'tc': tc})
+    peor = peor_r = 0
+    for c, (mg, rent) in zip(cs, out):
+        pc = Decimal(str(c['lista'])) * (1 - Decimal(c['T']) / 100)
+        pv = pc + Decimal(str(c['meli']))
+        ref = cm.margen_oferta(pv, pc, c['plan'], Decimal(str(c['usd'])) * tc, Decimal(str(c['iva'])), par, Decimal(c['envio']), Decimal(str(c['lista'])))
+        peor, peor_r = max(peor, abs(mg - float(ref.margen) * 100)), max(peor_r, abs(rent - float(ref.rentabilidad)))
+    assert peor < 0.0051 and peor_r < 0.0051, (peor, peor_r)
+
+
+def test_diferencia_entre_dos_calculos_de_la_misma_fila():
+    a = {'margenes': {'contado': {'margen': 10.0}, '3': {'margen': 5.0}}}
+    b = {'margenes': {'contado': {'margen': 10.004}, '3': {'margen': 4.99}}}
+    assert abs(_js('cpDifMargenes(D.a,D.b)', {'a': a, 'b': b}) - 0.01) < 1e-9
+    assert _js('cpDifMargenes(D.a,D.a)', {'a': a}) == 0
+    assert _js('cpDifMargenes(D.a,D.b)', {'a': a, 'b': {'margenes': {}}}) == 999   # uno tiene margen y el otro no: es una diferencia grande

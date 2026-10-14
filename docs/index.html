@@ -761,6 +761,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-aviso" onchange="CP.page=1;cpRender()">Con avisos</label>
       <select id="cp-sort" class="fi" onchange="cpSortSel(this.value)" title="También podés hacer clic en el encabezado de cada columna"><option value="excel">Orden del Excel</option><option value="margen_asc">Menor margen primero</option><option value="margen_desc">Mayor margen primero</option><option value="sku">SKU A-Z</option><option value="col">Por columna (clic en el encabezado)</option></select>
       <span id="cp-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+      <span id="cp-confirm" style="flex-basis:100%;font-size:10px;font-family:'DM Mono',monospace"></span>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:10px;color:var(--text2)">
       <b style="color:var(--accent)">Lote</b> (sobre las filas editables filtradas):
@@ -1829,8 +1830,9 @@ function goPage(page,el){
 // ══ CAMPAÑAS ML (C2) — simulador del descuento sobre el Excel de la Central de Promociones. Solo lectura: no escribe nada en ML.
 // El backend (/campanas-ml/analizar) lee el Excel, cruza PM + costo y devuelve el margen de cada fila MÁS los parámetros del motor (`motor_ml`)
 // y el costo/IVA de cada SKU (`calc`). Con eso el margen al jugar el descuento se recalcula acá, al instante (misma cuenta que
-// motor_precios.precio_a_margen; la paridad la cubre backend/test_front_campanas.py). No hay llamadas al backend al editar.
-const CP={data:null,filas:[],base:{},orig:{},page:1,pageSize:50,cuentaManual:null,sort:{col:'excel',dir:1}};
+// motor_precios.precio_a_margen; la paridad la cubre backend/test_front_campanas.py). El valor del navegador es una VISTA PREVIA (≈): el backend
+// recalcula en segundo plano (cpConfirmar) y su valor es el que manda, el que se muestra al confirmarse y el que se exportará.
+const CP={data:null,filas:[],base:{},orig:{},page:1,pageSize:50,cuentaManual:null,sort:{col:'excel',dir:1},tmr:null,confirmando:false,otra:false,difMax:0,divergencias:0,errorConf:null};
 const CP_PLANES=['contado','3','6','9','12'];
 function cpPctValido(p){return Number.isInteger(p)&&p>=5&&p<=80;}
 function cpMargen(f,plan){const m=f.margenes&&f.margenes[plan];return m?m.margen:null;}
@@ -1880,6 +1882,8 @@ function cpMargenLocal(calc,orig,meli,T,M,plan,tc){
   return {margen:rent/n*100,rentabilidad:rent};
 }
 function cpR2(x){return Math.round(x*100)/100;}
+// Mayor diferencia de margen (en puntos) entre dos filas, plan por plan.
+function cpDifMargenes(a,b){let m=0;CP_PLANES.forEach(p=>{const u=a.margenes&&a.margenes[p],v=b.margenes&&b.margenes[p];if(u&&v)m=Math.max(m,Math.abs(u.margen-v.margen));else if(!!u!==!!v)m=Math.max(m,999);});return m;}
 function cpTcActual(){const v=parseFloat(String(qs('cp-tc').value).replace(',','.'));return v>0?v:(CP.data?CP.data.tc:0);}
 // Pone el descuento total T en la fila y recalcula todo lo que depende de él.
 function cpRecalcular(f,T,M,tc){
@@ -1893,7 +1897,7 @@ function cpRecalcular(f,T,M,tc){
   if(sm<-0.005)f.avisos.push('El aporte de ML ($'+Math.round(meli)+') supera ese descuento total: ML no lo permitiría');
   f.margenes={};
   if(f.calc&&sm>=-0.005)CP_PLANES.forEach(pl=>{const r=cpMargenLocal(f.calc,orig,meli,T,M,pl,tc);if(r)f.margenes[pl]={margen:cpR2(r.margen),rentabilidad:cpR2(r.rentabilidad)};});
-  delete f._ya;
+  f._v=(f._v||0)+1;f._conf=false;   // vista previa local: el backend la confirma enseguida
   return f;
 }
 // Mayor descuento TOTAL entero (5–80) que deja el margen de `plan` ≥ obj (%); ML mantiene su aporte. null si ni el 5% alcanza.
@@ -1902,6 +1906,31 @@ function cpPctMax(f,M,plan,obj,tc){
   const meli=f.meli_monto||0,meliPct=meli/f.precio_original*100;let mejor=null;
   for(let T=5;T<=80;T++){if(T<meliPct)continue;const r=cpMargenLocal(f.calc,f.precio_original,meli,T,M,plan,tc);if(r&&r.margen>=obj)mejor=T;}
   return mejor;
+}
+function cpTcEnvio(){const v=qs('cp-tc').value.trim().replace(',','.');return v||(CP.data?String(CP.data.tc):null);}
+function cpFilaSim(f){return {fila:f.fila,item_id:f.item_id,sku:f.sku,titulo:f.titulo,precio_original:f.precio_original,descuento_pct:f.descuento_total_pct,meli_pct:f.meli_pct,meli_monto:f.meli_monto,editable:f.editable,cuenta:f.cuenta};}
+// El backend es la fuente de verdad: recalcula en segundo plano las filas con valor local (≈) y su resultado REEMPLAZA al del navegador.
+// Si la fila se volvió a editar mientras tanto (_v distinto) no se pisa: se confirma en la pasada siguiente.
+function cpProgramarConfirmacion(){clearTimeout(CP.tmr);CP.tmr=setTimeout(cpConfirmar,600);}
+async function cpConfirmar(){
+  if(!CP.data)return;
+  if(CP.confirmando){CP.otra=true;return;}
+  const pend=CP.filas.filter(f=>f._conf===false&&f.descuento_total_pct!=null&&f.precio_original);
+  if(!pend.length){cpRender();return;}
+  CP.confirmando=true;CP.errorConf=null;cpRender();
+  try{
+    for(let i=0;i<pend.length;i+=1500){
+      const lote=pend.slice(i,i+1500),vs=lote.map(f=>f._v);
+      const d=await cpPost('/campanas-ml/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filas:lote.map(cpFilaSim),tc:cpTcEnvio()})});
+      const por={};d.filas.forEach(r=>{por[r.fila]=r;});
+      lote.forEach((f,k)=>{const r=por[f.fila];if(!r||f._v!==vs[k])return;
+        const dif=cpDifMargenes(f,r);CP.difMax=Math.max(CP.difMax,dif);if(dif>0.011){CP.divergencias++;console.warn('Campañas ML: el navegador y el backend difieren en',dif,'pp para',f.item_id);}
+        const keep={cuenta:f.cuenta,sku_origen:f.sku_origen,_v:f._v};Object.assign(f,r,keep);f._conf=true;});
+    }
+  }catch(e){CP.errorConf=e.message;}
+  CP.confirmando=false;
+  if(CP.otra){CP.otra=false;cpProgramarConfirmacion();}
+  cpRender();
 }
 function cpObj(){const v=parseFloat(String(qs('cp-obj').value).replace(',','.'));return isNaN(v)?0:v;}
 function cpPlan(){return qs('cp-plan').value;}
@@ -1920,7 +1949,7 @@ async function cpSubir(inp){
     const fd=new FormData();fd.append('archivo',file);
     const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
     CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;
-    d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);});
+    d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
     ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
@@ -1928,7 +1957,7 @@ async function cpSubir(inp){
   finally{qs('btn-cp-subir').disabled=false;}
 }
 // El TC cambió: se recalculan todas las filas (el costo en USD × TC) con su descuento actual.
-function cpOnTc(){if(!CP.data)return;const tc=cpTcActual();CP.filas.forEach(f=>{if(f.descuento_total_pct!=null&&f.calc)cpRecalcular(f,f.descuento_total_pct,CP.data.motor_ml,tc);});cpRender();}
+function cpOnTc(){if(!CP.data)return;const tc=cpTcActual();CP.filas.forEach(f=>{if(f.descuento_total_pct!=null&&f.calc)cpRecalcular(f,f.descuento_total_pct,CP.data.motor_ml,tc);});cpProgramarConfirmacion();cpRender();}
 // Descuento total de una fila: se aplica al instante, sin pedirle nada al backend.
 function cpOnPct(fila,txt){
   const f=CP.filas.find(x=>x.fila===fila);if(!f||!f.editable)return;
@@ -1937,7 +1966,7 @@ function cpOnPct(fila,txt){
   if(t!==''&&isNaN(v)){toast('Poné un número entero entre 5 y 80','error');cpRender();return;}
   if(v!==f.descuento_total_pct){
     if(!cpPctValido(v))toast('ML pide el descuento total ENTERO entre 5 y 80 (no se puede usar '+v+')','error');
-    cpRecalcular(f,v,CP.data.motor_ml,cpTcActual());
+    cpRecalcular(f,v,CP.data.motor_ml,cpTcActual());cpProgramarConfirmacion();
   }
   cpRender();
 }
@@ -1957,18 +1986,18 @@ function cpLoteFijo(){
   if(t===''||!cpPctValido(v)){toast('Poné un % entero entre 5 y 80 para el lote','error');return;}
   const fs=cpFiltradasEditables();if(!fs.length){toast('No hay filas editables con ese filtro','error');return;}
   const tc=cpTcActual();fs.forEach(f=>cpRecalcular(f,v,CP.data.motor_ml,tc));
-  qs('cp-lote-info').textContent=`${v}% puesto en ${fs.length} filas`;cpRender();
+  qs('cp-lote-info').textContent=`${v}% puesto en ${fs.length} filas`;cpProgramarConfirmacion();cpRender();
 }
 function cpLoteOriginal(){
   const fs=cpFiltradasEditables().filter(f=>cpModificada(f,CP.orig));if(!fs.length){toast('Ninguna fila filtrada está modificada','error');return;}
-  fs.forEach(f=>{const b=JSON.parse(CP.base[f.fila]);Object.keys(f).forEach(k=>delete f[k]);Object.assign(f,b);});
+  fs.forEach(f=>{const v=(f._v||0)+1,b=JSON.parse(CP.base[f.fila]);Object.keys(f).forEach(k=>delete f[k]);Object.assign(f,b,{_v:v,_conf:true});});
   qs('cp-lote-info').textContent=`${fs.length} filas vuelven a lo del Excel`;cpRender();
 }
 function cpLoteMargen(){
   const fs=cpFiltradasEditables();if(!fs.length){toast('No hay filas editables con ese filtro','error');return;}
   const M=CP.data.motor_ml,plan=cpPlan(),obj=cpObj(),tc=cpTcActual();let ok=0,no=0,sin=0;
   fs.forEach(f=>{if(!f.calc){sin++;return;}const T=cpPctMax(f,M,plan,obj,tc);if(T==null){no++;return;}cpRecalcular(f,T,M,tc);ok++;});
-  qs('cp-lote-info').textContent=`${ok} ajustadas · ${no} no llegan al ${obj}% ni con 5% (sin tocar) · ${sin} sin costo/PM`;cpRender();
+  qs('cp-lote-info').textContent=`${ok} ajustadas · ${no} no llegan al ${obj}% ni con 5% (sin tocar) · ${sin} sin costo/PM`;cpProgramarConfirmacion();cpRender();
 }
 function cpSortCol(col){CP.sort=CP.sort.col===col?{col,dir:-CP.sort.dir}:{col,dir:1};qs('cp-sort').value='col';CP.page=1;cpRender();}
 function cpSortSel(v){CP.sort=({excel:{col:'excel',dir:1},margen_asc:{col:'margen',dir:1},margen_desc:{col:'margen',dir:-1},sku:{col:'sku',dir:1}})[v]||CP.sort;CP.page=1;cpRender();}
@@ -2004,12 +2033,14 @@ function cpRender(){
     return `<tr${mod?' style="background:rgba(0,157,188,.05)"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
       +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}</td><td>${pctCel}</td>`
       +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?Math.round(f.meli_pct*1000)/1000+'%':'—'}</td>`)
-      +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
+      +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f._conf===false?' <span title="Vista previa calculada en el navegador: el backend la está confirmando" style="color:var(--yellow)">≈</span>':''}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
       +`<td style="font-family:'DM Mono',monospace">${f.precio_pm?fmt$(f.precio_pm)+(dif!=null?` <span style="font-size:9px;color:${Math.abs(dif)<=1?'var(--green)':dif<0?'var(--red)':'var(--yellow)'}">${dif>0?'+':''}${dif.toFixed(1)}%</span>`:''):'<span style="color:var(--text3)">sin PM</span>'}</td>`
       +CP_PLANES.map(mTd).join('')
       +`<td style="font-size:10px;color:var(--yellow);cursor:help" title="${acEsc(avisos.join('\n'))}">${avisos.length?'⚠ '+avisos.length:''}</td></tr>`;
   }).join('');
-  qs('cp-count').textContent=filas.length+' filas';
+  const sinConf=CP.filas.filter(f=>f._conf===false).length;
+  qs('cp-count').textContent=filas.length+' filas'+(sinConf?` · ${sinConf} ≈ sin confirmar${CP.confirmando?' (confirmando con el backend…)':''}`:'');
+  const ec=qs('cp-confirm');if(ec){ec.style.color=CP.errorConf||CP.divergencias?'var(--red)':'var(--text3)';ec.textContent=CP.errorConf?`❌ No se pudo confirmar con el backend: ${CP.errorConf}. Los valores marcados ≈ son solo una vista previa.`:CP.divergencias?`⚠ ${CP.divergencias} fila(s) difirieron entre el navegador y el backend (máx. ${CP.difMax.toFixed(3)} pp): se muestra el del backend.`:(mod&&!sinConf?`✓ Valores confirmados por el backend (diferencia máx. vs. la vista previa: ${CP.difMax.toFixed(3)} pp)`:'');}
   renderPag('cp-pag',pages,filas.length,'cpPage','cpIrPagina');
 }
 function cpIrPagina(){CP.page=S.cpPage;cpRender();}
