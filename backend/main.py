@@ -716,6 +716,31 @@ async def campanas_ml_exportar(archivo: UploadFile = File(...), payload: str = F
                              "Content-Disposition": 'attachment; filename="campana_con_ERP_Analisis.xlsx"'})
 
 # ══════════════════════════════════════════════════════
+# CALENDARIO DE CAMPAÑAS (aviso diario, lo llama n8n)
+# ══════════════════════════════════════════════════════
+
+def _campanas_calendario_sync(hoy: str | None, dias_aviso: int, con_elegibles: bool, incluir_finalizadas: bool) -> dict:
+    import campanas_calendario
+    from datetime import timedelta
+    from rentabilidad.cierre_ecom_diario import ayer_en_argentina
+    try:
+        dia = date.fromisoformat(hoy) if hoy else ayer_en_argentina() + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"hoy debe ser AAAA-MM-DD: {hoy!r}")
+    if not 0 <= dias_aviso <= 60:
+        raise HTTPException(status_code=422, detail="dias_aviso debe estar entre 0 y 60.")
+    return campanas_calendario.calendario(ml_ofertas.MLOfertasClient(), dia, dias_aviso, con_elegibles, incluir_finalizadas=incluir_finalizadas)
+
+@app.get("/campanas/calendario")
+async def campanas_calendario_endpoint(hoy: str | None = None, dias_aviso: int = 5, con_elegibles: bool = True,
+                                       incluir_finalizadas: bool = False):
+    """Aviso diario de campañas de ML (n8n). Protegido con X-ERP-Key. Consulta IT y MT, separa eventos especiales de cupones/operativas,
+    calcula los días que faltan (al límite de adhesión si lo tiene, si no al inicio), en cuántos ítems es elegible cada cuenta y marca las
+    que están a EXACTAMENTE `dias_aviso` días (5) en `a_5_dias`. La misma campaña en IT y MT sale una sola vez con las dos cuentas.
+    `hoy` (AAAA-MM-DD) permite probar con otra fecha; `con_elegibles=false` evita las ~2 llamadas por campaña."""
+    return await run_in_threadpool(_campanas_calendario_sync, hoy, dias_aviso, con_elegibles, incluir_finalizadas)
+
+# ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)
 # ══════════════════════════════════════════════════════
 

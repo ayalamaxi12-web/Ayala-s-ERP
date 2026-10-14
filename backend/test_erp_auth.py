@@ -47,6 +47,7 @@ def sin_clave(monkeypatch):
     ("GET", "/ml-proxy"),
     ("GET", "/competencia/analisis"),
     ("GET", "/competencia/publicaciones-propias"),
+    ("GET", "/campanas/calendario"),
 ])
 def test_rutas_protegidas(metodo, path):
     assert requiere_clave(metodo, path)

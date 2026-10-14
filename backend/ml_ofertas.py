@@ -324,6 +324,15 @@ class MLOfertasClient(MLFullClient):
             params = {**params, "search_after": cursor}
         return salida
 
+    def contar_items_promocion(self, promotion_id: str, promotion_type: str, cuenta: str, status: str) -> int | None:
+        """Cantidad de ítems de la cuenta en una campaña con ese estado (`candidate` = elegibles, `started` = ya aceptados),
+        leyendo `paging.total` con `limit=1` (una llamada, sin traer los ítems). None si ML no informa el total."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        params = {"promotion_type": promotion_type, "app_version": "v2", "status": status, "limit": 1}
+        d = self._get(f"https://api.mercadolibre.com/seller-promotions/promotions/{promotion_id}/items", params, headers) or {}
+        total = (d.get("paging") or {}).get("total")
+        return int(total) if total is not None else None
+
     def promociones_item(self, item_id: str, cuenta: str) -> list[dict]:
         """Todas las promociones (candidatas y activas, de cualquier tipo)
         de UNA publicación puntual -- mismo endpoint que ya usaba
