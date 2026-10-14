@@ -37,6 +37,7 @@ def cli(db_multihilo, monkeypatch):
         {"MLA1": {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": None},
          "MLA2": {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": "SKU-1"}}, []))
     monkeypatch.delenv("ERP_API_KEY", raising=False)
+    campanas_ml_cuentas.limpiar_cache()
     monkeypatch.setitem(main._CAMP_CTX, "datos", None)  # el contexto de costos se cachea 5 min: aislar cada test
     return TestClient(main.app)
 
@@ -135,3 +136,65 @@ def test_si_ml_no_responde_cae_a_la_tabla_y_avisa(cli, monkeypatch):
     j = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
     assert any("No se pudo leer la comisión real de ML" in a for a in j["avisos"])
     assert j["filas"][1]["comision_origen"] in ("categoria", "general")
+
+
+# ── C3: exportar y selector de cuenta ──
+def _hoja_erp(contenido):
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(contenido))
+    ws = wb["ERP Análisis"]
+    enc = [c.value for c in ws[1]]
+    return wb, [{n: c.value for n, c in zip(enc, fila)} for fila in ws.iter_rows(min_row=2)]
+
+
+def _payload(filas, **k):
+    import json
+    return {"payload": json.dumps({"tc": "1500", "filas": filas, **k})}
+
+
+def test_exportar_simple_agrega_la_hoja_sin_tocar_promociones(cli):
+    from test_campanas_ml_xlsx import _ml_simple
+    import zipfile
+    xl = _ml_simple()
+    fila = {"fila": 6, "item_id": "MLA10", "descuento_pct": 12, "meli_monto": 0, "cuenta": "IT", "comision": 0.15, "comision_origen": "ml", "sku": "SIL-1"}
+    r = cli.post("/campanas-ml/exportar", files={"archivo": ("a.xlsx", xl)}, data=_payload([fila]))
+    assert r.status_code == 200, r.text
+    assert '"ok": true' in r.headers["x-integridad"] and "ERP" in r.headers["content-disposition"]
+    wb, filas = _hoja_erp(r.content)
+    assert wb.sheetnames == ["Promociones", "ERP Análisis"]
+    f1, f2 = filas
+    assert f1["ITEM_ID"] == "MLA10" and f1["COLUMNA DE ML"] == "DISCOUNT_PERCENTAGE" and f1["VALOR A COPIAR"] == 12 and f1["CAMBIÓ vs EXCEL"] == "SI"
+    assert f1["PRECIO QUE PAGA EL CLIENTE"] == 17600 and f1["COMISIÓN %"] == 15.0 and f1["ORIGEN COMISIÓN"] == "ml" and f1["MARGEN CONTADO %"] is not None
+    assert f2["ITEM_ID"] == "MLA11" and f2["EDITABLE EN ML"] == "NO" and f2["VALOR A COPIAR"] == "—"            # la 2ª no se mandó: sale con lo del Excel
+    # "Promociones" idéntica byte a byte: solo se agregó una entrada y se editaron las 4 de registro
+    zo, zn = zipfile.ZipFile(io.BytesIO(xl)), zipfile.ZipFile(io.BytesIO(r.content))
+    nombre = [n for n in zo.namelist() if "worksheets/sheet" in n][0]
+    assert zo.read(nombre) == zn.read(nombre)
+
+
+def test_exportar_reparto_el_valor_a_copiar_es_el_total_menos_ml(cli):
+    xl = _ml_sintetico()
+    fila = {"fila": 6, "item_id": "MLA1", "descuento_pct": 12, "meli_monto": 0, "comision": None}
+    r = cli.post("/campanas-ml/exportar", files={"archivo": ("a.xlsx", xl)}, data=_payload([fila]))
+    assert r.status_code == 200, r.text
+    _, filas = _hoja_erp(r.content)
+    assert filas[0]["COLUMNA DE ML"] == "SELLER_PERCENTAGE" and filas[0]["VALOR A COPIAR"] == 12 and filas[0]["MONTO ALTERNATIVO $ (SELLER_AMOUNT)"] == 1200
+    assert filas[1]["EDITABLE EN ML"] == "NO" and filas[1]["% ML"] == 0.5                      # la 2ª participa con aporte de ML: no editable
+
+
+def test_exportar_rechaza_un_archivo_que_no_coincide_y_un_detalle_roto(cli):
+    xl = _ml_sintetico()
+    r = cli.post("/campanas-ml/exportar", files={"archivo": ("a.xlsx", xl)}, data=_payload([{"fila": 6, "item_id": "MLA999", "descuento_pct": 12}]))
+    assert r.status_code == 422 and "no coincide" in r.json()["detail"]
+    assert cli.post("/campanas-ml/exportar", files={"archivo": ("a.xlsx", xl)}, data={"payload": "no es json"}).status_code == 422
+    assert cli.post("/campanas-ml/exportar", files={"archivo": ("a.xlsx", b"basura")}, data=_payload([])).status_code == 422
+
+
+def test_selector_de_cuenta_manda_sobre_la_detectada_y_avisa_si_no_coincide(cli):
+    # el fixture detecta IT para las dos publicaciones; elijo MT
+    j = cli.post("/campanas-ml/analizar?cuenta=MT", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
+    assert j["cuentas"]["sugerida"] == "MT" and j["cuentas"]["elegida"] is True and [f["cuenta"] for f in j["filas"]] == ["MT", "MT"]
+    assert any("Elegiste la cuenta MT" in a and "2 publicaciones" in a for a in j["avisos"])
+    ok = cli.post("/campanas-ml/analizar?cuenta=IT", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
+    assert ok["cuentas"]["sugerida"] == "IT" and not any("Elegiste la cuenta" in a for a in ok["avisos"])
+    assert cli.post("/campanas-ml/analizar?cuenta=XX", files={"archivo": ("a.xlsx", _ml_sintetico())}).status_code == 422

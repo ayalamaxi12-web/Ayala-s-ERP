@@ -3,6 +3,7 @@
 `GET /items?ids=…` es público: devuelve `seller_id` de cualquier ítem, así que alcanza con el
 token de una cuenta. Se mapea con `ml_auth.SELLERS`. De paso trae el SKU del ítem
 (`seller_custom_field` / atributo `SELLER_SKU`) para las filas del Excel que vienen sin SKU."""
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
@@ -27,14 +28,30 @@ def _lote(ids: list[str], get_fn, headers: dict) -> dict[str, dict]:
     return out
 
 
+# Lo que ML devuelve de cada publicación (cuenta, SKU, categoría, tipo) casi no cambia: se guarda 30 min para que volver a subir el
+# mismo Excel (o uno parecido) no repita las ~100 llamadas.
+_CACHE: dict[str, tuple[float, dict]] = {}
+_TTL = 1800.0
+
+
+def limpiar_cache() -> None:
+    _CACHE.clear()
+
+
 def detectar(item_ids: list[str], get_fn: Callable | None = None, token_fn: Callable[[str], str] | None = None,
              workers: int = 6) -> tuple[dict[str, dict], list[str]]:
     """Devuelve ({item_id: {seller_id, cuenta, sku_ml}}, avisos). Un lote que falla no tira el resto."""
     get_fn, token_fn = get_fn or _get_real, token_fn or token_de
     ids = list(dict.fromkeys(i for i in item_ids if i))
     headers = {"Authorization": f"Bearer {token_fn(next(iter(SELLERS)))}"}
-    lotes = [ids[i:i + 20] for i in range(0, len(ids), 20)]
+    ahora = time.time()
     res, avisos = {}, []
+    for i in ids:
+        hit = _CACHE.get(i)
+        if hit and ahora - hit[0] < _TTL:
+            res[i] = hit[1]
+    pendientes = [i for i in ids if i not in res]
+    lotes = [pendientes[i:i + 20] for i in range(0, len(pendientes), 20)]
 
     def uno(lote):
         try:
@@ -47,6 +64,8 @@ def detectar(item_ids: list[str], get_fn: Callable | None = None, token_fn: Call
             res.update(parcial)
             if error:
                 avisos.append(f"Un lote de ítems no se pudo consultar a ML ({error})")
+    for i, info in res.items():
+        _CACHE.setdefault(i, (ahora, info))
     faltan = [i for i in ids if i not in res]
     if faltan and not avisos:
         avisos.append(f"{len(faltan)} publicaciones no respondió ML (borradas o sin acceso): sin cuenta.")

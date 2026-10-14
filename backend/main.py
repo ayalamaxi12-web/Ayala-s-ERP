@@ -2,7 +2,7 @@
 Ayala's ERP - Backend API
 """
 from pydantic import BaseModel
-from fastapi import FastAPI, BackgroundTasks, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
@@ -549,7 +549,9 @@ def _campanas_objetivo(margen_objetivo: str | None):
     except Exception:
         raise HTTPException(status_code=422, detail=f"margen_objetivo no numérico: {margen_objetivo!r}")
 
-def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None, plan_objetivo: str = "contado") -> dict:
+def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None, plan_objetivo: str = "contado",
+                            cuenta: str | None = None) -> dict:
+    from ml_auth import SELLERS
     from rentabilidad import campanas_ml
     from rentabilidad.db import sesion
     import campanas_ml_comision
@@ -560,6 +562,8 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
     except campanas_ml_xlsx.ExcelInvalido as e:
         raise HTTPException(status_code=422, detail=str(e))
     objetivo, avisos = _campanas_objetivo(margen_objetivo), []
+    if cuenta and cuenta not in SELLERS:
+        raise HTTPException(status_code=422, detail=f"Cuenta desconocida: {cuenta!r} (opciones: {list(SELLERS)})")
     filas = leido["filas"]
     ids = [f["ITEM_ID"] for f in filas]
     try:
@@ -584,27 +588,34 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
         c = comisiones_ml.get(f["ITEM_ID"])
         if c:
             f["comision_real"], f["comision_origen"] = c["pct"], "ml"
-        f["cuenta"] = d.get("cuenta")
+        f["cuenta"] = cuenta or d.get("cuenta")      # la cuenta elegida a mano manda sobre la detectada
         if not f.get("SKU") and d.get("sku_ml"):
             f["SKU"], f["sku_origen"], completados = d["sku_ml"], "ml", completados + 1
     if completados:
         avisos.append(f"{completados} filas sin SKU en el Excel se completaron con el SKU de la publicación en ML.")
+    if cuenta:
+        otras = [f["ITEM_ID"] for f in filas if (det.get(f["ITEM_ID"]) or {}).get("cuenta") not in (None, cuenta)]
+        if otras:
+            avisos.append(f"Elegiste la cuenta {cuenta}, pero {len(otras)} publicaciones son de la otra cuenta (ej. {otras[0]}): revisalas.")
     tc_valor = resolver_tc(tc)
     datos = _campanas_datos(datos_sku_fn, avisos)
     with sesion() as db:
         r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
                                  margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
+    resumen = campanas_ml_cuentas.resumen_cuentas(det, ids)
+    if cuenta:
+        resumen = {**resumen, "sugerida": cuenta, "elegida": True}
     return {**r, "campana": leido["campana"], "tipo": leido["tipo"], "col_editable": leido["col_editable"],
-            "avisos": leido["avisos"] + avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids),
+            "avisos": leido["avisos"] + avisos, "cuentas": resumen,
             "comisiones_ml": sorted({(c["categoria"], c["tipo"], float(c["pct"]) * 100) for c in comisiones_ml.values()})}
 
 @app.post("/campanas-ml/analizar")
 async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None,
-                               plan_objetivo: str = "contado"):
+                               plan_objetivo: str = "contado", cuenta: str | None = None):
     """C1/C2: cruza cada fila del Excel con el PM y el costo de Ecom, detecta la cuenta (IT/MT) por ITEM_ID
     y devuelve el margen a precio de oferta (contado/3/6/9/12) con la regla del aporte de ML. Solo lectura.
     `margen_objetivo` (en %, ej. 20) agrega el mayor % entero de descuento que lo cumple para `plan_objetivo`."""
-    return await run_in_threadpool(_campanas_analizar_sync, await archivo.read(), tc, margen_objetivo, plan_objetivo)
+    return await run_in_threadpool(_campanas_analizar_sync, await archivo.read(), tc, margen_objetivo, plan_objetivo, cuenta)
 
 class _SimularIn(BaseModel):
     filas: list[dict]
@@ -645,6 +656,64 @@ def _campanas_simular_sync(body: "_SimularIn") -> dict:
 @app.post("/campanas-ml/simular")
 async def campanas_ml_simular(body: _SimularIn):
     return await run_in_threadpool(_campanas_simular_sync, body)
+
+def _campanas_exportar_sync(contenido: bytes, payload: str) -> tuple[bytes, dict]:
+    """C3: el MISMO Excel de ML con la hoja "ERP Análisis" agregada (todas las filas, VALOR A COPIAR). Todo lo que se escribe sale del
+    análisis del backend con los descuentos que mandó la pantalla; `Promociones` no se toca."""
+    import campanas_ml_export
+    from rentabilidad import campanas_ml
+    from rentabilidad.db import sesion
+    try:
+        p = json.loads(payload)
+        enviadas = {int(f["fila"]): f for f in p["filas"]}
+    except Exception:
+        raise HTTPException(status_code=422, detail="El detalle de filas a exportar no es válido.")
+    try:
+        leido = campanas_ml_xlsx.leer_promociones(contenido)
+    except campanas_ml_xlsx.ExcelInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
+    originales = {f["fila"]: f for f in leido["filas"]}
+    filas, avisos = [], []
+    for f in leido["filas"]:
+        e = enviadas.get(f["fila"])
+        if e is not None and e.get("item_id") != f["ITEM_ID"]:
+            raise HTTPException(status_code=422, detail=f"La fila {f['fila']} no coincide con el Excel (¿es otro archivo?).")
+        orig = f["ORIGINAL_PRICE"]
+        meli = (e or {}).get("meli_monto") or f.get("MELI_AMOUNT") or 0
+        total = (e or {}).get("descuento_pct")
+        fila = dict(f)
+        if e is not None and total is not None and orig:
+            fila.update(SELLER_PERCENTAGE=total - meli / orig * 100, SELLER_AMOUNT=None, MELI_AMOUNT=meli or None,
+                        MELI_PERCENTAGE=meli / orig * 100 if meli else None, DISCOUNT_PERCENTAGE=total)
+        if e is not None:
+            fila.update(cuenta=e.get("cuenta"), comision_real=e.get("comision"), comision_origen=e.get("comision_origen"))
+            if not fila.get("SKU") and e.get("sku"):
+                fila["SKU"] = e["sku"]
+        filas.append(fila)
+    tc_valor = resolver_tc(p.get("tc"))
+    datos = _campanas_datos(datos_sku_fn, avisos)
+    with sesion() as db:
+        analisis = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha))
+    enc, cuerpo = campanas_ml_export.construir(analisis, leido["tipo"], originales)
+    try:
+        nuevo, info = campanas_ml_xlsx.agregar_hoja(contenido, campanas_ml_export.NOMBRE_HOJA, enc, cuerpo)
+    except campanas_ml_xlsx.ExcelInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return nuevo, {**info, **campanas_ml_xlsx.verificar_integridad(contenido, nuevo, info["hoja"]), "filas": len(cuerpo), "tipo": leido["tipo"]}
+
+@app.post("/campanas-ml/exportar")
+async def campanas_ml_exportar(archivo: UploadFile = File(...), payload: str = Form(...)):
+    """C3: devuelve el mismo Excel con la hoja "ERP Análisis" (columna VALOR A COPIAR). `payload` = JSON {tc, filas:[{fila,
+    item_id, descuento_pct, meli_monto, comision, comision_origen, cuenta, sku}]} con el descuento total que se jugó en cada fila."""
+    from fastapi.responses import Response
+    nuevo, rep = await run_in_threadpool(_campanas_exportar_sync, await archivo.read(), payload)
+    if not rep["ok"]:
+        raise HTTPException(status_code=500, detail=f"El Excel generado no pasó la verificación de integridad: {rep['problemas']}")
+    return Response(nuevo, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"X-Integridad": json.dumps({"ok": rep["ok"], "problemas": rep["problemas"], "filas": rep["filas"], "hoja": rep["hoja"]}),
+                             "Access-Control-Expose-Headers": "X-Integridad",
+                             "Content-Disposition": 'attachment; filename="campana_con_ERP_Analisis.xlsx"'})
 
 # ══════════════════════════════════════════════════════
 # ML VENDEDOR (scraper)

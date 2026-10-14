@@ -743,7 +743,9 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div class="section-hdr">Campañas ML — simulador de descuento <span style="font-size:10px;font-weight:400;color:var(--text3)">(sube el Excel de la campaña · calcula el margen con el aporte de ML · no escribe nada en ML)</span></div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
     <input type="file" id="cp-file" accept=".xlsx" style="display:none" onchange="cpSubir(this)">
+    <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuenta<select id="cp-cuenta-pre" class="fi" onchange="cpGuardarCuentaPre()" title="Elegila antes de subir el Excel: no depende de la detección y se acelera"><option value="">Auto (detectar)</option><option value="IT">IT</option><option value="MT">MT</option></select></span>
     <button class="btn primary" id="btn-cp-subir" onclick="qs('cp-file').click()">📂 Subir Excel de campaña</button>
+    <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Margen objetivo %<input type="text" id="cp-obj" value="20" oninput="cpRender()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuota de referencia<select id="cp-plan" class="fi" onchange="cpRender()"><option value="contado">Contado</option><option value="3">3 cuotas</option><option value="6">6 cuotas</option><option value="9">9 cuotas</option><option value="12">12 cuotas</option></select></span>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">TC:<input type="text" id="cp-tc" placeholder="BNA auto" onchange="cpOnTc()" title="Recalcula el costo de todas las filas con este TC" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
@@ -1941,17 +1943,20 @@ async function cpPost(ruta,opts){
   if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
   if(!r.ok)throw new Error(d.detail||('Error '+r.status));return d;
 }
-function cpQuery(){const p=new URLSearchParams();const tc=qs('cp-tc').value.trim();if(tc)p.set('tc',tc.replace(',','.'));const q=p.toString();return q?'?'+q:'';}
+try{const _cp=localStorage.getItem('cp_cuenta_pre');if(_cp)setTimeout(()=>{const e=qs('cp-cuenta-pre');if(e)e.value=_cp;},0);}catch(e){}
+function cpGuardarCuentaPre(){try{localStorage.setItem('cp_cuenta_pre',qs('cp-cuenta-pre').value);}catch(e){}}
+function cpCuentaPre(){return qs('cp-cuenta-pre').value;}
+function cpQuery(){const p=new URLSearchParams();const cu=cpCuentaPre();if(cu)p.set('cuenta',cu);const tc=qs('cp-tc').value.trim();if(tc)p.set('tc',tc.replace(',','.'));const q=p.toString();return q?'?'+q:'';}
 async function cpSubir(inp){
   const file=inp.files[0];inp.value='';if(!file)return;
   const st=qs('cp-status');qs('btn-cp-subir').disabled=true;st.textContent='Leyendo el Excel, cruzando con el PM y los costos y detectando la cuenta en ML (puede tardar unos segundos)...';
   try{
     const fd=new FormData();fd.append('archivo',file);
     const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
-    CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;
+    CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;CP.file=file;
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
-    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
+    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{qs('btn-cp-subir').disabled=false;}
@@ -1999,6 +2004,25 @@ function cpLoteMargen(){
   fs.forEach(f=>{if(!f.calc){sin++;return;}const T=cpPctMax(f,M,plan,obj,tc);if(T==null){no++;return;}cpRecalcular(f,T,M,tc);ok++;});
   qs('cp-lote-info').textContent=`${ok} ajustadas · ${no} no llegan al ${obj}% ni con 5% (sin tocar) · ${sin} sin costo/PM`;cpProgramarConfirmacion();cpRender();
 }
+// C3: el MISMO Excel con la hoja ERP Análisis (todas las filas + VALOR A COPIAR). Se le manda al backend el descuento total de cada fila
+// y el backend recalcula y escribe TODO (nada sale del cálculo del navegador); "Promociones" no se toca.
+async function cpExportar(){
+  if(!CP.data||!CP.file){toast('Primero subí el Excel de la campaña','error');return;}
+  const bu=getBackendUrl();if(!bu){toast('Falta la URL del backend (Configuración).','error');return;}
+  const st=qs('cp-status'),btn=qs('btn-cp-export');btn.disabled=true;st.textContent='Armando el Excel con la hoja ERP Análisis (el backend recalcula todas las filas)...';
+  try{
+    const filas=CP.filas.filter(f=>f.descuento_total_pct!=null).map(f=>({fila:f.fila,item_id:f.item_id,sku:f.sku,descuento_pct:f.descuento_total_pct,meli_monto:f.meli_monto||0,comision:f.calc?f.calc.comision:null,comision_origen:f.comision_origen,cuenta:CP.cuentaManual||f.cuenta}));
+    const fd=new FormData();fd.append('archivo',CP.file);fd.append('payload',JSON.stringify({tc:cpTcEnvio(),filas}));
+    const r=await fetch(bu.replace(/\/$/,'')+'/campanas-ml/exportar',{method:'POST',body:fd});
+    if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||('Error '+r.status));}
+    const b=await r.blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=String(CP.file.name).replace(/\.xlsx$/i,'')+'_ERP.xlsx';a.click();
+    let integ={};try{integ=JSON.parse(r.headers.get('X-Integridad')||'{}');}catch(e){}
+    st.textContent=`✓ Excel descargado: hoja "${integ.hoja||'ERP Análisis'}" con ${integ.filas||filas.length} filas · integridad ${integ.ok===false?'CON PROBLEMAS: '+(integ.problemas||[]).join('; '):'OK (Promociones sin tocar)'}. Copiá la columna VALOR A COPIAR en la columna de ML y subilo.`;
+    toast('Excel exportado con la hoja ERP Análisis');
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+  finally{btn.disabled=false;}
+}
 function cpSortCol(col){CP.sort=CP.sort.col===col?{col,dir:-CP.sort.dir}:{col,dir:1};qs('cp-sort').value='col';CP.page=1;cpRender();}
 function cpSortSel(v){CP.sort=({excel:{col:'excel',dir:1},margen_asc:{col:'margen',dir:1},margen_desc:{col:'margen',dir:-1},sku:{col:'sku',dir:1}})[v]||CP.sort;CP.page=1;cpRender();}
 function cpCuentaHtml(){
@@ -2006,7 +2030,7 @@ function cpCuentaHtml(){
   const det=Object.entries(con).map(([k,v])=>`${k==='?'?'sin dato':k}: <b>${v}</b>`).join(' · ');
   const opt=['',...(c.cuentas||['IT','MT'])].map(k=>`<option value="${k}"${(CP.cuentaManual||'')===k?' selected':''}>${k||'Auto ('+(c.sugerida||'sin detectar')+')'}</option>`).join('');
   const av=!ef?'<span style="color:var(--yellow)">⚠ No se pudo detectar la cuenta: elegila a mano.</span>':c.mixta?'<span style="color:var(--yellow)">⚠ El Excel mezcla cuentas: revisá las filas marcadas.</span>':'';
-  return `<b style="color:var(--accent)">Cuenta de la campaña:</b> <b style="font-size:13px">${ef||'—'}</b> <span style="color:var(--text3)">(detectada por ITEM_ID — ${det})</span> <span>Corregir: <select class="fi" onchange="CP.cuentaManual=this.value||null;cpRender()">${opt}</select></span> ${av}`;
+  return `<b style="color:var(--accent)">Cuenta de la campaña:</b> <b style="font-size:13px">${ef||'—'}</b> <span style="color:var(--text3)">(${c.elegida?'elegida por vos antes de subir · ITEM_ID dice':'detectada por ITEM_ID —'} ${det})</span> <span>Corregir: <select class="fi" onchange="CP.cuentaManual=this.value||null;cpRender()">${opt}</select></span> ${av}`;
 }
 function cpRender(){
   if(!CP.data)return;
