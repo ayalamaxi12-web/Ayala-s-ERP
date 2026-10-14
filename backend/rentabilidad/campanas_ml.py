@@ -31,6 +31,21 @@ AVISOS_GENERALES = [
 ]
 
 
+def comision_de(par: motor.ParametrosMotor, categoria: str | None) -> tuple[Decimal, str]:
+    """Comisión ML (fracción) de la publicación y de dónde sale: la de su categoría si está cargada en
+    `pricing_comision_categoria`, si no la general. Es la comisión ACTUAL de ML, que varía por categoría."""
+    if categoria:
+        c = par.comision_categoria.get(("ML", categoria.strip().lower()))
+        if c is not None:
+            return c, "categoria"
+    return par.valor("ML", "comision_general"), "general"
+
+
+# "Impuestos" que ML descuenta aparte en el Recibís (retenciones): 0,904% del monto (240 s/ $26.599; 321 s/ $35.589 en ventas
+# reales de SEW-MINI; idéntico en el Excel de Día de la Madre). No entra al margen (IIBB y cheque ya lo cubren): solo al Recibís.
+IMPUESTOS_ML_PCT = Decimal("0.00904")
+
+
 def dinero(v) -> float | None:
     """'$\xa06,947.91' (formato de ML) → 6947.91."""
     if v is None:
@@ -45,9 +60,9 @@ def dinero(v) -> float | None:
 
 
 def recibis(d: motor.Desglose, precio_vendedor) -> Decimal:
-    """Lo que ML llama "Recibís": el precio del vendedor menos comisión, cuotas, costo fijo y envío."""
+    """Lo que ML llama "Recibís": el precio del vendedor menos comisión, cuotas, costo fijo, envío e impuestos (0,904%)."""
     c = d.cargos
-    return _D(precio_vendedor) - c["comision"] - c["cuotas"] - c["costo_fijo"] - c["envio"]
+    return _D(precio_vendedor) - c["comision"] - c["cuotas"] - c["costo_fijo"] - c["envio"] - _D(precio_vendedor) * IMPUESTOS_ML_PCT
 
 
 def precios_oferta(original, seller_pct=None, seller_monto=None, meli_pct=None, meli_monto=None) -> dict:
@@ -62,7 +77,7 @@ def precios_oferta(original, seller_pct=None, seller_monto=None, meli_pct=None, 
 
 def margen_oferta(
     precio_vendedor, precio_cliente, plan: str, costo: Decimal, iva: Decimal, par: motor.ParametrosMotor,
-    envio: Decimal = Decimal(0), precio_lista=None,
+    envio: Decimal = Decimal(0), precio_lista=None, comision=None,
 ) -> motor.Desglose:
     """`precio_lista`: el de la publicación sin promo; define el tramo del costo fijo y
     el umbral de envío (validado contra el "Recibís" de ML)."""
@@ -71,13 +86,14 @@ def margen_oferta(
     e = motor.EntradaMotor(
         canal="ML", costo=costo, iva_factor=iva, plan=plan, envio=envio,
         precio_cliente=pc if pc != pv else None, precio_lista=pl if pl is not None and pl != pc else None,
+        comision_pct=None if comision is None else _D(comision),
     )
     return motor.precio_a_margen(pv, e, par)
 
 
 def pct_max_para_margen(
     original, meli_pct, objetivo, plan: str, costo: Decimal, iva: Decimal, par: motor.ParametrosMotor,
-    envio: Decimal = Decimal(0),
+    envio: Decimal = Decimal(0), comision=None,
 ) -> int | None:
     """Mayor % de descuento TOTAL entero (5–80, la regla de ML es sobre el total) que deja el margen ≥
     `objetivo` (fracción). El vendedor pone total − % de ML (supone que ML mantiene el suyo). Recorre todos los
@@ -88,7 +104,7 @@ def pct_max_para_margen(
             continue
         o = precios_oferta(orig, seller_pct=_D(total) - meli, meli_pct=meli)
         try:
-            r = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, iva, par, envio, orig)
+            r = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, iva, par, envio, orig, comision)
         except (motor.ParametroFaltante, ValueError):
             continue
         if r.margen >= _D(objetivo):
@@ -162,12 +178,16 @@ def analizar(
             r["descuento_que_cuadra_pct"] = _pct((orig - base) / orig)
             if o["precio_cliente"] is not None:
                 r["dif_vs_pm_pct"] = _pct((o["precio_cliente"] - base) / base)
+        comision, com_origen = comision_de(par, datos.categoria)
+        r["comision_pct"], r["comision_origen"] = round(float(comision) * 100, 3), com_origen
+        if com_origen == "general":
+            av.append("Comisión ML: la categoría %s no está cargada, se usa la general (%s%%)" % (datos.categoria or "sin categoría", r["comision_pct"]))
         tiene_costo = bool(datos.costo_usd and datos.iva_factor)
         envio = _D(envios[f["ITEM_ID"]]) if f["ITEM_ID"] in envios else Decimal(0)
         if tiene_costo:
             costo = datos.costo_usd * tc
             r["costo"] = _n(costo)
-            r["calc"] = {"costo": float(costo), "costo_usd": float(datos.costo_usd), "iva": float(datos.iva_factor), "envio": float(envio)}
+            r["calc"] = {"costo": float(costo), "costo_usd": float(datos.costo_usd), "iva": float(datos.iva_factor), "envio": float(envio), "comision": float(comision)}
         if o["precio_vendedor"] is None:
             av.append("Sin descuento cargado: no hay margen de oferta")
         elif tiene_costo:
@@ -175,7 +195,7 @@ def analizar(
                 av.append("Sin envío: el margen de esta oferta no descuenta el costo de envío")
             try:
                 for plan in PLANES:
-                    d = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, datos.iva_factor, par, envio, orig)
+                    d = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, datos.iva_factor, par, envio, orig, comision)
                     r["margenes"][plan] = {"margen": _pct(d.margen), "rentabilidad": _n(d.rentabilidad)}
                     if plan == "contado":
                         r["recibis_motor"] = _n(recibis(d, o["precio_vendedor"]))
@@ -183,13 +203,13 @@ def analizar(
                         r["recibis_ml"] = rm
                         r["recibis_dif"] = None if rm is None else round(r["recibis_motor"] - rm, 2)
                 if o["meli_monto"]:
-                    sin = margen_oferta(o["precio_cliente"], o["precio_cliente"], "contado", costo, datos.iva_factor, par, envio, orig)
+                    sin = margen_oferta(o["precio_cliente"], o["precio_cliente"], "contado", costo, datos.iva_factor, par, envio, orig, comision)
                     r["margen_contado_sin_aporte_ml"] = _pct(sin.margen)
                 if margen_objetivo is not None:
                     r["pct_max_para_margen"] = pct_max_para_margen(
-                        orig, float(o["meli_monto"] / orig * 100) if o["meli_monto"] else 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio)
+                        orig, float(o["meli_monto"] / orig * 100) if o["meli_monto"] else 0, margen_objetivo, plan_objetivo, costo, datos.iva_factor, par, envio, comision)
                 if base:
-                    r["margen_a_precio_pm_contado"] = _pct(margen_oferta(base, base, "contado", costo, datos.iva_factor, par, envio).margen)
+                    r["margen_a_precio_pm_contado"] = _pct(margen_oferta(base, base, "contado", costo, datos.iva_factor, par, envio, comision=comision).margen)
             except (motor.ParametroFaltante, ValueError) as e:
                 av.append(str(e))
         out.append(r)

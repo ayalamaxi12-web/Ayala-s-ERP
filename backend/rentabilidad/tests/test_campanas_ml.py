@@ -143,7 +143,7 @@ _RECIBIS_ML = [(10499, "9974.05", "6947.91", 60), (19459, "18486.05", "12713.59"
 def test_recibis_de_ml_es_el_motor_menos_0_904_pct_del_precio(par, lista, final, recibis, extra):
     r = cm.margen_oferta(d(final), d(final), "contado", d("1000"), d("1.21"), par, d(0), lista)
     assert abs(r.cargos["comision"] - d(final) * d("0.155")) <= d("0.01")  # la comisión NO cambia: 15,5%
-    esperado = cm.recibis(r, d(final)) - d(final) * d("0.00904") - extra
+    esperado = cm.recibis(r, d(final)) - extra   # recibis ya descuenta el 0,904% de impuestos de ML
     assert abs(float(esperado) - float(recibis)) < 0.05
 
 
@@ -164,14 +164,14 @@ def test_envio_por_umbral_de_la_lista(par):
     # fila #4: lista 34.403 (≥ 33.000) con final 32.682,85: ML cobra envío y no costo fijo
     r = cm.margen_oferta(d("32682.85"), d("32682.85"), "contado", d("1000"), d("1.21"), par, d("14265.7"), 34403)
     assert r.cargos["envio"] == d("14265.70") and r.cargos["costo_fijo"] == 0
-    assert abs(float(cm.recibis(r, d("32682.85")) ) - float(d("32682.85") - d("0.155") * d("32682.85") - d("14265.7"))) < 0.01
+    assert abs(float(cm.recibis(r, d("32682.85"))) - float(d("32682.85") * (1 - d("0.155") - cm.IMPUESTOS_ML_PCT) - d("14265.7"))) < 0.01
 
 
 def test_analizar_expone_recibis_motor_vs_ml(db_session):
     f = _fila(ORIGINAL_PRICE=10499.0, SELLER_PERCENTAGE=5.0, SELLER_AMOUNT=524.95, MELI_PERCENTAGE=None, MELI_AMOUNT=None,
               FINAL_PRICE=9974.05, NEW_RECEIVES="$\xa06,947.91")
     r = _analizar(db_session, [f], {"PV-AB1": DatosSku(d("1"), d("1.21"), None, None, None)})["filas"][0]
-    assert r["recibis_ml"] == 6947.91 and r["recibis_motor"] == 7098.07 and r["recibis_dif"] == 150.16
+    assert r["recibis_ml"] == 6947.91 and r["recibis_motor"] == 7007.9 and r["recibis_dif"] == 59.99   # los $60 del primer tramo
 
 
 def test_la_regla_de_enteros_de_ml_es_sobre_el_descuento_total_no_sobre_el_del_vendedor(db_session):
@@ -204,3 +204,22 @@ def test_el_aporte_de_ml_es_un_monto_fijo_y_el_pct_max_lo_respeta(db_session):
     # con ese total, ML sigue poniendo $202,35 (no el 0,5% redondeado): vendedor = total − 0,4853%
     o = cm.precios_oferta(41699, seller_pct=t - 202.35 / 41699 * 100, meli_monto=202.35)
     assert abs(float(o["precio_cliente"]) - 41699 * (1 - t / 100)) < 0.01
+
+
+def test_la_comision_se_toma_de_la_categoria(par):
+    """La comisión de ML varía por categoría (15,5% toners, 15% SEW-MINI): se usa la de la categoría si está cargada."""
+    assert cm.comision_de(par, "Comercial y Oficinas") == (d("0.15"), "categoria")
+    assert cm.comision_de(par, " comercial y oficinas ") == (d("0.15"), "categoria")
+    assert cm.comision_de(par, "Insumo De Impresion") == (d("0.155"), "categoria")
+    assert cm.comision_de(par, "Categoría nueva") == (d("0.155"), "general") and cm.comision_de(par, None)[1] == "general"
+
+
+def test_analizar_usa_la_comision_de_la_categoria_y_avisa_si_cae_a_la_general(db_session):
+    datos = {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Comercial y Oficinas", None)}
+    r = _analizar(db_session, [_fila()], datos)["filas"][0]
+    assert r["comision_pct"] == 15.0 and r["comision_origen"] == "categoria" and r["calc"]["comision"] == 0.15
+    assert not any("Comisión ML" in a for a in r["avisos"])
+    sin = _analizar(db_session, [_fila()], {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Rara", None)})["filas"][0]
+    assert sin["comision_pct"] == 15.5 and sin["comision_origen"] == "general" and any("Comisión ML" in a for a in sin["avisos"])
+    # con la comisión de la categoría el margen es mayor que con la general
+    assert r["margenes"]["contado"]["margen"] > sin["margenes"]["contado"]["margen"]

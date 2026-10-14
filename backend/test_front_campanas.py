@@ -92,22 +92,22 @@ CASOS = [(lista, T, meli, usd, iva, plan)
 def test_margen_local_coincide_con_el_motor():
     par = pm.parametros_seed()
     tc = 1500
-    entradas = [{'lista': l, 'T': T, 'meli': m, 'usd': u, 'iva': i, 'plan': p} for l, T, m, u, i, p in CASOS]
-    js = _js('D.c.map(c=>{const r=cpMargenLocal({costo_usd:c.usd,costo:c.usd*D.tc,iva:c.iva,envio:8500},c.lista,c.meli,c.T,D.M,c.plan,D.tc);return r&&r.margen;})',
+    entradas = [{'lista': l, 'T': T, 'meli': m, 'usd': u, 'iva': i, 'plan': p, 'com': 0.15 if l % 2 else 0.155} for l, T, m, u, i, p in CASOS]
+    js = _js('D.c.map(c=>{const r=cpMargenLocal({costo_usd:c.usd,costo:c.usd*D.tc,iva:c.iva,envio:8500,comision:c.com},c.lista,c.meli,c.T,D.M,c.plan,D.tc);return r&&r.margen;})',
              {'c': entradas, 'M': _M(), 'tc': tc})
     peor = 0
     for c, local in zip(CASOS, js):
         l, T, m, u, i, p = c
         pc = Decimal(str(l)) * (1 - Decimal(T) / 100)
         pv = pc + Decimal(str(m))
-        ref = cm.margen_oferta(pv, pc, p, Decimal(u) * tc, Decimal(str(i)), par, Decimal(8500), Decimal(str(l))).margen * 100
+        ref = cm.margen_oferta(pv, pc, p, Decimal(u) * tc, Decimal(str(i)), par, Decimal(8500), Decimal(str(l)), Decimal(str(0.15 if l % 2 else 0.155))).margen * 100
         peor = max(peor, abs(local - float(ref)))
     assert len(CASOS) > 200 and peor < 0.011, peor
 
 
 def _fila_calc(**k):
     f = {'fila': 6, 'precio_original': 20000.0, 'meli_monto': 0, 'precio_pm': 19000.0, 'descuento_total_pct': 5.0, 'avisos': ['x', 'ML pide el descuento TOTAL entero entre 5 y 80: 5.5'],
-         'calc': {'costo_usd': 2, 'costo': 3000, 'iva': 1.21, 'envio': 0}, 'margenes': {}}
+         'calc': {'costo_usd': 2, 'costo': 3000, 'iva': 1.21, 'envio': 0, 'comision': 0.15}, 'margenes': {}}
     return dict(f, **k)
 
 
@@ -141,7 +141,7 @@ def test_pct_max_del_front_coincide_con_el_del_backend():
     par = pm.parametros_seed()
     f = _fila_calc(meli_monto=202.35)
     T = _js('cpPctMax(D.f,D.M,"3",D.o,1500)', {'f': f, 'M': _M(), 'o': 12})
-    ref = cm.pct_max_para_margen(20000, 202.35 / 20000 * 100, Decimal('0.12'), '3', Decimal(3000), Decimal('1.21'), par)
+    ref = cm.pct_max_para_margen(20000, 202.35 / 20000 * 100, Decimal('0.12'), '3', Decimal(3000), Decimal('1.21'), par, comision=Decimal('0.15'))
     assert T == ref
 
 
@@ -157,14 +157,15 @@ def test_paridad_aleatoria_del_margen_local_con_el_motor():
         T = random.randint(5, 80)
         meli = round(random.choice([0, 0, random.uniform(0, lista * T / 100)]), 2)
         cs.append({'lista': lista, 'T': T, 'meli': meli, 'usd': round(random.uniform(0.5, 120), 2), 'iva': random.choice([1.21, 1.105]),
-                   'plan': random.choice(['contado', '3', '6', '9', '12']), 'envio': random.choice([0, 8500, 14000])})
-    out = _js('D.c.map(c=>{const r=cpMargenLocal({costo_usd:c.usd,costo:c.usd*D.tc,iva:c.iva,envio:c.envio},c.lista,c.meli,c.T,D.M,c.plan,D.tc);return r&&[r.margen,r.rentabilidad];})',
+                   'plan': random.choice(['contado', '3', '6', '9', '12']), 'envio': random.choice([0, 8500, 14000]),
+                   'com': random.choice([0.14, 0.144, 0.15, 0.155, 0.16])})
+    out = _js('D.c.map(c=>{const r=cpMargenLocal({costo_usd:c.usd,costo:c.usd*D.tc,iva:c.iva,envio:c.envio,comision:c.com},c.lista,c.meli,c.T,D.M,c.plan,D.tc);return r&&[r.margen,r.rentabilidad];})',
               {'c': cs, 'M': _M(), 'tc': tc})
     peor = peor_r = 0
     for c, (mg, rent) in zip(cs, out):
         pc = Decimal(str(c['lista'])) * (1 - Decimal(c['T']) / 100)
         pv = pc + Decimal(str(c['meli']))
-        ref = cm.margen_oferta(pv, pc, c['plan'], Decimal(str(c['usd'])) * tc, Decimal(str(c['iva'])), par, Decimal(c['envio']), Decimal(str(c['lista'])))
+        ref = cm.margen_oferta(pv, pc, c['plan'], Decimal(str(c['usd'])) * tc, Decimal(str(c['iva'])), par, Decimal(c['envio']), Decimal(str(c['lista'])), Decimal(str(c['com'])))
         peor, peor_r = max(peor, abs(mg - float(ref.margen) * 100)), max(peor_r, abs(rent - float(ref.rentabilidad)))
     assert peor < 0.0051 and peor_r < 0.0051, (peor, peor_r)
 
@@ -175,3 +176,30 @@ def test_diferencia_entre_dos_calculos_de_la_misma_fila():
     assert abs(_js('cpDifMargenes(D.a,D.b)', {'a': a, 'b': b}) - 0.01) < 1e-9
     assert _js('cpDifMargenes(D.a,D.a)', {'a': a}) == 0
     assert _js('cpDifMargenes(D.a,D.b)', {'a': a, 'b': {'margenes': {}}}) == 999   # uno tiene margen y el otro no: es una diferencia grande
+
+
+# ── Ventas reales de SEW-MINI ($26.599, tramo 24.000–33.000): el envío de productos < $33.000 es $0 ──
+def test_el_envio_de_productos_menores_a_33000_nunca_se_descuenta():
+    par = pm.parametros_seed()
+    for lista in (9905, 26599, 32999):
+        r = cm.margen_oferta(Decimal(lista), Decimal(lista), 'contado', Decimal(5000), Decimal('1.21'), par, Decimal(8500), Decimal(lista))
+        assert r.cargos['envio'] == 0, lista                      # aunque alguien pase un envío, por debajo del umbral no se descuenta
+    assert cm.margen_oferta(Decimal(33000), Decimal(33000), 'contado', Decimal(5000), Decimal('1.21'), par, Decimal(8500), Decimal(33000)).cargos['envio'] == 8500
+    # el navegador: mismo criterio
+    out = _js('D.l.map(l=>{const a=cpMargenLocal({costo:5000,iva:1.21,envio:8500,comision:0.155},l,0,5,D.M,"contado",1);const b=cpMargenLocal({costo:5000,iva:1.21,envio:0,comision:0.155},l,0,5,D.M,"contado",1);return a.margen-b.margen;})',
+              {'l': [9905, 26599, 32999, 33000], 'M': _M()})
+    assert out[:3] == [0, 0, 0] and out[3] < 0
+
+
+def test_desglose_de_las_dos_ventas_reales_de_sew_mini():
+    """FULL: comisión 15%, costo fijo $3.400, envío $0, impuestos $240 → recibe $18.968.
+    FLEX: comisión 15%, costo fijo $3.320, envío +$8.990 (lo paga el comprador), impuestos $321 → recibe $27.957."""
+    par, p = pm.parametros_seed(), Decimal('26599')
+    r = cm.margen_oferta(p, p, 'contado', Decimal(5000), Decimal('1.21'), par, Decimal(0), p, Decimal('0.15'))
+    assert r.cargos['comision'] == Decimal('3989.85') and r.cargos['costo_fijo'] == Decimal('3320.00') and r.cargos['envio'] == 0
+    imp = p * cm.IMPUESTOS_ML_PCT
+    assert abs(float(imp) - 240) < 1                                          # impuestos de la venta Full: 0,904% de $26.599
+    flex = p - r.cargos['comision'] - r.cargos['costo_fijo'] + Decimal(8990) - (p + Decimal(8990)) * cm.IMPUESTOS_ML_PCT
+    assert abs(float(flex) - 27957) < 1                                       # Flex cierra con el costo fijo de la tabla
+    full = p - r.cargos['comision'] - Decimal(3400) - imp
+    assert abs(float(full) - 18968) < 1.5                                     # Full cierra con 3.400: $80 más que la tabla
