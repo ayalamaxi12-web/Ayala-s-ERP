@@ -1834,11 +1834,29 @@ function goPage(page,el){
 // y el costo/IVA de cada SKU (`calc`). Con eso el margen al jugar el descuento se recalcula acá, al instante (misma cuenta que
 // motor_precios.precio_a_margen; la paridad la cubre backend/test_front_campanas.py). El valor del navegador es una VISTA PREVIA (≈): el backend
 // recalcula en segundo plano (cpConfirmar) y su valor es el que manda, el que se muestra al confirmarse y el que se exportará.
-const CP={data:null,filas:[],base:{},orig:{},page:1,pageSize:50,cuentaManual:null,sort:{col:'excel',dir:1},tmr:null,confirmando:false,otra:false,difMax:0,divergencias:0,errorConf:null};
+const CP={data:null,filas:[],base:{},orig:{},page:1,pageSize:50,cuentaManual:null,avisosAbiertos:new Set(),sort:{col:'excel',dir:1},tmr:null,confirmando:false,otra:false,difMax:0,divergencias:0,errorConf:null};
 const CP_PLANES=['contado','3','6','9','12'];
 function cpPctValido(p){return Number.isInteger(p)&&p>=5&&p<=80;}
 function cpMargen(f,plan){const m=f.margenes&&f.margenes[plan];return m?m.margen:null;}
 function cpModificada(f,orig){return orig[f.fila]!=null&&f.descuento_total_pct!==orig[f.fila];}
+// Etiqueta corta de un aviso (la que se ve en la celda ⚠); el texto completo va en el detalle (clic) y en el tooltip.
+function cpAvisoCorto(a){
+  const t=String(a||'');
+  if(t.startsWith('Envío no descontado')||t.startsWith('Sin envío'))return 'envío ≥ $33.000 no descontado';
+  if(t.startsWith('Sin SKU'))return 'sin SKU';
+  if(t.startsWith('Sin precio en el PM'))return 'sin precio en el PM';
+  if(t.startsWith('Sin costo'))return 'sin costo en Ecom';
+  if(t.startsWith('Sin alícuota'))return 'sin IVA';
+  if(t.startsWith('Sin descuento'))return 'sin descuento cargado';
+  if(t.startsWith('Comisión ML: no se pudo leer la real')&&t.includes('de la tabla'))return 'comisión de la tabla, no la real';
+  if(t.startsWith('Comisión ML'))return 'comisión general (sin dato real)';
+  if(t.startsWith('Celda no editable'))return 'ya participa (no editable)';
+  if(t.startsWith('ML pide el descuento TOTAL'))return 'descuento total no válido para ML';
+  if(t.startsWith('El aporte de ML'))return 'ML aporta más que el descuento';
+  return t.length>34?t.slice(0,32)+'…':t;
+}
+// El envío primero (es lo que más cambia el margen), después lo que impide calcularlo, y por último lo informativo.
+function cpOrdenarAvisos(av){const pri=t=>/^(Envío no descontado|Sin envío)/.test(t)?0:/^(Sin SKU|Sin precio|Sin costo|Sin alícuota|Sin descuento)/.test(t)?1:2;return av.slice().sort((x,y)=>pri(x)-pri(y));}
 function cpClaseMargen(m,obj){return m==null?'var(--text3)':m<0?'var(--red)':m<obj?'var(--yellow)':'var(--green)';}
 function cpFiltrar(filas,fl,orig){
   const q=String(fl.search||'').toLowerCase().trim();
@@ -1953,7 +1971,7 @@ async function cpSubir(inp){
   try{
     const fd=new FormData();fd.append('archivo',file);
     const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
-    CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;CP.file=file;
+    CP.avisosAbiertos=new Set();CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;CP.file=file;
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
     ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
@@ -2023,6 +2041,7 @@ async function cpExportar(){
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{btn.disabled=false;}
 }
+function cpToggleAviso(fila){if(CP.avisosAbiertos.has(fila))CP.avisosAbiertos.delete(fila);else CP.avisosAbiertos.add(fila);cpRender();}
 function cpSortCol(col){CP.sort=CP.sort.col===col?{col,dir:-CP.sort.dir}:{col,dir:1};qs('cp-sort').value='col';CP.page=1;cpRender();}
 function cpSortSel(v){CP.sort=({excel:{col:'excel',dir:1},margen_asc:{col:'margen',dir:1},margen_desc:{col:'margen',dir:-1},sku:{col:'sku',dir:1}})[v]||CP.sort;CP.page=1;cpRender();}
 function cpCuentaHtml(){
@@ -2053,14 +2072,15 @@ function cpRender(){
     const pctCel=f.editable?`<input type="text" data-fila="${f.fila}" value="${f.descuento_total_pct==null?'':f.descuento_total_pct}" onchange="cpOnPct(${f.fila},this.value)" onkeydown="cpKey(event,${f.fila})" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide el descuento total entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}${!simple&&f.seller_pct!=null?`<div style="font-size:9px;color:var(--accent)" title="Es el valor a copiar en SELLER_PERCENTAGE">vos ${Math.round(f.seller_pct*1000)/1000}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.descuento_total_pct==null?'—':f.descuento_total_pct+'%'} 🔒</span>`;
     const dif=f.precio_pm&&f.precio_cliente?((f.precio_cliente/f.precio_pm-1)*100):null;
     const cuentaChip=f.cuenta&&ef&&f.cuenta!==ef?` <span style="color:var(--yellow)" title="Esta publicación es de la cuenta ${f.cuenta}, no de ${ef}">⚠${f.cuenta}</span>`:'';
-    const avisos=f.avisos||[];
+    const avisos=cpOrdenarAvisos(f.avisos||[]);
     return `<tr${mod?' style="background:rgba(0,157,188,.05)"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
       +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}${f.comision_pct!=null?`<div style="font-size:8px;color:${f.comision_origen==='ml'?'var(--text3)':'var(--yellow)'}" title="${f.comision_origen==='ml'?'Comisión REAL de esta publicación, leída de ML (Cargo por vender)':f.comision_origen==='categoria'?'No se pudo leer la real de ML: se usa la de la categoría de la tabla (puede no coincidir)':'No se pudo leer la real de ML y la categoría no está cargada: se usa la general'}">com ${f.comision_pct}%${f.comision_origen==='ml'?' ✓ML':' (tabla)'}</div>`:''}</td><td>${pctCel}</td>`
       +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?Math.round(f.meli_pct*1000)/1000+'%':'—'}</td>`)
       +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f._conf===false?' <span title="Vista previa calculada en el navegador: el backend la está confirmando" style="color:var(--yellow)">≈</span>':''}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
       +`<td style="font-family:'DM Mono',monospace">${f.precio_pm?fmt$(f.precio_pm)+(dif!=null?` <span style="font-size:9px;color:${Math.abs(dif)<=1?'var(--green)':dif<0?'var(--red)':'var(--yellow)'}">${dif>0?'+':''}${dif.toFixed(1)}%</span>`:''):'<span style="color:var(--text3)">sin PM</span>'}</td>`
       +CP_PLANES.map(mTd).join('')
-      +`<td style="font-size:10px;color:var(--yellow);cursor:help" title="${acEsc(avisos.join('\n'))}">${avisos.length?'⚠ '+avisos.length:''}</td></tr>`;
+      +`<td style="font-size:10px;color:var(--yellow);min-width:130px">${avisos.length?`<div onclick="cpToggleAviso(${f.fila})" style="cursor:pointer" title="${acEsc(avisos.join('\n\n'))}"><b>⚠ ${avisos.length}</b> <span style="font-size:9px;color:var(--text2)">${acEsc(avisos.slice(0,2).map(cpAvisoCorto).join(' · '))}${avisos.length>2?` <span style="color:var(--text3)">+${avisos.length-2} más</span>`:''}</span> <span style="font-size:9px;color:var(--text3)">${CP.avisosAbiertos.has(f.fila)?'▲':'▼'}</span></div>`:''}</td></tr>`
+      +(avisos.length&&CP.avisosAbiertos.has(f.fila)?`<tr class="cp-avisos-row"><td colspan="13" style="background:rgba(255,209,102,.07);font-size:10px;color:var(--text2);padding:6px 12px;line-height:1.6"><b style="color:var(--yellow)">${acEsc(f.item_id)}</b> · por qué está marcada:<br>${avisos.map(a=>'• '+acEsc(a)).join('<br>')}</td></tr>`:'');
   }).join('');
   const sinConf=CP.filas.filter(f=>f._conf===false).length;
   qs('cp-count').textContent=filas.length+' filas'+(sinConf?` · ${sinConf} ≈ sin confirmar${CP.confirmando?' (confirmando con el backend…)':''}`:'');
