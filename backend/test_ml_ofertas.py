@@ -1352,3 +1352,17 @@ def test_resolver_item_para_gestion_sin_costo_tactica():
     ml = MLOfertasClient(get_fn=fake_get, token_fn=_FAKE_TOKEN_FN)
     r = resolver_item_para_gestion(ml, _CostoProviderFalso({}), _IvaProviderFalso({"SKU-X": Decimal("1.21")}), "MLA1", "IT", Decimal(1000))
     assert r["incidencia"] == "SIN_COSTO"
+
+
+def test_contar_items_promocion_lee_el_total_sin_traer_los_items():
+    llamadas = []
+
+    def get(url, params, headers):
+        llamadas.append((url, params))
+        return {"results": [{"id": "MLA1"}], "paging": {"total": 2283, "limit": 1}}
+
+    cli = MLOfertasClient(get_fn=get, token_fn=_FAKE_TOKEN_FN)
+    assert cli.contar_items_promocion("P-1", "DEAL", "IT", "candidate") == 2283
+    url, params = llamadas[0]
+    assert url.endswith("/seller-promotions/promotions/P-1/items") and params == {"promotion_type": "DEAL", "app_version": "v2", "status": "candidate", "limit": 1}
+    assert MLOfertasClient(get_fn=lambda u, p, h: {"results": []}, token_fn=_FAKE_TOKEN_FN).contar_items_promocion("P", "DEAL", "IT", "started") is None
