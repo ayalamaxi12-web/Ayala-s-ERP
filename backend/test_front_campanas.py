@@ -13,7 +13,7 @@ import paridad_margenes as pm  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
 FUNS = ('cpPctValido', 'cpMargen', 'cpModificada', 'cpClaseMargen', 'cpFiltrar', 'cpValorOrden', 'cpOrdenar', 'cpTramoFijo', 'cpMargenLocal', 'cpR2',
-        'cpRecalcular', 'cpPctMax', 'cpDifMargenes')
+        'cpRecalcular', 'cpPctMax', 'cpDifMargenes', 'cpAvisoCorto', 'cpOrdenarAvisos')
 
 
 def _js(expr, datos):
@@ -203,3 +203,24 @@ def test_desglose_de_las_dos_ventas_reales_de_sew_mini():
     assert abs(float(flex) - 27957) < 1                                       # Flex cierra con el costo fijo de la tabla
     full = p - r.cargos['comision'] - Decimal(3400) - imp
     assert abs(float(full) - 18968) < 1.5                                     # Full cierra con 3.400: $80 más que la tabla
+
+
+def test_etiqueta_corta_de_cada_aviso_que_produce_el_backend():
+    casos = {
+        "Envío no descontado: la publicación es de $33.000 o más y ML cobra el envío al vendedor; este margen NO lo descuenta": "envío ≥ $33.000 no descontado",
+        "Sin SKU: no se puede cruzar con el PM ni el costo": "sin SKU", "Sin precio en el PM": "sin precio en el PM",
+        "Sin costo vigente en Ecom": "sin costo en Ecom", "Sin alícuota de IVA": "sin IVA", "Sin descuento cargado: no hay margen de oferta": "sin descuento cargado",
+        "Comisión ML: no se pudo leer la real de la publicación; se usa la de la categoría de la tabla (15%), que puede no coincidir": "comisión de la tabla, no la real",
+        "Comisión ML: no se pudo leer la real de la publicación y la categoría X no está cargada: se usa la general (15.5%)": "comisión general (sin dato real)",
+        "Celda no editable en ML (ya participa)": "ya participa (no editable)", "ML pide el descuento TOTAL entero entre 5 y 80: 7.5": "descuento total no válido para ML",
+        "El aporte de ML ($1500) supera ese descuento total: ML no lo permitiría": "ML aporta más que el descuento",
+        "Falta el parámetro 'x' para ML (pricing_parametro).": "Falta el parámetro 'x' para ML (…",
+    }
+    for texto, corto in casos.items():
+        assert _js('cpAvisoCorto(D.t)', {'t': texto}) == corto, texto
+
+
+def test_el_envio_se_muestra_primero_entre_los_avisos():
+    av = ["Comisión ML: no se pudo leer la real...", "Sin SKU: x", "Envío no descontado: la publicación es de $33.000 o más", "Celda no editable en ML (ya participa)"]
+    orden = _js('cpOrdenarAvisos(D.a)', {'a': av})
+    assert orden[0].startswith("Envío no descontado") and orden[1].startswith("Sin SKU") and sorted(orden) == sorted(av)

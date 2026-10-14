@@ -197,7 +197,7 @@ def analizar(
             av.append("Sin descuento cargado: no hay margen de oferta")
         elif tiene_costo:
             if f["ITEM_ID"] not in envios and orig and orig >= umbral:
-                av.append("Sin envío: el margen de esta oferta no descuenta el costo de envío")
+                av.append("Envío no descontado: la publicación es de $33.000 o más y ML cobra el envío al vendedor; este margen NO lo descuenta (el envío real todavía no se trae de ML), así que sale más alto que el real")
             try:
                 for plan in PLANES:
                     d = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, datos.iva_factor, par, envio, orig, comision)

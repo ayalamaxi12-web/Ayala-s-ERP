@@ -1,6 +1,14 @@
 """Detección de cuenta IT/MT por ITEM_ID (sin red real)."""
 import campanas_ml_cuentas as cc
+import pytest
 from ml_auth import SELLERS
+
+
+@pytest.fixture(autouse=True)
+def _sin_cache():
+    cc.limpiar_cache()
+    yield
+    cc.limpiar_cache()
 
 
 def _fake(items):
@@ -42,3 +50,20 @@ def test_resumen_cuenta_sugerida_por_mayoria():
     r = cc.resumen_cuentas(det, ["A", "B", "C", "D"])
     assert r["sugerida"] == "IT" and r["mixta"] and r["conteo"] == {"IT": 2, "MT": 1, "?": 1}
     assert cc.resumen_cuentas({}, ["A"])["sugerida"] is None
+
+
+def test_la_segunda_subida_no_vuelve_a_pedirle_a_ml():
+    items = {f"MLA{i}": {"id": f"MLA{i}", "seller_id": int(SELLERS["IT"]), "category_id": "MLA1", "listing_type_id": "gold_special"} for i in range(45)}
+    llamadas = []
+
+    def get(url, params, headers):
+        llamadas.append(len(params["ids"].split(",")))
+        return [{"code": 200, "body": items[i]} for i in params["ids"].split(",")]
+
+    a, _ = cc.detectar(list(items), get, lambda c: "T")
+    b, _ = cc.detectar(list(items), get, lambda c: "T")
+    assert len(llamadas) == 3 and a == b and b["MLA7"]["category_id"] == "MLA1"      # 45 ítems = 3 lotes, solo la primera vez
+    # un ítem nuevo pide solo el lote que falta
+    items["MLA99"] = {"id": "MLA99", "seller_id": int(SELLERS["MT"])}
+    c, _ = cc.detectar(list(items), get, lambda t: "T")
+    assert llamadas[3:] == [1] and c["MLA99"]["cuenta"] == "MT"
