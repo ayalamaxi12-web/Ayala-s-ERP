@@ -218,8 +218,33 @@ def test_analizar_usa_la_comision_de_la_categoria_y_avisa_si_cae_a_la_general(db
     datos = {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Comercial y Oficinas", None)}
     r = _analizar(db_session, [_fila()], datos)["filas"][0]
     assert r["comision_pct"] == 15.0 and r["comision_origen"] == "categoria" and r["calc"]["comision"] == 0.15
-    assert not any("Comisión ML" in a for a in r["avisos"])
+    assert any("de la categoría de la tabla" in a for a in r["avisos"])        # no es la real de ML: avisa
     sin = _analizar(db_session, [_fila()], {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Rara", None)})["filas"][0]
     assert sin["comision_pct"] == 15.5 and sin["comision_origen"] == "general" and any("Comisión ML" in a for a in sin["avisos"])
     # con la comisión de la categoría el margen es mayor que con la general
     assert r["margenes"]["contado"]["margen"] > sin["margenes"]["contado"]["margen"]
+
+
+def test_la_comision_real_de_ml_manda_sobre_la_tabla(db_session):
+    """SEW-MINI: 'Textil' en la planilla, 'Electrodomésticos y Aires Ac.' en ML, 15% real. La real gana a la tabla y a la general."""
+    datos = {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Textil", None)}
+    real = _analizar(db_session, [_fila(comision_real=d("0.15"), comision_origen="ml")], datos)["filas"][0]
+    assert real["comision_pct"] == 15.0 and real["comision_origen"] == "ml" and real["calc"]["comision"] == 0.15
+    assert not any("Comisión ML" in a for a in real["avisos"])
+    tabla = _analizar(db_session, [_fila()], datos)["filas"][0]                  # sin dato real: 'Textil' no está → general 15,5%
+    assert tabla["comision_pct"] == 15.5 and tabla["comision_origen"] == "general"
+    assert real["margenes"]["contado"]["margen"] > tabla["margenes"]["contado"]["margen"]
+    assert cm.comision_de(m.cargar_parametros(db_session, HOY), "Textil", d("0.15")) == (d("0.15"), "ml")
+
+
+def test_electrodomesticos_quedo_en_15_con_vigencia_nueva(db_session, par):
+    """Corrección con la venta real de SEW-MINI: fila nueva con vigencia, la de 14% queda en el historial."""
+    from rentabilidad.motor_precios import cargar_parametros
+    assert par.comision_categoria[("ML", "electrodomesticos")] == d("0.14")                        # antes de la vigencia
+    assert cargar_parametros(db_session, date(2026, 10, 14)).comision_categoria[("ML", "electrodomesticos")] == d("0.15")
+    from rentabilidad.models import PricingComisionCategoria as C
+    filas = db_session.query(C).filter(C.categoria == "Electrodomesticos").all()
+    assert sorted(f.pct for f in filas) == [d("0.14"), d("0.15")]
+    from rentabilidad import seed
+    seed.seed(db_session)       # idempotente: no duplica el ajuste
+    assert db_session.query(C).filter(C.categoria == "Electrodomesticos").count() == 2

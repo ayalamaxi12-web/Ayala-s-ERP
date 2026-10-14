@@ -10,7 +10,7 @@ from typing import Callable
 from ml_auth import SELLERS, token_de
 from ml_full import _get_real, _sku_de_item
 
-_CAMPOS = "id,seller_id,seller_custom_field,attributes"
+_CAMPOS = "id,seller_id,seller_custom_field,attributes,category_id,listing_type_id"
 _POR_SELLER = {v: k for k, v in SELLERS.items()}
 
 
@@ -22,7 +22,8 @@ def _lote(ids: list[str], get_fn, headers: dict) -> dict[str, dict]:
         if not cuerpo or not cuerpo.get("id"):
             continue
         sid = str(cuerpo["seller_id"]) if cuerpo.get("seller_id") is not None else None
-        out[cuerpo["id"]] = {"seller_id": sid, "cuenta": _POR_SELLER.get(sid), "sku_ml": _sku_de_item(cuerpo)}
+        out[cuerpo["id"]] = {"seller_id": sid, "cuenta": _POR_SELLER.get(sid), "sku_ml": _sku_de_item(cuerpo),
+                             "category_id": cuerpo.get("category_id"), "listing_type_id": cuerpo.get("listing_type_id")}
     return out
 
 

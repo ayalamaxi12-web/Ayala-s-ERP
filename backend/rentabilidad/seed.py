@@ -137,6 +137,13 @@ PRICING_COMISION_ML = [
     ("Electrodomesticos", "0.14"), ("Seguridad", "0.14"),
 ]
 
+# Correcciones de la tabla de comisión por categoría: filas NUEVAS con vigencia (la tabla no se pisa). Se cargan una sola vez,
+# también en una base que ya tiene la tabla (producción).
+PRICING_COMISION_AJUSTES = [
+    ("Electrodomesticos", "0.15", date(2026, 10, 14),
+     "venta real SEW-MINI (Maxx, 2026-10-14): Cargo por vender 15% en Electrodomésticos y Aires Ac.; la tabla traía 14%"),
+]
+
 PRICING_CUOTAS = [
     ("ML", "reducida", "0.05"), ("ML", "3", "0.089"), ("ML", "6", "0.134"), ("ML", "9", "0.178"), ("ML", "12", "0.216"),
     ("WEB", "2", "0.03"), ("WEB", "3", "0.034"), ("WEB", "6", "0.079"), ("WEB", "9", "0.126"),
@@ -175,6 +182,11 @@ def seed_pricing(db: Session) -> None:
     if db.query(PricingComisionCategoria).first() is None:
         for categoria, pct in PRICING_COMISION_ML:
             db.add(PricingComisionCategoria(canal="ML", categoria=categoria, pct=Decimal(pct), origen=_ORIGEN_ML, **_PRICING_ALTA))
+    ya = {(c.canal, c.categoria.strip().lower(), c.vigente_desde) for c in db.query(PricingComisionCategoria).all()}
+    for categoria, pct, desde, motivo in PRICING_COMISION_AJUSTES:
+        if ("ML", categoria.strip().lower(), desde) not in ya:
+            db.add(PricingComisionCategoria(canal="ML", categoria=categoria, pct=Decimal(pct), origen=motivo, vigente_desde=desde,
+                                            cargado_por="Maxx — venta real de ML"))
     if db.query(PricingCuotas).first() is None:
         for canal, plan, pct in PRICING_CUOTAS:
             db.add(PricingCuotas(canal=canal, plan=plan, pct=Decimal(pct), **_PRICING_ALTA))

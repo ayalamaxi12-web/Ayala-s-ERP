@@ -31,9 +31,12 @@ AVISOS_GENERALES = [
 ]
 
 
-def comision_de(par: motor.ParametrosMotor, categoria: str | None) -> tuple[Decimal, str]:
-    """Comisión ML (fracción) de la publicación y de dónde sale: la de su categoría si está cargada en
-    `pricing_comision_categoria`, si no la general. Es la comisión ACTUAL de ML, que varía por categoría."""
+def comision_de(par: motor.ParametrosMotor, categoria: str | None, real=None, origen_real: str = "ml") -> tuple[Decimal, str]:
+    """Comisión ML (fracción) de la publicación y de dónde sale, en este orden: la REAL leída de ML para esa publicación
+    (`real`), la de su categoría en `pricing_comision_categoria` (las categorías internas no siempre coinciden con las de ML:
+    es un respaldo), o la general."""
+    if real is not None:
+        return _D(real), origen_real
     if categoria:
         c = par.comision_categoria.get(("ML", categoria.strip().lower()))
         if c is not None:
@@ -178,10 +181,12 @@ def analizar(
             r["descuento_que_cuadra_pct"] = _pct((orig - base) / orig)
             if o["precio_cliente"] is not None:
                 r["dif_vs_pm_pct"] = _pct((o["precio_cliente"] - base) / base)
-        comision, com_origen = comision_de(par, datos.categoria)
+        comision, com_origen = comision_de(par, datos.categoria, f.get("comision_real"), f.get("comision_origen") or "ml")
         r["comision_pct"], r["comision_origen"] = round(float(comision) * 100, 3), com_origen
         if com_origen == "general":
-            av.append("Comisión ML: la categoría %s no está cargada, se usa la general (%s%%)" % (datos.categoria or "sin categoría", r["comision_pct"]))
+            av.append("Comisión ML: no se pudo leer la real de la publicación y la categoría %s no está cargada: se usa la general (%s%%)" % (datos.categoria or "sin categoría", r["comision_pct"]))
+        elif com_origen == "categoria":
+            av.append("Comisión ML: no se pudo leer la real de la publicación; se usa la de la categoría de la tabla (%s%%), que puede no coincidir" % r["comision_pct"])
         tiene_costo = bool(datos.costo_usd and datos.iva_factor)
         envio = _D(envios[f["ITEM_ID"]]) if f["ITEM_ID"] in envios else Decimal(0)
         if tiene_costo:

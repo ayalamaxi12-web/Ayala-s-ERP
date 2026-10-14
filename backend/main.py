@@ -552,6 +552,7 @@ def _campanas_objetivo(margen_objetivo: str | None):
 def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None, plan_objetivo: str = "contado") -> dict:
     from rentabilidad import campanas_ml
     from rentabilidad.db import sesion
+    import campanas_ml_comision
     import campanas_ml_cuentas
     motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
     try:
@@ -567,9 +568,22 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
     except Exception as e:  # sin token / ML caído: se sigue sin cuenta
         det = {}
         avisos.append(f"No se pudo detectar la cuenta ni completar SKUs desde ML ({type(e).__name__}: {e}).")
+    # Comisión REAL de cada publicación (Cargo por vender), por par categoría/tipo de ML; si falla, tabla por categoría.
+    comisiones_ml: dict = {}
+    try:
+        comisiones_ml, av = campanas_ml_comision.comisiones(
+            {f["ITEM_ID"]: {"category_id": (det.get(f["ITEM_ID"]) or {}).get("category_id"),
+                            "listing_type_id": (det.get(f["ITEM_ID"]) or {}).get("listing_type_id"),
+                            "precio": f.get("ORIGINAL_PRICE")} for f in filas})
+        avisos += av
+    except Exception as e:  # noqa: BLE001
+        avisos.append(f"No se pudo leer la comisión real de ML ({type(e).__name__}: {e}): se usa la tabla por categoría.")
     completados = 0
     for f in filas:
         d = det.get(f["ITEM_ID"]) or {}
+        c = comisiones_ml.get(f["ITEM_ID"])
+        if c:
+            f["comision_real"], f["comision_origen"] = c["pct"], "ml"
         f["cuenta"] = d.get("cuenta")
         if not f.get("SKU") and d.get("sku_ml"):
             f["SKU"], f["sku_origen"], completados = d["sku_ml"], "ml", completados + 1
@@ -581,7 +595,8 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
         r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
                                  margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
     return {**r, "campana": leido["campana"], "tipo": leido["tipo"], "col_editable": leido["col_editable"],
-            "avisos": leido["avisos"] + avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids)}
+            "avisos": leido["avisos"] + avisos, "cuentas": campanas_ml_cuentas.resumen_cuentas(det, ids),
+            "comisiones_ml": sorted({(c["categoria"], c["tipo"], float(c["pct"]) * 100) for c in comisiones_ml.values()})}
 
 @app.post("/campanas-ml/analizar")
 async def campanas_ml_analizar(archivo: UploadFile = File(...), tc: str | None = None, margen_objetivo: str | None = None,
@@ -616,7 +631,8 @@ def _campanas_simular_sync(body: "_SimularIn") -> dict:
         seller = f.get("seller_pct") if total is None else total - meli
         return {"fila": f.get("fila"), "ITEM_ID": f.get("item_id"), "SKU": f.get("sku"), "TITLE": f.get("titulo"),
                 "ORIGINAL_PRICE": orig, "SELLER_PERCENTAGE": seller, "MELI_PERCENTAGE": meli or None,
-                "DISCOUNT_PERCENTAGE": total, "editable": f.get("editable", True), "cuenta": f.get("cuenta")}
+                "DISCOUNT_PERCENTAGE": total, "editable": f.get("editable", True), "cuenta": f.get("cuenta"),
+                "comision_real": f.get("comision"), "comision_origen": f.get("comision_origen")}
     filas = [fila(f) for f in body.filas if f.get("item_id") and f.get("precio_original")]
     avisos = []
     tc_valor, objetivo = resolver_tc(body.tc), _campanas_objetivo(body.margen_objetivo)
