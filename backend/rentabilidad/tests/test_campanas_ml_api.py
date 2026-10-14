@@ -37,6 +37,7 @@ def cli(db_multihilo, monkeypatch):
         {"MLA1": {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": None},
          "MLA2": {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": "SKU-1"}}, []))
     monkeypatch.delenv("ERP_API_KEY", raising=False)
+    monkeypatch.setitem(main._CAMP_CTX, "datos", None)  # el contexto de costos se cachea 5 min: aislar cada test
     return TestClient(main.app)
 
 
@@ -88,3 +89,22 @@ def test_simular_juega_el_total_y_ml_mantiene_su_aporte(cli):
     # si ML informó el monto, manda sobre el %
     g = cli.post("/campanas-ml/simular", json={"filas": [dict(fila, meli_pct=None, meli_monto=100)]}).json()["filas"][0]
     assert g["meli_monto"] == 100 and g["seller_pct"] == 9.0 and g["precio_cliente"] == 9000
+
+
+def test_el_contexto_de_costos_se_arma_una_vez_y_se_reutiliza(cli, monkeypatch):
+    from rentabilidad import api
+    llamadas = []
+    monkeypatch.setattr(api, "_datos_sku_fn", lambda avisos: (llamadas.append(1), avisos.append("aviso de carga"),
+                                                              (lambda sku: DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None)))[2])
+    fila = {"item_id": "MLA9", "sku": "SKU-1", "precio_original": 10000, "descuento_pct": 10, "meli_pct": 0, "editable": True}
+    a = cli.post("/campanas-ml/simular", json={"filas": [fila]}).json()
+    b = cli.post("/campanas-ml/simular", json={"filas": [fila]}).json()
+    assert len(llamadas) == 1 and a["avisos"] == b["avisos"] == ["aviso de carga"]
+
+
+def test_analizar_devuelve_los_parametros_y_el_costo_para_recalcular_en_la_pantalla(cli):
+    j = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
+    m = j["motor_ml"]
+    assert m["comision"] == 0.155 and m["umbral_envio"] == 33000 and m["cuotas"]["contado"] == 0 and m["cuotas"]["3"] > 0
+    assert m["tramos_costo_fijo"][0] == {"desde": 0.0, "hasta": 16000.0, "valor": 1330.0}
+    assert j["filas"][1]["calc"] == {"costo": 3000.0, "costo_usd": 2.0, "iva": 1.21, "envio": 0.0}

@@ -96,6 +96,19 @@ def pct_max_para_margen(
     return mejor
 
 
+def params_front(par: motor.ParametrosMotor) -> dict:
+    """Los parámetros del motor para ML, para que la pantalla recalcule el margen al instante al jugar el
+    descuento (misma cuenta que `margen_oferta`; la paridad la cubre test_front_campanas)."""
+    return {
+        "comision": float(par.valor("ML", "comision_general")), "iva_cargos": float(par.valor("ML", "iva_cargos")),
+        "iibb": float(par.valor("ML", "iibb")), "cheque": float(par.valor("ML", "imp_cheque")),
+        "umbral_envio": float(par.valor("ML", "umbral_envio_gratis")),
+        "tramos_costo_fijo": [{"desde": float(t["desde"]), "hasta": None if t["hasta"] is None else float(t["hasta"]),
+                               "valor": float(t["valor"])} for t in motor.tramos_costo_fijo_ml(par)],
+        "cuotas": {pl: float(par.cuota("ML", pl)) for pl in PLANES},
+    }
+
+
 def analizar(
     db: Session, filas: list[dict], fecha: date, tc: Decimal, datos_fn, par: motor.ParametrosMotor,
     envios: dict[str, Decimal] | None = None, margen_objetivo: Decimal | None = None, plan_objetivo: str = "contado",
@@ -149,13 +162,16 @@ def analizar(
             r["descuento_que_cuadra_pct"] = _pct((orig - base) / orig)
             if o["precio_cliente"] is not None:
                 r["dif_vs_pm_pct"] = _pct((o["precio_cliente"] - base) / base)
-        if o["precio_vendedor"] is None:
-            av.append("Sin descuento cargado: no hay margen de oferta")
-        elif datos.costo_usd and datos.iva_factor:
+        tiene_costo = bool(datos.costo_usd and datos.iva_factor)
+        envio = _D(envios[f["ITEM_ID"]]) if f["ITEM_ID"] in envios else Decimal(0)
+        if tiene_costo:
             costo = datos.costo_usd * tc
             r["costo"] = _n(costo)
-            envio = _D(envios[f["ITEM_ID"]]) if f["ITEM_ID"] in envios else Decimal(0)
-            if f["ITEM_ID"] not in envios and o["precio_cliente"] >= umbral:
+            r["calc"] = {"costo": float(costo), "costo_usd": float(datos.costo_usd), "iva": float(datos.iva_factor), "envio": float(envio)}
+        if o["precio_vendedor"] is None:
+            av.append("Sin descuento cargado: no hay margen de oferta")
+        elif tiene_costo:
+            if f["ITEM_ID"] not in envios and orig and orig >= umbral:
                 av.append("Sin envío: el margen de esta oferta no descuenta el costo de envío")
             try:
                 for plan in PLANES:
@@ -179,7 +195,7 @@ def analizar(
         out.append(r)
     con_margen = [x for x in out if x["margenes"]]
     return {
-        "fecha": fecha.isoformat(), "tc": float(tc), "planes": list(PLANES), "avisos_generales": AVISOS_GENERALES,
+        "fecha": fecha.isoformat(), "tc": float(tc), "planes": list(PLANES), "avisos_generales": AVISOS_GENERALES, "motor_ml": params_front(par),
         "resumen": {
             "filas": len(out), "con_margen": len(con_margen),
             "sin_sku": sum(1 for x in out if not x["sku"]),
