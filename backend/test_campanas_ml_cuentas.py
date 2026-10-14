@@ -17,7 +17,7 @@ def test_detecta_cuenta_y_sku_de_ml():
              "MLA2": {"id": "MLA2", "seller_id": int(SELLERS["MT"]), "attributes": [{"id": "SELLER_SKU", "value_name": "SKU-B"}]},
              "MLA3": {"id": "MLA3", "seller_id": 999}}
     det, av = cc.detectar(["MLA1", "MLA2", "MLA3", "MLA4", "MLA1"], _fake(items), lambda c: "T")
-    assert det["MLA1"] == {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": "SKU-A"}
+    assert det["MLA1"] == {"seller_id": SELLERS["IT"], "cuenta": "IT", "sku_ml": "SKU-A", "category_id": None, "listing_type_id": None}
     assert det["MLA2"]["cuenta"] == "MT" and det["MLA2"]["sku_ml"] == "SKU-B"
     assert det["MLA3"]["cuenta"] is None and "MLA4" not in det
     assert any("1 publicaciones" in a for a in av)

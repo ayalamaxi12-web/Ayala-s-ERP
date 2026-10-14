@@ -107,4 +107,31 @@ def test_analizar_devuelve_los_parametros_y_el_costo_para_recalcular_en_la_panta
     m = j["motor_ml"]
     assert m["comision"] == 0.155 and m["umbral_envio"] == 33000 and m["cuotas"]["contado"] == 0 and m["cuotas"]["3"] > 0
     assert m["tramos_costo_fijo"][0] == {"desde": 0.0, "hasta": 16000.0, "valor": 1330.0}
-    assert j["filas"][1]["calc"] == {"costo": 3000.0, "costo_usd": 2.0, "iva": 1.21, "envio": 0.0}
+    assert j["filas"][1]["calc"] == {"costo": 3000.0, "costo_usd": 2.0, "iva": 1.21, "envio": 0.0, "comision": 0.155}
+
+
+def test_analizar_lee_la_comision_real_de_ml_y_simular_respeta_la_que_manda_la_pantalla(cli, monkeypatch):
+    import campanas_ml_comision
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", lambda items: (
+        {i: {"pct": d("0.15"), "categoria": "MLA-X", "tipo": "gold_special", "raw": {}} for i in items}, []))
+    j = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
+    f = j["filas"][1]
+    assert f["comision_pct"] == 15.0 and f["comision_origen"] == "ml" and f["calc"]["comision"] == 0.15
+    assert j["comisiones_ml"] == [["MLA-X", "gold_special", 15.0]]
+    # la pantalla manda la comisión que usó en la vista previa: el backend confirma con ESA, no con la tabla
+    fila = {"item_id": "MLA9", "sku": "SKU-1", "precio_original": 10000, "descuento_pct": 10, "meli_pct": 0, "editable": True}
+    a = cli.post("/campanas-ml/simular", json={"filas": [dict(fila, comision=0.15, comision_origen="ml")]}).json()["filas"][0]
+    b = cli.post("/campanas-ml/simular", json={"filas": [fila]}).json()["filas"][0]
+    assert a["comision_pct"] == 15.0 and a["comision_origen"] == "ml" and b["comision_pct"] == 15.5
+    assert a["margenes"]["contado"]["margen"] > b["margenes"]["contado"]["margen"]
+
+
+def test_si_ml_no_responde_cae_a_la_tabla_y_avisa(cli, monkeypatch):
+    import campanas_ml_comision
+
+    def boom(items):
+        raise RuntimeError("sin red")
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", boom)
+    j = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
+    assert any("No se pudo leer la comisión real de ML" in a for a in j["avisos"])
+    assert j["filas"][1]["comision_origen"] in ("categoria", "general")

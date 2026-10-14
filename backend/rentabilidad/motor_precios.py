@@ -156,6 +156,9 @@ class EntradaMotor:
     # envío por el precio de la publicación, no por el rebajado (validado con 5 filas
     # del Excel de Día de la Madre, 2026-10-14). None = el mismo precio de la cuenta.
     precio_lista: Decimal | None = None
+    # Comisión ML como fracción (0.15) cuando se conoce la REAL de la publicación (por categoría o leída de ML).
+    # None = la general de `pricing_parametro` (15,5%). La comisión varía por categoría: 15,5% toners, 15% SEW-MINI.
+    comision_pct: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -198,7 +201,7 @@ def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor, p_lista: Deci
         # Criterio de margen §2: comisión ML 15,5% ÚNICO por ahora. La tabla
         # por categoría (`par.comision_categoria`, pricing_comision_categoria)
         # queda cargada y sin usar: es el futuro (comisión real por categoría).
-        comision = par.valor(canal, "comision_general")
+        comision = e.comision_pct if e.comision_pct is not None else par.valor(canal, "comision_general")
         fijo = e.costo_fijo_ml if e.costo_fijo_ml is not None else (par.tramo("ml_costo_fijo", p_lista) or Decimal(0))
         envio = e.envio if p_lista >= par.valor(canal, "umbral_envio_gratis") else Decimal(0)
         return _Estructura(
