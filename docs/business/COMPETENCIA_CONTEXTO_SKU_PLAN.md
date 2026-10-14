@@ -14,3 +14,13 @@ Sub-etapas (cada una con el OK de Maxx):
 
 ## Por qué el precio de ML no se trae para todos a la vez
 Cada publicación pide su propia consulta de promociones (1 llamada) y un SKU puede tener hasta ~6 publicaciones por cuenta. Para el catálogo completo son miles de llamadas (minutos u horas, con riesgo de 429): solo se justifica por SKU o por página.
+
+## Estado: E1 construida (stock + ventas desde los Sheets)
+
+- Se leen en el navegador (API key de Sheets) la pestaña `Global` (E/F/G) y `conjunto` (AY/AZ/BA/BB + BC). Datos no en vivo; se cachean 10 min en la sesión y hay botón ↻.
+- Madre → variante: el SKU de la pantalla se busca como madre (suma de sus variantes; filas repetidas no suman dos veces); si no está, como variante; también sin el prefijo `pv-`.
+- Máximo mensual (BC) del madre = suma de los máximos de cada variante (es un tope, no el máximo de la suma).
+- Pantalla: chips bajo el SKU `📦 total (~N d) · 🛒 30d: N`; clic abre el desglose (Táctica/Ecom/Total, 7/30/90/180, ritmo diario, días de stock y tabla por variante). Amarillo si alcanza para menos de 15 días, rojo si el total es 0.
+- Filtro "Ocultar sin stock" (solo cuando G = 0; un SKU que no está en el Sheet no se oculta) y orden "Más vendidos (30 d)".
+- Si cambia el encabezado de una columna esperada, se lee igual y aparece un ⚠ con el aviso.
+- Tests: `backend/test_front_contexto_sku.py`. Pendiente: E2 (precio real ML al abrir el SKU).
