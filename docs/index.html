@@ -2697,7 +2697,7 @@ let intelComercialLoaded=false;
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
 // (igual que Competidores) y el margen sale de compMargenAt (paridad con el motor: backend/scripts/paridad_margenes.py). Convive con los módulos viejos.
-const AC={ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[]};
+const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[]};
 function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Nuestro precio "comparable" contra una publicación por `c` unidades: precio × c (+ envío desde el umbral), igual que Competidores ("Mi Precio = PM×Cant+Envío").
 function acComparable(X,c,ctx){const t=(X||0)*(c>0?c:1);return t>=ctx.umbral?t+ctx.envio:t;}
@@ -3054,9 +3054,9 @@ function acCtxEstado(){
 function acCtxDe(f){if(!AC.ctx)return null;return acCtxBuscar(AC.ctx,f.sku);}
 function acCtxFn(){return AC.ctx?(sku=>{const r=acCtxBuscar(AC.ctx,sku);return r?r.e:null;}):null;}
 function acCtxChips(f){
-  if(!AC.ctx)return AC.ctxCargando?'<div class="ac-ctx" style="color:var(--text3)">leyendo stock y ventas…</div>':'';
   const r=acCtxDe(f),ab=!!(AC.ctxAbierto&&AC.ctxAbierto[f.key]);
-  if(!r)return `<div class="ac-ctx" style="color:var(--text3)" title="Este SKU no está en los Sheets de stock ni de ventas">📦 — · 🛒 —</div>`;
+  if(!r){const t=AC.ctx?'Este SKU no está en los Sheets de stock ni de ventas':AC.ctxCargando?'Leyendo stock y ventas...':'Stock y ventas no cargados (falta la API key de Sheets o falló la lectura)';
+    return `<div class="ac-ctx" onclick="acCtxToggle('${acEsc(f.key)}')" style="cursor:pointer;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:3px" title="${t}">${AC.ctxCargando&&!AC.ctx?'leyendo…':'📦 — · 🛒 —'}${acMlChip(f)} <span>${ab?'▾':'▸'}</span></div>`;}
   const s=acCtxResumen(r.e),col=s.sinStock?'var(--red)':s.bajo?'var(--yellow)':'var(--text2)';
   const stock=s.total==null?'📦 —':`📦 <b>${fmtN(s.total)}</b>${s.sinStock?' sin stock':s.dias!=null?` <span style="font-size:9px">(~${Math.round(s.dias)} d)</span>`:''}`;
   const ven=s.v30==null?'🛒 —':`🛒 30d: <b>${fmtN(s.v30)}</b>`;
@@ -3065,7 +3065,7 @@ function acCtxChips(f){
 }
 function acCtxToggle(key){AC.ctxAbierto=AC.ctxAbierto||{};AC.ctxAbierto[key]=!AC.ctxAbierto[key];if(AC.ctxAbierto[key]&&typeof acMlCargar==='function')acMlCargar(key);acRender();}
 function acCtxDetalleHtml(f){
-  const r=acCtxDe(f);if(!r)return `<div style="color:var(--text3)">${acEsc(f.sku)} no está en los Sheets de stock/ventas (revisá que el SKU coincida con la columna A).</div>`;
+  const r=acCtxDe(f);if(!r)return `<div style="display:flex;gap:28px;flex-wrap:wrap;font-size:11px;color:var(--text2)"><div style="flex-basis:100%;color:var(--text3)">${acEsc(f.sku)}: sin datos de stock/ventas (${AC.ctx?'no está en los Sheets: revisá que el SKU coincida con la columna A':'no se cargaron los Sheets'}).</div>${acMlDetalleHtml(f)}</div>`;
   const e=r.e,s=acCtxResumen(e),n=(x)=>x==null?'—':fmtN(x);
   const hdr=t=>`<div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:2px 0 4px">${t}</div>`;
   const fila=(a,b)=>`<tr><td style="color:var(--text3);padding:1px 10px 1px 0">${a}</td><td style="font-family:'DM Mono',monospace">${b}</td></tr>`;
@@ -3076,8 +3076,53 @@ function acCtxDetalleHtml(f){
   return `<div style="display:flex;gap:28px;flex-wrap:wrap;font-size:11px;color:var(--text2)">${via}<div>${hdr('Stock (Sheet, no en vivo)')}${stock}</div><div>${hdr('Ventas')}${ven}</div>${acMlDetalleHtml(f)}${vars}</div>`;
 }
 function acCtxFilaHtml(f){return AC.ctxAbierto&&AC.ctxAbierto[f.key]?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:8px 14px;border-bottom:1px solid var(--border)">${acCtxDetalleHtml(f)}</td></tr>`:'';}
-function acMlChip(f){return '';}
-function acMlDetalleHtml(f){return '';}
+// ── Precio real en ML (E2): al abrir el desglose de un SKU se pide GET /competencia/precio-ml (≈1 llamada a ML por publicación activa; el backend lo cachea 5 min).
+// Distinto del PM: el chip marca "≠ PM" cuando el precio real de alguna publicación activa se aparta más del 1% del precio ML del PM.
+const AC_ML_TOL_PM=0.01;
+function acMlPrecioPM(sku){const p=(S.pmData||{})[normSku(sku||'')];return p&&p.ml>0?p.ml:null;}
+// Resumen puro (testeable): activas = publicaciones activas con precio; dif = desvío relativo máximo contra el PM.
+function acMlResumen(pubs,pm){
+  const act=(pubs||[]).filter(p=>p.estado==='active'&&p.precio_real>0);
+  if(!act.length)return {act:[],min:null,max:null,dif:null,distinto:false};
+  const pr=act.map(p=>p.precio_real),mn=Math.min(...pr),mx=Math.max(...pr);
+  const dif=pm?Math.max(...pr.map(x=>Math.abs(x-pm)/pm)):null;
+  return {act,min:mn,max:mx,dif,distinto:dif!=null&&dif>AC_ML_TOL_PM};
+}
+async function acMlCargar(key,refrescar){
+  const f=(AC.filas||[]).find(x=>x.key===key);if(!f)return;AC.ml=AC.ml||{};
+  const m=AC.ml[key];if(m&&(m.cargando||(m.data&&!refrescar&&Date.now()-m.en<300000)))return;
+  const bu=getBackendUrl();if(!bu){AC.ml[key]={error:'Falta la URL del backend'};acRender();return;}
+  AC.ml[key]={cargando:true};acRender();
+  try{
+    const r=await fetch(`${bu}/competencia/precio-ml?sku=${encodeURIComponent(f.sku)}${refrescar?'&refrescar=true':''}`);
+    const d=await r.json().catch(()=>({}));
+    if(r.status===401)throw new Error('Clave del backend inválida o ausente');
+    if(!r.ok)throw new Error(d.detail||('status '+r.status));
+    AC.ml[key]={data:d,en:Date.now()};
+  }catch(e){AC.ml[key]={error:String(e.message||e)};}
+  acRender();
+}
+function acMlChip(f){
+  const m=(AC.ml||{})[f.key];if(!m)return '';
+  if(m.cargando)return ' · <span style="color:var(--text3)">ML …</span>';
+  if(m.error)return ' · <span style="color:var(--red)" title="'+acEsc(m.error)+'">ML ❌</span>';
+  const r=acMlResumen(m.data.publicaciones,acMlPrecioPM(f.sku));
+  if(!r.act.length)return ' · <span style="color:var(--text3)" title="Sin publicaciones activas de este SKU en IT/MT">ML —</span>';
+  const p=r.min===r.max?'$'+fmtN(Math.round(r.min)):'$'+fmtN(Math.round(r.min))+'–'+fmtN(Math.round(r.max));
+  return ` · <span style="color:${r.distinto?'var(--yellow)':'var(--text2)'}" title="${r.distinto?'El precio real en ML se aparta más del 1% del precio ML del PM':'Precio real en ML (con la oferta aplicada)'}">ML <b>${p}</b>${r.distinto?' ≠PM':''}</span>`;
+}
+function acMlDetalleHtml(f){
+  const m=(AC.ml||{})[f.key],hdr='<div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:2px 0 4px">Mis publicaciones en ML (precio real)</div>';
+  if(!m||m.cargando)return `<div style="flex-basis:100%">${hdr}<span style="color:var(--text3)">leyendo precios en ML…</span></div>`;
+  if(m.error)return `<div style="flex-basis:100%">${hdr}<span style="color:var(--red)">❌ ${acEsc(m.error)}</span> <button class="btn-xs" onclick="acMlCargar('${acEsc(f.key)}',true)">Reintentar</button></div>`;
+  const d=m.data,pm=acMlPrecioPM(f.sku),$=v=>v==null?'—':'$'+fmtN(Math.round(v));
+  const filas=(d.publicaciones||[]).map(p=>{
+    const dp=pm&&p.precio_real?(p.precio_real-pm)/pm*100:null,mal=dp!=null&&Math.abs(dp)>AC_ML_TOL_PM*100&&p.estado==='active';
+    return `<tr style="font-family:'DM Mono',monospace"><td style="padding-right:8px"><a href="${acEsc(p.permalink||'#')}" target="_blank" rel="noopener" style="color:var(--accent)">${acEsc(p.item_id)}</a></td><td>${acEsc(p.cuenta)}</td><td>${p.estado==='active'?'activa':acEsc(p.estado)}</td><td style="text-align:right"><b>${$(p.precio_real)}</b></td><td style="text-align:right;color:var(--text3)">${p.campana?'<s>'+$(p.precio_tachado)+'</s>':''}</td><td style="padding-left:8px">${p.campana?acEsc(p.campana.nombre||p.campana.tipo):''}</td><td style="text-align:right">${p.stock==null?'—':fmtN(p.stock)}</td><td style="text-align:right;color:${mal?'var(--yellow)':'var(--text3)'}">${dp==null?'':(dp>0?'+':'')+dp.toFixed(1)+'%'}</td></tr>`;}).join('');
+  const t=filas?`<table style="font-size:10px"><tr style="color:var(--text3)"><td>Publicación</td><td>Cuenta</td><td>Estado</td><td>Precio real</td><td>Tachado</td><td>Campaña</td><td>Stock ML</td><td>vs PM${pm?' ('+$(pm)+')':''}</td></tr>${filas}</table>`:'<span style="color:var(--text3)">Este SKU no tiene publicaciones propias en IT ni MT.</span>';
+  const av=(d.errores||[]).length?`<div style="color:var(--yellow);font-size:10px">⚠ ${acEsc(d.errores.map(e=>(e.cuenta?e.cuenta+': ':'')+e.error).join(' · '))}</div>`:'';
+  return `<div style="flex-basis:100%">${hdr}${t}${av}<div style="font-size:9px;color:var(--text3);margin-top:3px">Leído de ML hace ${Math.round((Date.now()-m.en)/60000)} min (caché 5 min) <button class="btn-xs" onclick="acMlCargar('${acEsc(f.key)}',true)">↻</button>${pm?'':' · sin precio ML en el PM para comparar'}</div></div>`;
+}
 
 async function acCargar(refrescar){
   const st=qs('ac-status'),bu=getBackendUrl();

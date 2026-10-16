@@ -24,3 +24,13 @@ Cada publicación pide su propia consulta de promociones (1 llamada) y un SKU pu
 - Filtro "Ocultar sin stock" (solo cuando G = 0; un SKU que no está en el Sheet no se oculta) y orden "Más vendidos (30 d)".
 - Si cambia el encabezado de una columna esperada, se lee igual y aparece un ⚠ con el aviso.
 - Tests: `backend/test_front_contexto_sku.py`. Pendiente: E2 (precio real ML al abrir el SKU).
+
+## Estado: E2 construida (precio real en ML por SKU, al abrirlo)
+
+- Backend: `GET /competencia/precio-ml?sku=` (protegido con X-ERP-Key, caché de 5 min por SKU, `refrescar=true` la saltea). Busca NUESTRAS publicaciones del SKU en IT y MT (`publicaciones_por_sku`) y, por cada publicación **activa**, lee sus promociones: el precio real es el de la promoción `started` de menor precio (mismo criterio que `ayala_core.resolver_precio_real`); sin promoción vale el precio de lista. Devuelve también el tachado, el nombre de la campaña (cruzado con `promociones_seller`, una vez por cuenta), estado y stock en ML. Las pausadas/cerradas no consultan promociones. Un resultado con errores no se cachea.
+- Costo: ~1 llamada a ML por publicación activa (+1 por cuenta para los nombres), solo al abrir el desglose de ese SKU.
+- Front: al abrir un SKU aparece en el chip `ML $30.000` (o rango si hay varias activas con precios distintos) y la sección "Mis publicaciones en ML (precio real)" con tabla (publicación, cuenta, estado, precio real, tachado, campaña, stock ML, % vs PM) y botón ↻. Chip amarillo `≠PM` cuando el precio real de alguna activa se aparta más del 1% del precio ML del PM.
+- Si ML falla, se ve el error con botón Reintentar; el SKU sigue mostrando stock/ventas.
+- No verificado contra la API real de ML (sin credenciales en el contenedor): la forma de `seller-promotions/items/{id}` (`status`, `price`, `original_price`, `promotion_id`) sigue los supuestos ya usados en Ofertas ML.
+- Tests: `backend/test_competencia_publicaciones.py` (precio real, caché) y `backend/test_front_contexto_sku.py` (resumen ≠PM).
+- E3 (botón "cargar precios ML de esta página") queda sin hacer, solo si lo pedís.

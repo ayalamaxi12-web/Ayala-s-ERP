@@ -74,3 +74,15 @@ def test_filtro_sin_stock_y_orden_por_ventas():
 const filas=['SEW-MINI','AGOTADO','NOEXISTE','MADRE-X'].map(s=>({sku:s,key:s,_hayCambio:true,_ganan:true}));
 console.log(JSON.stringify({o:acOrdenar(filas,'ventas30',fn).map(f=>f.sku)}));"""
     assert js(cuerpo, {'s': STOCK, 'v': VENTAS})['o'][:2] == ['SEW-MINI', 'MADRE-X']       # 24 > 5; los sin dato de ventas van al final
+
+
+def test_resumen_precio_ml_marca_distinto_del_pm():
+    src = open(INDEX, encoding='utf-8').read()
+    cod = 'const AC_ML_TOL_PM=0.01;\n' + extraer_funcion(src, 'acMlResumen') + """
+const P=(e,p)=>({estado:e,precio_real:p});
+console.log(JSON.stringify([acMlResumen([P('active',21000),P('paused',5)],21000),acMlResumen([P('active',21000),P('active',22000)],21000),acMlResumen([P('paused',1)],21000),acMlResumen([P('active',20000)],null)]));"""
+    a, b, c, d = json.loads(subprocess.run(['node', '-e', cod], capture_output=True, text=True, check=True).stdout)
+    assert a['distinto'] is False and a['min'] == a['max'] == 21000          # la pausada no cuenta
+    assert b['distinto'] is True and b['min'] == 21000 and b['max'] == 22000 and round(b['dif'], 3) == 0.048
+    assert c['act'] == [] and c['distinto'] is False
+    assert d['dif'] is None and d['distinto'] is False                       # sin PM no se puede comparar

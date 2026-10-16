@@ -2332,6 +2332,16 @@ async def competencia_publicaciones_propias(sku: str):
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.get("/competencia/precio-ml")
+async def competencia_precio_ml(sku: str, refrescar: bool = False):
+    """Precio REAL (con la oferta aplicada) de NUESTRAS publicaciones de ML de un SKU, por cuenta. Solo lectura; X-ERP-Key; caché de 5 min por SKU."""
+    import competencia_publicaciones
+    try:
+        return await run_in_threadpool(competencia_publicaciones.precio_real_cacheado, sku, refrescar)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/competencia/migracion/run")
 async def competencia_migracion_run(request: Request):
     """Body: {"ejecutar": false|true, "plan_hash": "<hash del dry-run aprobado>"}. Sin `ejecutar` = dry-run."""
