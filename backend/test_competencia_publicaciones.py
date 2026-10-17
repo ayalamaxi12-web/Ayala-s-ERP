@@ -53,3 +53,64 @@ def test_sku_sin_publicaciones_y_sku_vacio():
     assert cp.publicaciones_por_sku("NO-EXISTE", cliente({"IT": [], "MT": [], "items": {}})) == {"sku": "NO-EXISTE", "publicaciones": [], "errores": []}
     with pytest.raises(ValueError):
         cp.publicaciones_por_sku("  ")
+
+
+# ── precio real (E2) ──
+from ml_ofertas import MLOfertasClient
+
+
+def cliente_ofertas(promos, fallar_promos=()):
+    llamadas = []
+
+    def get(url, params, headers):
+        llamadas.append(url)
+        if url.endswith("/items/search"):
+            return {"results": R["IT"] if "115764017" in url else R["MT"]}
+        if "/seller-promotions/items/" in url:
+            i = url.rsplit("/", 1)[1]
+            if i in fallar_promos:
+                raise RuntimeError("500")
+            return promos.get(i, [])
+        if "/seller-promotions/users/" in url:
+            return {"results": [{"id": "C1", "name": "Hot Sale"}]}
+        ids = params["ids"].split(",")
+        return [{"code": 200, "body": R["items"][i]} for i in ids if i in R["items"]]
+    c = MLOfertasClient(get_fn=get, token_fn=lambda cuenta: "T-" + cuenta)
+    c.llamadas = llamadas
+    return c
+
+
+def test_precio_real_usa_la_promocion_activa_y_el_precio_de_lista_es_el_tachado():
+    c = cliente_ofertas({"MLA1": [{"type": "SELLER_CAMPAIGN", "promotion_id": "C1", "status": "started", "price": 21000, "original_price": 24990},
+                                  {"type": "DEAL", "status": "candidate", "price": 15000}]})
+    r = cp.precio_real_por_sku("PV-100", c)
+    a, b = r["publicaciones"]
+    assert (a["item_id"], a["precio_real"], a["precio_tachado"], a["precio_lista"]) == ("MLA1", 21000.0, 24990.0, 24990.0)
+    assert a["campana"] == {"nombre": "Hot Sale", "tipo": "SELLER_CAMPAIGN"}
+    assert b["item_id"] == "MLA3" and b["precio_real"] == 25500.0 and b["campana"] is None          # pausada: no se consultan promociones
+    assert not any(u.endswith("/MLA3") for u in c.llamadas if "seller-promotions/items" in u)
+
+
+def test_sin_promocion_el_precio_real_es_el_de_lista_y_error_de_promos_se_avisa():
+    r = cp.precio_real_por_sku("PV-100", cliente_ofertas({}))
+    assert r["publicaciones"][0]["precio_real"] == 24990.0 and r["publicaciones"][0]["campana"] is None
+    r = cp.precio_real_por_sku("PV-100", cliente_ofertas({}, fallar_promos=("MLA1",)))
+    assert r["publicaciones"][0]["precio_real"] == 24990.0 and "MLA1" in r["errores"][0]["error"]
+
+
+def test_cache_5_min_y_no_cachea_con_errores():
+    cp._cache_precio.clear()
+    c = cliente_ofertas({})
+    t = [1000.0]
+    cp.precio_real_cacheado("PV-100", cliente=c, ahora=lambda: t[0])
+    n = len(c.llamadas)
+    cp.precio_real_cacheado("PV-100", cliente=c, ahora=lambda: t[0] + 10)
+    assert len(c.llamadas) == n                                              # cache
+    cp.precio_real_cacheado("PV-100", cliente=c, ahora=lambda: t[0] + 400)
+    assert len(c.llamadas) > n                                               # venció
+    cp._cache_precio.clear()
+    e = cliente_ofertas({}, fallar_promos=("MLA1",))
+    cp.precio_real_cacheado("PV-100", cliente=e, ahora=lambda: t[0]); m = len(e.llamadas)
+    cp.precio_real_cacheado("PV-100", cliente=e, ahora=lambda: t[0] + 1)
+    assert len(e.llamadas) > m
+    cp._cache_precio.clear()
