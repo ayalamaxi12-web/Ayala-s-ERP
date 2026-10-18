@@ -275,6 +275,11 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   </div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-section">
+    <div class="sidebar-section-label">🛍️ Compras</div>
+    <div class="sidebar-item" data-page="proyeccion" onclick="goPage('proyeccion',this)"><span class="icon">📅</span> Proyección 2027</div>
+  </div>
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section">
     <div class="sidebar-section-label">🚚 Distribución</div>
     <div class="sidebar-item" data-page="distribucion" onclick="goPage('distribucion',this)"><span class="icon">🚚</span> Distribuidores</div>
   </div>
@@ -1013,6 +1018,12 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 </div>
 
 <!-- CONFIG -->
+<div id="page-proyeccion" class="page">
+  <div class="section-hdr">Proyección de compras e inversión 2027</div>
+  <div class="card" style="border-left:3px solid var(--accent3)"><b>Solo lectura.</b> Este tablero no escribe nada en Mercado Libre, Ecom ni Táctica: muestra el último snapshot cargado en el backend. <b>Los datos están incompletos</b> (mercadería en tránsito, caja inicial y gastos operativos todavía no están cargados): leé el aviso rojo del tablero antes de decidir compras.
+    <div style="margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="proy-status" style="color:var(--text2);font-size:12px">Sin cargar</span><button class="btn btn-secondary" onclick="proyeccionCargar(true)">↻ Recargar</button></div></div>
+  <div id="proy-root"></div>
+</div>
 <div id="page-config" class="page">
   <div class="section-hdr">Configuración</div>
   <div class="grid-2">
@@ -1603,6 +1614,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
     <div id="ac-mla-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"></div>
   </div>
 </div>
+<script src="proyeccion_dashboard.js"></script>
 <script>
 const S={
   mlToken:'',mlToken2:'',mlSellerId:'',mlSellerId2:'',sheetsKey:'',ecomCookie:'',ecomEmail:'',
@@ -1655,7 +1667,7 @@ let vivoSalesData=[],vivoFilters={},vivoCompare={},dashChartsVivo={};
 let ventasTab='hist';
 let histSkus=[],histAllData={},histDataParsed={};
 let cobrData=[],brData=[];
-let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;
+let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;let proyLoaded=false;
 
 // ── UTILS ──
 function qs(id){return document.getElementById(id);}
@@ -1815,6 +1827,7 @@ function goPage(page,el){
   if(['competidores','analisis-competencia','campanas-ml','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
+  if(page==='proyeccion'&&!proyLoaded)proyeccionCargar();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
   if(page==='brasil'&&!brLoaded)loadBrasil();
   if(page==='verificar-ecom')renderEcom();
@@ -1829,6 +1842,25 @@ function goPage(page,el){
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarTablasML().then(()=>{if(ofmResult)ofmRender();});}
   if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
   if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
+}
+
+// ══ PROYECCIÓN 2027 — tablero SOLO LECTURA (proyeccion_dashboard.js). Los datos salen del backend (GET /proyeccion-2027/dashboard, exige X-ERP-Key: el wrapper
+// de fetch ya la agrega); no se commitean al repo ni a docs/. El componente no escribe nada en ningún canal.
+async function proyeccionCargar(forzar){
+  const st=qs('proy-status'),root=qs('proy-root'),bu=getBackendUrl();
+  if(!bu){st.textContent='⚠ Falta la URL del backend (Configuración).';return;}
+  if(typeof ProyeccionDashboard==='undefined'){st.textContent='⚠ No se cargó proyeccion_dashboard.js.';return;}
+  st.textContent='Cargando…';
+  try{
+    const r=await fetch(bu+'/proyeccion-2027/dashboard',{cache:'no-store',signal:AbortSignal.timeout(60000)});
+    if(r.status===401)throw new Error('clave del backend faltante o incorrecta (Configuración)');
+    if(r.status===404)throw new Error('todavía no hay un snapshot cargado en el backend');
+    if(r.status===503)throw new Error('el backend no tiene ERP_API_KEY definida: no sirve estos datos');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const ver=r.headers.get('X-Proyeccion-Version'),d=await r.json();
+    ProyeccionDashboard.mount(root,d,{theme:'dark'});
+    proyLoaded=true;st.textContent='● Versión '+(ver||'?')+' · generada '+((d.meta||{}).generado||'?');
+  }catch(e){root.innerHTML='';st.textContent='❌ '+e.message;proyLoaded=false;}
 }
 
 // ══ CAMPAÑAS ML (C2) — simulador del descuento sobre el Excel de la Central de Promociones. Solo lectura: no escribe nada en ML.

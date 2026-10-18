@@ -23,6 +23,7 @@ from rentabilidad.adapters import CostoVigenteProvider, IvaProvider
 from rentabilidad import costos_ecom
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
+from proyeccion_snapshot import router as proyeccion_router
 
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 # Orden: el último en agregarse es el más externo. CORS va por fuera de la clave
@@ -33,8 +34,9 @@ app.add_middleware(ClaveERPMiddleware)
 # Ojo: CORS solo frena a otros sitios web, no a curl -- la protección real es
 # la clave X-ERP-Key (erp_auth.py).
 _CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "https://ayalamaxi12-web.github.io").split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Proyeccion-Version"])
 app.include_router(rentabilidad_router)
+app.include_router(proyeccion_router)
 
 
 # Starlette no agrega los headers de CORSMiddleware a una excepción que se
