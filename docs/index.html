@@ -1020,8 +1020,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 <!-- CONFIG -->
 <div id="page-proyeccion" class="page">
   <div class="section-hdr">Proyección de compras e inversión 2027</div>
-  <div class="card" style="border-left:3px solid var(--accent3)"><b>Solo lectura.</b> Este tablero no escribe nada en Mercado Libre, Ecom ni Táctica: muestra el último snapshot cargado en el backend. <b>Los datos están incompletos</b> (mercadería en tránsito, caja inicial y gastos operativos todavía no están cargados): leé el aviso rojo del tablero antes de decidir compras.
-    <div style="margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="proy-status" style="color:var(--text2);font-size:12px">Sin cargar</span><button class="btn btn-secondary" onclick="proyeccionCargar(true)">↻ Recargar</button></div></div>
+  <div class="card" style="border-left:3px solid var(--accent3)"><b>Solo lectura.</b> Este tablero no escribe nada en Mercado Libre, Ecom ni Táctica: muestra el último snapshot cargado en el backend (el botón "Cargar snapshot" solo guarda una versión nueva del tablero). <b>Los datos están incompletos</b> (mercadería en tránsito, caja inicial y gastos operativos todavía no están cargados): leé el aviso rojo del tablero antes de decidir compras.
+    <div style="margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="proy-status" style="color:var(--text2);font-size:12px">Sin cargar</span><button class="btn btn-secondary" onclick="proyeccionCargar(true)">↻ Recargar</button><button class="btn btn-secondary" onclick="qs('proy-file').click()">⬆ Cargar snapshot</button><input type="file" id="proy-file" accept=".json,application/json" style="display:none" onchange="proyeccionSubir(this.files[0]);this.value=''"><span id="proy-upload-msg" style="font-size:12px"></span></div></div>
   <div id="proy-root"></div>
 </div>
 <div id="page-config" class="page">
@@ -1861,6 +1861,41 @@ async function proyeccionCargar(forzar){
     ProyeccionDashboard.mount(root,d,{theme:'dark'});
     proyLoaded=true;st.textContent='● Versión '+(ver||'?')+' · generada '+((d.meta||{}).generado||'?');
   }catch(e){root.innerHTML='';st.textContent='❌ '+e.message;proyLoaded=false;}
+}
+
+// Cargar snapshot: valida en el navegador que sea un JSON del contrato v1.0 y lo manda tal cual a POST /proyeccion-2027/snapshot (el mismo cuerpo que
+// scripts/subir_proyeccion.py); la clave X-ERP-Key la agrega el wrapper de fetch. El backend valida el resto del contrato y conserva las últimas 20 versiones.
+const PROY_MAX_BYTES=20*1024*1024;
+function proyeccionValidarArchivo(texto){
+  let d;try{d=JSON.parse(texto);}catch(e){return{error:'el archivo no es un JSON válido'};}
+  if(!d||typeof d!=='object'||Array.isArray(d))return{error:'el JSON debe ser un objeto (¿es un dashboard_data.json?)'};
+  const m=d.meta;
+  if(!m||typeof m!=='object')return{error:'falta "meta" (¿es un dashboard_data.json?)'};
+  if(m.schema_version!=='1.0')return{error:'meta.schema_version debe ser "1.0" (el archivo trae '+JSON.stringify(m.schema_version===undefined?null:m.schema_version)+')'};
+  return{ok:true};
+}
+async function proyeccionSubir(file){
+  const msg=qs('proy-upload-msg'),bu=getBackendUrl();
+  const fin=(t,ok)=>{msg.textContent=t;msg.style.color=ok?'var(--green)':'var(--red)';};
+  if(!file)return;
+  if(!bu)return fin('⚠ Falta la URL del backend (Configuración).');
+  if(file.size>PROY_MAX_BYTES)return fin('❌ El archivo pesa más de 20 MB.');
+  let texto;try{texto=await file.text();}catch(e){return fin('❌ No se pudo leer el archivo.');}
+  const v=proyeccionValidarArchivo(texto);
+  if(!v.ok)return fin('❌ '+v.error+'.');
+  if(!confirm('¿Subir "'+file.name+'" como una versión nueva del tablero? Se conservan las últimas 20 versiones.'))return fin('Carga cancelada.',true);
+  fin('Subiendo…',true);
+  try{
+    const r=await fetch(bu+'/proyeccion-2027/snapshot',{method:'POST',headers:{'Content-Type':'application/json'},body:texto,signal:AbortSignal.timeout(120000)});
+    let d={};try{d=await r.json();}catch(e){}
+    if(r.status===401)return fin('❌ Clave del backend faltante o incorrecta (Configuración).');
+    if(r.status===503)return fin('❌ El backend no tiene ERP_API_KEY definida.');
+    if(r.status===413)return fin('❌ El backend rechazó el archivo por tamaño.');
+    if(r.status===422){const dt=d.detail,er=dt&&dt.errores;return fin('❌ '+(Array.isArray(er)&&er.length?er.slice(0,3).join('; '):(typeof dt==='string'?dt:'el archivo no cumple el contrato v1.0'))+'.');}
+    if(!r.ok)return fin('❌ Error '+r.status+' al subir.');
+    fin('✅ Versión '+d.version+' cargada.',true);
+    await proyeccionCargar(true);
+  }catch(e){fin('❌ '+e.message);}
 }
 
 // ══ CAMPAÑAS ML (C2) — simulador del descuento sobre el Excel de la Central de Promociones. Solo lectura: no escribe nada en ML.
