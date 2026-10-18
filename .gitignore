@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 *.sqlite3
 .env
+
+# Proyección 2027: el snapshot real tiene márgenes/costos/capital (sensible). Solo vive en la base del backend, nunca en el repo.
+dashboard_data*.json

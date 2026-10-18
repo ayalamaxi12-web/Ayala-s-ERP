@@ -16,7 +16,8 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Integer, Numeric, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -581,3 +582,18 @@ class CostoEcomSnapshot(Base):
     duracion_seg: Mapped[Decimal] = mapped_column(MONEY)
     cantidad: Mapped[int] = mapped_column(Integer)  # SKU con costo
     payload: Mapped[str] = mapped_column(Text)  # JSON
+
+
+class ProyeccionSnapshot(Base):
+    """Versión del tablero "Proyección de compras e inversión 2027" (contrato de datos v1.0). Solo lectura para el ERP: lo escribe quien sube el
+    JSON de `export_dashboard_data.py` (más adelante, un cron). `id` es el número de versión. Son datos sensibles (márgenes, costos, capital):
+    solo se sirven con X-ERP-Key. Se conservan las últimas `proyeccion_snapshot.CONSERVAR` para poder volver atrás."""
+
+    __tablename__ = "proyeccion_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subido_en: Mapped[datetime] = mapped_column(DateTime, index=True)
+    generado: Mapped[str] = mapped_column(String(32))  # meta.generado del JSON
+    schema_version: Mapped[str] = mapped_column(String(16))
+    tamano_bytes: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))

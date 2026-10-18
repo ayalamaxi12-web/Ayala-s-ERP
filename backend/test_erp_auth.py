@@ -49,6 +49,9 @@ def sin_clave(monkeypatch):
     ("GET", "/competencia/publicaciones-propias"),
     ("GET", "/competencia/precio-ml"),
     ("GET", "/campanas/calendario"),
+    ("GET", "/proyeccion-2027/dashboard"),
+    ("GET", "/proyeccion-2027/versiones"),
+    ("POST", "/proyeccion-2027/snapshot"),
 ])
 def test_rutas_protegidas(metodo, path):
     assert requiere_clave(metodo, path)
