@@ -2764,7 +2764,7 @@ let intelComercialLoaded=false;
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
 // (igual que Competidores) y el margen sale de compMargenAt (paridad con el motor: backend/scripts/paridad_margenes.py). Convive con los módulos viejos.
-const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[]};
+const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[],histAb:{}};
 function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Nuestro precio "comparable" contra una publicación por `c` unidades: precio × c (+ envío desde el umbral), igual que Competidores ("Mi Precio = PM×Cant+Envío").
 function acComparable(X,c,ctx){const t=(X||0)*(c>0?c:1);return t>=ctx.umbral?t+ctx.envio:t;}
@@ -2898,7 +2898,7 @@ function acRender(){
     const col=b=>`<td style="vertical-align:top;min-width:170px">${f[b].map(acCelda).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
     const mi=f.pmML?`${fmt$(f.pmML)} · ${acMgHtml(f.mgActual)}`:'<span style="color:var(--text3)" title="Sin precio ML en la planilla PM">sin PM</span>';
     const sm=AC.sim[f.key],sim=sm&&(sm.px.contado>0||sm.extra.length||sm.q>0)?`<div style="font-size:10px;color:var(--accent)">simulando${sm.px.contado>0?' '+fmt$(sm.px.contado):''}${sm.q>0?' ×'+sm.q:''}${sm.extra.length?' +combo':''}</div>`:'';
-    return `<tr${AC.abierto===f.key?' class="ac-sel"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b>${acCtxChips(f)}</td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?`<td style="vertical-align:top;min-width:150px">${acOtrosCelda(f)}</td>`:''}</tr>${acCtxFilaHtml(f)}`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
+    return `<tr${AC.abierto===f.key?' class="ac-sel"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b>${acCtxChips(f)}</td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button> <button class="btn-xs" onclick="acHistToggle(${i})" title="Histórico de precios de los competidores de este SKU (serie, último cambio y eventos)">📈 ${AC.histAb[f.key]?'Cerrar':'Histórico'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?`<td style="vertical-align:top;min-width:150px">${acOtrosCelda(f)}</td>`:''}</tr>${acCtxFilaHtml(f)}${acHistFilaHtml(f)}`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
   acAsideRender();
   qs('ac-count').textContent=filas.length+' SKU';
   S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
@@ -3142,6 +3142,52 @@ function acCtxDetalleHtml(f){
   const via=r.via==='variante'?`<div style="flex-basis:100%;font-size:10px;color:var(--text3)">${acEsc(f.sku)} es una variante de ${acEsc(r.madre)}: se muestra solo esa variante.</div>`:'';
   return `<div style="display:flex;gap:28px;flex-wrap:wrap;font-size:11px;color:var(--text2)">${via}<div>${hdr('Stock (Sheet, no en vivo)')}${stock}</div><div>${hdr('Ventas')}${ven}</div>${acMlDetalleHtml(f)}${vars}</div>`;
 }
+// ── 3.2 Histórico por SKU: serie de precio por competidor (7/30/90 d), fecha del último cambio y eventos del SKU. Solo lectura de lo que ya trae /competencia/analisis (dias=90).
+// Precios por UNIDAD (precio ÷ cantidad de la publicación) para que un kit ×2 y uno suelto se vean comparables; la línea punteada es nuestro PM ML.
+const AC_HIST_COLORES=['#00a0c6','#e67e22','#8e44ad','#27ae60','#c0392b','#7f8c8d','#d4ac0d','#2c3e50'];
+function acIsoMas(iso,n){const d=new Date(iso+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+function acHistHoy(D){return (D.referencias||[]).reduce((m,x)=>x.ultima_lectura&&x.ultima_lectura.fecha>m?x.ultima_lectura.fecha:m,'')||new Date().toISOString().slice(0,10);}
+// Serie de cada referencia dentro de la ventana: el precio vigente al inicio queda anclado en `desde` y el último se mantiene hasta `hoy` (escalón: el precio no cambia entre lecturas). pts reales = lecturas.
+function acHistSeries(refs,dias,hoy){const desde=acIsoMas(hoy,-dias);
+  return refs.filter(r=>(r.serie||[]).length).map(r=>{const c=r.cantidad>0?r.cantidad:1,all=r.serie.map(([d,p])=>[d,p/c]);
+    const dentro=all.filter(x=>x[0]>=desde&&x[0]<=hoy),antes=all.filter(x=>x[0]<desde);
+    const pasos=dentro.slice();if(antes.length&&(!dentro.length||dentro[0][0]>desde))pasos.unshift([desde,antes[antes.length-1][1]]);
+    return {id:r.id,entidad:r.entidad||'?',rol:r.rol||'',cant:c,reales:dentro,pasos};}).filter(s=>s.pasos.length);}
+// Último cambio de precio de una referencia (null si nunca cambió con lo leído): desde cuándo rige el precio actual, de cuánto a cuánto.
+function acHistCambio(r){return r&&r.anterior&&r.desde&&r.ultimo?{fecha:r.desde,de:r.anterior.precio,a:r.ultimo.precio,pct:r.delta_pct}:null;}
+function acHistEventos(D,key,dias,hoy,normSku){const desde=acIsoMas(hoy,-dias);return (D.eventos||[]).filter(e=>normSku(e.sku||'')===key&&e.fecha>=desde&&e.fecha<=hoy);}
+function acHistSvg(series,pmUnit,dias,hoy){
+  const W=720,H=230,L=64,R=12,T=10,B=26,desde=acIsoMas(hoy,-dias),vals=[];
+  series.forEach(s=>s.pasos.forEach(p=>vals.push(p[1])));if(pmUnit>0)vals.push(pmUnit);
+  if(!vals.length)return '';
+  let lo=Math.min(...vals),hi=Math.max(...vals);if(hi===lo){hi=lo*1.05+1;lo=lo*0.95;}const pad=(hi-lo)*0.08;lo-=pad;hi+=pad;
+  const X=d=>L+(Math.max(0,Math.min(dias,(Date.parse(d+'T00:00:00Z')-Date.parse(desde+'T00:00:00Z'))/86400000))/dias)*(W-L-R),Y=v=>T+(1-(v-lo)/(hi-lo))*(H-T-B);
+  let g='';
+  for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4,y=Y(v).toFixed(1);g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--border)" stroke-width="1"/><text x="${L-6}" y="${(+y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text3)">${fmt$(v)}</text>`;}
+  [[desde,'start'],[acIsoMas(hoy,-Math.round(dias/2)),'middle'],[hoy,'end']].forEach(([d,an])=>{g+=`<text x="${X(d).toFixed(1)}" y="${H-8}" text-anchor="${an}" font-size="9" fill="var(--text3)">${acFechaCorta(d)}</text>`;});
+  if(pmUnit>0)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(pmUnit).toFixed(1)}" y2="${Y(pmUnit).toFixed(1)}" stroke="var(--text2)" stroke-width="1.2" stroke-dasharray="5 4"><title>Nuestro PM ML ${fmt$(pmUnit)}</title></line>`;
+  series.forEach((s,i)=>{const col=AC_HIST_COLORES[i%AC_HIST_COLORES.length];let d='';
+    s.pasos.forEach((p,j)=>{const x=X(p[0]).toFixed(1),y=Y(p[1]).toFixed(1);d+=j?` H${x} V${y}`:`M${x},${y}`;});
+    d+=` H${X(hoy).toFixed(1)}`;
+    g+=`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>`;
+    s.reales.forEach(p=>{g+=`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="2.6" fill="${col}"><title>${acEsc(s.entidad)} · ${acFechaCorta(p[0])} · ${fmt$(p[1])}</title></circle>`;});});
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" role="img" aria-label="Histórico de precios por unidad">${g}</svg>`;}
+const AC_EV_TXT={Bajo:['▼ Bajó','var(--red)'],Subio:['▲ Subió','var(--green)']};
+function acHistHtml(f,dias){
+  const hoy=acHistHoy(AC.data),ser=acHistSeries(f.refs,dias,hoy),pmUnit=f.pmML||0;
+  const chips=[7,30,90].map(n=>`<button class="btn-xs${n===dias?' active':''}" style="${n===dias?'border-color:var(--accent);color:var(--accent)':''}" onclick="acHistDias(${AC.keys.indexOf(f.key)},${n})">${n} d</button>`).join(' ');
+  const gr=ser.length?acHistSvg(ser,pmUnit,dias,hoy):`<div style="color:var(--text3);font-size:11px;padding:10px 0">Sin lecturas con precio en los últimos ${dias} días.</div>`;
+  const filas=f.refs.map(r=>{const i=ser.findIndex(s=>s.id===r.id),col=i>=0?AC_HIST_COLORES[i%AC_HIST_COLORES.length]:'var(--text3)',c=acHistCambio(r),u=r.cantidad>0?r.cantidad:1;
+    const cam=c?`${acFechaCorta(c.fecha)} · ${fmt$(c.de/u)} → ${fmt$(c.a/u)} <span style="color:${c.pct<0?'var(--red)':'var(--green)'}">${c.pct<0?'▼':'▲'} ${Math.abs(c.pct).toFixed(1)}%</span>`:'<span style="color:var(--text3)">sin cambios en lo leído</span>';
+    return `<tr><td><span style="color:${col}">●</span> ${acEsc(r.entidad||'?')}${r.cantidad>1?` <span class="badge badge-gray">×${r.cantidad}</span>`:''}</td><td>${acEsc(r.rol||'Otros')}</td><td style="font-family:'DM Mono',monospace">${r.precio!=null?fmt$(r.precio/u):'—'}</td><td>${cam}</td></tr>`;}).join('');
+  const evs=acHistEventos(AC.data,f.key,dias,hoy,normSku),tipo=e=>AC_EV_TXT[e.tipo]||[acEsc(String(e.tipo||'').replace(/_/g,' ')),'var(--text2)'];
+  const evh=evs.length?evs.map(e=>`<div style="font-size:10px;line-height:1.7"><span style="font-family:'DM Mono',monospace;color:var(--text3)">${acFechaCorta(e.fecha)}</span> <span style="color:${tipo(e)[1]}">${tipo(e)[0]}</span> · ${acEsc(e.entidad||'')}${e.anterior!=null&&e.nuevo!=null?` · ${fmt$(e.anterior)} → ${fmt$(e.nuevo)}`:''}${e.detalle?` · <span style="color:var(--text3)">${acEsc(e.detalle)}</span>`:''}</div>`).join(''):'<div style="font-size:10px;color:var(--text3)">Sin eventos en el período.</div>';
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><b style="font-size:11px">Histórico de precios · ${acEsc(f.sku)}</b>${chips}<span style="font-size:10px;color:var(--text3)">precio por unidad · punteada = nuestro PM ML${pmUnit?' ('+fmt$(pmUnit)+')':' (sin PM)'}</span></div>${gr}
+    <table style="font-size:10px;margin:8px 0;width:auto"><thead><tr><th>Competidor</th><th>Rol</th><th>Hoy (u.)</th><th>Último cambio (por unidad)</th></tr></thead><tbody>${filas}</tbody></table>
+    <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:2px">Eventos del SKU (${dias} d)</div>${evh}`;}
+function acHistFilaHtml(f){const d=AC.histAb[f.key];return d?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:10px 14px;border-bottom:1px solid var(--border)">${acHistHtml(acFilaCompleta(f.key)||f,d)}</td></tr>`:'';}
+function acHistToggle(i){const key=AC.keys[i];if(!key)return;if(AC.histAb[key])delete AC.histAb[key];else AC.histAb[key]=30;acRender();}
+function acHistDias(i,n){const key=AC.keys[i];if(key&&AC.histAb[key]){AC.histAb[key]=n;acRender();}}
 function acCtxFilaHtml(f){return AC.ctxAbierto&&AC.ctxAbierto[f.key]?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:8px 14px;border-bottom:1px solid var(--border)">${acCtxDetalleHtml(f)}</td></tr>`:'';}
 // ── Precio real en ML (E2): al abrir el desglose de un SKU se pide GET /competencia/precio-ml (≈1 llamada a ML por publicación activa; el backend lo cachea 5 min).
 // Distinto del PM: el chip marca "≠ PM" cuando el precio real de alguna publicación activa se aparta más del 1% del precio ML del PM.
@@ -3200,7 +3246,7 @@ async function acCargar(refrescar){
     if(!S.tcBNA)fetch(`${bu}/tc/bna`).then(r=>r.json()).then(d=>{if(d.tc>0){S.tcBNA=d.tc;acRender();}}).catch(()=>{});
     cargarCostosEcom(false).then(()=>{if(COSTOS_ECOM.error)toast('Costos de Ecom: '+COSTOS_ECOM.error+' -- sin margen','error');acRender();});
     if(!Object.keys(S.catData||{}).length&&S.sheetsKey)await loadCats().catch(()=>{});
-    const r=await fetch(`${bu}/competencia/analisis?dias=30${refrescar?'&refrescar=true':''}`);
+    const r=await fetch(`${bu}/competencia/analisis?dias=90${refrescar?'&refrescar=true':''}`);
     const d=await r.json().catch(()=>({}));
     if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
     if(!r.ok)throw new Error(d.detail||('status '+r.status));
