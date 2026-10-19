@@ -13,7 +13,7 @@ Lógica (confirmada con Maxx):
 Modos:
   GET /proyeccion-2027/transito                  ítems pendientes + resumen por SKU + informe de calidad (con proveedor)
   GET /proyeccion-2027/transito?diagnostico=1    para decodificar los estados de Táctica: NO devuelve proveedores ni costos.
-      [&reqs=6703,6720,...]                      números de requerimiento a contrastar (si coinciden con r.ID o con r.Numero)
+      [&reqs=1001,1002,...]                      números de requerimiento a contrastar (si coinciden con r.ID o con r.Numero)
 
 Garantías: X-ERP-Key obligatoria (falla cerrado: 503 sin ERP_API_KEY), solo SELECT de texto fijo (lo único que viene del usuario es `reqs`,
 validado como enteros y mandado como parámetro, nunca concatenado), lecturas sin bloqueos (WITH (NOLOCK)), timeout de login y de consulta, tope de filas.

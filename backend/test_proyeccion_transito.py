@@ -154,8 +154,8 @@ def _res_diag(con_reqs):
     r = [[{"estado": 1, "requerimientos": 5, "items": 12, "items_fecha_invalida": 2}, {"estado": 3, "requerimientos": 1, "items": 1, "items_fecha_invalida": 0}],
          [{"estado": 1, "requerimientos": 3, "con_fecha_despacho": 2, "con_fecha_despacho_invalida": Decimal("1")}]]
     if con_reqs:
-        r.append([{"req_recid": 7, "req_id": 6703, "req_numero": 11, "estado": 1, "coincide_id": 1, "coincide_numero": 0, "items": 2, "pedido": Decimal("10"), "recibido": Decimal("4"), "pendiente": Decimal("6"), "comprometido": Decimal("1")},
-                  {"req_recid": 8, "req_id": 200, "req_numero": 6720, "estado": 3, "coincide_id": 0, "coincide_numero": 1, "items": 1, "pedido": 5, "recibido": 5, "pendiente": 0, "comprometido": 0}])
+        r.append([{"req_recid": 7, "req_id": 1001, "req_numero": 11, "estado": 1, "coincide_id": 1, "coincide_numero": 0, "items": 2, "pedido": Decimal("10"), "recibido": Decimal("4"), "pendiente": Decimal("6"), "comprometido": Decimal("1")},
+                  {"req_recid": 8, "req_id": 200, "req_numero": 1002, "estado": 3, "coincide_id": 0, "coincide_numero": 1, "items": 1, "pedido": 5, "recibido": 5, "pendiente": 0, "comprometido": 0}])
     return r
 
 
@@ -171,10 +171,10 @@ def test_diagnostico_sin_reqs_dos_consultas_sin_proveedores(cliente):
 
 def test_diagnostico_con_reqs_los_manda_como_parametro_y_resume_coincidencias(cliente):
     cliente.est["resultados"] = _res_diag(True)
-    r = cliente.get(URL + "?diagnostico=1&reqs=6703,6720, 9999,6703", headers=H)
+    r = cliente.get(URL + "?diagnostico=1&reqs=1001,1002, 9999,1001", headers=H)
     assert r.status_code == 200
     sql, params = cliente.log["execute"][2]
-    assert sql == pt._SQL_DIAG_REQS and params == {"reqs": ("6703", "6720", "9999")}  # sin repetidos, como texto y como parámetro
+    assert sql == pt._SQL_DIAG_REQS and params == {"reqs": ("1001", "1002", "9999")}  # sin repetidos, como texto y como parámetro
     j = r.json()
     assert j["pedidos"] == {"recibidos": 3, "coinciden_por_id": 1, "coinciden_por_numero": 1, "sin_coincidencia": ["9999"]}
     a, b = j["por_requerimiento"]
