@@ -11,7 +11,7 @@ import sheets_io as sio
 CONTEO_SHEET = 'Tiendas_Conteo'
 CONTEO_HEADERS = ['Fecha', 'Hora', 'Entidad_ID', 'Entidad', 'Leidas', 'Declaradas_ML', 'Paginas', 'Completa', 'Motivo',
                   'Nuevas', 'Desaparecidas', 'Mediana_7d', 'Var_vs_Mediana_Pct', 'Estado_Debilidad', 'Fuente']
-# Nuevas/Desaparecidas se completan en la Fase 2 (Tiendas_Estado) y Estado_Debilidad en la Fase 3.
+# Nuevas/Desaparecidas las completa la corrida con Tiendas_Estado (Fase 2; vacías si la lectura fue incompleta o es la siembra) y Estado_Debilidad la Fase 3.
 FUENTE_SCRAPER, FUENTE_SEMILLA = 'Scraper', 'V-* (historico)'
 
 

@@ -30,6 +30,12 @@ def _num(v):
     return n if n is not None and n > 0 else None
 
 
+def _cant(v):
+    """Cantidad que puede ser 0 ('' = no medido, None)."""
+    n = cdb.parse_precio(v) if str(v).strip() != '0' else 0
+    return n if n is not None and n >= 0 else None
+
+
 def _iso(d):
     return d.isoformat() if d else ''
 
@@ -133,8 +139,10 @@ def construir(filas, dias=DIAS_DEFAULT, hoy=None):
         lista_t.append({'entidad_id': t['entidad_id'], 'entidad': t['entidad'],
                         'ultimo': {'fecha': _iso(f_u), 'leidas': _num(c_u.get('Leidas')), 'declaradas': _num(c_u.get('Declaradas_ML')),
                                    'completa': _es_si(c_u.get('Completa')), 'motivo': c_u.get('Motivo', ''), 'mediana_7d': _num(c_u.get('Mediana_7d')),
-                                   'var_pct': c_u.get('Var_vs_Mediana_Pct', ''), 'estado_debilidad': c_u.get('Estado_Debilidad', '')},
-                        'serie': [{'fecha': _iso(f), 'leidas': _num(c.get('Leidas')), 'completa': _es_si(c.get('Completa'))} for f, c in t['filas'] if f >= desde]})
+                                   'var_pct': c_u.get('Var_vs_Mediana_Pct', ''), 'estado_debilidad': c_u.get('Estado_Debilidad', ''),
+                                   'nuevas': _cant(c_u.get('Nuevas')), 'desaparecidas': _cant(c_u.get('Desaparecidas'))},
+                        'serie': [{'fecha': _iso(f), 'leidas': _num(c.get('Leidas')), 'completa': _es_si(c.get('Completa')),
+                                   'nuevas': _cant(c.get('Nuevas')), 'desaparecidas': _cant(c.get('Desaparecidas'))} for f, c in t['filas'] if f >= desde]})
     lista_t.sort(key=lambda x: x['entidad'])
 
     cats = _dicts(filas.get('categorias'))
