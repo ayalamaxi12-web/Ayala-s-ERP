@@ -23,6 +23,7 @@ ESQUEMA_VERIFICADO = {
     "requerimientositemsclientes": {"IDReqProd", "Cantidad"},
     "comprasitems": {"RecID", "IDCompra", "IDReqProd", "Cantidad"},
     "compras": {"RecID", "Estado", "FechaDespacho"},
+    "pedidos": {"IDRequerimiento"},
     "fiscal": {"RecID", "RazonSocial"},
     "productos": {"RecID", "Codigo"},
 }
@@ -53,7 +54,7 @@ class FakeConn:
 
 
 def fila(**k):
-    base = dict(req_recid=1, req_id=9001, req_numero=9002, estado=1, proveedor="Proveedor Demo SA ", item_recid=1, codigo_item="SKU-A    ", en_maestro="SKU-A",
+    base = dict(req_recid=1, req_id=9001, estado=0, proveedor="Proveedor Demo SA ", item_recid=1, codigo_item="SKU-A    ", en_maestro="SKU-A",
                 codigo_respaldo=None, pedido=Decimal("10"), recibido=Decimal("4"), comprometido=Decimal("2"),
                 fecha_item=datetime(2026, 11, 20), fecha_cab=datetime(2026, 12, 15), fecha_creacion=datetime(2026, 9, 1))
     base.update(k)
@@ -106,7 +107,7 @@ def test_clasificar_fecha(item, cab, esperado):
 
 
 def test_fecha_estado_en_la_respuesta():
-    items, _, q = pt.armar_respuesta([
+    items, _, _, q = pt.armar_respuesta([
         fila(item_recid=1),                                                                       # ítem válido
         fila(item_recid=2, fecha_item=datetime(2001, 1, 1), fecha_cab=datetime(2026, 12, 15)),    # cae a cabecera
         fila(item_recid=3, fecha_item=None, fecha_cab=datetime(2001, 1, 1)),                      # sin fecha
@@ -117,53 +118,95 @@ def test_fecha_estado_en_la_respuesta():
 
 
 def test_antiguedad_sale_de_fecha_de_creacion_no_de_la_fecha_estimada():
-    items, _, _ = pt.armar_respuesta([fila(fecha_creacion=datetime(2026, 7, 1), fecha_item=datetime(2026, 12, 1))], HOY)
+    items, _, _, _ = pt.armar_respuesta([fila(fecha_creacion=datetime(2026, 7, 1), fecha_item=datetime(2026, 12, 1))], HOY)
     assert items[0]["antiguedad_dias"] == (HOY - date(2026, 7, 1)).days
-    items, _, _ = pt.armar_respuesta([fila(fecha_creacion=datetime(2001, 1, 1)), fila(fecha_creacion=None)], HOY)
+    items, _, _, _ = pt.armar_respuesta([fila(fecha_creacion=datetime(2001, 1, 1)), fila(fecha_creacion=None)], HOY)
     assert [i["antiguedad_dias"] for i in items] == [None, None]
 
 
 # ── Modo normal ──────────────────────────────────────────────────────────
 
-def test_modo_normal_una_consulta_fija_y_pendiente_calculado(cliente):
+def test_modo_normal_una_consulta_fija_y_pendiente_es_el_pedido(cliente):
     r = cliente.get(URL, headers=H)
     assert r.status_code == 200
     (sql, params), = cliente.log["execute"]
     assert sql == pt._SQL_ITEMS and params is None and cliente.log["cerrada"] and cliente.log["fetchmany"] == [pt.TOPE_FILAS + 1]
     j = r.json()
     it, = j["items"]
-    assert (it["pedido"], it["recibido"], it["comprometido"], it["pendiente"]) == (10, 4, 2, 6)
-    assert it["sku"] == "SKU-A" and it["proveedor"] == "Proveedor Demo SA" and it["fecha_estimada"] == "2026-11-20" and it["fecha_estado"] == "del ítem"
-    assert j["por_sku"] == [{"sku": "SKU-A", "pendiente": 6, "proxima_fecha": "2026-11-20", "requerimientos": ["9002"], "proveedores": ["Proveedor Demo SA"]}]
+    # pendiente = pedido (10); el recibido (4) y el comprometido (2) son solo informativos y NO se restan
+    assert (it["pendiente"], it["recibido_informativo"], it["comprometido_informativo"]) == (10, 4, 2)
+    assert it["requerimiento"] == 9001 and it["sku"] == "SKU-A" and it["proveedor"] == "Proveedor Demo SA" and it["estado"] == 0
+    assert it["fecha_estimada"] == "2026-11-20" and it["fecha_estado"] == "del ítem" and it["antiguedad_dias"] == (date.today() - date(2026, 9, 1)).days
+    assert j["por_sku"] == [{"sku": "SKU-A", "pendiente": 10, "de_los_cuales_a_revisar": 0, "proxima_fecha": "2026-11-20", "requerimientos": ["9001"], "proveedores": ["Proveedor Demo SA"]}]
+    assert j["criterio"]["abierto"].startswith("requerimientos.Estado = 0") and j["criterio"]["revisar_mas_de_dias"] == 180 and j["criterio"]["excluido_del_calculo_mas_de_dias"] == 365
 
 
-def test_pendiente_nunca_negativo_y_respaldo_de_sku():
-    items, resumen, _ = pt.armar_respuesta([fila(pedido=3, recibido=5, codigo_item="  ", codigo_respaldo="SKU-RESP  ", en_maestro=None)], HOY)
-    assert items[0]["pendiente"] == 0 and items[0]["sku"] == "SKU-RESP" and resumen[0]["pendiente"] == 0
+def test_solo_requerimientos_abiertos_estado_0_en_la_consulta():
+    s = " ".join(pt._SQL_ITEMS.split())
+    assert pt.ESTADO_ABIERTO == 0 and "WHERE r.Estado = 0 AND ri.Cantidad > 0" in s
+    assert "recibido" not in s.split("WHERE")[1]          # el recibido ya no filtra: es informativo
+    assert "Estado <>" not in s and "Estado IN" not in s   # no hay listas de estados que cuelen el 1 (cerrado) ni el 2 (sin decodificar)
+
+
+def test_pendiente_es_el_pedido_aunque_haya_recibido_de_sobra():
+    items, _, resumen, _ = pt.armar_respuesta([fila(pedido=3, recibido=5, codigo_item="  ", codigo_respaldo="SKU-RESP  ", en_maestro=None)], HOY)
+    assert items[0]["pendiente"] == 3 and items[0]["sku"] == "SKU-RESP" and resumen[0]["pendiente"] == 3
+
+
+@pytest.mark.parametrize("dias,revisar,excluido", [(0, False, False), (180, False, False), (181, True, False), (365, True, False), (366, True, True), (900, True, True)])
+def test_umbrales_de_antiguedad_180_revisar_365_excluir(dias, revisar, excluido):
+    from datetime import timedelta
+    creacion = datetime.combine(HOY - timedelta(days=dias), datetime.min.time())
+    items, por_req, por_sku, q = pt.armar_respuesta([fila(fecha_creacion=creacion)], HOY)
+    assert items[0]["antiguedad_dias"] == dias and (items[0]["revisar"], items[0]["excluido"]) == (revisar, excluido)
+    assert (por_req[0]["revisar"], por_req[0]["excluido"]) == (revisar, excluido)
+    assert bool(por_sku) is (not excluido)                  # los excluidos no entran al cálculo por SKU
+    assert q["antiguedad"]["requerimientos_a_revisar"] == int(revisar) and q["antiguedad"]["requerimientos_excluidos"] == int(excluido)
+
+
+def test_los_excluidos_siguen_listados_pero_fuera_del_calculo():
+    filas = [fila(req_id=9001, item_recid=1, pedido=10, fecha_creacion=datetime(2026, 9, 1)),                      # vigente
+             fila(req_id=9002, item_recid=2, pedido=7, fecha_creacion=datetime(2026, 2, 1)),                       # > 180: revisar (entra al cálculo)
+             fila(req_id=9003, item_recid=3, pedido=100, fecha_creacion=datetime(2025, 6, 1)),                     # > 365: excluido
+             fila(req_id=9004, item_recid=4, pedido=5, fecha_creacion=None)]                                       # sin antigüedad medible: entra y se cuenta
+    items, por_req, por_sku, q = pt.armar_respuesta(filas, HOY)
+    assert len(items) == 4 and [i["excluido"] for i in items] == [False, False, True, False]
+    assert por_sku == [{"sku": "SKU-A", "pendiente": 22, "de_los_cuales_a_revisar": 7, "proxima_fecha": "2026-11-20", "requerimientos": ["9001", "9002", "9004"], "proveedores": ["Proveedor Demo SA"]}]
+    assert [r["requerimiento"] for r in por_req] == [9001, 9002, 9003, 9004] and next(r for r in por_req if r["requerimiento"] == 9003)["unidades"] == 100
+    assert q["antiguedad"] == {"revisar_mas_de_dias": 180, "excluir_mas_de_dias": 365, "requerimientos_a_revisar": 2, "requerimientos_excluidos": 1,
+                               "unidades_excluidas": 100, "requerimientos_sin_antiguedad": 1}
+
+
+def test_resumen_por_requerimiento_items_y_unidades():
+    filas = [fila(req_id=9002, item_recid=1, pedido=10, fecha_item=datetime(2026, 12, 1), proveedor="Prov A"),
+             fila(req_id=9002, item_recid=2, pedido=5, codigo_item="SKU-B", fecha_item=None, fecha_cab=datetime(2026, 11, 3), proveedor="Prov A"),
+             fila(req_id=9001, item_recid=3, pedido=7, fecha_item=None, fecha_cab=None, proveedor="Prov B")]
+    _, por_req, _, _ = pt.armar_respuesta(filas, HOY)
+    assert por_req == [
+        {"requerimiento": 9001, "estado": 0, "proveedor": "Prov B", "items": 1, "unidades": 7, "antiguedad_dias": 48, "revisar": False, "excluido": False, "items_sin_fecha": 1, "proxima_fecha": None},
+        {"requerimiento": 9002, "estado": 0, "proveedor": "Prov A", "items": 2, "unidades": 15, "antiguedad_dias": 48, "revisar": False, "excluido": False, "items_sin_fecha": 0, "proxima_fecha": "2026-11-03"}]
 
 
 def test_informe_de_calidad():
     filas = [
-        fila(req_id=9101, req_numero=9201, item_recid=1, fecha_creacion=datetime(2026, 1, 1)),                         # viejo (> 90 días)
-        fila(req_id=9102, req_numero=9202, item_recid=2, fecha_item=datetime(2001, 1, 1), fecha_cab=datetime(2001, 1, 1)),  # sin fecha
-        fila(req_id=9105, req_numero=9205, item_recid=5, codigo_item="SKU-X", en_maestro=None),                        # fuera del maestro
-        fila(req_id=9105, req_numero=9205, item_recid=6, codigo_item="SKU-X", en_maestro=None),                        # duplicado
-        fila(req_id=9106, req_numero=9206, item_recid=7, codigo_item=None, codigo_respaldo=None, en_maestro=None),     # sin SKU
+        fila(req_id=9102, item_recid=2, fecha_item=datetime(2001, 1, 1), fecha_cab=datetime(2001, 1, 1)),             # sin fecha
+        fila(req_id=9105, item_recid=5, codigo_item="SKU-X", en_maestro=None),                                        # fuera del maestro
+        fila(req_id=9105, item_recid=6, codigo_item="SKU-X", en_maestro=None),                                        # duplicado
+        fila(req_id=9106, item_recid=7, codigo_item=None, codigo_respaldo=None, en_maestro=None),                     # sin SKU
     ]
-    items, resumen, q = pt.armar_respuesta(filas, HOY)
-    assert q["viejos_pendientes"] == {"items": 1, "requerimientos": ["9201"]}
+    items, _, resumen, q = pt.armar_respuesta(filas, HOY)
     assert q["fechas"]["sin_fecha"] == 1 and q["fechas"]["item_invalida"]["placeholder_2001"] == 1
-    assert q["duplicados"]["total"] == 1 and q["duplicados"]["muestra"] == [{"req_numero": 9205, "sku": "SKU-X", "veces": 2}]
+    assert q["duplicados"]["total"] == 1 and q["duplicados"]["muestra"] == [{"requerimiento": 9105, "sku": "SKU-X", "veces": 2}]
     assert q["sku_fuera_del_maestro"] == {"total": 1, "muestra": ["SKU-X"]}
     assert q["items_sin_sku"] == 1 and all(s["sku"] for s in resumen)
 
 
 def test_resumen_por_sku_suma_y_toma_la_fecha_valida_mas_cercana():
-    filas = [fila(req_numero=9001, item_recid=1, pedido=10, recibido=0, fecha_item=datetime(2026, 12, 1)),
-             fila(req_numero=9002, item_recid=2, pedido=5, recibido=0, fecha_item=datetime(2026, 11, 5), proveedor="Otro"),
-             fila(req_numero=9003, item_recid=3, pedido=7, recibido=0, fecha_item=datetime(2001, 1, 1), fecha_cab=datetime(2026, 12, 20))]
-    _, resumen, _ = pt.armar_respuesta(filas, HOY)
-    assert resumen == [{"sku": "SKU-A", "pendiente": 22, "proxima_fecha": "2026-11-05", "requerimientos": ["9001", "9002", "9003"], "proveedores": ["Otro", "Proveedor Demo SA"]}]
+    filas = [fila(req_id=9001, item_recid=1, pedido=10, fecha_item=datetime(2026, 12, 1)),
+             fila(req_id=9002, item_recid=2, pedido=5, fecha_item=datetime(2026, 11, 5), proveedor="Otro"),
+             fila(req_id=9003, item_recid=3, pedido=7, fecha_item=datetime(2001, 1, 1), fecha_cab=datetime(2026, 12, 20))]
+    _, _, resumen, _ = pt.armar_respuesta(filas, HOY)
+    assert resumen == [{"sku": "SKU-A", "pendiente": 22, "de_los_cuales_a_revisar": 0, "proxima_fecha": "2026-11-05", "requerimientos": ["9001", "9002", "9003"], "proveedores": ["Otro", "Proveedor Demo SA"]}]
 
 
 def test_tope_de_filas_marca_truncado(cliente, monkeypatch):
@@ -180,8 +223,8 @@ def _res_diag(con_reqs):
          [{"estado": 1, "requerimientos_con_compra": 3, "con_fecha_despacho": 2, "con_fecha_despacho_invalida": Decimal("1")}],
          [{"estado": 2, "compras": 7, "items_recibidos": 20, "recibido": Decimal("150.5")}, {"estado": 0, "compras": 1, "items_recibidos": 1, "recibido": 3}]]
     if con_reqs:
-        r.append([{"req_recid": 7, "req_id": 9001, "req_numero": 9101, "estado": 1, "coincide_id": 1, "coincide_numero": 0, "items": 2, "pedido": Decimal("10"), "recibido": Decimal("4"), "pendiente": Decimal("6"), "comprometido": Decimal("1")},
-                  {"req_recid": 8, "req_id": 9200, "req_numero": 9002, "estado": 3, "coincide_id": 0, "coincide_numero": 1, "items": 1, "pedido": 5, "recibido": 5, "pendiente": 0, "comprometido": 0}])
+        r.append([{"req_recid": 7, "req_id": 9001, "req_numero": 9101, "estado": 1, "coincide_id": 1, "coincide_numero": 0, "items": 2, "pedido": Decimal("10"), "recibido": Decimal("4"), "pendiente": Decimal("6"), "comprometido": Decimal("1"), "pedidos_vinculados": 3},
+                  {"req_recid": 8, "req_id": 9200, "req_numero": 9002, "estado": 3, "coincide_id": 0, "coincide_numero": 1, "items": 1, "pedido": 5, "recibido": 5, "pendiente": 0, "comprometido": 0, "pedidos_vinculados": 0}])
     return r
 
 
@@ -207,6 +250,7 @@ def test_diagnostico_con_reqs_los_manda_como_parametro_y_resume_coincidencias(cl
     assert j["pedidos"] == {"recibidos": 3, "coinciden_por_id": 1, "coinciden_por_numero": 1, "sin_coincidencia": ["9999"]}
     a, b = j["por_requerimiento"]
     assert (a["estado"], a["items"], a["pedido"], a["recibido"], a["comprometido"], a["coincide_id"]) == (1, 2, 10, 4, 1, 1) and b["coincide_numero"] == 1
+    assert (a["pedidos_vinculados"], b["pedidos_vinculados"]) == (3, 0)   # cuántos `pedidos` tienen IDRequerimiento = RecID del requerimiento
     assert '"proveedor"' not in r.text and "Proveedor Demo" not in r.text
 
 
@@ -287,6 +331,12 @@ def test_la_fecha_de_cabecera_es_fechaentrega_y_no_existe_requerimientos_fecha()
     assert pt.C_FECHA_CAB == "FechaEntrega" and pt.C_CREACION == "FechaCreacion"
     assert not re.search(r"\br\.Fecha\b", pt._SQL_ITEMS + pt._SQL_DIAG_ESTADOS)
     assert "r.FechaEntrega AS fecha_cab" in pt._SQL_ITEMS and "r.FechaCreacion AS fecha_creacion" in pt._SQL_ITEMS
+
+
+def test_pedidos_vinculados_se_cuentan_por_pedidos_idrequerimiento_igual_al_recid():
+    s = " ".join(pt._SQL_DIAG_REQS.split())
+    assert "FROM pedidos pd WITH (NOLOCK) GROUP BY pd.IDRequerimiento" in s and "ON ped.IDRequerimiento = r.RecID" in s
+    assert "MAX(ISNULL(ped.pedidos, 0)) AS pedidos_vinculados" in s   # MAX: la unión con ítems repite filas, no se suma de más
 
 
 def test_el_diagnostico_no_toca_proveedores_ni_costos():
