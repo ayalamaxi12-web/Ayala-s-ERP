@@ -7,20 +7,24 @@ Lógica (confirmada con Maxx):
   recibido     = SUM(comprasitems.Cantidad) por IDReqProd = ri.RecID (comprasitems -> compras por IDCompra)
   comprometido = SUM(requerimientositemsclientes.Cantidad) por IDReqProd = ri.RecID   (a clientes: informativo, no se resta)
   pendiente    = max(pedido - recibido, 0); solo se listan los ítems con pendiente > 0
-  fecha        = la del ítem, o la de cabecera si el ítem no tiene; INVÁLIDA si es nula, 2001-01-01 o anterior a 2020
+  fecha        = la del ítem (requerimientositems.FechaEntrega); si es nula, 2001-01-01 o anterior a 2020, la de cabecera
+                 (requerimientos.FechaEntrega); si las dos son inválidas, "sin fecha"
+  antigüedad   = días desde requerimientos.FechaCreacion
   SKU          = ri.Codigo (sin el padding de Táctica), con respaldo por `productos` si el ítem no trae código
 
 Modos:
   GET /proyeccion-2027/transito                  ítems pendientes + resumen por SKU + informe de calidad (con proveedor)
   GET /proyeccion-2027/transito?diagnostico=1    para decodificar los estados de Táctica: NO devuelve proveedores ni costos.
-      [&reqs=1001,1002,...]                      números de requerimiento a contrastar (si coinciden con r.ID o con r.Numero)
+      [&reqs=9001,9002,...]                      números de requerimiento a contrastar (si coinciden con r.ID o con r.Numero)
+      Incluye: estados, FechaDespacho por estado de requerimiento y recibido / cantidad de compras por compras.Estado.
 
 Garantías: X-ERP-Key obligatoria (falla cerrado: 503 sin ERP_API_KEY), solo SELECT de texto fijo (lo único que viene del usuario es `reqs`,
 validado como enteros y mandado como parámetro, nunca concatenado), lecturas sin bloqueos (WITH (NOLOCK)), timeout de login y de consulta, tope de filas.
 Un error de conexión no devuelve el texto de la excepción (podría traer servidor o usuario); los errores de esquema ("Invalid column name ...") sí, filtrados.
 
-SUPUESTOS DE ESQUEMA a confirmar con el primer GET: los nombres de columna marcados abajo no estaban en lo dictado (`Cantidad` de ri, las dos fechas y
-la clave de ri hacia productos). Si alguno está mal, el endpoint responde 502 diciendo "Invalid column name 'X'": se corrige la constante y listo.
+ESQUEMA: cada columna de cada SELECT se verificó contra el esquema real de Táctica (INFORMATION_SCHEMA). `fiscal` y `productos` no estaban en ese listado:
+sus columnas (RecID, RazonSocial, Codigo) son las de las consultas que ya corren en producción (ingesta_tactica / adapters). En `requerimientos` no existe
+`Fecha`: la fecha de cabecera es `FechaEntrega`. Si el esquema cambia, el endpoint responde 502 con "Invalid column name 'X'".
 """
 import os
 import re
@@ -44,13 +48,14 @@ UMBRAL_VIEJO_DIAS = 90
 FECHA_PLACEHOLDER = date(2001, 1, 1)
 FECHA_MINIMA_VALIDA = date(2020, 1, 1)
 
-# Columnas que NO figuraban en lo dictado (SUPUESTOS; ver docstring). Solo identificadores de código, nunca texto del usuario.
-C_PEDIDO = "Cantidad"        # requerimientositems: unidades pedidas
+# Columnas reales de Táctica (verificadas contra el esquema). Solo identificadores de código, nunca texto del usuario.
+C_PEDIDO = "Cantidad"          # requerimientositems: unidades pedidas
 C_FECHA_ITEM = "FechaEntrega"  # requerimientositems: fecha estimada del ítem
-C_FECHA_CAB = "Fecha"        # requerimientos: fecha de cabecera
-C_PRODUCTO = "IDProducto"    # requerimientositems -> productos.RecID (respaldo del SKU)
+C_FECHA_CAB = "FechaEntrega"   # requerimientos: fecha de cabecera (no existe `Fecha`)
+C_CREACION = "FechaCreacion"   # requerimientos: de acá sale la antigüedad
+C_PRODUCTO = "IDProducto"      # requerimientositems -> productos.RecID (respaldo del SKU)
 
-_FMT = dict(n=TOPE_FILAS + 1, pedido=C_PEDIDO, fecha_item=C_FECHA_ITEM, fecha_cab=C_FECHA_CAB, producto=C_PRODUCTO)
+_FMT = dict(n=TOPE_FILAS + 1, pedido=C_PEDIDO, fecha_item=C_FECHA_ITEM, fecha_cab=C_FECHA_CAB, creacion=C_CREACION, producto=C_PRODUCTO)
 
 # Subconsultas por ítem (una fila por IDReqProd): evitan multiplicar filas al unir varias compras / clientes.
 _RECIBIDO = """(SELECT ci.IDReqProd, SUM(ci.Cantidad) AS recibido
@@ -59,15 +64,20 @@ _RECIBIDO = """(SELECT ci.IDReqProd, SUM(ci.Cantidad) AS recibido
 _COMPROMETIDO = """(SELECT rc.IDReqProd, SUM(rc.Cantidad) AS comprometido
          FROM requerimientositemsclientes rc WITH (NOLOCK) GROUP BY rc.IDReqProd)"""
 
-_EFECTIVA = "COALESCE(ri.{fecha_item}, r.{fecha_cab})".format(**_FMT)
-_INVALIDA = ("({e} IS NULL OR CAST({e} AS date) = '20010101' OR CAST({e} AS date) < '20200101')").format(e=_EFECTIVA)
+def _invalida(col):
+    """Fragmento SQL: fecha nula, 2001-01-01 o anterior a 2020 (mismo criterio que `_motivo`)."""
+    return "({c} IS NULL OR CAST({c} AS date) = '20010101' OR CAST({c} AS date) < '20200101')".format(c=col)
+
+
+_ITEM_INVALIDA = _invalida("ri.{fecha_item}".format(**_FMT))
+_CAB_INVALIDA = _invalida("r.{fecha_cab}".format(**_FMT))
 
 _SQL_ITEMS = """
 SELECT TOP ({n})
     r.RecID AS req_recid, r.ID AS req_id, r.Numero AS req_numero, r.Estado AS estado, fis.RazonSocial AS proveedor,
     ri.RecID AS item_recid, ri.Codigo AS codigo_item, pm.Codigo AS en_maestro, pf.Codigo AS codigo_respaldo,
     ri.{pedido} AS pedido, ISNULL(rec.recibido, 0) AS recibido, ISNULL(com.comprometido, 0) AS comprometido,
-    ri.{fecha_item} AS fecha_item, r.{fecha_cab} AS fecha_cab
+    ri.{fecha_item} AS fecha_item, r.{fecha_cab} AS fecha_cab, r.{creacion} AS fecha_creacion
 FROM requerimientos r WITH (NOLOCK)
 JOIN requerimientositems ri WITH (NOLOCK) ON ri.IDRequerimiento = r.RecID
 LEFT JOIN fiscal fis WITH (NOLOCK) ON fis.RecID = r.IDFiscal
@@ -82,12 +92,13 @@ ORDER BY r.RecID, ri.RecID
 # Diagnóstico 1: requerimientos e ítems por Estado y cuántos ítems tienen fecha inválida. Sin proveedores ni costos.
 _SQL_DIAG_ESTADOS = """
 SELECT TOP ({n}) r.Estado AS estado, COUNT(DISTINCT r.RecID) AS requerimientos, COUNT(ri.RecID) AS items,
-    SUM(CASE WHEN ri.RecID IS NOT NULL AND {invalida} THEN 1 ELSE 0 END) AS items_fecha_invalida
+    SUM(CASE WHEN ri.RecID IS NOT NULL AND {item_invalida} THEN 1 ELSE 0 END) AS items_fecha_propia_invalida,
+    SUM(CASE WHEN ri.RecID IS NOT NULL AND {item_invalida} AND {cab_invalida} THEN 1 ELSE 0 END) AS items_sin_fecha
 FROM requerimientos r WITH (NOLOCK)
 LEFT JOIN requerimientositems ri WITH (NOLOCK) ON ri.IDRequerimiento = r.RecID
 GROUP BY r.Estado
 ORDER BY r.Estado
-""".format(invalida=_INVALIDA, **_FMT)
+""".format(item_invalida=_ITEM_INVALIDA, cab_invalida=_CAB_INVALIDA, **_FMT)
 
 # Diagnóstico 2: por cada número recibido, ¿coincide con r.ID o con r.Numero? (se compara como texto: no se asume el tipo de la columna).
 _SQL_DIAG_REQS = """
@@ -120,6 +131,17 @@ JOIN comprasitems ci WITH (NOLOCK) ON ci.IDReqProd = ri.RecID
 JOIN compras c WITH (NOLOCK) ON c.RecID = ci.IDCompra
 GROUP BY r.Estado
 ORDER BY r.Estado
+""".format(**_FMT)
+
+# Diagnóstico 4: recibido y cantidad de compras por compras.Estado (solo compras con ítems ligados a un ítem de requerimiento).
+_SQL_DIAG_COMPRAS = """
+SELECT TOP ({n}) c.Estado AS estado, COUNT(DISTINCT c.RecID) AS compras, COUNT(ci.RecID) AS items_recibidos,
+    SUM(ISNULL(ci.Cantidad, 0)) AS recibido
+FROM compras c WITH (NOLOCK)
+JOIN comprasitems ci WITH (NOLOCK) ON ci.IDCompra = c.RecID
+JOIN requerimientositems ri WITH (NOLOCK) ON ri.RecID = ci.IDReqProd
+GROUP BY c.Estado
+ORDER BY c.Estado
 """.format(**_FMT)
 
 
@@ -188,18 +210,27 @@ def _dia(v):
     return v if isinstance(v, date) else None
 
 
-def clasificar_fecha(fecha_item, fecha_cab):
-    """-> (fecha efectiva | None, motivo de invalidez | None). Ítem si tiene; si no, cabecera. Inválida: nula, 2001-01-01 o anterior a 2020."""
-    f = _dia(fecha_item)
+def _motivo(v):
+    """None si la fecha es válida; si no, por qué no: nula, placeholder_2001 (2001-01-01) o anterior_2020."""
+    f = _dia(v)
     if f is None:
-        f = _dia(fecha_cab)
-    if f is None:
-        return None, "nula"
+        return "nula"
     if f == FECHA_PLACEHOLDER:
-        return f, "placeholder_2001"
+        return "placeholder_2001"
     if f < FECHA_MINIMA_VALIDA:
-        return f, "anterior_2020"
-    return f, None
+        return "anterior_2020"
+    return None
+
+
+def clasificar_fecha(fecha_item, fecha_cab):
+    """-> (fecha | None, origen | None, motivo por el que la fecha del ítem no sirvió | None).
+    Ítem si es válida; si no (nula, 2001-01-01 o anterior a 2020), cabecera; si las dos son inválidas, (None, None, motivo): "sin fecha"."""
+    mi = _motivo(fecha_item)
+    if mi is None:
+        return _dia(fecha_item), "item", None
+    if _motivo(fecha_cab) is None:
+        return _dia(fecha_cab), "cabecera", mi
+    return None, None, mi
 
 
 def _num(v):
@@ -220,22 +251,26 @@ def _sku(codigo_item, codigo_respaldo):
 
 def armar_respuesta(filas, hoy: date, umbral_viejo=UMBRAL_VIEJO_DIAS):
     """Filas crudas de `_SQL_ITEMS` -> ítems, resumen por SKU e informe de calidad. Sin acceso a la base."""
-    items, motivos = [], defaultdict(int)
+    items, motivos, usaron_cabecera, sin_fecha = [], defaultdict(int), 0, 0
     vistos, duplicados, sin_maestro, viejos = defaultdict(int), set(), set(), []
     for f in filas:
         sku = _sku(f.get("codigo_item"), f.get("codigo_respaldo"))
         pedido, recibido = _num(f.get("pedido")), _num(f.get("recibido"))
-        fecha, motivo = clasificar_fecha(f.get("fecha_item"), f.get("fecha_cab"))
-        cab = _dia(f.get("fecha_cab"))
-        antig = (hoy - cab).days if cab and cab >= FECHA_MINIMA_VALIDA else None
+        fecha, origen, motivo = clasificar_fecha(f.get("fecha_item"), f.get("fecha_cab"))
+        creacion = _dia(f.get("fecha_creacion"))
+        antig = (hoy - creacion).days if _motivo(creacion) is None else None
         en_maestro = f.get("en_maestro") is not None
         it = {"req_id": f.get("req_id"), "req_numero": f.get("req_numero"), "estado": f.get("estado"),
               "proveedor": (f.get("proveedor") or "").strip() or None, "sku": sku, "sku_en_maestro": en_maestro,
               "pedido": pedido, "recibido": recibido, "comprometido": _num(f.get("comprometido")), "pendiente": max(pedido - recibido, 0),
-              "fecha_estimada": fecha.isoformat() if fecha and not motivo else None, "fecha_invalida": motivo, "antiguedad_dias": antig}
+              "fecha_estimada": fecha.isoformat() if fecha else None,
+              "fecha_estado": {"item": "del ítem", "cabecera": "de cabecera"}.get(origen, "sin fecha"),
+              "fecha_item_invalida": motivo, "antiguedad_dias": antig}
         items.append(it)
         if motivo:
             motivos[motivo] += 1
+        usaron_cabecera += origen == "cabecera"
+        sin_fecha += origen is None
         clave = (it["req_id"], it["req_numero"], sku)
         vistos[clave] += 1
         if vistos[clave] == 2:
@@ -260,7 +295,8 @@ def armar_respuesta(filas, hoy: date, umbral_viejo=UMBRAL_VIEJO_DIAS):
     calidad = {
         "umbral_viejo_dias": umbral_viejo,
         "viejos_pendientes": {"items": len(viejos), "requerimientos": sorted({str(i["req_numero"]) for i in viejos})[:50]},
-        "fechas_invalidas": {"total": sum(motivos.values()), "nula": motivos["nula"], "placeholder_2001": motivos["placeholder_2001"], "anterior_2020": motivos["anterior_2020"]},
+        "fechas": {"item_invalida": {"total": sum(motivos.values()), "nula": motivos["nula"], "placeholder_2001": motivos["placeholder_2001"], "anterior_2020": motivos["anterior_2020"]},
+                   "usaron_cabecera": usaron_cabecera, "sin_fecha": sin_fecha},
         "duplicados": {"total": len(duplicados), "muestra": [{"req_numero": k[1], "sku": k[2], "veces": vistos[k]} for k in sorted(duplicados, key=str)[:50]]},
         "sku_fuera_del_maestro": {"total": len(sin_maestro), "muestra": sorted(sin_maestro)[:50]},
         "items_sin_sku": sum(1 for i in items if not i["sku"]),
@@ -295,7 +331,7 @@ def transito(request: Request, diagnostico: int = Query(0, ge=0, le=1), reqs: st
         raise HTTPException(status_code=422, detail="'reqs' solo se usa con diagnostico=1.")
     try:
         if diagnostico:
-            consultas = [(_SQL_DIAG_ESTADOS, None), (_SQL_DIAG_DESPACHO, None)] + ([(_SQL_DIAG_REQS, {"reqs": pedidos})] if pedidos else [])
+            consultas = [(_SQL_DIAG_ESTADOS, None), (_SQL_DIAG_DESPACHO, None), (_SQL_DIAG_COMPRAS, None)] + ([(_SQL_DIAG_REQS, {"reqs": pedidos})] if pedidos else [])
             res = _consultar(consultas)
         else:
             res = _consultar([(_SQL_ITEMS, None)])
@@ -310,11 +346,13 @@ def transito(request: Request, diagnostico: int = Query(0, ge=0, le=1), reqs: st
         return JSONResponse({**cab, "truncado": trunc, "total_items": len(items), "items": items, "por_sku": por_sku, "calidad": calidad}, headers={"Cache-Control": "no-store"})
     estados, t1 = _recortar(res[0])
     despacho, t3 = _recortar(res[1])
+    compras, t4 = _recortar(res[2])
     out = {**cab, "modo": "diagnostico",
            "nota": "No incluye proveedores ni costos. 'estado' es el valor crudo de requerimientos.Estado.",
-           "por_estado": [_limpiar(f) for f in estados], "despacho_por_estado": [_limpiar(f) for f in despacho], "truncado": t1 or t3}
+           "por_estado": [_limpiar(f) for f in estados], "despacho_por_estado": [_limpiar(f) for f in despacho],
+           "compras_por_estado": [_limpiar(f) for f in compras], "truncado": t1 or t3 or t4}
     if pedidos:
-        reqf, t2 = _recortar(res[2])
+        reqf, t2 = _recortar(res[3])
         por_req = [_limpiar(f) for f in reqf]
         hay_id = {str(f["req_id"]) for f in por_req if f["coincide_id"]}
         hay_num = {str(f["req_numero"]) for f in por_req if f["coincide_numero"]}
