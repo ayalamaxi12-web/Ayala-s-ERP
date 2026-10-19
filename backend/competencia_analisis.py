@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 import competencia_db as cdb
 
 DIAS_DEFAULT, DIAS_MAX = 30, 365
+# Tiendas_Estado crece sin poda (una fila por publicación vista, 6 columnas). Con más filas que esto, /competencia/analisis lo avisa (Google Sheets: 10 M de celdas por archivo).
+TIENDAS_ESTADO_AVISO_FILAS = 100_000
 _ORDEN_ROL = {'Rey': 0, 'Media': 1, 'Barato': 2}
 _SI = {'si', 'sí', 'true', '1', 'activo', 'x'}
 
@@ -45,7 +47,7 @@ def _es_si(v):
 
 
 def construir(filas, dias=DIAS_DEFAULT, hoy=None):
-    """filas = {'refs','hist','eventos','conteo','categorias'}: cada una, filas crudas de la pestaña (encabezado incluido)."""
+    """filas = {'refs','hist','eventos','conteo','categorias'}: cada una, filas crudas de la pestaña (encabezado incluido); 'estado_filas' (opcional) = cantidad de filas de Tiendas_Estado."""
     dias = max(1, min(int(dias or DIAS_DEFAULT), DIAS_MAX))
     hoy = hoy or date.today()
     desde = hoy - timedelta(days=dias)
@@ -151,6 +153,10 @@ def construir(filas, dias=DIAS_DEFAULT, hoy=None):
     categorias = [{'subcategoria': c.get('Subcategoria', ''), 'rol': c.get('Rol', ''), 'entidad_id': c.get('Entidad_ID', ''), 'entidad': c.get('Entidad', ''),
                    'slug': c.get('Slug', ''), 'skus_nuestros': c.get('SKUs_Nuestros', ''), 'actualizado': _iso(f),
                    'desactualizada': bool(max_f and f and (max_f - f).days > 7)} for c, f in zip(cats, fechas)]
+    n_est = filas.get('estado_filas')
+    if isinstance(n_est, int) and n_est > TIENDAS_ESTADO_AVISO_FILAS:
+        avisos.append(f'Tiendas_Estado tiene {n_est:,} filas (~{n_est * 6 / 10_000_000:.0%} de las 10 M de celdas del Sheet; aviso desde {TIENDAS_ESTADO_AVISO_FILAS:,}): '
+                      'hay que podar las publicaciones desaparecidas de más de 90 días (pendiente, todavía no está hecho).'.replace(',', '.'))
     if not categorias:
         avisos.append('Categoria_Competidores está vacía o no existe: correr el scraper actualizado para guardar el mapa de A-CATEGORIAS.')
 

@@ -2305,8 +2305,10 @@ def _analisis_leer_filas():
     ss = get_gs().open_by_key(SPREADSHEET_ID)
     titulos = {ws.title for ws in ss.worksheets()}
     v = lambda n: cm._valores(ss, n, titulos)  # noqa: E731
+    # Tiendas_Estado puede tener decenas de miles de filas: no se baja entera, solo se cuenta (una columna) para avisar si crece de más.
+    estado_filas = max(len(ss.worksheet("Tiendas_Estado").col_values(1)) - 1, 0) if "Tiendas_Estado" in titulos else 0
     return {"refs": v("Referencias_Mercado"), "hist": v(cdb.HISTORIAL_SHEET), "eventos": v("Eventos_Competencia"),
-            "conteo": v("Tiendas_Conteo"), "categorias": v("Categoria_Competidores")}
+            "conteo": v("Tiendas_Conteo"), "categorias": v("Categoria_Competidores"), "estado_filas": estado_filas}
 
 
 _analisis_cache = None

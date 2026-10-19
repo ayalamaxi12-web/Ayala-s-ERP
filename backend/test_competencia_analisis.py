@@ -115,3 +115,13 @@ def test_cache_lee_una_vez_respeta_ttl_y_min_refresco_y_sobrevive_a_un_error():
         assert False
     except RuntimeError:
         pass
+
+
+def test_aviso_cuando_tiendas_estado_supera_el_umbral(monkeypatch):
+    base = {'refs': REFS, 'hist': HIST, 'eventos': [], 'conteo': [], 'categorias': []}
+    sin = lambda **k: [a for a in ca.construir(dict(base, **k), dias=30, hoy=HOY)['avisos'] if 'Tiendas_Estado' in a]
+    assert sin() == [] and sin(estado_filas=ca.TIENDAS_ESTADO_AVISO_FILAS) == []            # en el umbral todavía no avisa
+    a = sin(estado_filas=ca.TIENDAS_ESTADO_AVISO_FILAS + 1)
+    assert len(a) == 1 and '100.001 filas' in a[0] and 'podar' in a[0] and '90 días' in a[0]
+    monkeypatch.setattr(ca, 'TIENDAS_ESTADO_AVISO_FILAS', 10)
+    assert len(sin(estado_filas=11)) == 1
