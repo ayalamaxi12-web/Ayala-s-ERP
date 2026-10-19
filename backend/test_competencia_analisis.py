@@ -77,11 +77,15 @@ def test_eventos_ventana_y_orden():
 def test_tiendas_conteo_y_categorias_desactualizadas():
     cont = [['Fecha', 'Hora', 'Entidad_ID', 'Entidad', 'Leidas', 'Declaradas_ML', 'Paginas', 'Completa', 'Motivo', 'Nuevas', 'Desaparecidas', 'Mediana_7d', 'Var_vs_Mediana_Pct', 'Estado_Debilidad', 'Fuente'],
             ['08/10/2026', '', 'E1', 'GEOTEK', '120', '122', '3', 'Si', '', '', '', '', '', '', 'Scraper'],
-            ['09/10/2026', '', 'E1', 'GEOTEK', '48', '122', '1', 'No', 'captcha', '', '', '118', '', '', 'Scraper']]
+            ['09/10/2026', '', 'E1', 'GEOTEK', '48', '122', '1', 'No', 'captcha', '', '', '118', '', '', 'Scraper'],
+            ['08/10/2026', '', 'E2', 'TECNO', '30', '30', '1', 'Si', '', '0', '4', '', '', '', 'Scraper']]
     cat = [['Subcategoria', 'Rol', 'Entidad_ID', 'Entidad', 'Slug', 'SKUs_Nuestros', 'Actualizado'],
            ['Toner', 'Rey', 'E1', 'GEOTEK', 'geotek', 'PV-1', '10/10/2026'], ['Tinta', 'Barato', 'E2', 'TECNO', 'tecno', '', '01/09/2026']]
     r = armar(conteo=cont, categorias=cat)
     t = r['tiendas'][0]
+    assert (t['ultimo']['nuevas'], t['ultimo']['desaparecidas']) == (None, None)             # '' = no medido (lectura incompleta)
+    t2 = r['tiendas'][1]
+    assert (t2['ultimo']['nuevas'], t2['ultimo']['desaparecidas']) == (0, 4) and t2['serie'][0]['nuevas'] == 0    # 0 es un dato, no 'sin dato'
     assert t['ultimo']['leidas'] == 48 and t['ultimo']['completa'] is False and t['ultimo']['mediana_7d'] == 118 and len(t['serie']) == 2
     assert [c['desactualizada'] for c in r['categorias']] == [False, True]
     assert not any('Categoria_Competidores' in a for a in r['avisos'])
@@ -111,3 +115,13 @@ def test_cache_lee_una_vez_respeta_ttl_y_min_refresco_y_sobrevive_a_un_error():
         assert False
     except RuntimeError:
         pass
+
+
+def test_aviso_cuando_tiendas_estado_supera_el_umbral(monkeypatch):
+    base = {'refs': REFS, 'hist': HIST, 'eventos': [], 'conteo': [], 'categorias': []}
+    sin = lambda **k: [a for a in ca.construir(dict(base, **k), dias=30, hoy=HOY)['avisos'] if 'Tiendas_Estado' in a]
+    assert sin() == [] and sin(estado_filas=ca.TIENDAS_ESTADO_AVISO_FILAS) == []            # en el umbral todavía no avisa
+    a = sin(estado_filas=ca.TIENDAS_ESTADO_AVISO_FILAS + 1)
+    assert len(a) == 1 and '100.001 filas' in a[0] and 'podar' in a[0] and '90 días' in a[0]
+    monkeypatch.setattr(ca, 'TIENDAS_ESTADO_AVISO_FILAS', 10)
+    assert len(sin(estado_filas=11)) == 1

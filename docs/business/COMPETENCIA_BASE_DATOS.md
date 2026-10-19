@@ -57,6 +57,18 @@ Estado_Debilidad, Fuente`. `Nuevas`/`Desaparecidas` se completan en la Fase 2 (`
 Solo las lecturas `Completa = Si` forman la línea base. Esquema pensado para Postgres (`comp_tienda_conteo`, clave `(fecha, entidad_id)`).
 Medidor: `scraper/celdas.py` (límite de Google Sheets: 10M celdas por archivo, cuentan también las vacías).
 
+### Etapa 2 — Fase 2: `Tiendas_Estado` (Nuevas / Desaparecidas por tienda)
+Una fila por (`Entidad_ID`, `Ident`) con `Primera_Vez, Ultima_Vez, Activa, Desaparecida_Desde` (`Ident` = identidad de la publicación sin entidad, ej. `P|producto|wid`, `I|item`).
+Cada corrida compara las publicaciones que trae la tienda contra ese estado y completa `Nuevas` / `Desaparecidas` en `Tiendas_Conteo` (y en `GET /competencia/analisis`, `tiendas[].ultimo` y `serie`).
+- Solo una lectura **completa** mueve el estado; una incompleta o bloqueada deja Nuevas/Desaparecidas **vacías** (= no medido; `0` es un dato).
+- La primera lectura completa de una tienda **siembra** el estado y no cuenta nada como nuevo (no hay con qué comparar).
+- Idempotente por día (se cuenta contra el estado de antes de hoy). Una publicación que reaparece se reactiva y no cuenta como nueva.
+- Costo: se reescribe la fila de cada publicación vista (Ultima_Vez) en cada corrida, en lotes de 200; 6 columnas por publicación (el medidor de celdas de la corrida lo suma).
+- Qué NO hace: no guarda títulos ni precios de esas publicaciones, ni poda las `Activa = No` viejas.
+- **PENDIENTE: podar publicaciones desaparecidas de más de 90 días** (`Activa = No` y `Desaparecida_Desde` > 90 días). Decisión de Maxx: por ahora sin poda.
+- **Vigilancia:** `GET /competencia/analisis` agrega un aviso en `avisos` cuando `Tiendas_Estado` supera **100.000 filas** (~6 % de las 10 M de celdas del archivo; constante `TIENDAS_ESTADO_AVISO_FILAS` en `competencia_analisis.py`).
+  El backend solo cuenta las filas (una columna), no baja la pestaña entera. Con ese aviso hay que hacer la poda.
+
 ### Limpieza (Etapa 2) — endpoints protegidos, dry-run por defecto
 - `POST /competencia/historial/borrar-lecturas-entidad` `{"entidad": "GLOBAL ELECTRONICS GROUP", "ejecutar": false, "esperado": N}`: borra de `Historial_Precios`
   las lecturas de esa entidad (somos nosotros, no es competencia). **Irreversible**; la real exige `esperado` = la cantidad del dry-run, registra el lote en

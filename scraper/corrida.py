@@ -16,6 +16,7 @@ import sincronizar as sy
 import paginas_ml as pml
 import celdas as cel
 import tiendas_conteo as tc
+import tiendas_estado as te
 import errores
 from errores import CorridaCortada, NavegadorCaido
 
@@ -162,6 +163,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
     hist_f, ev_f = sio.leer(ss, cdb.HISTORIAL_SHEET, titulos), sio.leer(ss, ev.EVENTOS_SHEET, titulos)
     disc_f = sio.leer(ss, DISCOVERY_SHEET, titulos)
     conteo_f = sio.leer(ss, tc.CONTEO_SHEET, titulos)
+    estado_f = sio.leer(ss, te.ESTADO_SHEET, titulos)
 
     # 1) Planilla de Maca -> perfiles y SKU
     perfiles, av1 = pm.leer_perfiles(filas_maca['A'])
@@ -226,7 +228,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
 
     previos = _ultimos_precios(hist_f, hoy)
     ultimo_caida = ev.ultimo_tipo_por_referencia(ev_f)
-    lecturas, eventos, disc_nuevas, conteos = {}, [], [], []
+    lecturas, eventos, disc_nuevas, conteos, estados = {}, [], [], [], []
     leidas_por_perfil = set()
     disc_existentes = set()
     if disc_f:
@@ -301,9 +303,17 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
                 previas = tc.validas_previas(conteo_f, p['entidad_id'], hoy)
                 fila_c = tc.fila_conteo(hoy, hora, p['entidad_id'], p['entidad_nombre'], n_leidas, t.get('declaradas'),
                                         t.get('paginas'), completa, motivo_c, previas)
+                # Fase 2: Nuevas / Desaparecidas contra el estado guardado (solo con lectura completa y sin bloqueo)
+                f_est, nuevas_t, desap_t, siembra_t = te.actualizar(
+                    te.estado_de_tienda(estado_f, p['entidad_id']), p['entidad_id'],
+                    [te.ident_texto(sy.ident_publicacion(it['link'])) for it in (t.get('items') or [])],
+                    bool(completa) and t['estado'] != 'bloqueado', hoy)
+                estados += f_est
+                fila_c['Nuevas'], fila_c['Desaparecidas'] = ('' if nuevas_t is None else nuevas_t), ('' if desap_t is None else desap_t)
                 conteos.append(fila_c)
                 R['tiendas'].append({'entidad': p['entidad_nombre'], 'leidas': n_leidas, 'declaradas': t.get('declaradas'),
                                      'completa': completa, 'motivo': motivo_c, 'mediana': fila_c['Mediana_7d'],
+                                     'nuevas': fila_c['Nuevas'], 'desaparecidas': fila_c['Desaparecidas'], 'siembra': siembra_t,
                                      'var': fila_c['Var_vs_Mediana_Pct'], 'via_paginacion': t.get('via_paginacion'),
                                      'evidencia_paginacion': t.get('evidencia_paginacion')})
                 if not completa and t['estado'] != 'bloqueado':
@@ -484,7 +494,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
         R['descubrimiento_nuevas'] = len(disc_nuevas)
         R['navegador_reinicios'] = getattr(lector, 'reinicios', 0)
         if escribir:
-            _escribir(ss, titulos, plan, ents_nuevas_por_lectura, cambios_ref, lecturas, eventos, disc_nuevas, conteos, R, log)
+            _escribir(ss, titulos, plan, ents_nuevas_por_lectura, cambios_ref, lecturas, eventos, disc_nuevas, conteos, estados, R, log)
         R['celdas'] = cel.medir(ss)
     if bloqueo:
         R['bloqueo'] = bloqueo
@@ -499,7 +509,7 @@ def correr(ss, filas_maca, lector, *, vendedor=None, solo=None, escribir=True, d
     return R
 
 
-def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, disc_nuevas, conteos, R, log):
+def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, disc_nuevas, conteos, estados, R, log):
     ent_ws = cdb.asegurar_pestana(ss, 'Entidades', ENT_HEADERS, 1000)
     ref_ws = cdb.asegurar_pestana(ss, 'Referencias_Mercado', REF_HEADERS, 1000)
     ent_h = sio.asegurar_columnas(ent_ws, ENT_HEADERS)
@@ -531,6 +541,9 @@ def _escribir(ss, titulos, plan, ents_extra, cambios_ref, lecturas, eventos, dis
     if conteos:
         ins, act, _ = tc.registrar(ss, conteos)
         R['conteos_escritos'] = {'nuevos': ins, 'reemplazados': act}
+    if estados:
+        ins, act = te.registrar(ss, estados)
+        R['estado_tiendas_escrito'] = {'nuevas': ins, 'actualizadas': act}
     log('Escritura al Sheet terminada.')
 
 
@@ -569,7 +582,8 @@ def texto_resumen(R):
             dec = f" / {t['declaradas']} declaradas" if t['declaradas'] else ''
             med = f" · mediana {t['mediana']} ({t['var']:+}%)" if t['mediana'] != '' and t['var'] != '' else (f" · mediana {t['mediana']}" if t['mediana'] != '' else ' · línea base en construcción')
             via = f" · paginación {t['via_paginacion']}" if t.get('via_paginacion') else ''
-            L.append(f"   - {t['entidad']}: {t['leidas']} leídas{dec} · " + ('completa' if t['completa'] else f"INCOMPLETA ({t['motivo']})") + med + via)
+            cambio = ('' if t.get('nuevas', '') == '' else f" · +{t['nuevas']} nuevas / -{t['desaparecidas']} desaparecidas") + (' · estado sembrado hoy (sin comparación)' if t.get('siembra') else '')
+            L.append(f"   - {t['entidad']}: {t['leidas']} leídas{dec} · " + ('completa' if t['completa'] else f"INCOMPLETA ({t['motivo']})") + med + cambio + via)
     if R.get('celdas'):
         L.append(cel.texto(R['celdas']))
     if pu['catalogo_sin_wid']:
