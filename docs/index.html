@@ -708,8 +708,9 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
 <!-- ANÁLISIS DE COMPETENCIA (Etapa 3.1: por SKU, modo reciente). Convive con Competidores ML / Intel. Competitiva (no los reemplaza todavía). -->
 <div id="page-analisis-competencia" class="page">
-  <div class="section-hdr">Análisis de Competencia — por SKU <span style="font-size:10px;font-weight:400;color:var(--text3)">(modo reciente · último precio leído por el scraper)</span></div>
+  <div class="section-hdr">Análisis de Competencia — <span id="ac-titulo-modo">por SKU</span> <span style="font-size:10px;font-weight:400;color:var(--text3)">(último precio leído por el scraper · histórico en 📈 de cada SKU)</span></div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <span style="display:inline-flex;gap:4px"><button class="btn-xs" id="ac-modo-sku" onclick="acModo('sku')" style="border-color:var(--accent)">Por SKU</button><button class="btn-xs" id="ac-modo-cat" onclick="acModo('cat')" title="Una fila por subcategoría: tiendas Rey/Media/Barato (planilla de Maca), conteo de publicaciones y en cuántos SKU nos gana el Rey">Por categoría</button></span>
     <button class="btn primary" id="btn-ac-load" onclick="acCargar(false)">🔄 Cargar</button>
     <button class="btn" onclick="acCargar(true)" title="Relee el Sheet (máx. 1 vez cada 30 s)">⟳ Releer Sheet</button>
     <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
@@ -741,6 +742,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     </table>
     <div class="pagination" id="ac-pag"></div>
   </div>
+  <div id="ac-cat-wrap" style="display:none;flex:1;min-width:0"></div>
   <aside id="ac-aside" class="ac-aside" style="display:none"></aside>
   </div>
 </div>
@@ -2764,7 +2766,7 @@ let intelComercialLoaded=false;
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
 // (igual que Competidores) y el margen sale de compMargenAt (paridad con el motor: backend/scripts/paridad_margenes.py). Convive con los módulos viejos.
-const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[],histAb:{}};
+const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[],histAb:{},modo:'sku',catAb:{},catSort:'sub'};
 function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Nuestro precio "comparable" contra una publicación por `c` unidades: precio × c (+ envío desde el umbral), igual que Competidores ("Mi Precio = PM×Cant+Envío").
 function acComparable(X,c,ctx){const t=(X||0)*(c>0?c:1);return t>=ctx.umbral?t+ctx.envio:t;}
@@ -2901,6 +2903,7 @@ function acRender(){
     return `<tr${AC.abierto===f.key?' class="ac-sel"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b>${acCtxChips(f)}</td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button> <button class="btn-xs" onclick="acHistToggle(${i})" title="Histórico de precios de los competidores de este SKU (serie, último cambio y eventos)">📈 ${AC.histAb[f.key]?'Cerrar':'Histórico'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?`<td style="vertical-align:top;min-width:150px">${acOtrosCelda(f)}</td>`:''}</tr>${acCtxFilaHtml(f)}${acHistFilaHtml(f)}`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
   acAsideRender();
   qs('ac-count').textContent=filas.length+' SKU';
+  acCatRender(filas,fl);
   S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
   const c=window.COMPDESC||{},raro=[];if(c.com===false)raro.push('comisión');if(c.iva===false)raro.push('IVA');if(c.iibb===false)raro.push('IIBB');if(c.impch===false)raro.push('cheque');if(c.envio===false)raro.push('envío');if(c.extra===false)raro.push('costo fijo ML');
   qs('ac-margen-info').innerHTML=`Margen con los parámetros de Competidores: comisión ${cfgN('cfg-com',15.5)}% · IIBB ${cfgN('cfg-iibb',5)}% · cheque ${cfgN('cfg-impch',1.2)}% · envío $${cfgN('cfg-envio',8500)} desde ${fmt$(ctx.umbral)} · costo fijo ML ${mlCostoFijoTexto()}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>')+(raro.length?` · <span style="color:var(--yellow)">⚠ en Competidores tenés desactivado: ${raro.join(', ')}</span>`:'');
@@ -3188,6 +3191,61 @@ function acHistHtml(f,dias){
 function acHistFilaHtml(f){const d=AC.histAb[f.key];return d?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:10px 14px;border-bottom:1px solid var(--border)">${acHistHtml(acFilaCompleta(f.key)||f,d)}</td></tr>`:'';}
 function acHistToggle(i){const key=AC.keys[i];if(!key)return;if(AC.histAb[key])delete AC.histAb[key];else AC.histAb[key]=30;acRender();}
 function acHistDias(i,n){const key=AC.keys[i];if(key&&AC.histAb[key]){AC.histAb[key]=n;acRender();}}
+// ── 3.3 Por categoría: una fila por subcategoría (mapa A-CATEGORIAS de Maca guardado en Categoria_Competidores). Solo lectura; los SKU salen de la columna SKUs_Nuestros
+// y se cruzan con las mismas filas (y filtros) de la vista por SKU. Conteo de publicaciones por tienda = Tiendas_Conteo (+ Nuevas/Desaparecidas de Tiendas_Estado).
+function acMediana(a){const v=a.filter(x=>x!=null&&isFinite(x)).sort((x,y)=>x-y);if(!v.length)return null;const m=v.length>>1;return v.length%2?v[m]:(v[m-1]+v[m])/2;}
+function acCatSkus(txt,norm){return [...new Set(String(txt||'').split(/[,;\n]+/).map(x=>norm(x)).filter(Boolean))];}
+function acTiendaConteo(D,t,norm){const T=D.tiendas||[];const x=T.find(c=>t.entidad_id&&c.entidad_id===t.entidad_id)||T.find(c=>norm(c.entidad||'')&&norm(c.entidad||'')===norm(t.entidad||''));return x?x.ultimo:null;}
+// filas = filas de acArmar/acFiltrar (con las refs visibles); hayFiltro: si hay algún filtro activo se ocultan las subcategorías sin SKU visibles.
+function acCategoriasArmar(D,filas,hayFiltro,norm){
+  const por=new Map(),byKey=new Map(filas.map(f=>[f.key,f]));
+  (D.categorias||[]).forEach(c=>{const sub=c.subcategoria||'Sin subcategoría';let g=por.get(sub);if(!g){g={sub,tiendas:[],keys:new Set()};por.set(sub,g);}
+    g.tiendas.push({rol:c.rol,entidad:c.entidad,entidad_id:c.entidad_id,slug:c.slug,desactualizada:!!c.desactualizada,conteo:acTiendaConteo(D,c,norm)});
+    acCatSkus(c.skus_nuestros,norm).forEach(k=>g.keys.add(k));});
+  const out=[];
+  por.forEach(g=>{
+    g.tiendas.sort((a,b)=>acRolRank(a.rol)-acRolRank(b.rol)||String(a.entidad).localeCompare(b.entidad));
+    const rows=[...g.keys].map(k=>byKey.get(k)).filter(Boolean);
+    const reyRefs=f=>f.Rey.filter(r=>r.precio!=null&&r._diff!=null),conRey=rows.filter(f=>reyRefs(f).length),reyGana=conRey.filter(f=>reyRefs(f).some(r=>r._diff<0));
+    const bar=[].concat(...rows.map(f=>f.Barato.filter(r=>r.precio!=null).map(r=>({p:r.precio/(r.cantidad>0?r.cantidad:1),d:r._diff}))));
+    out.push(Object.assign(g,{nSkus:g.keys.size,rows,conRey:conRey.length,reyGana:reyGana.length,reyGanaSkus:reyGana.map(f=>f.sku),barMedP:acMediana(bar.map(x=>x.p)),barMedD:acMediana(bar.map(x=>x.d)),conBarato:bar.length}));
+  });
+  return out.filter(g=>!hayFiltro||g.rows.length);}
+function acCatOrdenar(gs,modo){const v=g=>{const t=g.tiendas.map(x=>x.conteo&&parseFloat(x.conteo.var_pct)).filter(x=>x!=null&&!isNaN(x));return t.length?Math.min(...t):null;};
+  const c=gs.slice();if(modo==='ganan')c.sort((a,b)=>(b.reyGana-a.reyGana)||a.sub.localeCompare(b.sub));
+  else if(modo==='var')c.sort((a,b)=>{const x=v(a),y=v(b);return (x==null)-(y==null)||(x-y)||a.sub.localeCompare(b.sub);});
+  else c.sort((a,b)=>a.sub.localeCompare(b.sub));return c;}
+function acTiendaHtml(t){
+  const c=t.conteo,nm=`<b>${acEsc(t.entidad||'?')}</b>`+(t.desactualizada?' <span class="badge badge-gray" title="Ya no figura en A-CATEGORIAS de la planilla de Maca (se conserva el último dato)">fuera de planilla</span>':'');
+  if(!c)return `<div style="margin-bottom:6px">${nm}<div style="font-size:10px;color:var(--text3)">sin conteo de publicaciones todavía</div></div>`;
+  const vp=parseFloat(c.var_pct),med=c.mediana_7d!=null?` · mediana 7 d ${c.mediana_7d}${!isNaN(vp)?` (<span style="color:${vp<0?'var(--red)':'var(--green)'}">${vp>0?'+':''}${vp}%</span>)`:''}`:'';
+  const cam=(c.nuevas!=null||c.desaparecidas!=null)?` · <span title="Publicaciones nuevas / desaparecidas en la última lectura completa">+${c.nuevas==null?'?':c.nuevas} / −${c.desaparecidas==null?'?':c.desaparecidas}</span>`:'';
+  const inc=c.completa?'':` <span class="badge badge-red" title="${acEsc(c.motivo||'lectura incompleta')}">lectura incompleta</span>`;
+  const deb=c.estado_debilidad?` <span class="badge badge-yellow">${acEsc(c.estado_debilidad)}</span>`:'';
+  return `<div style="margin-bottom:6px;line-height:1.5">${nm}<div style="font-family:'DM Mono',monospace;font-size:11px">${c.leidas==null?'—':c.leidas} pub.${med}${cam}${inc}${deb}</div><div style="font-size:10px;color:var(--text3)">lectura del ${acFechaCorta(c.fecha)}</div></div>`;}
+function acCatHtml(gs){
+  if(!gs.length)return '<div style="padding:20px;text-align:center;color:var(--text3)">Sin subcategorías para mostrar (¿Categoria_Competidores vacía, o los filtros no dejan ningún SKU?)</div>';
+  const col=(g,rol)=>`<td style="vertical-align:top;min-width:200px">${g.tiendas.filter(t=>t.rol===rol).map(acTiendaHtml).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
+  const filas=gs.map((g,i)=>{const ab=AC.catAb[g.sub];
+    const rey=g.conRey?`<span style="color:${g.reyGana?'var(--red)':'var(--green)'}" title="SKU donde algún Rey vende más barato que nuestro PM">${g.reyGana} de ${g.conRey}</span><div style="font-size:10px;color:var(--text3)">nos gana el Rey</div>`:'<span style="color:var(--text3)">sin precio del Rey</span>';
+    const bar=g.conBarato?`<span style="font-family:'DM Mono',monospace">${fmt$(g.barMedP)}</span><div style="font-size:10px;color:var(--text3)">mediana del Barato (por u.)${g.barMedD!=null?' · '+(g.barMedD>0?'+':'')+g.barMedD.toFixed(1)+'% vs nosotros':''}</div>`:'<span style="color:var(--text3)">—</span>';
+    const det=ab?`<tr class="ac-ctx-row"><td colspan="7" style="background:rgba(0,157,188,.05);padding:8px 14px">${g.rows.length?g.rows.map((f,j)=>`<span class="badge badge-gray" style="margin:2px;cursor:pointer" onclick="acCatVerSku(${i},${j})" title="Ver este SKU en la vista por SKU">${acEsc(f.sku)}</span>`).join(''):'<span style="color:var(--text3);font-size:10px">Ningún SKU de la subcategoría con competencia cargada.</span>'}</td></tr>`:'';
+    return `<tr><td style="vertical-align:top"><b>${acEsc(g.sub)}</b><div><button class="btn-xs" onclick="acCatToggle(${i})">${ab?'Ocultar':'Ver'} SKU</button></div></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${g.rows.length}<span style="color:var(--text3)"> / ${g.nSkus}</span><div style="font-size:10px;color:var(--text3)">con competencia / en planilla</div></td><td style="vertical-align:top">${rey}</td><td style="vertical-align:top">${bar}</td>${col(g,'Rey')}${col(g,'Media')}${col(g,'Barato')}</tr>${det}`;}).join('');
+  return `<div class="table-wrap"><table><thead><tr><th>Subcategoría</th><th>Nuestros SKU</th><th>Rey vs nosotros</th><th>Barato</th><th>👑 Tienda Rey</th><th>Tienda Media</th><th>Tienda Barato</th></tr></thead><tbody>${filas}</tbody></table></div>`;}
+function acCatRender(filas,fl){
+  const cat=AC.modo==='cat',w=qs('ac-cat-wrap');if(!w)return;
+  qs('ac-table-wrap').style.display=cat?'none':'';w.style.display=cat?'':'none';
+  qs('ac-titulo-modo').textContent=cat?'por categoría':'por SKU';qs('ac-modo-sku').style.borderColor=cat?'':'var(--accent)';qs('ac-modo-cat').style.borderColor=cat?'var(--accent)':'';
+  if(!cat)return;
+  const as=qs('ac-aside');if(as)as.style.display='none';AC.asideKey=null;
+  const hay=!!(fl.search||fl.cats||fl.pms||(fl.vend&&fl.vend.size)||fl.soloCambios||fl.soloGanan||fl.ocultarSinStock);
+  AC.catGs=acCatOrdenar(acCategoriasArmar(AC.data,filas,hay,normSku),AC.catSort);
+  const ops=[['sub','Subcategoría A-Z'],['ganan','Donde más nos gana el Rey'],['var','Tienda más por debajo de su mediana']].map(([v,t])=>`<option value="${v}"${AC.catSort===v?' selected':''}>${t}</option>`).join('');
+  w.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:10px;color:var(--text2)">Ordenar<select class="fi" onchange="AC.catSort=this.value;acRender()">${ops}</select><span style="color:var(--text3)">${AC.catGs.length} subcategorías · fuente: Categoria_Competidores + Tiendas_Conteo</span></div>`+acCatHtml(AC.catGs);
+  qs('ac-count').textContent=AC.catGs.length+' subcategorías';}
+function acModo(m){AC.modo=m;acRender();}
+function acCatToggle(i){const g=(AC.catGs||[])[i];if(!g)return;AC.catAb[g.sub]=!AC.catAb[g.sub];acRender();}
+function acCatVerSku(i,j){const g=(AC.catGs||[])[i],f=g&&g.rows[j];if(!f)return;qs('ac-search').value=f.sku;AC.page=1;AC.modo='sku';acRender();}
 function acCtxFilaHtml(f){return AC.ctxAbierto&&AC.ctxAbierto[f.key]?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:8px 14px;border-bottom:1px solid var(--border)">${acCtxDetalleHtml(f)}</td></tr>`:'';}
 // ── Precio real en ML (E2): al abrir el desglose de un SKU se pide GET /competencia/precio-ml (≈1 llamada a ML por publicación activa; el backend lo cachea 5 min).
 // Distinto del PM: el chip marca "≠ PM" cuando el precio real de alguna publicación activa se aparta más del 1% del precio ML del PM.
