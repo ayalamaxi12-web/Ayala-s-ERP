@@ -24,6 +24,7 @@ from rentabilidad import costos_ecom
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 from proyeccion_snapshot import router as proyeccion_router
+from proyeccion_descubrir_esquema import router as descubrir_esquema_router  # TEMPORAL, se elimina en un PR aparte
 
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
 # Orden: el último en agregarse es el más externo. CORS va por fuera de la clave
@@ -37,6 +38,7 @@ _CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "https://ayalamaxi
 app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Proyeccion-Version"])
 app.include_router(rentabilidad_router)
 app.include_router(proyeccion_router)
+app.include_router(descubrir_esquema_router)  # TEMPORAL
 
 
 # Starlette no agrega los headers de CORSMiddleware a una excepción que se

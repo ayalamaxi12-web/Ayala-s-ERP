@@ -30,7 +30,7 @@ import os
 
 HEADER_CLAVE = "x-erp-key"
 
-_RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy", "/competencia/analisis", "/competencia/publicaciones-propias", "/competencia/precio-ml", "/campanas/calendario", "/proyeccion-2027/dashboard", "/proyeccion-2027/versiones")
+_RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy", "/competencia/analisis", "/competencia/publicaciones-propias", "/competencia/precio-ml", "/campanas/calendario", "/proyeccion-2027/dashboard", "/proyeccion-2027/versiones", "/proyeccion-2027/descubrir-esquema")
 _METODOS_ESCRITURA = ("POST", "PUT", "PATCH", "DELETE")
 
 _MAX_AVISADOS = 500
