@@ -2,21 +2,26 @@
 
 Alimenta el tablero Proyección 2027 con lo que hoy el modelo no ve (pedidos abiertos). Solo SELECT contra Táctica: nada se escribe allá.
 
-Lógica (confirmada con Maxx):
+Lógica (decodificada con el diagnóstico y confirmada con Maxx):
   requerimientos r + requerimientositems ri (ri.IDRequerimiento = r.RecID) + fiscal (proveedor, por r.IDFiscal).
-  recibido     = SUM(comprasitems.Cantidad) por IDReqProd = ri.RecID (comprasitems -> compras por IDCompra)
-  comprometido = SUM(requerimientositemsclientes.Cantidad) por IDReqProd = ri.RecID   (a clientes: informativo, no se resta)
-  pendiente    = max(pedido - recibido, 0); solo se listan los ítems con pendiente > 0
+  ABIERTO      = requerimientos.Estado = 0. Se EXCLUYEN Estado 1 (cerrado) y Estado 2 (sin decodificar: no se sabe qué significa, no se cuenta).
+  pendiente    = pedido (requerimientositems.Cantidad). El recibido por comprasitems y el comprometido a clientes son INFORMATIVOS: Táctica casi no
+                 registra recepciones contra el requerimiento, así que no se restan.
+  recibido     = SUM(comprasitems.Cantidad) por IDReqProd = ri.RecID (comprasitems -> compras por IDCompra)      [informativo]
+  comprometido = SUM(requerimientositemsclientes.Cantidad) por IDReqProd = ri.RecID                              [informativo]
   fecha        = la del ítem (requerimientositems.FechaEntrega); si es nula, 2001-01-01 o anterior a 2020, la de cabecera
                  (requerimientos.FechaEntrega); si las dos son inválidas, "sin fecha"
-  antigüedad   = días desde requerimientos.FechaCreacion
+  antigüedad   = días desde requerimientos.FechaCreacion (es de la cabecera: todos los ítems de un requerimiento tienen la misma)
+                 más de 180 días -> `revisar`; más de 365 -> `excluido`: sigue listado pero NO entra al cálculo (por SKU ni por requerimiento).
+                 Sin FechaCreacion válida no se puede medir la antigüedad: el requerimiento queda en el cálculo y se cuenta en la calidad.
   SKU          = ri.Codigo (sin el padding de Táctica), con respaldo por `productos` si el ítem no trae código
 
 Modos:
-  GET /proyeccion-2027/transito                  ítems pendientes + resumen por SKU + informe de calidad (con proveedor)
+  GET /proyeccion-2027/transito                  ítems abiertos + resumen por requerimiento + resumen por SKU + informe de calidad (con proveedor)
   GET /proyeccion-2027/transito?diagnostico=1    para decodificar los estados de Táctica: NO devuelve proveedores ni costos.
       [&reqs=9001,9002,...]                      números de requerimiento a contrastar (si coinciden con r.ID o con r.Numero)
-      Incluye: estados, FechaDespacho por estado de requerimiento y recibido / cantidad de compras por compras.Estado.
+      Incluye: estados, FechaDespacho por estado de requerimiento, recibido / cantidad de compras por compras.Estado y, por requerimiento,
+      cuántos `pedidos` (de clientes) tienen IDRequerimiento igual a su RecID (¿ahí está la reserva de clientes?).
 
 Garantías: X-ERP-Key obligatoria (falla cerrado: 503 sin ERP_API_KEY), solo SELECT de texto fijo (lo único que viene del usuario es `reqs`,
 validado como enteros y mandado como parámetro, nunca concatenado), lecturas sin bloqueos (WITH (NOLOCK)), timeout de login y de consulta, tope de filas.
@@ -44,7 +49,9 @@ LOGIN_TIMEOUT_SEG = 20
 QUERY_TIMEOUT_SEG = 30
 TOPE_FILAS = 5000
 MAX_REQS = 500
-UMBRAL_VIEJO_DIAS = 90
+ESTADO_ABIERTO = 0      # requerimientos.Estado: 0 = abierto; 1 = cerrado; 2 = sin decodificar (1 y 2 se excluyen)
+REVISAR_MAS_DE_DIAS = 180
+EXCLUIR_MAS_DE_DIAS = 365
 FECHA_PLACEHOLDER = date(2001, 1, 1)
 FECHA_MINIMA_VALIDA = date(2020, 1, 1)
 
@@ -55,7 +62,7 @@ C_FECHA_CAB = "FechaEntrega"   # requerimientos: fecha de cabecera (no existe `F
 C_CREACION = "FechaCreacion"   # requerimientos: de acá sale la antigüedad
 C_PRODUCTO = "IDProducto"      # requerimientositems -> productos.RecID (respaldo del SKU)
 
-_FMT = dict(n=TOPE_FILAS + 1, pedido=C_PEDIDO, fecha_item=C_FECHA_ITEM, fecha_cab=C_FECHA_CAB, creacion=C_CREACION, producto=C_PRODUCTO)
+_FMT = dict(n=TOPE_FILAS + 1, pedido=C_PEDIDO, fecha_item=C_FECHA_ITEM, fecha_cab=C_FECHA_CAB, creacion=C_CREACION, producto=C_PRODUCTO, abierto=ESTADO_ABIERTO)
 
 # Subconsultas por ítem (una fila por IDReqProd): evitan multiplicar filas al unir varias compras / clientes.
 _RECIBIDO = """(SELECT ci.IDReqProd, SUM(ci.Cantidad) AS recibido
@@ -63,6 +70,9 @@ _RECIBIDO = """(SELECT ci.IDReqProd, SUM(ci.Cantidad) AS recibido
          GROUP BY ci.IDReqProd)"""
 _COMPROMETIDO = """(SELECT rc.IDReqProd, SUM(rc.Cantidad) AS comprometido
          FROM requerimientositemsclientes rc WITH (NOLOCK) GROUP BY rc.IDReqProd)"""
+# Pedidos (de clientes) cuyo IDRequerimiento apunta al requerimiento: una fila por requerimiento.
+_PEDIDOS_POR_REQ = """(SELECT pd.IDRequerimiento, COUNT(*) AS pedidos
+         FROM pedidos pd WITH (NOLOCK) GROUP BY pd.IDRequerimiento)"""
 
 def _invalida(col):
     """Fragmento SQL: fecha nula, 2001-01-01 o anterior a 2020 (mismo criterio que `_motivo`)."""
@@ -74,7 +84,7 @@ _CAB_INVALIDA = _invalida("r.{fecha_cab}".format(**_FMT))
 
 _SQL_ITEMS = """
 SELECT TOP ({n})
-    r.RecID AS req_recid, r.ID AS req_id, r.Numero AS req_numero, r.Estado AS estado, fis.RazonSocial AS proveedor,
+    r.RecID AS req_recid, r.ID AS req_id, r.Estado AS estado, fis.RazonSocial AS proveedor,
     ri.RecID AS item_recid, ri.Codigo AS codigo_item, pm.Codigo AS en_maestro, pf.Codigo AS codigo_respaldo,
     ri.{pedido} AS pedido, ISNULL(rec.recibido, 0) AS recibido, ISNULL(com.comprometido, 0) AS comprometido,
     ri.{fecha_item} AS fecha_item, r.{fecha_cab} AS fecha_cab, r.{creacion} AS fecha_creacion
@@ -85,8 +95,8 @@ OUTER APPLY (SELECT TOP 1 p.Codigo FROM productos p WITH (NOLOCK) WHERE p.Codigo
 OUTER APPLY (SELECT TOP 1 p.Codigo FROM productos p WITH (NOLOCK) WHERE p.RecID = ri.{producto}) pf
 LEFT JOIN {recibido} rec ON rec.IDReqProd = ri.RecID
 LEFT JOIN {comprometido} com ON com.IDReqProd = ri.RecID
-WHERE ri.{pedido} - ISNULL(rec.recibido, 0) > 0
-ORDER BY r.RecID, ri.RecID
+WHERE r.Estado = {abierto} AND ri.{pedido} > 0
+ORDER BY r.ID, ri.RecID
 """.format(recibido=_RECIBIDO, comprometido=_COMPROMETIDO, **_FMT)
 
 # Diagnóstico 1: requerimientos e ítems por Estado y cuántos ítems tienen fecha inválida. Sin proveedores ni costos.
@@ -109,15 +119,17 @@ SELECT TOP ({n}) r.RecID AS req_recid, r.ID AS req_id, r.Numero AS req_numero, r
     SUM(ISNULL(ri.{pedido}, 0)) AS pedido,
     SUM(ISNULL(rec.recibido, 0)) AS recibido,
     SUM(CASE WHEN ri.{pedido} - ISNULL(rec.recibido, 0) > 0 THEN ri.{pedido} - ISNULL(rec.recibido, 0) ELSE 0 END) AS pendiente,
-    SUM(ISNULL(com.comprometido, 0)) AS comprometido
+    SUM(ISNULL(com.comprometido, 0)) AS comprometido,
+    MAX(ISNULL(ped.pedidos, 0)) AS pedidos_vinculados
 FROM requerimientos r WITH (NOLOCK)
 LEFT JOIN requerimientositems ri WITH (NOLOCK) ON ri.IDRequerimiento = r.RecID
 LEFT JOIN {recibido} rec ON rec.IDReqProd = ri.RecID
 LEFT JOIN {comprometido} com ON com.IDReqProd = ri.RecID
+LEFT JOIN {pedidos} ped ON ped.IDRequerimiento = r.RecID
 WHERE CAST(r.ID AS varchar(40)) IN %(reqs)s OR CAST(r.Numero AS varchar(40)) IN %(reqs)s
 GROUP BY r.RecID, r.ID, r.Numero, r.Estado
 ORDER BY r.RecID
-""".format(recibido=_RECIBIDO, comprometido=_COMPROMETIDO, **_FMT)
+""".format(recibido=_RECIBIDO, comprometido=_COMPROMETIDO, pedidos=_PEDIDOS_POR_REQ, **_FMT)
 
 # Diagnóstico 3: requerimientos con compra que tienen compras.FechaDespacho cargada (válida / inválida), por Estado.
 _SQL_DIAG_DESPACHO = """
@@ -249,59 +261,77 @@ def _sku(codigo_item, codigo_respaldo):
     return None
 
 
-def armar_respuesta(filas, hoy: date, umbral_viejo=UMBRAL_VIEJO_DIAS):
-    """Filas crudas de `_SQL_ITEMS` -> ítems, resumen por SKU e informe de calidad. Sin acceso a la base."""
+def armar_respuesta(filas, hoy: date):
+    """Filas crudas de `_SQL_ITEMS` (solo requerimientos abiertos) -> (ítems, resumen por requerimiento, resumen por SKU, calidad). Sin acceso a la base."""
     items, motivos, usaron_cabecera, sin_fecha = [], defaultdict(int), 0, 0
-    vistos, duplicados, sin_maestro, viejos = defaultdict(int), set(), set(), []
+    vistos, duplicados, sin_maestro = defaultdict(int), set(), set()
     for f in filas:
         sku = _sku(f.get("codigo_item"), f.get("codigo_respaldo"))
-        pedido, recibido = _num(f.get("pedido")), _num(f.get("recibido"))
+        pedido = _num(f.get("pedido"))
         fecha, origen, motivo = clasificar_fecha(f.get("fecha_item"), f.get("fecha_cab"))
         creacion = _dia(f.get("fecha_creacion"))
         antig = (hoy - creacion).days if _motivo(creacion) is None else None
         en_maestro = f.get("en_maestro") is not None
-        it = {"req_id": f.get("req_id"), "req_numero": f.get("req_numero"), "estado": f.get("estado"),
-              "proveedor": (f.get("proveedor") or "").strip() or None, "sku": sku, "sku_en_maestro": en_maestro,
-              "pedido": pedido, "recibido": recibido, "comprometido": _num(f.get("comprometido")), "pendiente": max(pedido - recibido, 0),
+        it = {"requerimiento": f.get("req_id"), "estado": f.get("estado"), "proveedor": (f.get("proveedor") or "").strip() or None,
+              "sku": sku, "sku_en_maestro": en_maestro, "pendiente": pedido,
               "fecha_estimada": fecha.isoformat() if fecha else None,
-              "fecha_estado": {"item": "del ítem", "cabecera": "de cabecera"}.get(origen, "sin fecha"),
-              "fecha_item_invalida": motivo, "antiguedad_dias": antig}
+              "fecha_estado": {"item": "del ítem", "cabecera": "de cabecera"}.get(origen, "sin fecha"), "fecha_item_invalida": motivo,
+              "antiguedad_dias": antig, "revisar": antig is not None and antig > REVISAR_MAS_DE_DIAS, "excluido": antig is not None and antig > EXCLUIR_MAS_DE_DIAS,
+              "recibido_informativo": _num(f.get("recibido")), "comprometido_informativo": _num(f.get("comprometido"))}
         items.append(it)
         if motivo:
             motivos[motivo] += 1
         usaron_cabecera += origen == "cabecera"
         sin_fecha += origen is None
-        clave = (it["req_id"], it["req_numero"], sku)
+        clave = (it["requerimiento"], sku)
         vistos[clave] += 1
         if vistos[clave] == 2:
             duplicados.add(clave)
         if not en_maestro and sku:
             sin_maestro.add(sku)
-        if antig is not None and antig > umbral_viejo:
-            viejos.append(it)
-    por_sku = defaultdict(lambda: {"pendiente": 0, "fechas": [], "requerimientos": set(), "proveedores": set()})
+    # Por requerimiento (para cruzar con el Excel de Marcelo): todos los ítems abiertos, también los excluidos por antigüedad (con su marca).
+    reqs = {}
     for it in items:
-        if not it["sku"]:
+        r = reqs.setdefault(it["requerimiento"], {"requerimiento": it["requerimiento"], "estado": it["estado"], "proveedor": it["proveedor"], "items": 0, "unidades": 0,
+                                                    "antiguedad_dias": it["antiguedad_dias"], "revisar": it["revisar"], "excluido": it["excluido"], "items_sin_fecha": 0, "_fechas": []})
+        r["items"] += 1
+        r["unidades"] += it["pendiente"]
+        r["items_sin_fecha"] += it["fecha_estado"] == "sin fecha"
+        if it["fecha_estimada"]:
+            r["_fechas"].append(it["fecha_estimada"])
+    por_requerimiento = []
+    for _, r in sorted(reqs.items(), key=lambda kv: (kv[0] is None, kv[0] if isinstance(kv[0], (int, float)) else str(kv[0]))):
+        fechas = r.pop("_fechas")
+        por_requerimiento.append({**r, "proxima_fecha": min(fechas) if fechas else None})
+    # Por SKU: solo lo que entra al cálculo (sin los excluidos por antigüedad); lo marcado `revisar` entra pero se informa aparte.
+    por_sku = defaultdict(lambda: {"pendiente": 0, "a_revisar": 0, "fechas": [], "requerimientos": set(), "proveedores": set()})
+    for it in items:
+        if not it["sku"] or it["excluido"]:
             continue
         s = por_sku[it["sku"]]
         s["pendiente"] += it["pendiente"]
+        if it["revisar"]:
+            s["a_revisar"] += it["pendiente"]
         if it["fecha_estimada"]:
             s["fechas"].append(it["fecha_estimada"])
-        s["requerimientos"].add(str(it["req_numero"]))
+        s["requerimientos"].add(str(it["requerimiento"]))
         if it["proveedor"]:
             s["proveedores"].add(it["proveedor"])
-    resumen = [{"sku": k, "pendiente": v["pendiente"], "proxima_fecha": min(v["fechas"]) if v["fechas"] else None,
-                "requerimientos": sorted(v["requerimientos"]), "proveedores": sorted(v["proveedores"])} for k, v in sorted(por_sku.items())]
+    resumen_sku = [{"sku": k, "pendiente": v["pendiente"], "de_los_cuales_a_revisar": v["a_revisar"], "proxima_fecha": min(v["fechas"]) if v["fechas"] else None,
+                    "requerimientos": sorted(v["requerimientos"]), "proveedores": sorted(v["proveedores"])} for k, v in sorted(por_sku.items())]
+    revisar = [r for r in por_requerimiento if r["revisar"]]
+    excluidos = [r for r in por_requerimiento if r["excluido"]]
     calidad = {
-        "umbral_viejo_dias": umbral_viejo,
-        "viejos_pendientes": {"items": len(viejos), "requerimientos": sorted({str(i["req_numero"]) for i in viejos})[:50]},
+        "antiguedad": {"revisar_mas_de_dias": REVISAR_MAS_DE_DIAS, "excluir_mas_de_dias": EXCLUIR_MAS_DE_DIAS,
+                       "requerimientos_a_revisar": len(revisar), "requerimientos_excluidos": len(excluidos),
+                       "unidades_excluidas": sum(r["unidades"] for r in excluidos), "requerimientos_sin_antiguedad": sum(1 for r in por_requerimiento if r["antiguedad_dias"] is None)},
         "fechas": {"item_invalida": {"total": sum(motivos.values()), "nula": motivos["nula"], "placeholder_2001": motivos["placeholder_2001"], "anterior_2020": motivos["anterior_2020"]},
                    "usaron_cabecera": usaron_cabecera, "sin_fecha": sin_fecha},
-        "duplicados": {"total": len(duplicados), "muestra": [{"req_numero": k[1], "sku": k[2], "veces": vistos[k]} for k in sorted(duplicados, key=str)[:50]]},
+        "duplicados": {"total": len(duplicados), "muestra": [{"requerimiento": k[0], "sku": k[1], "veces": vistos[k]} for k in sorted(duplicados, key=str)[:50]]},
         "sku_fuera_del_maestro": {"total": len(sin_maestro), "muestra": sorted(sin_maestro)[:50]},
         "items_sin_sku": sum(1 for i in items if not i["sku"]),
     }
-    return items, resumen, calidad
+    return items, por_requerimiento, resumen_sku, calidad
 
 
 def _limpiar(fila):
@@ -342,8 +372,12 @@ def transito(request: Request, diagnostico: int = Query(0, ge=0, le=1), reqs: st
     cab = {"generado": datetime.now(timezone.utc).isoformat(timespec="seconds"), "tope": TOPE_FILAS}
     if not diagnostico:
         filas, trunc = _recortar(res[0])
-        items, por_sku, calidad = armar_respuesta(filas, date.today())
-        return JSONResponse({**cab, "truncado": trunc, "total_items": len(items), "items": items, "por_sku": por_sku, "calidad": calidad}, headers={"Cache-Control": "no-store"})
+        items, por_req, por_sku, calidad = armar_respuesta(filas, date.today())
+        criterio = {"abierto": f"requerimientos.Estado = {ESTADO_ABIERTO} (1 = cerrado y 2 = sin decodificar quedan excluidos)",
+                    "pendiente": "= unidades pedidas; recibido y comprometido son solo informativos",
+                    "revisar_mas_de_dias": REVISAR_MAS_DE_DIAS, "excluido_del_calculo_mas_de_dias": EXCLUIR_MAS_DE_DIAS, "antiguedad": "desde requerimientos.FechaCreacion"}
+        return JSONResponse({**cab, "criterio": criterio, "truncado": trunc, "total_items": len(items), "items": items, "por_requerimiento": por_req, "por_sku": por_sku, "calidad": calidad},
+                            headers={"Cache-Control": "no-store"})
     estados, t1 = _recortar(res[0])
     despacho, t3 = _recortar(res[1])
     compras, t4 = _recortar(res[2])
