@@ -29,6 +29,16 @@ def payload_sintetico(marca=1):
     }
 
 
+def payload_con_transito():
+    """Extensión v1.1 (misma schema_version '1.0'): bloque `transito` inventado, requerimientos 9001, 9002..."""
+    d = payload_sintetico()
+    d["transito"] = {"meses": ["2000-02", "2000-03"], "unidades_por_mes": [10, 20], "resumen": {"NO_ESTA_EN_MARCELO": {"requerimientos": 1, "unidades": 5}},
+                     "requerimientos": [{"requerimiento": 9001, "clasificacion": "FIRME", "unidades": 10, "fob": 100, "saldo": 50, "eta_marcelo": "2000-02-15"},
+                                        {"requerimiento": 9002, "clasificacion": "NO_ESTA_EN_MARCELO", "unidades": 5, "fob": 0, "saldo": 0, "eta_marcelo": None}],
+                     "pagos": []}
+    return d
+
+
 @pytest.fixture
 def cliente(monkeypatch):
     eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
@@ -137,3 +147,22 @@ def test_cors_expone_la_version_al_front(cliente):
     cliente.post("/proyeccion-2027/snapshot", json=payload_sintetico(), headers=H)
     g = cliente.get("/proyeccion-2027/dashboard", headers={**H, "Origin": "https://ayalamaxi12-web.github.io"})
     assert "x-proyeccion-version" in g.headers["access-control-expose-headers"].lower()
+
+
+def test_transito_es_extension_aceptada_y_se_devuelve_intacta(cliente):
+    d = payload_con_transito()
+    assert ps.validar_payload(copy.deepcopy(d)) == []
+    assert cliente.post("/proyeccion-2027/snapshot", json=d, headers=H).status_code == 200
+    assert cliente.get("/proyeccion-2027/dashboard", headers=H).json() == d
+
+
+def test_transito_no_exime_las_claves_obligatorias(cliente):
+    d = payload_con_transito()
+    del d["skus"]
+    assert "falta la clave 'skus'" in ps.validar_payload(d)
+    assert cliente.post("/proyeccion-2027/snapshot", json=d, headers=H).status_code == 422
+    assert cliente.get("/proyeccion-2027/dashboard", headers=H).status_code == 404
+
+
+def test_snapshot_sin_transito_sigue_valido():
+    assert "transito" not in payload_sintetico() and ps.validar_payload(payload_sintetico()) == []
