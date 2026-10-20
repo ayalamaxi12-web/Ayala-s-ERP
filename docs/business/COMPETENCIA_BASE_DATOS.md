@@ -130,6 +130,10 @@ Botones **Por SKU / Por categoría** arriba de la pantalla. Una fila por subcate
 - Orden: subcategoría A-Z, donde más nos gana el Rey, o tienda más por debajo de su mediana. Solo lectura; no se jubila ningún módulo (3.4 aparte). No cambia ningún cálculo de margen.
 - La tienda se une al conteo por `Entidad_ID` (si falta, por nombre normalizado). Tests: `backend/test_front_categoria.py` (datos sintéticos, node).
 
+### Etapa 3.4d — cargador compartido de Inteligencia Comercial (paso previo a jubilar «SKUs & Referencias»)
+`INTEL` (referencias, entidades, `bySku`) y la lectura del Sheet viven ahora en un bloque propio de `docs/index.html` (`intelCargarEntidades`, `intelCargarReferencias`, `intelReindexar`), no en la página «SKUs & Referencias». SKUs & Referencias, Entidades y Referencias usan las mismas funciones; las páginas solo pintan. Así, cuando se jubile SKUs & Referencias (con el aviso de Maxx) no se rompe ninguna otra.
+Comportamiento idéntico (verificado en Chromium con las tres páginas contra `main`). **Nota:** la página «Referencias» lee solo las primeras **1000** filas de `Referencias_Mercado` (SKUs & Referencias lee 5000); no se tocó, pero si el Sheet pasa de 1000 referencias esa página las trunca. Tests: `backend/test_front_intel_datos.py`.
+
 ### Costo de Ecom guardado + tabla única de cuotas + resolver SKU → publicaciones (A y B0)
 - **Costo cacheado (A):** el catálogo de costos de Ecom (~80 s) se baja UNA vez por día y queda guardado en la base (`costo_ecom_snapshot`, migración `h2c3d4e5f6a7`, últimas 7 fotos).
   Un request nunca baja de Ecom: lee la foto más reciente (memoria → base, se vuelve a mirar la base cada 5 min). Quién baja: el cron de las 06:00 (`scripts/ecom_diario.py`, primer paso, no fatal),
