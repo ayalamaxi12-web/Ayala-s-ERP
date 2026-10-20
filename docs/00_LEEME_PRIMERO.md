@@ -134,3 +134,16 @@ No bloquean el arranque. Sí bloquean los módulos indicados.
 - Reglas propias en los reportes: los reportes son agregaciones puras
 - Cualquier corrección de las observaciones documentadas
 - Un módulo separado de Inteligencia Competitiva: está absorbido dentro del CGCC como su capa de detección
+
+
+---
+
+## Mapa de módulos de competencia (estado de la jubilación 3.4)
+| Módulo | Estado |
+|---|---|
+| **Análisis de Competencia** (Por SKU, Histórico, Jugar, Por categoría, Eventos) | Vigente: la pantalla de competencia |
+| **Intel. Competitiva** | **Jubilada**: sacada del menú y del código; `goPage('intel-competitiva')` lleva a Análisis de Competencia → Eventos. Sus datos (`V-*`, `Historial Competidores`) no se tocaron. El Detector de Ads y las Alertas se descartaron |
+| **Competidores ML** | Vigente: de él depende el panel de parámetros de margen (`compMargenAt`, `COMPDESC`); se jubila en la etapa «Jugar mi precio» con envío |
+| **SKUs & Referencias** | Pendiente (condiciones de Maxx: cargador compartido movido, la página «Referencias» NO se jubila, confirmación de Maca) |
+| **Referencias**, **Entidades**, **Mix** | Vigentes |
+Detalle y auditoría: `docs/business/COMPETENCIA_JUBILACION_AUDITORIA.md`.
