@@ -10,7 +10,7 @@ import pytest
 from test_front_analisis import INDEX, _fn
 
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
-FUNS = ('acMediana', 'acCatSkus', 'acTiendaConteo', 'acRolRank', 'acCategoriasArmar', 'acCatOrdenar', 'acTiendaHtml', 'acCatHtml', 'acEsc', 'acFechaCorta', 'fmt$')
+FUNS = ('acCatDiag', 'acCatDiagHtml', 'acMediana', 'acCatSkus', 'acTiendaConteo', 'acRolRank', 'acCategoriasArmar', 'acCatOrdenar', 'acTiendaHtml', 'acCatHtml', 'acEsc', 'acFechaCorta', 'fmt$')
 
 
 def js(cuerpo, datos):
@@ -88,3 +88,9 @@ def test_html_conteo_mediana_nuevas_incompleta_y_sin_datos():
     assert '120 pub.' in h[0] and 'mediana 7 d 150' in h[0] and '-20%' in h[0] and '+0 / −7' in h[0]
     assert 'lectura incompleta' in h[0] and 'captcha' in h[0] and 'fuera de planilla' in h[0] and 'sin conteo de publicaciones todavía' in h[0]
     assert '1 de 2' in h[0] and 'acCatVerSku(2,0)' in h[0] and h[1].startswith('<div') and 'Sin subcategorías' in h[1]
+
+
+def test_diagnostico_de_lo_que_no_se_pudo_cruzar():
+    d = js("const gs=acCategoriasArmar(X.D,X.filas,false,norm);console.log(JSON.stringify([acCatDiag(gs),acCatDiagHtml(acCatDiag(gs)),acCatDiagHtml({})]))", {'D': D, 'filas': FILAS})
+    assert d[0] == {'subs': 3, 'sinSkus': 1, 'sinCompetencia': 0, 'skusSinCompetencia': 1, 'tiendas': 5, 'tiendasSinConteo': 1, 'incompletas': 1, 'fueraPlanilla': 1}
+    assert '1 subcategorías con SKUs_Nuestros vacío' in d[1] and '1 de 5 tiendas sin conteo' in d[1] and d[2] == ''

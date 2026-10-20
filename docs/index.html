@@ -3215,6 +3215,9 @@ function acCatOrdenar(gs,modo){const v=g=>{const t=g.tiendas.map(x=>x.conteo&&pa
   const c=gs.slice();if(modo==='ganan')c.sort((a,b)=>(b.reyGana-a.reyGana)||a.sub.localeCompare(b.sub));
   else if(modo==='var')c.sort((a,b)=>{const x=v(a),y=v(b);return (x==null)-(y==null)||(x-y)||a.sub.localeCompare(b.sub);});
   else c.sort((a,b)=>a.sub.localeCompare(b.sub));return c;}
+// Diagnóstico de la vista (para validar con datos reales de un vistazo): qué no se pudo cruzar.
+function acCatDiag(gs){const t=gs.reduce((a,g)=>a.concat(g.tiendas),[]);
+  return {subs:gs.length,sinSkus:gs.filter(g=>!g.nSkus).length,sinCompetencia:gs.filter(g=>g.nSkus&&!g.rows.length).length,skusSinCompetencia:gs.reduce((n,g)=>n+g.nSkus-g.rows.length,0),tiendas:t.length,tiendasSinConteo:t.filter(x=>!x.conteo).length,incompletas:t.filter(x=>x.conteo&&!x.conteo.completa).length,fueraPlanilla:t.filter(x=>x.desactualizada).length};}
 function acTiendaHtml(t){
   const c=t.conteo,nm=`<b>${acEsc(t.entidad||'?')}</b>`+(t.desactualizada?' <span class="badge badge-gray" title="Ya no figura en A-CATEGORIAS de la planilla de Maca (se conserva el último dato)">fuera de planilla</span>':'');
   if(!c)return `<div style="margin-bottom:6px">${nm}<div style="font-size:10px;color:var(--text3)">sin conteo de publicaciones todavía</div></div>`;
@@ -3232,6 +3235,13 @@ function acCatHtml(gs){
     const det=ab?`<tr class="ac-ctx-row"><td colspan="7" style="background:rgba(0,157,188,.05);padding:8px 14px">${g.rows.length?g.rows.map((f,j)=>`<span class="badge badge-gray" style="margin:2px;cursor:pointer" onclick="acCatVerSku(${i},${j})" title="Ver este SKU en la vista por SKU">${acEsc(f.sku)}</span>`).join(''):'<span style="color:var(--text3);font-size:10px">Ningún SKU de la subcategoría con competencia cargada.</span>'}</td></tr>`:'';
     return `<tr><td style="vertical-align:top"><b>${acEsc(g.sub)}</b><div><button class="btn-xs" onclick="acCatToggle(${i})">${ab?'Ocultar':'Ver'} SKU</button></div></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${g.rows.length}<span style="color:var(--text3)"> / ${g.nSkus}</span><div style="font-size:10px;color:var(--text3)">con competencia / en planilla</div></td><td style="vertical-align:top">${rey}</td><td style="vertical-align:top">${bar}</td>${col(g,'Rey')}${col(g,'Media')}${col(g,'Barato')}</tr>${det}`;}).join('');
   return `<div class="table-wrap"><table><thead><tr><th>Subcategoría</th><th>Nuestros SKU</th><th>Rey vs nosotros</th><th>Barato</th><th>👑 Tienda Rey</th><th>Tienda Media</th><th>Tienda Barato</th></tr></thead><tbody>${filas}</tbody></table></div>`;}
+function acCatDiagHtml(d){const av=[];
+  if(d.sinSkus)av.push(`${d.sinSkus} subcategorías con SKUs_Nuestros vacío o ilegible`);
+  if(d.sinCompetencia)av.push(`${d.sinCompetencia} subcategorías cuyos SKU no tienen competencia cargada (¿otro formato de SKU?)`);
+  if(d.tiendasSinConteo)av.push(`${d.tiendasSinConteo} de ${d.tiendas} tiendas sin conteo de publicaciones (no se unieron a Tiendas_Conteo)`);
+  if(d.incompletas)av.push(`${d.incompletas} tiendas con la última lectura incompleta`);
+  if(d.fueraPlanilla)av.push(`${d.fueraPlanilla} tiendas que ya no figuran en la planilla de Maca`);
+  return av.length?`<div style="margin-bottom:8px;padding:6px 10px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6">${av.map(x=>'⚠ '+x).join('<br>')}</div>`:'';}
 function acCatRender(filas,fl){
   const cat=AC.modo==='cat',w=qs('ac-cat-wrap');if(!w)return;
   qs('ac-table-wrap').style.display=cat?'none':'';w.style.display=cat?'':'none';
@@ -3241,7 +3251,7 @@ function acCatRender(filas,fl){
   const hay=!!(fl.search||fl.cats||fl.pms||(fl.vend&&fl.vend.size)||fl.soloCambios||fl.soloGanan||fl.ocultarSinStock);
   AC.catGs=acCatOrdenar(acCategoriasArmar(AC.data,filas,hay,normSku),AC.catSort);
   const ops=[['sub','Subcategoría A-Z'],['ganan','Donde más nos gana el Rey'],['var','Tienda más por debajo de su mediana']].map(([v,t])=>`<option value="${v}"${AC.catSort===v?' selected':''}>${t}</option>`).join('');
-  w.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:10px;color:var(--text2)">Ordenar<select class="fi" onchange="AC.catSort=this.value;acRender()">${ops}</select><span style="color:var(--text3)">${AC.catGs.length} subcategorías · fuente: Categoria_Competidores + Tiendas_Conteo</span></div>`+acCatHtml(AC.catGs);
+  w.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:10px;color:var(--text2)">Ordenar<select class="fi" onchange="AC.catSort=this.value;acRender()">${ops}</select><span style="color:var(--text3)">${AC.catGs.length} subcategorías · fuente: Categoria_Competidores + Tiendas_Conteo</span></div>${acCatDiagHtml(acCatDiag(AC.catGs))}`+acCatHtml(AC.catGs);
   qs('ac-count').textContent=AC.catGs.length+' subcategorías';}
 function acModo(m){AC.modo=m;acRender();}
 function acCatToggle(i){const g=(AC.catGs||[])[i];if(!g)return;AC.catAb[g.sub]=!AC.catAb[g.sub];acRender();}
