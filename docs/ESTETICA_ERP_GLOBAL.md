@@ -44,11 +44,19 @@ Principios:
 ### Temas de marketplace (`data-modulo="…"` en el contenedor del módulo)
 Cada tema define 3 variables que usan los componentes: `--mod-acento` (banda de cabecera e ítem activo del menú), `--mod-sobre-acento` (texto sobre el acento) y `--mod-primario` (botones primarios).
 
-| `data-modulo` | `--mod-acento` | `--mod-sobre-acento` | `--mod-primario` | Estado |
-|---|---|---|---|---|
-| `global` (por defecto) | `--tinta` | `#FFFFFF` | `--celeste-600` | Definido |
-| `ml` (Campañas ML, Ofertas ML) | `#FFE600` | `#2D3277` | `#2D3277` | Definido |
-| `fravega`, `oncity`, `megatone`, otros | **sacar del logo oficial** | calcular | calcular | A definir |
+| `data-modulo` | `--mod-acento` | `--mod-sobre-acento` | `--mod-primario` | Contraste texto/acento | Estado |
+|---|---|---|---|---|---|
+| `global` (por defecto) | `--tinta` | `#FFFFFF` | `--celeste-600` | 15,5:1 | Definido |
+| `ml` (Campañas ML, Ofertas ML) | `#FFE600` | `#2D3277` | `#2D3277` | **9,03:1** (verificado con `muestrear_color.py`; el color dominante del logo provisorio sale `#FFE600`) | Definido e implementado (Fase 1: barra superior e ítem de menú) |
+| `fravega` | **sacar del logo oficial** | calcular | calcular | — | **A definir**: el entorno de trabajo no pudo bajar el logo (la red bloquea `fravega.com`). Falta el archivo en `docs/assets/logos/fravega.*` |
+| `oncity` | **sacar del logo oficial** | calcular | calcular | — | **A definir**: ídem (`oncity.com` bloqueado) |
+| `megatone` | **sacar del logo oficial** | calcular | calcular | — | **A definir**: ídem (`megatone.net` bloqueado) |
+
+Cómo se completan: `python docs/assets/logos/muestrear_color.py docs/assets/logos/fravega.png` imprime el color dominante, el contraste con blanco y con la tinta y qué texto pasa 4,5:1; esa salida se pega en esta tabla y en un bloque `[data-modulo="…"]` del `:root` de `docs/index.html`.
+
+Variables de tema agregadas por la implementación (los mockups las necesitan; sin ellas habría hex sueltos): `--mod-barra`, `--mod-sobre-barra`, `--mod-barra-borde` (barra superior), `--mod-encabezado`, `--mod-encabezado-texto`, `--mod-encabezado-borde` (encabezado de tabla), `--mod-segmento-activo` (selector segmentado). Tokens agregados: `--tinta-activo`, `--encabezado-tabla`, `--segmentado`, `--pista`, `--ok-fondo`, `--ok-texto`, `--error-fondo`, `--error-texto`, `--fuente`, `--mk-ml*`.
+
+**Hallazgo de contraste:** `--celeste-600` (`#1B8195`) da 4,54:1 sobre blanco pero **4,12:1 sobre `--fondo`** (`#EDF5F8`): como texto sobre el fondo de la pantalla no pasa. En la implementación el texto de enlace/acento sobre fondo usa `--celeste-700` y `--celeste-600` queda para botones (texto blanco encima) y bordes.
 
 Regla para los marketplaces sin color definido: muestrear el color dominante del logo oficial (script en `docs/assets/logos/`), guardar el hex resultante en esta tabla y **verificar contraste**: el texto sobre el acento debe dar 4,5:1 como mínimo. Si el color de marca es muy claro o muy fuerte, usar tinta o blanco para el texto y limitar el color a la banda de cabecera, el ítem activo y el botón primario. Nunca usar el color de marca como color de texto.
 
@@ -112,3 +120,9 @@ Cada fase termina con: capturas antes y después, resultado de los tests del bac
 - No inventar colores de marketplace: salen del logo oficial.
 - No agregar librerías ni pasos de compilación sin proponerlo antes.
 - No borrar nada de los módulos viejos desde esta tarea: eso es la jubilación y tiene su propio proceso.
+
+
+## 11. Registro de implementación
+- **Fase 0 (hecha):** bloque `:root` con tokens y temas, fuente Figtree cargada. Sin cambios visibles (verificado comparando capturas pixel a pixel).
+- **Fase 1 (hecha, pendiente de OK):** barra superior de módulo (propio: celeste `#24A2B9` con logo blanco; marketplace ML: `#FFE600` con «GLOBAL × Mercado Libre»), menú lateral de 208 px con íconos SVG, y Análisis de Competencia completo (Por SKU, Histórico, Jugar y Por categoría). Los demás módulos conservan su estilo oscuro hasta su fase.
+- **Pendientes visibles:** logo de Mercado Libre **provisorio** (`assets/logos/mercadolibre-provisorio.png`, baja resolución; hay un TODO en el HTML y una etiqueta «logo provisorio» en la barra); colores de Frávega, OnCity y Megatone (arriba); buscador de la barra superior (no se agregó: no existe un buscador global y sería una función nueva).
