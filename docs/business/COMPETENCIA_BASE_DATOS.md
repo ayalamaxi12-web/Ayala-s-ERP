@@ -120,6 +120,16 @@ con el precio de hoy y el **último cambio** de cada competidor (fecha desde la 
 La pantalla ahora pide `GET /competencia/analisis?dias=90` (antes 30; la caché del backend es la misma) y recorta la ventana en el navegador. No cambia ningún cálculo de margen. Tests: `backend/test_front_historico.py` (node, datos sintéticos).
 Límite conocido: el "último cambio" sale de las lecturas diarias; si ML cambió y volvió entre dos lecturas, no se ve.
 
+### Etapa 3.3 — vista por categoría (Análisis de Competencia) — EN PRUEBA, falta validar con `Categoria_Competidores` real
+Botones **Por SKU / Por categoría** arriba de la pantalla. Una fila por subcategoría (de `Categoria_Competidores`, el mapa de A-CATEGORIAS de Maca):
+- **Nuestros SKU:** con competencia cargada / en planilla (columna `SKUs_Nuestros`, separada por coma, punto y coma o salto de línea).
+- **Rey vs nosotros:** en cuántos SKU algún Rey vende más barato que nuestro PM (misma cuenta que la vista por SKU, kits incluidos).
+- **Barato:** mediana de su precio por unidad y mediana de la diferencia contra nosotros.
+- **Tienda Rey / Media / Barato:** publicaciones leídas (`Tiendas_Conteo`), mediana de 7 días y variación, `+nuevas / −desaparecidas` (`Tiendas_Estado`), "lectura incompleta" con el motivo, "fuera de planilla" si Maca la sacó de A-CATEGORIAS, y `Estado_Debilidad` si existe (Fase 3, todavía vacío).
+- Los filtros de arriba (vendedor, categoría, PM, buscador, solo con cambios / donde nos ganan) valen en las dos vistas; con un filtro activo se ocultan las subcategorías sin SKU visibles. **Ver SKU** lista los SKU y salta a la vista por SKU.
+- Orden: subcategoría A-Z, donde más nos gana el Rey, o tienda más por debajo de su mediana. Solo lectura; no se jubila ningún módulo (3.4 aparte). No cambia ningún cálculo de margen.
+- La tienda se une al conteo por `Entidad_ID` (si falta, por nombre normalizado). Tests: `backend/test_front_categoria.py` (datos sintéticos, node).
+
 ### Costo de Ecom guardado + tabla única de cuotas + resolver SKU → publicaciones (A y B0)
 - **Costo cacheado (A):** el catálogo de costos de Ecom (~80 s) se baja UNA vez por día y queda guardado en la base (`costo_ecom_snapshot`, migración `h2c3d4e5f6a7`, últimas 7 fotos).
   Un request nunca baja de Ecom: lee la foto más reciente (memoria → base, se vuelve a mirar la base cada 5 min). Quién baja: el cron de las 06:00 (`scripts/ecom_diario.py`, primer paso, no fatal),
