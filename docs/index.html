@@ -17,8 +17,6 @@
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;}
 header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);background:rgba(13,15,20,0.98);backdrop-filter:blur(16px);z-index:300;position:sticky;top:0;box-shadow:0 1px 0 rgba(0,157,188,0.12);}
 .logo{display:flex;align-items:center;gap:10px;}
-.logo-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .logo h1{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
 .logo span{font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;}
 .header-right{display:flex;align-items:center;gap:12px;}
@@ -233,12 +231,14 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;
   /* Tipografía */
   --fuente:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --fs-cuerpo:14px;--fs-campo:14px;--fs-tabla:13px;   /* escritorio: manda la guía (tablas 13 px) */
   /* Tema por defecto = módulo propio de Global */
   --mod-acento:var(--tinta);--mod-sobre-acento:#FFFFFF;--mod-primario:var(--celeste-600);
   --mod-barra:var(--celeste-marca);--mod-sobre-barra:var(--tinta);--mod-barra-borde:var(--celeste-marca);   /* barra superior de módulo */
   --mod-encabezado:var(--encabezado-tabla);--mod-encabezado-texto:var(--tinta-2);--mod-encabezado-borde:var(--borde);   /* encabezado de tabla */
   --mod-segmento-activo:var(--tinta);
 }
+@media(max-width:768px){:root{--fs-cuerpo:16px;--fs-campo:16px}}   /* hasta 768 px: cuerpo y campos a 16 px (evita el zoom de iOS al enfocar un campo); las tablas siguen en --fs-tabla y scrollean dentro de su caja */
 /* Temas de marketplace: <body data-modulo="…">. El color del marketplace solo aparece en su barra, el ítem activo del menú, los botones primarios, el selector de cuenta y el encabezado de tabla. */
 [data-modulo="ml"]{
   --mod-acento:var(--mk-ml);--mod-sobre-acento:var(--mk-ml-tinta);--mod-primario:var(--mk-ml-tinta);   /* Mercado Libre: definido */
@@ -306,7 +306,7 @@ body[data-page="analisis-competencia"]{
   --text:var(--tinta);--text2:var(--texto-suave);--text3:var(--texto-suave);
   --green:var(--ok);--yellow:var(--atencion);--red:var(--error-texto);--orange:var(--atencion);
   background:var(--fondo);color:var(--tinta);font-family:var(--fuente)}
-#page-analisis-competencia{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:14px}
+#page-analisis-competencia{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:var(--fs-cuerpo)}
 #page-analisis-competencia :focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px}
 #page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .badge,#page-analisis-competencia .ac-aside,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2,
 #page-analisis-competencia .ms-trigger,#page-analisis-competencia .ms-option,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ms-actions button,#page-analisis-competencia .filter-label,
@@ -341,7 +341,7 @@ body[data-page="analisis-competencia"]{
 #page-analisis-competencia .stat-label{font-size:12px;color:var(--texto-suave)}
 #page-analisis-competencia .erp-filters{gap:10px;padding:0;background:transparent;align-items:flex-end}
 #page-analisis-competencia .filter-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
-#page-analisis-competencia .ms-trigger,#page-analisis-competencia select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:14px}
+#page-analisis-competencia .ms-trigger,#page-analisis-competencia select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)}
 #page-analisis-competencia .ms-trigger{display:flex;align-items:center;padding:0 28px 0 10px;min-width:150px}
 #page-analisis-competencia .ms-trigger::after{color:var(--texto-suave);font-size:12px}
 #page-analisis-competencia .ms-dropdown,#page-analisis-competencia .ac-sug{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;box-shadow:0 4px 12px rgba(11,39,51,.12)}
@@ -349,15 +349,15 @@ body[data-page="analisis-competencia"]{
 #page-analisis-competencia .ms-option:hover,#page-analisis-competencia .ac-sug div.it.on,#page-analisis-competencia .ac-sug div.it:hover{background:var(--celeste-100);color:var(--tinta)}
 #page-analisis-competencia .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
 #page-analisis-competencia input[type=checkbox]{accent-color:var(--celeste-600);width:16px;height:16px}
-#page-analisis-competencia label{font-size:13px}
+#page-analisis-competencia label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
 #page-analisis-competencia input,#page-analisis-competencia select{font-family:var(--fuente)!important}
-#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,#page-analisis-competencia select.fi{font-size:14px!important}
+#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,#page-analisis-competencia select.fi,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{font-size:var(--fs-campo)!important}
 #page-analisis-competencia #ac-tc{width:96px!important}
 #page-analisis-competencia ::placeholder{color:var(--texto-suave);opacity:1}
 #page-analisis-competencia .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
 #page-analisis-competencia .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
 #page-analisis-competencia .table-wrap::-webkit-scrollbar-thumb{background:var(--celeste-300);border-color:var(--zebra)}
-#page-analisis-competencia .table-wrap table{font-size:13px}
+#page-analisis-competencia .table-wrap table{font-size:var(--fs-tabla)}
 #page-analisis-competencia .table-wrap thead{background:var(--mod-encabezado)}
 #page-analisis-competencia .table-wrap th{padding:9px 14px;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mod-encabezado-texto);border-bottom:1px solid var(--mod-encabezado-borde);cursor:default}
 #page-analisis-competencia .table-wrap td{padding:10px 14px;border-bottom:1px solid var(--divisor)}

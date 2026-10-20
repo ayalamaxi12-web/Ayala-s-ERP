@@ -7,7 +7,7 @@ Referencias visuales: `mockup_competencia_denso.html` (módulo propio de Global)
 Que el ERP se vea **lindo, innovador, serio, amigable** y que **todo se lea claro**. Solo cambia la presentación: ninguna función, cálculo ni endpoint cambia por esta tarea.
 
 Principios:
-1. El celeste de Global manda. El color real del logo es **`#24A2B9`** (muestreado del logo oficial): contraste de 3,0:1 sobre blanco, así que sirve para logo, gráficos y texto grande, y para texto chico solo sobre la tinta oscura (5,1:1). Para texto y botones sobre fondo claro se usa su versión más oscura, `--celeste-600`.
+1. El celeste de Global manda. El color real del logo es **`#24A2B9`** (muestreado del logo oficial): contraste de 3,0:1 sobre blanco, así que sirve para logo, gráficos y texto grande, y para texto chico solo sobre la tinta oscura (5,1:1). Para texto y botones sobre fondo claro se usa su versión más oscura: **`--celeste-700` para texto de enlace y de acento** (da 4,5:1 también sobre `--fondo`) y **`--celeste-600` solo para botones** (texto blanco encima), bordes y foco. `--celeste-600` como texto sobre `--fondo` da 4,12:1 y no pasa.
 2. Densidad útil: más datos por pantalla sin perder legibilidad (filas de 36 a 40 px, texto de 12 a 14 px).
 3. El color de un marketplace aparece **solo dentro de sus módulos** y de forma contenida.
 4. Sobrio: sin degradados, sin sombras pesadas, sin emojis como íconos.
@@ -25,8 +25,8 @@ Principios:
 | `--celeste-100` | `#D9EFF4` | Ítem activo, chips, texto del menú oscuro |
 | `--celeste-200` | `#AEDDE7` | Bordes suaves, estados |
 | `--celeste-300` | `#7CC7D6` | Texto de acento sobre el menú oscuro (8,1:1 sobre `--tinta`) |
-| `--celeste-600` | `#1B8195` | Enlaces, barras, foco, botones con texto blanco (4,5:1 sobre blanco) |
-| `--celeste-700` | `#146378` | Texto sobre celeste claro (5,7:1 sobre `--celeste-100`) |
+| `--celeste-600` | `#1B8195` | **Solo botones** (texto blanco encima, 4,54:1), bordes y foco. No como color de texto: sobre `--fondo` da 4,12:1 |
+| `--celeste-700` | `#146378` | **Texto de enlace y de acento** sobre blanco, `--fondo` y celeste claro (5,7:1 sobre `--celeste-100`) |
 | `--celeste-marca` | `#24A2B9` | **Color real del logo de Global.** Barra superior de los módulos propios, logo, gráficos, puntito del ítem activo y texto grande. No para texto chico sobre blanco |
 | `--borde` | `#C3DBE1` | Bordes de controles y tablas |
 | `--divisor` | `#D8E8EC` | Líneas entre filas |
@@ -62,7 +62,8 @@ Regla para los marketplaces sin color definido: muestrear el color dominante del
 
 ## 3. Tipografía
 - Familia única: **Figtree** (Google Fonts), pesos 400, 500, 600, 700 y 800.
-- Títulos de módulo: 22 px, peso 600. Texto de tabla: 13 px. Texto de apoyo: 12 px. Indicadores grandes: 22 px, peso 500.
+- Títulos de módulo: 22 px, peso 600. Texto de apoyo: 12 px. Indicadores grandes: 22 px, peso 500.
+- **Tamaños como tokens** (decisión de Maxx, 20/10/2026): `--fs-cuerpo` 14 px, `--fs-campo` 14 px y **`--fs-tabla` 13 px** en escritorio (manda esta guía). **En pantallas de hasta 768 px el cuerpo y los campos pasan a 16 px** (`--fs-cuerpo` y `--fs-campo`; evita el zoom de iOS al enfocar un campo). Las tablas siguen en `--fs-tabla` y scrollean dentro de su caja. Nadie escribe un `font-size` suelto en un componente nuevo.
 - Números: `font-variant-numeric: tabular-nums` para que las columnas queden alineadas.
 - El wordmark "GLOBAL": peso 800, espaciado de letras 0,08em. Sale del logo oficial cuando esté el archivo.
 
@@ -126,3 +127,7 @@ Cada fase termina con: capturas antes y después, resultado de los tests del bac
 - **Fase 0 (hecha):** bloque `:root` con tokens y temas, fuente Figtree cargada. Sin cambios visibles (verificado comparando capturas pixel a pixel).
 - **Fase 1 (hecha, pendiente de OK):** barra superior de módulo (propio: celeste `#24A2B9` con logo blanco; marketplace ML: `#FFE600` con «GLOBAL × Mercado Libre»), menú lateral de 208 px con íconos SVG, y Análisis de Competencia completo (Por SKU, Histórico, Jugar y Por categoría). Los demás módulos conservan su estilo oscuro hasta su fase.
 - **Pendientes visibles:** logo de Mercado Libre **provisorio** (`assets/logos/mercadolibre-provisorio.png`, baja resolución; hay un TODO en el HTML y una etiqueta «logo provisorio» en la barra); colores de Frávega, OnCity y Megatone (arriba); buscador de la barra superior (no se agregó: no existe un buscador global y sería una función nueva).
+- **Sin animaciones decorativas:** se sacó la animación del punto del logo (`.logo-dot` / `@keyframes pulse`). Solo quedan las funcionales (el spinner de carga), y todas se apagan con `prefers-reduced-motion`.
+
+## 12. Ideas para después (no están en ninguna fase)
+- **Buscador global de SKU y publicación** en la barra superior (la guía y los mockups lo dibujan, pero hoy no existe un buscador global: sería una función nueva, no estética; por eso la barra no lo tiene).
