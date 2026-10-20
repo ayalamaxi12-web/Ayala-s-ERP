@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Global Electronics — ERP</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;900&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Figtree:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;900&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
@@ -213,6 +213,38 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   .page{padding:12px;}
   .dash-filters{padding:8px 12px;}
 }
+</style>
+<style id="estetica-tokens">
+/* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
+   Fase 0 no cambia nada visible: las variables viejas (--bg, --surface, --accent…) siguen vigentes para los módulos que todavía no migraron. ══ */
+:root{
+  /* Global */
+  --tinta:#0B2733;--tinta-2:#25414E;--texto-suave:#4B6472;
+  --celeste-50:#F0F9FB;--fondo:#EDF5F8;--celeste-100:#D9EFF4;--celeste-200:#AEDDE7;--celeste-300:#7CC7D6;--celeste-600:#1B8195;--celeste-700:#146378;
+  --celeste-marca:#24A2B9;                    /* color real del logo: barra de módulos propios, logo, gráficos, texto grande. No para texto chico sobre blanco (3,0:1) */
+  --borde:#C3DBE1;--divisor:#D8E8EC;--zebra:#F6FBFD;--superficie:#FFFFFF;
+  /* Agregados a la guía (los pide el mockup; sin ellos habría hex sueltos): ítem activo del menú, encabezado de tabla, selector segmentado, tintes de estado */
+  --tinta-activo:#14414F;--encabezado-tabla:#DFF0F4;--segmentado:#D3EAF0;--pista:#CBE8EF;
+  --ok-fondo:#E3F4E8;--ok-texto:#14532D;--error-fondo:#FDECEC;--error-texto:#991B1B;
+  /* Semánticos: significan algo, no se usan de decoración */
+  --aviso-fondo:#FFFBEB;--aviso-texto:#78350F;--aviso-borde:#FCD34D;
+  --atencion:#B45309;--error:#DC2626;--ok:#15803D;
+  /* Tipografía */
+  --fuente:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+  /* Tema por defecto = módulo propio de Global */
+  --mod-acento:var(--tinta);--mod-sobre-acento:#FFFFFF;--mod-primario:var(--celeste-600);
+  --mod-barra:var(--celeste-marca);--mod-sobre-barra:var(--tinta);--mod-barra-borde:var(--celeste-marca);   /* barra superior de módulo */
+  --mod-encabezado:var(--encabezado-tabla);--mod-encabezado-texto:var(--tinta-2);--mod-encabezado-borde:var(--borde);   /* encabezado de tabla */
+  --mod-segmento-activo:var(--tinta);
+}
+/* Temas de marketplace: <body data-modulo="…">. El color del marketplace solo aparece en su barra, el ítem activo del menú, los botones primarios, el selector de cuenta y el encabezado de tabla. */
+[data-modulo="ml"]{
+  --mod-acento:#FFE600;--mod-sobre-acento:#2D3277;--mod-primario:#2D3277;                       /* Mercado Libre: definido */
+  --mod-barra:#FFE600;--mod-sobre-barra:#2D3277;--mod-barra-borde:#E0CC00;
+  --mod-encabezado:#FFF6B8;--mod-encabezado-texto:#2D3277;--mod-encabezado-borde:#E0CC00;
+  --mod-segmento-activo:#2D3277;
+}
+/* [data-modulo="fravega"], [data-modulo="oncity"], [data-modulo="megatone"]: A DEFINIR — el color sale del logo oficial con docs/assets/logos/muestrear_color.py (ver la tabla en la guía). */
 </style>
 </head>
 <body>
