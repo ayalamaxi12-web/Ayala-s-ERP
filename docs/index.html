@@ -710,7 +710,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 <div id="page-analisis-competencia" class="page">
   <div class="section-hdr">Análisis de Competencia — <span id="ac-titulo-modo">por SKU</span> <span style="font-size:10px;font-weight:400;color:var(--text3)">(último precio leído por el scraper · histórico en 📈 de cada SKU)</span></div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <span style="display:inline-flex;gap:4px"><button class="btn-xs" id="ac-modo-sku" onclick="acModo('sku')" style="border-color:var(--accent)">Por SKU</button><button class="btn-xs" id="ac-modo-cat" onclick="acModo('cat')" title="Una fila por subcategoría: tiendas Rey/Media/Barato (planilla de Maca), conteo de publicaciones y en cuántos SKU nos gana el Rey">Por categoría</button></span>
+    <span style="display:inline-flex;gap:4px"><button class="btn-xs" id="ac-modo-sku" onclick="acModo('sku')" style="border-color:var(--accent)">Por SKU</button><button class="btn-xs" id="ac-modo-cat" onclick="acModo('cat')" title="Una fila por subcategoría: tiendas Rey/Media/Barato (planilla de Maca), conteo de publicaciones y en cuántos SKU nos gana el Rey">Por categoría</button><button class="btn-xs" id="ac-modo-ev" onclick="acModo('ev')" title="Lista de eventos de competencia (Bajó, Subió, publicación caída…) con umbral de baja fuerte y export a CSV">Eventos</button></span>
     <button class="btn primary" id="btn-ac-load" onclick="acCargar(false)">🔄 Cargar</button>
     <button class="btn" onclick="acCargar(true)" title="Relee el Sheet (máx. 1 vez cada 30 s)">⟳ Releer Sheet</button>
     <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
@@ -743,6 +743,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
     <div class="pagination" id="ac-pag"></div>
   </div>
   <div id="ac-cat-wrap" style="display:none;flex:1;min-width:0"></div>
+  <div id="ac-ev-wrap" style="display:none;flex:1;min-width:0"></div>
   <aside id="ac-aside" class="ac-aside" style="display:none"></aside>
   </div>
 </div>
@@ -2766,7 +2767,7 @@ let intelComercialLoaded=false;
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
 // (igual que Competidores) y el margen sale de compMargenAt (paridad con el motor: backend/scripts/paridad_margenes.py). Convive con los módulos viejos.
-const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[],histAb:{},modo:'sku',catAb:{},catSort:'sub'};
+const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[],histAb:{},modo:'sku',catAb:{},catSort:'sub',ev:{dias:30,tipos:new Set(),fuertes:false,max:200}};
 function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Nuestro precio "comparable" contra una publicación por `c` unidades: precio × c (+ envío desde el umbral), igual que Competidores ("Mi Precio = PM×Cant+Envío").
 function acComparable(X,c,ctx){const t=(X||0)*(c>0?c:1);return t>=ctx.umbral?t+ctx.envio:t;}
@@ -3243,9 +3244,11 @@ function acCatDiagHtml(d){const av=[];
   if(d.fueraPlanilla)av.push(`${d.fueraPlanilla} tiendas que ya no figuran en la planilla de Maca`);
   return av.length?`<div style="margin-bottom:8px;padding:6px 10px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6">${av.map(x=>'⚠ '+x).join('<br>')}</div>`:'';}
 function acCatRender(filas,fl){
-  const cat=AC.modo==='cat',w=qs('ac-cat-wrap');if(!w)return;
-  qs('ac-table-wrap').style.display=cat?'none':'';w.style.display=cat?'':'none';
-  qs('ac-titulo-modo').textContent=cat?'por categoría':'por SKU';qs('ac-modo-sku').style.borderColor=cat?'':'var(--accent)';qs('ac-modo-cat').style.borderColor=cat?'var(--accent)':'';
+  const cat=AC.modo==='cat',ev=AC.modo==='ev',w=qs('ac-cat-wrap');if(!w)return;
+  qs('ac-table-wrap').style.display=(cat||ev)?'none':'';w.style.display=cat?'':'none';qs('ac-ev-wrap').style.display=ev?'':'none';
+  qs('ac-titulo-modo').textContent=cat?'por categoría':ev?'eventos':'por SKU';
+  [['sku',!cat&&!ev],['cat',cat],['ev',ev]].forEach(([m,on])=>{qs('ac-modo-'+m).style.borderColor=on?'var(--accent)':'';});
+  if(ev){acEvRender(fl);return;}
   if(!cat)return;
   const as=qs('ac-aside');if(as)as.style.display='none';AC.asideKey=null;
   const hay=!!(fl.search||fl.cats||fl.pms||(fl.vend&&fl.vend.size)||fl.soloCambios||fl.soloGanan||fl.ocultarSinStock);
@@ -3256,6 +3259,52 @@ function acCatRender(filas,fl){
 function acModo(m){AC.modo=m;acRender();}
 function acCatToggle(i){const g=(AC.catGs||[])[i];if(!g)return;AC.catAb[g.sub]=!AC.catAb[g.sub];acRender();}
 function acCatVerSku(i,j){const g=(AC.catGs||[])[i],f=g&&g.rows[j];if(!f)return;qs('ac-search').value=f.sku;AC.page=1;AC.modo='sku';acRender();}
+// ── Eventos de competencia en la pantalla nueva (reemplaza «Cambios de precio» de Intel. Competitiva): lista de eventos, umbral de «baja fuerte» configurable y export a CSV.
+// Lee `eventos` de /competencia/analisis (Eventos_Competencia, ventana de 90 d). Solo lectura.
+const AC_EV_TIPOS={Bajo:'Bajó',Subio:'Subió',Publicacion_caida:'Publicación caída',Reaparecio:'Reapareció',Vendedor_sin_resultados:'Tienda sin resultados',Stock_bajo:'Stock bajo',Tienda_bloqueada:'Tienda bloqueada'};
+const AC_UMBRAL_DEFAULT=10,AC_UMBRAL_KEY='ac_umbral_baja_fuerte';
+function acUmbralLeer(){try{const v=parseFloat(localStorage.getItem(AC_UMBRAL_KEY));return v>0&&v<=90?v:AC_UMBRAL_DEFAULT;}catch(e){return AC_UMBRAL_DEFAULT;}}
+function acUmbralGuardar(v){try{localStorage.setItem(AC_UMBRAL_KEY,String(v));}catch(e){}}
+function acEvPct(e){const v=parseFloat(String(e.variacion_pct==null?'':e.variacion_pct).replace(',','.'));if(isFinite(v))return v;return(e.anterior>0&&e.nuevo!=null)?Math.round((e.nuevo-e.anterior)/e.anterior*1000)/10:null;}
+// fl={dias,hoy,tipos:Set (vacío = todos),vend:Set,search,soloFuertes,umbral,cats:[..]|null,pms:[..]|null,info:{key:{cat,pm}},norm}. Devuelve los eventos de la ventana con pct, fuerte y tipoTxt, del más nuevo al más viejo.
+function acEvFiltrar(D,fl){
+  const desde=acIsoMas(fl.hoy,-fl.dias),q=(fl.search||'').toLowerCase().trim();
+  return (D.eventos||[]).filter(e=>e.fecha>=desde&&e.fecha<=fl.hoy).map(e=>{const pct=acEvPct(e);return Object.assign({},e,{pct,tipoTxt:AC_EV_TIPOS[e.tipo]||String(e.tipo||'').replace(/_/g,' '),fuerte:e.tipo==='Bajo'&&pct!=null&&pct<=-fl.umbral});})
+   .filter(e=>{
+    if(fl.tipos&&fl.tipos.size&&!fl.tipos.has(e.tipo))return false;
+    if(fl.vend&&fl.vend.size&&!fl.vend.has(e.entidad))return false;
+    if(fl.soloFuertes&&!e.fuerte)return false;
+    if(q&&!((e.sku||'').toLowerCase().includes(q)||(e.entidad||'').toLowerCase().includes(q)||(e.link||'').toLowerCase().includes(q)||(e.detalle||'').toLowerCase().includes(q)))return false;
+    if((fl.cats||fl.pms)&&fl.info){const i=fl.info[fl.norm(e.sku||'')]||{cat:'Sin categoría',pm:'Sin PM'};if(fl.cats&&!fl.cats.includes(i.cat))return false;if(fl.pms&&!fl.pms.includes(i.pm))return false;}
+    return true;}).sort((a,b)=>(b.fecha+(b.hora||'')).localeCompare(a.fecha+(a.hora||'')));}
+function acEvResumen(rows){return {total:rows.length,bajaron:rows.filter(e=>e.tipo==='Bajo').length,subieron:rows.filter(e=>e.tipo==='Subio').length,fuertes:rows.filter(e=>e.fuerte).length,otros:rows.filter(e=>e.tipo!=='Bajo'&&e.tipo!=='Subio').length};}
+function acCsvCelda(v){const t=v==null?'':String(v);return /[",\n;]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;}
+function acEvCsv(rows){const h=['Fecha','Hora','Tipo','SKU','Competidor','Rol','Precio anterior','Precio nuevo','Variacion %','Baja fuerte','Detalle','Link'];
+  return '﻿'+[h].concat(rows.map(e=>[e.fecha,e.hora||'',e.tipoTxt,e.sku||'',e.entidad||'',e.rol||'',e.anterior==null?'':e.anterior,e.nuevo==null?'':e.nuevo,e.pct==null?'':e.pct,e.fuerte?'Si':'No',e.detalle||'',e.link||''])).map(f=>f.map(acCsvCelda).join(',')).join('\n');}
+function acEvHtml(rows,res,st,tiposPresentes){
+  const chips=[7,30,90].map(n=>`<button class="btn-xs" style="${n===st.dias?'border-color:var(--accent);color:var(--accent)':''}" onclick="acEvDias(${n})">${n} d</button>`).join(' ');
+  const tch=tiposPresentes.map(t=>`<button class="btn-xs" aria-pressed="${st.tipos.has(t)}" style="${st.tipos.has(t)?'border-color:var(--accent);color:var(--accent)':''}" onclick="acEvTipo('${t}')">${acEsc(AC_EV_TIPOS[t]||t)}</button>`).join(' ');
+  const kpi=(v,l,tt)=>`<div class="stat-card"${tt?` title="${acEsc(tt)}"`:''}><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`;
+  const fila=e=>{const pc=e.pct==null?'—':`<span style="color:${e.pct<0?'var(--red)':'var(--green)'}">${e.pct>0?'+':e.pct<0?'−':''}${Math.abs(e.pct).toFixed(1).replace('.',',')}%</span>`;
+    return `<tr><td style="white-space:nowrap">${acFechaCorta(e.fecha)}<span style="color:var(--text3)"> ${acEsc(e.hora||'')}</span></td><td><span class="badge ${e.tipo==='Bajo'?'badge-red':e.tipo==='Subio'?'badge-green':'badge-gray'}">${acEsc(e.tipoTxt)}</span>${e.fuerte?' <span class="badge badge-yellow" title="Baja de '+st.umbral+'% o más (umbral configurable)">baja fuerte</span>':''}</td><td><b>${acEsc(e.sku||'—')}</b></td><td>${acEsc(e.entidad||'—')}</td><td>${acEsc(e.rol||'—')}</td><td style="white-space:nowrap">${e.anterior!=null&&e.nuevo!=null?fmt$(e.anterior)+' → '+fmt$(e.nuevo):(e.detalle?acEsc(e.detalle):'—')}</td><td>${pc}</td><td>${e.link?`<a href="${acEsc(e.link)}" target="_blank" rel="noopener" class="btn-xs" style="text-decoration:none">Ver</a>`:'—'}</td></tr>`;};
+  const mostrar=rows.slice(0,st.max);
+  return `<div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><b>Período</b>${chips}<span style="margin-left:10px"><b>Tipo</b></span>${tch||'<span style="color:var(--text3)">sin eventos</span>'}</div>
+   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><label style="display:flex;gap:6px;align-items:center">Baja fuerte desde <input type="number" id="ac-ev-umbral" min="1" max="90" step="1" value="${st.umbral}" style="width:60px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:inherit;font-size:11px" onchange="acEvUmbral(this.value)"> %</label>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ac-ev-fuertes"${st.fuertes?' checked':''} onchange="acEvSoloFuertes(this.checked)"> Solo bajas fuertes</label><button class="btn" onclick="acEvExportar()">Exportar CSV</button><span style="color:var(--text3)">los filtros de arriba (buscador, vendedores, categoría, PM) también valen acá</span></div></div>
+   <div class="stats-row" style="margin-bottom:10px">${kpi(res.bajaron,'Bajaron de precio')}${kpi(res.subieron,'Subieron de precio')}${kpi(res.fuertes,'Bajas fuertes (≥ '+st.umbral+'%)','Bajas de precio del umbral para arriba')}${kpi(res.otros,'Otros eventos','Publicación caída, reapareció, tienda sin resultados o bloqueada, stock bajo')}${kpi(res.total,'Eventos en el período')}</div>
+   <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Evento</th><th>SKU</th><th>Competidor</th><th>Rol</th><th>Precio (anterior → nuevo)</th><th>Variación</th><th>Link</th></tr></thead><tbody>${mostrar.map(fila).join('')||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">Sin eventos con esos filtros</td></tr>'}</tbody></table>${rows.length>mostrar.length?`<div style="padding:8px 12px;color:var(--text3)">Mostrando ${mostrar.length} de ${rows.length}; el CSV trae todos.</div>`:''}</div>`;}
+function acEvEstado(fl){const info={};(AC.filas||[]).forEach(f=>{info[f.key]={cat:f.cat,pm:f.pmName};});
+  return Object.assign({dias:AC.ev.dias,hoy:acHistHoy(AC.data),tipos:AC.ev.tipos,soloFuertes:AC.ev.fuertes,umbral:acUmbralLeer(),info,norm:normSku},{vend:fl.vend,search:fl.search,cats:fl.cats,pms:fl.pms});}
+function acEvRender(fl){
+  const as=qs('ac-aside');if(as)as.style.display='none';AC.asideKey=null;
+  const st=acEvEstado(fl),rows=acEvFiltrar(AC.data,st),tp=[...new Set((AC.data.eventos||[]).map(e=>e.tipo))].sort();
+  AC.evRows=rows;qs('ac-ev-wrap').innerHTML=acEvHtml(rows,acEvResumen(rows),Object.assign({max:AC.ev.max},st),tp);qs('ac-count').textContent=rows.length+' eventos';}
+function acEvDias(n){AC.ev.dias=n;acRender();}
+function acEvTipo(t){if(AC.ev.tipos.has(t))AC.ev.tipos.delete(t);else AC.ev.tipos.add(t);acRender();}
+function acEvUmbral(v){const n=parseFloat(String(v).replace(',','.'));if(n>0&&n<=90)acUmbralGuardar(n);acRender();}
+function acEvSoloFuertes(on){AC.ev.fuertes=!!on;acRender();}
+function acEvExportar(){const rows=AC.evRows||[];if(!rows.length){toast('Sin eventos para exportar','error');return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([acEvCsv(rows)],{type:'text/csv;charset=utf-8;'}));a.download=`eventos-competencia-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast('Exportado: '+rows.length+' eventos');}
 function acCtxFilaHtml(f){return AC.ctxAbierto&&AC.ctxAbierto[f.key]?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:8px 14px;border-bottom:1px solid var(--border)">${acCtxDetalleHtml(f)}</td></tr>`:'';}
 // ── Precio real en ML (E2): al abrir el desglose de un SKU se pide GET /competencia/precio-ml (≈1 llamada a ML por publicación activa; el backend lo cachea 5 min).
 // Distinto del PM: el chip marca "≠ PM" cuando el precio real de alguna publicación activa se aparta más del 1% del precio ML del PM.
