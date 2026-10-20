@@ -10,12 +10,13 @@ import pytest
 from test_front_analisis import INDEX, _fn
 
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
-FUNS = ('acCatDiag', 'acCatDiagHtml', 'acMediana', 'acCatSkus', 'acTiendaConteo', 'acRolRank', 'acCategoriasArmar', 'acCatOrdenar', 'acTiendaHtml', 'acCatHtml', 'acEsc', 'acFechaCorta', 'fmt$')
+FUNS = ('acCatDiag', 'acPl', 'acCatDiagHtml', 'acMediana', 'acCatSkus', 'acTiendaConteo', 'acRolRank', 'acCategoriasArmar', 'acCatOrdenar', 'acPctAR', 'acTiendaFilaHtml', 'acTiendasPanelHtml', 'acCatHtml', 'acEsc', 'acFechaCorta', 'fmt$')
 
 
 def js(cuerpo, datos):
     s = open(INDEX, encoding='utf-8').read()
-    src = '\n'.join(_fn(s, n) for n in FUNS) + '\n' + re.search(r"const AC_ROL_ORDEN=\{.*?\};", s).group(0)
+    iconos = s[s.index('// ICONOS-INICIO'):s.index('// ICONOS-FIN')]
+    src = iconos + '\n'.join(_fn(s, n) for n in FUNS) + '\n' + re.search(r"const AC_ROL_ORDEN=\{.*?\};", s).group(0)
     codigo = src + "\nconst X=JSON.parse(process.argv[1]);const norm=s=>String(s||'').trim().toLowerCase();global.AC={catAb:{}};\n" + cuerpo
     return json.loads(subprocess.run(['node', '-e', codigo, json.dumps(datos)], capture_output=True, text=True, check=True).stdout)
 
@@ -83,14 +84,17 @@ def test_orden_por_donde_nos_gana_el_rey_y_por_tienda_mas_debil():
 
 
 def test_html_conteo_mediana_nuevas_incompleta_y_sin_datos():
-    h = js("global.AC={catAb:{'Toner':true}};global.acFechaCorta=acFechaCorta;const gs=acCatOrdenar(acCategoriasArmar(X.D,X.filas,false,norm),'sub');console.log(JSON.stringify([acCatHtml(gs),acCatHtml([])]))",
+    h = js("global.AC={catAb:{'Toner':true}};const gs=acCatOrdenar(acCategoriasArmar(X.D,X.filas,false,norm),'sub');console.log(JSON.stringify([acCatHtml(gs),acCatHtml([])]))",
            {'D': D, 'filas': FILAS})
-    assert '120 pub.' in h[0] and 'mediana 7 d 150' in h[0] and '-20%' in h[0] and '+0 / −7' in h[0]
-    assert 'lectura incompleta' in h[0] and 'captcha' in h[0] and 'fuera de planilla' in h[0] and 'sin conteo de publicaciones todavía' in h[0]
-    assert '1 de 2' in h[0] and 'acCatVerSku(2,0)' in h[0] and h[1].startswith('<div') and 'Sin subcategorías' in h[1]
+    izq, der = h[0].split('aria-label="Tiendas"')                      # tabla de subcategorías | panel lateral de tiendas
+    assert 'TIENDA A <b>120</b>' in izq and 'TIENDA C <b>—</b>' in izq and '3 / 3' not in izq and '2 / 3' in izq             # Rey · Media · Barata con leídas; SKU con competencia / en planilla
+    assert 'aria-expanded="true"' in izq and 'acCatVerSku(2,0)' in izq and '>1</b> <span style="color:var(--texto-suave)">de 2' in izq and 'de 2' in izq   # el Rey nos gana en 1 de 2
+    assert '120 / 120' in der and '150 <span style="color:var(--texto-suave)">−20,0%</span>' in der and '+0 / −7' in der           # leídas / ML, mediana 7 d con signo, nuevas / desaparecidas
+    assert 'lectura incompleta' in der and 'captcha' in der and 'fuera de planilla' in der and 'sin conteo de publicaciones todavía' in der
+    assert 'aria-label="Tiendas"' in h[0] and h[1].startswith('<div') and 'Sin subcategorías' in h[1]
 
 
 def test_diagnostico_de_lo_que_no_se_pudo_cruzar():
     d = js("const gs=acCategoriasArmar(X.D,X.filas,false,norm);console.log(JSON.stringify([acCatDiag(gs),acCatDiagHtml(acCatDiag(gs)),acCatDiagHtml({})]))", {'D': D, 'filas': FILAS})
     assert d[0] == {'subs': 3, 'sinSkus': 1, 'sinCompetencia': 0, 'skusSinCompetencia': 1, 'tiendas': 5, 'tiendasSinConteo': 1, 'incompletas': 1, 'fueraPlanilla': 1}
-    assert '1 subcategorías con SKUs_Nuestros vacío' in d[1] and '1 de 5 tiendas sin conteo' in d[1] and d[2] == ''
+    assert '1 subcategoría con SKUs_Nuestros vacío' in d[1] and '1 de 5 tiendas sin conteo' in d[1] and d[2] == ''

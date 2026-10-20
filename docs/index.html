@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Global Electronics — ERP</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;900&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Figtree:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;900&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
@@ -17,8 +17,6 @@
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;}
 header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);background:rgba(13,15,20,0.98);backdrop-filter:blur(16px);z-index:300;position:sticky;top:0;box-shadow:0 1px 0 rgba(0,157,188,0.12);}
 .logo{display:flex;align-items:center;gap:10px;}
-.logo-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .logo h1{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
 .logo span{font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;}
 .header-right{display:flex;align-items:center;gap:12px;}
@@ -214,82 +212,254 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   .dash-filters{padding:8px 12px;}
 }
 </style>
+<style id="estetica-tokens">
+/* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
+   Fase 0 no cambia nada visible: las variables viejas (--bg, --surface, --accent…) siguen vigentes para los módulos que todavía no migraron. ══ */
+:root{
+  /* Global */
+  --tinta:#0B2733;--tinta-2:#25414E;--texto-suave:#4B6472;
+  --celeste-50:#F0F9FB;--fondo:#EDF5F8;--celeste-100:#D9EFF4;--celeste-200:#AEDDE7;--celeste-300:#7CC7D6;--celeste-600:#1B8195;--celeste-700:#146378;
+  --celeste-marca:#24A2B9;                    /* color real del logo: barra de módulos propios, logo, gráficos, texto grande. No para texto chico sobre blanco (3,0:1) */
+  --borde:#C3DBE1;--divisor:#D8E8EC;--zebra:#F6FBFD;--superficie:#FFFFFF;
+  /* Agregados a la guía (los pide el mockup; sin ellos habría hex sueltos): ítem activo del menú, encabezado de tabla, selector segmentado, tintes de estado */
+  --tinta-activo:#14414F;--encabezado-tabla:#DFF0F4;--segmentado:#D3EAF0;--pista:#CBE8EF;
+  --ok-fondo:#E3F4E8;--ok-texto:#14532D;--error-fondo:#FDECEC;--error-texto:#991B1B;
+  /* Semánticos: significan algo, no se usan de decoración */
+  --aviso-fondo:#FFFBEB;--aviso-texto:#78350F;--aviso-borde:#FCD34D;
+  --atencion:#B45309;--error:#DC2626;--ok:#15803D;
+  /* Marcas de marketplace (del logo oficial) */
+  --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;
+  /* Tipografía */
+  --fuente:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --fs-cuerpo:14px;--fs-campo:14px;--fs-tabla:13px;   /* escritorio: manda la guía (tablas 13 px) */
+  /* Tema por defecto = módulo propio de Global */
+  --mod-acento:var(--tinta);--mod-sobre-acento:#FFFFFF;--mod-primario:var(--celeste-600);
+  --mod-barra:var(--celeste-marca);--mod-sobre-barra:var(--tinta);--mod-barra-borde:var(--celeste-marca);   /* barra superior de módulo */
+  --mod-encabezado:var(--encabezado-tabla);--mod-encabezado-texto:var(--tinta-2);--mod-encabezado-borde:var(--borde);   /* encabezado de tabla */
+  --mod-segmento-activo:var(--tinta);
+}
+@media(max-width:768px){:root{--fs-cuerpo:16px;--fs-campo:16px}}   /* hasta 768 px: cuerpo y campos a 16 px (evita el zoom de iOS al enfocar un campo); las tablas siguen en --fs-tabla y scrollean dentro de su caja */
+/* Temas de marketplace: <body data-modulo="…">. El color del marketplace solo aparece en su barra, el ítem activo del menú, los botones primarios, el selector de cuenta y el encabezado de tabla. */
+[data-modulo="ml"]{
+  --mod-acento:var(--mk-ml);--mod-sobre-acento:var(--mk-ml-tinta);--mod-primario:var(--mk-ml-tinta);   /* Mercado Libre: definido */
+  --mod-barra:var(--mk-ml);--mod-sobre-barra:var(--mk-ml-tinta);--mod-barra-borde:var(--mk-ml-borde);
+  --mod-encabezado:var(--mk-ml-suave);--mod-encabezado-texto:var(--mk-ml-tinta);--mod-encabezado-borde:var(--mk-ml-borde);
+  --mod-segmento-activo:var(--mk-ml-tinta);
+}
+/* [data-modulo="fravega"], [data-modulo="oncity"], [data-modulo="megatone"]: A DEFINIR — el color sale del logo oficial con docs/assets/logos/muestrear_color.py (ver la tabla en la guía). */
+</style>
+<style id="estetica-fase1">
+/* ══ ESTÉTICA 2026 — Fase 1: barra superior, menú lateral y Análisis de Competencia (docs/ESTETICA_ERP_GLOBAL.md). Solo presentación. ══ */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* — Barra superior de módulo (56 px, a todo el ancho) — */
+.topbar{position:sticky;top:0;z-index:300;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:12px 18px;min-height:56px;padding:8px 24px;
+  background:var(--mod-barra);color:var(--mod-sobre-barra);border-bottom:1px solid var(--mod-barra-borde);backdrop-filter:none;font-family:var(--fuente)}
+.tb-brand{display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;border-radius:6px}
+.tb-logo{height:28px;width:auto;display:block}
+.tb-logo-tinta,.tb-x,.tb-logo-mk,.tb-prov{display:none}
+.tb-x{font-size:22px;font-weight:500;line-height:1}
+.tb-erp{font-size:13px;font-weight:700;letter-spacing:.08em}
+.tb-modulo{margin-left:auto;font-size:13px;font-weight:600}
+.tb-prov{padding:2px 8px;border-radius:999px;background:rgba(45,50,119,.12);font-size:11px;font-weight:600}   /* TODO visible: logo de ML provisorio */
+body[data-modulo="ml"] .tb-logo-blanco,body[data-modulo="ml"] .tb-erp{display:none}
+body[data-modulo="ml"] .tb-logo-tinta,body[data-modulo="ml"] .tb-logo-mk{display:block}
+body[data-modulo="ml"] .tb-logo-mk{height:42px}
+body[data-modulo="ml"] .tb-x{display:inline}
+body[data-modulo="ml"] .tb-prov{display:inline-block}
+.menu-toggle{display:none;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;border:1px solid color-mix(in srgb,var(--mod-sobre-barra) 40%,transparent);border-radius:8px;background:transparent;color:var(--mod-sobre-barra);cursor:pointer}
+.menu-toggle:hover{background:color-mix(in srgb,var(--mod-sobre-barra) 10%,transparent);border-color:var(--mod-sobre-barra);color:var(--mod-sobre-barra)}
+.topbar :focus-visible{outline:2px solid var(--mod-sobre-barra);outline-offset:2px}
+.topbar #status-global{font:600 12px var(--fuente);color:var(--mod-sobre-barra)!important}   /* el JS le pone un color inline pensado para fondo oscuro: acá manda el contraste con la barra; el estado se lee por el texto */
+/* — Menú lateral — */
+.sidebar{background:var(--tinta);border-right:0;font-family:var(--fuente)}
+.sidebar-header{border-bottom:1px solid rgba(217,239,244,.15)}
+.sidebar-header h2{font-size:13px;color:var(--celeste-300)}
+.sidebar-close{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;color:var(--celeste-100);cursor:pointer}
+.sidebar-section{padding:8px 12px}
+.sidebar-section-label{padding:8px 10px 4px;font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--celeste-300)}
+.sidebar-sep{display:none}
+.sidebar-item{padding:0 10px;min-height:40px;gap:10px;border-radius:6px;border-left:0;font-size:14px;font-weight:400;color:var(--celeste-100);text-decoration:none}
+.sidebar-item:hover{background:rgba(217,239,244,.09);color:#fff;border-left:0}
+.sidebar-item.active{background:var(--tinta-activo);color:#fff;font-weight:600;border-left:0}
+.sidebar-item.active::after,.sidebar-item[data-mod="ml"]::after{content:'';margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--celeste-marca)}
+.sidebar-item[data-mod="ml"]::after{background:var(--mk-ml)}
+body[data-modulo="ml"] .sidebar-item.active{background:var(--mod-acento);color:var(--mod-sobre-acento);font-weight:700}
+body[data-modulo="ml"] .sidebar-item.active::after{display:none}
+.sidebar-item .icon{display:inline-flex;width:18px;height:18px;flex:none;font-size:0}
+.sidebar :focus-visible{outline:2px solid var(--celeste-300);outline-offset:-2px}
+@media(min-width:900px){
+  .sidebar{left:0;top:56px;width:208px;height:calc(100vh - 56px);z-index:200;transition:none}
+  .sidebar-header,.sidebar-overlay{display:none!important}
+  .app-body{margin-left:208px}
+}
+@media(max-width:899px){
+  .menu-toggle{display:inline-flex}
+  .sidebar{left:-300px;width:280px}
+  .topbar{padding:8px 16px}
+  .tb-modulo{margin-left:auto}
+}
+@media(max-width:599px){.tb-modulo{display:none}.topbar #status-global{margin-left:auto}}
+/* — Análisis de Competencia: las variables viejas se remapean SOLO mientras esa página está activa (la pantalla y todo lo que cuelga de ella: avisos, menús, toasts) — */
+body[data-page="analisis-competencia"]{
+  --bg:var(--fondo);--surface:var(--superficie);--surface2:var(--zebra);--border:var(--borde);
+  --accent:var(--celeste-700);--accent-light:var(--celeste-600);--accent2:var(--celeste-700);--accent3:var(--atencion);--accent4:var(--error-texto);
+  --text:var(--tinta);--text2:var(--texto-suave);--text3:var(--texto-suave);
+  --green:var(--ok);--yellow:var(--atencion);--red:var(--error-texto);--orange:var(--atencion);
+  background:var(--fondo);color:var(--tinta);font-family:var(--fuente)}
+#page-analisis-competencia{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:var(--fs-cuerpo)}
+#page-analisis-competencia :focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px}
+#page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .badge,#page-analisis-competencia .ac-aside,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2,
+#page-analisis-competencia .ms-trigger,#page-analisis-competencia .ms-option,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ms-actions button,#page-analisis-competencia .filter-label,
+#page-analisis-competencia .stat-label,#page-analisis-competencia .ac-sug div.it,#page-analisis-competencia .btn{font-family:var(--fuente)!important}
+#page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .stat-value,#page-analisis-competencia td{font-variant-numeric:tabular-nums}
+#page-analisis-competencia [style*="font-size:8px"],#page-analisis-competencia [style*="font-size:9px"],#page-analisis-competencia [style*="font-size:10px"],#page-analisis-competencia [style*="font-size:11px"]{font-size:12px!important}
+.ac-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.ac-cab h1{margin:0;font-size:22px;font-weight:600;line-height:1.2}
+.ac-sub{font-size:13px;color:var(--texto-suave)}
+.ac-seg{display:flex;gap:2px;padding:3px;background:var(--segmentado);border-radius:8px}
+.ac-seg button{min-height:44px;padding:0 18px;border:0;border-radius:6px;background:transparent;color:var(--tinta-2);font:400 14px var(--fuente);cursor:pointer}
+.ac-seg button[aria-pressed="true"]{background:var(--mod-segmento-activo);color:#fff;font-weight:600}
+.ac-acciones{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+#page-analisis-competencia .btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--mod-primario);border-radius:8px;background:var(--superficie);color:var(--mod-primario);font-size:14px;font-weight:600}
+#page-analisis-competencia .btn:hover{background:var(--celeste-50);color:var(--mod-primario);border-color:var(--mod-primario)}
+#page-analisis-competencia .btn.primary{background:var(--mod-primario);border-color:var(--mod-primario);color:#fff}
+#page-analisis-competencia .btn.primary:hover{background:var(--celeste-700)}
+#page-analisis-competencia .btn-xs{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--celeste-200);border-radius:6px;background:var(--celeste-100);color:var(--celeste-700);font:600 12px var(--fuente)}
+#page-analisis-competencia .btn-xs:hover{background:var(--celeste-200)}
+#page-analisis-competencia .badge{padding:2px 8px;font-size:12px;font-weight:600}
+#page-analisis-competencia .badge-blue{background:var(--celeste-100);color:var(--celeste-700)}
+#page-analisis-competencia .badge-gray{background:var(--divisor);color:var(--tinta-2)}
+#page-analisis-competencia .badge-green{background:var(--ok-fondo);color:var(--ok-texto)}
+#page-analisis-competencia .badge-red{background:var(--error-fondo);color:var(--error-texto)}
+#page-analisis-competencia .badge-yellow{background:var(--aviso-fondo);color:var(--aviso-texto)}
+.ac-aviso{display:flex;flex-direction:column;gap:6px;padding:10px 14px;background:var(--aviso-fondo);border:1px solid var(--aviso-borde);border-radius:8px;color:var(--aviso-texto);font-size:13px;line-height:1.5}
+.ac-aviso svg{flex:none;margin-top:2px}
+#page-analisis-competencia .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;background:var(--superficie);border:1px solid var(--borde);border-radius:8px}
+#page-analisis-competencia .stat-card{display:flex;flex-direction:column-reverse;gap:0;padding:12px 16px;border:0;border-right:1px solid var(--divisor);border-radius:0;background:transparent}
+#page-analisis-competencia .stat-card:last-child{border-right:0}
+#page-analisis-competencia .stat-value{margin:0;font:500 22px/1.3 var(--fuente);color:var(--tinta)}
+#page-analisis-competencia .stat-label{font-size:12px;color:var(--texto-suave)}
+#page-analisis-competencia .erp-filters{gap:10px;padding:0;background:transparent;align-items:flex-end}
+#page-analisis-competencia .filter-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
+#page-analisis-competencia .ms-trigger,#page-analisis-competencia select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)}
+#page-analisis-competencia .ms-trigger{display:flex;align-items:center;padding:0 28px 0 10px;min-width:150px}
+#page-analisis-competencia .ms-trigger::after{color:var(--texto-suave);font-size:12px}
+#page-analisis-competencia .ms-dropdown,#page-analisis-competencia .ac-sug{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;box-shadow:0 4px 12px rgba(11,39,51,.12)}
+#page-analisis-competencia .ms-option,#page-analisis-competencia .ac-sug div.it{font-size:13px;color:var(--tinta-2)}
+#page-analisis-competencia .ms-option:hover,#page-analisis-competencia .ac-sug div.it.on,#page-analisis-competencia .ac-sug div.it:hover{background:var(--celeste-100);color:var(--tinta)}
+#page-analisis-competencia .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
+#page-analisis-competencia input[type=checkbox]{accent-color:var(--celeste-600);width:16px;height:16px}
+#page-analisis-competencia label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
+#page-analisis-competencia input,#page-analisis-competencia select{font-family:var(--fuente)!important}
+#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,#page-analisis-competencia select.fi,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{font-size:var(--fs-campo)!important}
+#page-analisis-competencia #ac-tc{width:96px!important}
+#page-analisis-competencia #ac-ev-umbral{min-height:44px;width:72px!important;padding:0 8px!important;border:1px solid var(--borde)!important;border-radius:6px!important;font-size:var(--fs-campo)!important;color:var(--tinta)!important;background:var(--superficie)!important}
+#page-analisis-competencia ::placeholder{color:var(--texto-suave);opacity:1}
+#page-analisis-competencia .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
+#page-analisis-competencia .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
+#page-analisis-competencia .table-wrap::-webkit-scrollbar-thumb{background:var(--celeste-300);border-color:var(--zebra)}
+#page-analisis-competencia .table-wrap table{font-size:var(--fs-tabla)}
+#page-analisis-competencia .table-wrap thead{background:var(--mod-encabezado)}
+#page-analisis-competencia .table-wrap th{padding:9px 14px;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mod-encabezado-texto);border-bottom:1px solid var(--mod-encabezado-borde);cursor:default}
+#page-analisis-competencia .table-wrap td{padding:10px 14px;border-bottom:1px solid var(--divisor)}
+#page-analisis-competencia .table-wrap tbody tr:nth-child(even) td{background:var(--zebra)}
+#page-analisis-competencia .table-wrap tr:hover td{background:var(--celeste-50)}
+#page-analisis-competencia .table-wrap tr.ac-sel td{background:var(--celeste-100)}
+#page-analisis-competencia .table-wrap tr.ac-ctx-row td{background:var(--celeste-50)}
+#page-analisis-competencia .pagination{color:var(--texto-suave);border-top:1px solid var(--divisor)}
+#page-analisis-competencia .ac-aside{top:68px;max-height:calc(100vh - 80px);background:var(--superficie);border:1px solid var(--celeste-600);font-size:13px}
+#page-analisis-competencia .ac-frow{border-bottom:1px solid var(--divisor)}
+#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px}
+#page-analisis-competencia .ac-mcard{background:var(--zebra);border:1px solid var(--divisor)}
+#page-analisis-competencia .ac-mcard .l,#page-analisis-competencia .ac-mcard .d{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
+#page-analisis-competencia .ac-riv>div{border-bottom:1px solid var(--divisor)}
+#page-analisis-competencia .ac-chip{font-size:12px;font-weight:600}
+.ac-cober{display:inline-block;width:60px;height:6px;border-radius:3px;background:var(--pista);vertical-align:middle}
+.ac-cober>i{display:block;height:6px;border-radius:3px;background:var(--celeste-600)}
+.ac-link{padding:0;border:0;background:none;color:var(--celeste-700);font:600 13px var(--fuente);text-decoration:underline;cursor:pointer;min-height:24px}
+.ac-cat{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.ac-cat>.table-wrap{min-width:0}
+.ac-cat-izq{flex:1 1 560px}.ac-cat-der{flex:0 1 520px}.ac-cat-der td:first-child{min-width:170px}
+#page-analisis-competencia .ac-cat-der th,#page-analisis-competencia .ac-cat-der td{padding-left:10px;padding-right:10px}
+.ac-nota{padding:10px 14px;border-top:1px solid var(--divisor);font-size:12px;color:var(--texto-suave)}
+@media(max-width:899px){
+  #page-analisis-competencia{padding:16px}
+  #page-analisis-competencia .ac-aside{position:static;width:auto;max-height:none}
+}
+</style>
 </head>
 <body>
-<header>
-  <div class="logo">
-    <div class="logo-dot"></div>
-    <div><h1>Global Electronics</h1><span>ERP · Dashboard</span></div>
-  </div>
-  <div class="header-right">
-    <span id="status-global">●</span>
-    <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
-  </div>
+<header class="topbar">
+  <button type="button" class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir el menú de módulos"><span data-ico="menu" data-size="22" aria-hidden="true"></span></button>
+  <a class="tb-brand" href="#" onclick="goPage('dashboard',document.querySelector('.sidebar-item[data-page=dashboard]'));return false;" aria-label="Global Electronics — ERP, ir al inicio">
+    <img class="tb-logo tb-logo-blanco" src="assets/logos/global-blanco.png" alt="Global" width="88" height="28">
+    <img class="tb-logo tb-logo-tinta" src="assets/logos/global-tinta.png" alt="Global" width="88" height="28">
+    <span class="tb-x" aria-hidden="true">×</span>
+    <!-- TODO (Maxx): el logo de Mercado Libre es PROVISORIO (assets/logos/mercadolibre-provisorio.png, baja resolución): reemplazar por el oficial. -->
+    <img class="tb-logo-mk" src="assets/logos/mercadolibre-provisorio.png" alt="Mercado Libre" width="151" height="42">
+    <span class="tb-prov" title="TODO: reemplazar por el logo oficial de Mercado Libre">logo provisorio</span>
+  </a>
+  <span class="tb-erp">ERP</span>
+  <span id="tb-modulo" class="tb-modulo"></span>
+  <span id="status-global" role="status" aria-live="polite">●</span>
 </header>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-<div class="sidebar" id="sidebar">
+<nav class="sidebar" id="sidebar" aria-label="Módulos del ERP">
   <div class="sidebar-header">
     <h2>Módulos</h2>
-    <button class="sidebar-close" onclick="closeSidebar()">✕</button>
+    <button type="button" class="sidebar-close" onclick="closeSidebar()" aria-label="Cerrar el menú"><span data-ico="x" data-size="20" aria-hidden="true"></span></button>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">📊 Dashboard</div>
-    <div class="sidebar-item active" data-page="dashboard" onclick="goPage('dashboard',this)"><span class="icon">🏠</span> Ventas &amp; Rentabilidad</div>
-    <div class="sidebar-item" data-page="historico" onclick="goPage('historico',this)"><span class="icon">📈</span> Histórico de Unidades</div>
-    <div class="sidebar-item" data-page="cobranzas" onclick="goPage('cobranzas',this)"><span class="icon">💰</span> Cobranzas</div>
-    <div class="sidebar-item" data-page="brasil" onclick="goPage('brasil',this)"><span class="icon">🇧🇷</span> Brasil</div>
+    <div class="sidebar-section-label">Dashboard</div>
+    <a href="#" class="sidebar-item active" data-page="dashboard" onclick="goPage('dashboard',this);return false;"><span class="icon" data-ico="home" aria-hidden="true"></span>Ventas &amp; Rentabilidad</a>
+    <a href="#" class="sidebar-item" data-page="historico" onclick="goPage('historico',this);return false;"><span class="icon" data-ico="line-chart" aria-hidden="true"></span>Histórico de Unidades</a>
+    <a href="#" class="sidebar-item" data-page="cobranzas" onclick="goPage('cobranzas',this);return false;"><span class="icon" data-ico="wallet" aria-hidden="true"></span>Cobranzas</a>
+    <a href="#" class="sidebar-item" data-page="brasil" onclick="goPage('brasil',this);return false;"><span class="icon" data-ico="globe" aria-hidden="true"></span>Brasil</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">🚀 Ayala Core</div>
-    <div class="sidebar-item" data-page="ayala-core" onclick="goPage('ayala-core',this)"><span class="icon">⚙️</span> Motor de Precios</div>
-    <div class="sidebar-item" data-page="pricing" onclick="goPage('pricing',this)"><span class="icon">📊</span> Precios &amp; Márgenes</div>
+    <div class="sidebar-section-label">Ayala Core</div>
+    <a href="#" class="sidebar-item" data-page="ayala-core" onclick="goPage('ayala-core',this);return false;"><span class="icon" data-ico="cpu" aria-hidden="true"></span>Motor de Precios</a>
+    <a href="#" class="sidebar-item" data-page="pricing" onclick="goPage('pricing',this);return false;"><span class="icon" data-ico="bar-chart" aria-hidden="true"></span>Precios &amp; Márgenes</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">🛠 Gestión de Precios</div>
-    <div class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this)"><span class="icon">🛒</span> Verificar Ecom</div>
-    <div class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this)"><span class="icon">✅</span> Verificar Táctica</div>
+    <div class="sidebar-section-label">Gestión de Precios</div>
+    <a href="#" class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this);return false;"><span class="icon" data-ico="cart" aria-hidden="true"></span>Verificar Ecom</a>
+    <a href="#" class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this);return false;"><span class="icon" data-ico="check-circle" aria-hidden="true"></span>Verificar Táctica</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">📦 Mercado Libre</div>
-    <div class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this)"><span class="icon">📦</span> Verificar ML</div>
-    <div class="sidebar-item" data-page="full-ml" onclick="goPage('full-ml',this)"><span class="icon">🏭</span> Full ML</div>
+    <div class="sidebar-section-label">Mercado Libre</div>
     <!-- "Ofertas ML" vieja (page-ofertas-ml, ajuste masivo contra PM Sheet) sacada
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
-    <div class="sidebar-item" data-page="ofertas-margen" onclick="goPage('ofertas-margen',this)"><span class="icon">🏷️</span> Ofertas ML</div>
-    <div class="sidebar-item" data-page="campanas-ml" onclick="goPage('campanas-ml',this)"><span class="icon">🎪</span> Campañas ML</div>
-    <div class="sidebar-item" data-page="analisis-competencia" onclick="goPage('analisis-competencia',this)"><span class="icon">📊</span> Análisis de Competencia</div>
-    <div class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this)"><span class="icon">🏆</span> Competidores ML</div>
+    <a href="#" class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
+    <a href="#" class="sidebar-item" data-page="full-ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Full ML</a>
+    <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Ofertas ML</a>
+    <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
+    <a href="#" class="sidebar-item" data-page="analisis-competencia" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
+    <a href="#" class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this);return false;"><span class="icon" data-ico="trophy" aria-hidden="true"></span>Competidores ML</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">🧠 Inteligencia Comercial</div>
-    <div class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this)"><span class="icon">🧠</span> SKUs &amp; Referencias</div>
-    <div class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this)"><span class="icon">🏢</span> Entidades</div>
-    <div class="sidebar-item" data-page="intel-referencias" onclick="goPage('intel-referencias',this)"><span class="icon">🔗</span> Referencias</div>
-    <div class="sidebar-item" data-page="intel-mix" onclick="goPage('intel-mix',this)"><span class="icon">🧪</span> Mix</div>
+    <div class="sidebar-section-label">Inteligencia Comercial</div>
+    <a href="#" class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this);return false;"><span class="icon" data-ico="layers" aria-hidden="true"></span>SKUs &amp; Referencias</a>
+    <a href="#" class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this);return false;"><span class="icon" data-ico="building" aria-hidden="true"></span>Entidades</a>
+    <a href="#" class="sidebar-item" data-page="intel-referencias" onclick="goPage('intel-referencias',this);return false;"><span class="icon" data-ico="link" aria-hidden="true"></span>Referencias</a>
+    <a href="#" class="sidebar-item" data-page="intel-mix" onclick="goPage('intel-mix',this);return false;"><span class="icon" data-ico="flask" aria-hidden="true"></span>Mix</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">🛍️ Compras</div>
-    <div class="sidebar-item" data-page="proyeccion" onclick="goPage('proyeccion',this)"><span class="icon">📅</span> Proyección 2027</div>
+    <div class="sidebar-section-label">Compras</div>
+    <a href="#" class="sidebar-item" data-page="proyeccion" onclick="goPage('proyeccion',this);return false;"><span class="icon" data-ico="calendar" aria-hidden="true"></span>Proyección 2027</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">🚚 Distribución</div>
-    <div class="sidebar-item" data-page="distribucion" onclick="goPage('distribucion',this)"><span class="icon">🚚</span> Distribuidores</div>
+    <div class="sidebar-section-label">Distribución</div>
+    <a href="#" class="sidebar-item" data-page="distribucion" onclick="goPage('distribucion',this);return false;"><span class="icon" data-ico="truck" aria-hidden="true"></span>Distribuidores</a>
   </div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-section">
-    <div class="sidebar-section-label">⚙️ Sistema</div>
-    <div class="sidebar-item" data-page="config" onclick="goPage('config',this)"><span class="icon">🔧</span> Configuración</div>
-    <div class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this)"><span class="icon">📐</span> Reglas de Precio</div>
-    <div class="sidebar-item" data-page="mltools" onclick="goPage('mltools',this)"><span class="icon">🔗</span> ML Tools</div>
+    <div class="sidebar-section-label">Sistema</div>
+    <a href="#" class="sidebar-item" data-page="config" onclick="goPage('config',this);return false;"><span class="icon" data-ico="sliders" aria-hidden="true"></span>Configuración</a>
+    <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Reglas de Precio</a>
+    <a href="#" class="sidebar-item" data-page="mltools" onclick="goPage('mltools',this);return false;"><span class="icon" data-ico="wrench" aria-hidden="true"></span>ML Tools</a>
   </div>
-</div>
+</nav>
 <div class="app-body">
 <div id="rent-query-bar" class="card" style="margin:10px 20px 0;display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:10px">
@@ -707,15 +877,24 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 
 <!-- ANÁLISIS DE COMPETENCIA (Etapa 3.1: por SKU, modo reciente). Convive con Competidores ML / Intel. Competitiva (no los reemplaza todavía). -->
 <div id="page-analisis-competencia" class="page">
-  <div class="section-hdr">Análisis de Competencia — <span id="ac-titulo-modo">por SKU</span> <span style="font-size:10px;font-weight:400;color:var(--text3)">(último precio leído por el scraper · histórico en 📈 de cada SKU)</span></div>
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <span style="display:inline-flex;gap:4px"><button class="btn-xs" id="ac-modo-sku" onclick="acModo('sku')" style="border-color:var(--accent)">Por SKU</button><button class="btn-xs" id="ac-modo-cat" onclick="acModo('cat')" title="Una fila por subcategoría: tiendas Rey/Media/Barato (planilla de Maca), conteo de publicaciones y en cuántos SKU nos gana el Rey">Por categoría</button><button class="btn-xs" id="ac-modo-ev" onclick="acModo('ev')" title="Lista de eventos de competencia (Bajó, Subió, publicación caída…) con umbral de baja fuerte y export a CSV">Eventos</button></span>
-    <button class="btn primary" id="btn-ac-load" onclick="acCargar(false)">🔄 Cargar</button>
-    <button class="btn" onclick="acCargar(true)" title="Relee el Sheet (máx. 1 vez cada 30 s)">⟳ Releer Sheet</button>
-    <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
-    <span id="ac-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  <div class="ac-cab">
+    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+      <h1>Análisis de Competencia</h1>
+      <span class="ac-sub">Último precio leído por el scraper · histórico en cada SKU</span>
+    </div>
+    <div class="ac-seg" role="group" aria-label="Vista">
+      <button type="button" id="ac-modo-sku" aria-pressed="true" onclick="acModo('sku')">Por SKU</button>
+      <button type="button" id="ac-modo-cat" aria-pressed="false" onclick="acModo('cat')" title="Una fila por subcategoría: tiendas Rey/Media/Barato (planilla de Maca), conteo de publicaciones y en cuántos SKU nos gana el Rey">Por categoría</button>
+      <button type="button" id="ac-modo-ev" aria-pressed="false" onclick="acModo('ev')" title="Lista de eventos de competencia (Bajó, Subió, publicación caída…) con umbral de baja fuerte y export a CSV">Eventos</button>
+    </div>
   </div>
-  <div id="ac-avisos" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6"></div>
+  <div class="ac-acciones">
+    <button type="button" class="btn primary" id="btn-ac-load" onclick="acCargar(false)"><span data-ico="refresh" data-size="16" aria-hidden="true"></span>Cargar</button>
+    <button type="button" class="btn" onclick="acCargar(true)" title="Relee el Sheet (máx. 1 vez cada 30 s)"><span data-ico="refresh" data-size="16" aria-hidden="true"></span>Releer Sheet</button>
+    <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:12px"></span>
+    <span id="ac-status" class="ac-sub"></span>
+  </div>
+  <div id="ac-avisos" class="ac-aviso" role="status" style="display:none"></div>
   <div class="stats-row" id="ac-stats" style="display:none"></div>
   <div id="ac-filtros" style="display:none">
     <div class="erp-filters" style="flex-wrap:wrap">
@@ -736,7 +915,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   <div id="ac-main">
   <div class="table-wrap" id="ac-table-wrap" style="display:none;flex:1;min-width:0">
     <table id="ac-table">
-      <thead><tr><th>SKU</th><th>Categoría · PM</th><th>Nuestro precio<br><span style="font-size:8px;font-weight:400">(PM ML · margen)</span></th><th>👑 Rey</th><th>Media</th><th>Barato</th><th id="ac-th-otros" style="display:none">Otros</th></tr></thead>
+      <thead><tr><th>SKU</th><th>Categoría · PM</th><th>Nuestro precio<br><span style="font-size:8px;font-weight:400">(PM ML · margen)</span></th><th><span data-ico="crown" data-size="14" aria-hidden="true"></span> Rey</th><th>Media</th><th>Barato</th><th id="ac-th-otros" style="display:none">Otros</th></tr></thead>
       <tbody id="ac-tbody"></tbody>
     </table>
     <div class="pagination" id="ac-pag"></div>
@@ -1548,6 +1727,38 @@ let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;let proyLo
 
 // ── UTILS ──
 function qs(id){return document.getElementById(id);}
+// ── ÍCONOS SVG en línea (estilo Lucide, trazo 1,8): reemplazan a los emojis. Fuente única: ICONOS. <span data-ico="nombre" data-size="18"> se hidrata al cargar. ──
+// ICONOS-INICIO
+const ICONOS={
+ 'home':'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>','line-chart':'<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+ 'wallet':'<path d="M3 7h16a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l2-3h12v3"/><circle cx="16" cy="14" r="1.2"/>',
+ 'globe':'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
+ 'cpu':'<rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+ 'bar-chart':'<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-9"/>',
+ 'cart':'<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.7 11.4a1 1 0 001 .8h9.6a1 1 0 001-.8L21 7H6"/>',
+ 'check-circle':'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>','check':'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+ 'box':'<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>','warehouse':'<path d="M3 21V9l9-6 9 6v12"/><path d="M7 21v-8h10v8M7 17h10"/>',
+ 'tag':'<path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.2"/>','megaphone':'<path d="M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1z"/><path d="M16 8a5 5 0 010 8"/>',
+ 'search':'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>','trophy':'<path d="M8 4h8v6a4 4 0 01-8 0z"/><path d="M8 6H4v2a3 3 0 003 3M16 6h4v2a3 3 0 01-3 3"/><path d="M12 14v4M8 21h8M10 18h4"/>',
+ 'target':'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>','layers':'<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5"/>',
+ 'building':'<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
+ 'link':'<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+ 'flask':'<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 001.3 2.2h12.4a1.5 1.5 0 001.3-2.2L14 9V3"/><path d="M7.5 15h9"/>',
+ 'calendar':'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>','truck':'<path d="M2 6h11v10H2zM13 9h4l4 4v3h-8"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
+ 'sliders':'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+ 'ruler':'<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
+ 'wrench':'<path d="M14.5 6a4 4 0 00-4.8 5.3L3 18l3 3 6.7-6.7A4 4 0 0018 9.5l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+ 'menu':'<path d="M4 6h16M4 12h16M4 18h16"/>','x':'<path d="M6 6l12 12M18 6L6 18"/>','x-circle':'<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+ 'refresh':'<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>','clock':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ 'alert':'<path d="M10.3 4.2L2.6 18a2 2 0 001.7 3h15.4a2 2 0 001.7-3L13.7 4.2a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+ 'crown':'<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>','external':'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>'
+};
+function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;vertical-align:-3px">${ICONOS[n]||''}</svg>`;}
+// ICONOS-FIN
+function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
+icoHidratar();
+const MODULO_MK={'ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml'};   // páginas de marketplace → tema (data-modulo del <body>); los demás marketplaces, cuando haya color y logo oficial
+
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
 // internas (S.mlToken/mlToken2, ids de DOM, parámetros ?cuenta=IT al
@@ -1692,11 +1903,13 @@ const DASH_PAGES=['dashboard','historico','cobranzas','brasil'];
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
-  if(!el)el=document.querySelector('.sidebar-item[data-page="'+page+'"]');
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
+  if(!el)el=document.querySelector('.sidebar-item[data-page="'+page+'"]');
   if(el)el.classList.add('active');
+  document.body.dataset.page=page;document.body.dataset.modulo=MODULO_MK[page]||'global';
+  {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
   qs('rent-query-bar').style.display=page==='dashboard'?'block':'none';
@@ -2761,14 +2974,14 @@ function acMgHtml(m,pre){if(m==null)return '<span style="color:var(--text3)" tit
 function acFechaCorta(iso){return iso?iso.slice(8,10)+'/'+iso.slice(5,7):'';}
 function acCelda(r){
   const ent=`<span class="badge badge-blue" style="font-size:9px">${acEsc(r.entidad||'?')}</span>`+(r.cantidad>1?` <span class="badge badge-gray" title="Publicación por ${r.cantidad} unidades: se compara contra nuestro precio × ${r.cantidad} y el costo × ${r.cantidad}">×${r.cantidad}</span>`:'');
-  const lnk=r.link?` <a href="${acEsc(r.link)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none" title="Abrir publicación">↗</a>`:'';
+  const lnk=r.link?` <a href="${acEsc(r.link)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none" title="Abrir publicación" aria-label="Abrir publicación">${ico('external',14)}</a>`:'';
   const ul=r.ultima_lectura;
   if(r.precio==null){const est=ul?(ul.estado||'sin precio'):'sin lecturas';return `<div style="margin-bottom:6px">${ent}${lnk}<div style="font-size:10px;color:var(--text3)">${acEsc(est)}${ul?' · '+acFechaCorta(ul.fecha):''}</div></div>`;}
   let d='';
   if(r.delta_pct==null)d='<span class="badge badge-gray" title="Primera lectura: todavía no hay con qué comparar">nuevo</span>';
   else if(r.delta_pct===0)d=`<span class="badge badge-gray" title="Sin cambios desde ${acFechaCorta(r.desde)}">＝ ${acFechaCorta(r.desde)}</span>`;
   else d=`<span class="badge ${r.delta_pct<0?'badge-red':'badge-green'}" title="Antes ${fmt$(r.anterior.precio)} (${acFechaCorta(r.anterior.fecha)}); rige desde ${acFechaCorta(r.desde)}">${r.delta_pct<0?'▼':'▲'} ${Math.abs(r.delta_pct).toFixed(1)}%</span>`;
-  const viejo=ul&&ul.dias>2?` <span title="Última lectura hace ${ul.dias} días" style="color:var(--yellow)">⏱${ul.dias}d</span>`:'';
+  const viejo=ul&&ul.dias>2?` <span title="Última lectura hace ${ul.dias} días" style="color:var(--yellow)">${ico('clock',13)}${ul.dias}d</span>`:'';
   const caida=ul&&ul.estado&&!/^ok$/i.test(ul.estado)&&ul.fecha>r.ultimo.fecha?` <span class="badge badge-red" title="Última lectura (${acFechaCorta(ul.fecha)}): ${acEsc(ul.estado)}">${acEsc(ul.estado)}</span>`:'';
   const g=r.ganador&&r.ganador.precio!==r.precio?`<div style="font-size:10px;color:var(--text3)" title="Precio que muestra ML como ganador de la ficha de catálogo">Gan. ${fmt$(r.ganador.precio)}${r.ganador.vendedor?' · '+acEsc(r.ganador.vendedor):''}</div>`:'';
   const dif=r._diff!=null?`<span style="color:${r._diff<0?'var(--red)':'var(--green)'}" title="vs. nuestro precio${r.cantidad>1?' ×'+r.cantidad:''}${r._mi?' ('+fmt$(r._mi)+')':''}">${r._diff>0?'+':''}${r._diff.toFixed(1)}%</span>`:'';
@@ -2789,13 +3002,13 @@ function acRender(){
     const col=b=>`<td style="vertical-align:top;min-width:170px">${f[b].map(acCelda).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
     const mi=f.pmML?`${fmt$(f.pmML)} · ${acMgHtml(f.mgActual)}`:'<span style="color:var(--text3)" title="Sin precio ML en la planilla PM">sin PM</span>';
     const sm=AC.sim[f.key],sim=sm&&(sm.px.contado>0||sm.extra.length||sm.q>0)?`<div style="font-size:10px;color:var(--accent)">simulando${sm.px.contado>0?' '+fmt$(sm.px.contado):''}${sm.q>0?' ×'+sm.q:''}${sm.extra.length?' +combo':''}</div>`:'';
-    return `<tr${AC.abierto===f.key?' class="ac-sel"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b>${acCtxChips(f)}</td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">🎯 ${AC.abierto===f.key?'Cerrar':'Jugar'}</button> <button class="btn-xs" onclick="acHistToggle(${i})" title="Histórico de precios de los competidores de este SKU (serie, último cambio y eventos)">📈 ${AC.histAb[f.key]?'Cerrar':'Histórico'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?`<td style="vertical-align:top;min-width:150px">${acOtrosCelda(f)}</td>`:''}</tr>${acCtxFilaHtml(f)}${acHistFilaHtml(f)}`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
+    return `<tr${AC.abierto===f.key?' class="ac-sel"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.sku)}</b>${acCtxChips(f)}</td><td style="vertical-align:top;font-size:10px;color:var(--text2)">${acEsc(f.cat)}<br><span style="color:var(--text3)">${acEsc(f.pmName)}</span></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${mi}<div><button class="btn-xs" onclick="acJugarToggle(${i})" title="Simular mi precio al lado de los rivales (no escribe nada)">${ico('target',14)} ${AC.abierto===f.key?'Cerrar':'Jugar'}</button> <button class="btn-xs" onclick="acHistToggle(${i})" title="Histórico de precios de los competidores de este SKU (serie, último cambio y eventos)">${ico('line-chart',14)} ${AC.histAb[f.key]?'Cerrar':'Histórico'}</button></div>${sim}</td>${col('Rey')}${col('Media')}${col('Barato')}${hayOtros?`<td style="vertical-align:top;min-width:150px">${acOtrosCelda(f)}</td>`:''}</tr>${acCtxFilaHtml(f)}${acHistFilaHtml(f)}`;}).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin resultados con esos filtros</td></tr>`;
   acAsideRender();
   qs('ac-count').textContent=filas.length+' SKU';
   acCatRender(filas,fl);
   S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
   const c=window.COMPDESC||{},raro=[];if(c.com===false)raro.push('comisión');if(c.iva===false)raro.push('IVA');if(c.iibb===false)raro.push('IIBB');if(c.impch===false)raro.push('cheque');if(c.envio===false)raro.push('envío');if(c.extra===false)raro.push('costo fijo ML');
-  qs('ac-margen-info').innerHTML=`Margen con los parámetros de Competidores: comisión ${cfgN('cfg-com',15.5)}% · IIBB ${cfgN('cfg-iibb',5)}% · cheque ${cfgN('cfg-impch',1.2)}% · envío $${cfgN('cfg-envio',8500)} desde ${fmt$(ctx.umbral)} · costo fijo ML ${mlCostoFijoTexto()}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>')+(raro.length?` · <span style="color:var(--yellow)">⚠ en Competidores tenés desactivado: ${raro.join(', ')}</span>`:'');
+  qs('ac-margen-info').innerHTML=`Margen con los parámetros de Competidores: comisión ${cfgN('cfg-com',15.5)}% · IIBB ${cfgN('cfg-iibb',5)}% · cheque ${cfgN('cfg-impch',1.2)}% · envío $${cfgN('cfg-envio',8500)} desde ${fmt$(ctx.umbral)} · costo fijo ML ${mlCostoFijoTexto()}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>')+(raro.length?` · <span style="color:var(--yellow)">${ico('alert',14)} en Competidores tenés desactivado: ${raro.join(', ')}</span>`:'');
 }
 function acFilaCompleta(key){return AC.filas.find(x=>x.key===key);}   // la fila SIN filtros de vendedor: el simulador compara contra todos los rivales
 function acSimGet(key){return AC.sim[key]||(AC.sim[key]={q:0,px:{},extra:[],rivalCombo:0});}
@@ -2806,8 +3019,8 @@ function acJugarPanelHtml(f){
   const sim=acSimGet(f.key),btn=(txt,js,tit)=>`<button class="btn-xs" onclick="${js}" ${tit?`title="${acEsc(tit)}"`:''}>${txt}</button>`;
   const qopt=[['0','auto'],...[1,2,3,4,5,6,8,10,12].map(n=>[String(n),'×'+n])].map(([v,l])=>`<option value="${v}"${String(sim.q)===v?' selected':''}>${l}</option>`).join('');
   return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
-      <div><div style="font-weight:700;color:var(--accent);font-size:12px">🎯 ${acEsc(f.sku)}</div><div style="font-size:9px;color:var(--text3)">${acEsc(f.cat)} · ${acEsc(f.pmName)} · simulación: no escribe nada</div></div>
-      <button class="btn-xs" onclick="acJugarCerrar()" title="Cerrar el panel">✕</button></div>
+      <div><div style="font-weight:700;color:var(--accent);font-size:12px">${ico('target',14)} ${acEsc(f.sku)}</div><div style="font-size:9px;color:var(--text3)">${acEsc(f.cat)} · ${acEsc(f.pmName)} · simulación: no escribe nada</div></div>
+      <button class="btn-xs" onclick="acJugarCerrar()" title="Cerrar el panel" aria-label="Cerrar el panel">${ico('x',14)}</button></div>
     <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       <span style="color:var(--text3);font-size:10px" title="Cuántas unidades de este SKU juego. «auto»: comparo contra cada rival con la cantidad de SU publicación">Unid.</span><select class="ac-sel2" style="width:62px" onchange="acJugarQ(this.value)">${qopt}</select>
       <span style="color:var(--text3);font-size:10px">precio</span>${btn('−5%','acJugarPaso(-5)')}${btn('−1%','acJugarPaso(-1)')}${btn('+1%','acJugarPaso(1)')}${btn('+5%','acJugarPaso(5)')}
@@ -2818,7 +3031,7 @@ function acJugarPanelHtml(f){
 function acJugarSalidaHtml(f,sim){
   const ctx=acCtx(),r=acJugarCalcular(f,sim,ctx);
   if(!r.ok)return '<span style="color:var(--text3)">Este SKU no tiene precio en la planilla PM: escribí un precio en «Contado».</span>'+acFormasHtml(f,sim,r,ctx);
-  return (r.sinCosto?`<div style="color:var(--yellow);margin-bottom:6px;font-size:10px">⚠ Sin costo de Ecom (o TC) en ${f.costoUsd>0?'algún SKU del combo / el TC':'este SKU'}: no se calcula el margen (no se inventa).</div>`:'')+acComboHtml(f,sim,r)+acFormasHtml(f,sim,r,ctx)+acRivalesHtml(f,sim,r);
+  return (r.sinCosto?`<div style="color:var(--yellow);margin-bottom:6px;font-size:10px">${ico('alert',14)} Sin costo de Ecom (o TC) en ${f.costoUsd>0?'algún SKU del combo / el TC':'este SKU'}: no se calcula el margen (no se inventa).</div>`:'')+acComboHtml(f,sim,r)+acFormasHtml(f,sim,r,ctx)+acRivalesHtml(f,sim,r);
 }
 function acMgColor(m){return m>0.25?'var(--green)':m>0.15?'var(--yellow)':'var(--red)';}
 // Una fila por forma de venta: precio (a mano) · margen · «fijar ▾» (igualar a un rival / margen objetivo). Sin valor propio, la forma sigue al contado.
@@ -2841,7 +3054,7 @@ function acFormasHtml(f,sim,r,ctx){
 }
 function acComboHtml(f,sim,r){
   if(!r.extras.length)return '';
-  const lineas=r.extras.map((e,i)=>`<div class="ac-frow" style="grid-template-columns:1fr 44px 84px auto"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${acEsc(e.sku)}">+ ${acEsc(e.sku)}</span><input type="text" id="ac-cq-${i}" value="${e.q}" onchange="acComboQ(${i},this.value)" title="Unidades" style="text-align:center"><input type="text" id="ac-cx-${i}" value="${e.x?Math.round(e.x):''}" onchange="acComboX(${i},this.value)" title="Precio unitario con IVA (vacío = PM)"><button class="btn-xs" onclick="acComboDel(${i})" title="Sacar del combo">✕</button></div>`).join('');
+  const lineas=r.extras.map((e,i)=>`<div class="ac-frow" style="grid-template-columns:1fr 44px 84px auto"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${acEsc(e.sku)}">+ ${acEsc(e.sku)}</span><input type="text" id="ac-cq-${i}" value="${e.q}" onchange="acComboQ(${i},this.value)" title="Unidades" style="text-align:center"><input type="text" id="ac-cx-${i}" value="${e.x?Math.round(e.x):''}" onchange="acComboX(${i},this.value)" title="Precio unitario con IVA (vacío = PM)"><button class="btn-xs" onclick="acComboDel(${i})" title="Sacar del combo" aria-label="Sacar del combo">${ico('x',14)}</button></div>`).join('');
   const rc=r.rivalCombo,rival=`<div class="ac-frow" style="grid-template-columns:1fr 100px auto"><span title="Los rivales se ven por SKU suelto: para comparar un combo cargá a mano lo que cobra el rival por el suyo">Combo del rival</span><input type="text" id="ac-rc" value="${sim.rivalCombo>0?Math.round(sim.rivalCombo):''}" onchange="acRivalCombo(this.value)" placeholder="$ del rival">${rc?`<span class="ac-chip" style="background:${rc.masBarato?'rgba(255,107,107,.15)':'rgba(0,229,160,.15)'};color:${rc.masBarato?'var(--red)':'var(--green)'}">${rc.masBarato?'▼':'▲'} ${Math.abs(rc.difPct).toFixed(1)}%</span>`:'<span></span>'}</div>`;
   return `<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:2px 0">Combo · ${f.sku} ×${r.qm}${r.extras.map(e=>` + ${e.sku} ×${e.q}`).join('')}</div>${lineas}${rival}`;
 }
@@ -2851,7 +3064,7 @@ function acRivalesHtml(f,sim,r){
   const fila=v=>{const c=v.masBarato?'var(--red)':'var(--green)',bg=v.masBarato?'rgba(255,107,107,.15)':'rgba(0,229,160,.15)';
     return `<div>${v.rol?`<span class="badge badge-gray">${acEsc(v.rol)}</span>`:''}</div><div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${acEsc(v.entidad)} · mi precio comparable ${fmt$(v.mio)}${v.pubs>1?' · '+v.pubs+' publicaciones (se muestra la más barata)':''}">${acEsc(v.entidad)}${v.qeq>1?` <span style="color:var(--text3)">×${v.qeq}</span>`:''}<div style="font-size:9px;color:var(--text3)">yo ${fmt$(v.mio)}${v.pubs>1?' · '+v.pubs+' pub.':''}${v.qeq!==v.cantidad?` · su ×${v.cantidad}→×${v.qeq}`:''}</div></div><div style="text-align:right;font-weight:700">${fmt$(v.su)}</div><div><span class="ac-chip" style="background:${bg};color:${c}" title="${v.masBarato?'El rival está más barato que mi precio comparable':'Yo estoy más barato que el rival'}">${v.masBarato?'▼':'▲'} ${Math.abs(v.difPct).toFixed(1)}%</span></div>`;};
   const con=r.rivales.filter(v=>v.rol),sin=r.rivales.filter(v=>!v.rol),ab=!!AC.otrosPanel[f.key];
-  const pos=r.masBaratos===0?'<span class="ac-chip" style="background:rgba(0,229,160,.15);color:var(--green)">✅ sos el más barato</span>':`<span class="ac-chip" style="background:rgba(255,107,107,.15);color:var(--red)" title="Se cuenta por vendedor: un vendedor con varias publicaciones del mismo producto es un solo rival">${r.masBaratos} de ${r.total} vendedor${r.total>1?'es':''} más barato${r.masBaratos>1?'s':''}</span>`;
+  const pos=r.masBaratos===0?'<span class="ac-chip" style="background:rgba(0,229,160,.15);color:var(--green)">'+ico('check',13)+' sos el más barato</span>':`<span class="ac-chip" style="background:rgba(255,107,107,.15);color:var(--red)" title="Se cuenta por vendedor: un vendedor con varias publicaciones del mismo producto es un solo rival">${r.masBaratos} de ${r.total} vendedor${r.total>1?'es':''} más barato${r.masBaratos>1?'s':''}</span>`;
   return `<div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 2px"><span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em" title="${r.pubs} publicaciones de ${r.total} vendedores">Rivales (${r.total} vendedor${r.total>1?'es':''})</span>${pos}</div>
     <div class="ac-riv">${con.map(fila).join('')}</div>
     ${sin.length?`<div style="margin-top:4px"><button class="btn-xs" onclick="acOtrosPanelToggle('${f.key.replace(/'/g,"\\'")}')">${ab?'▾':'▸'} Otros vendedores (${sin.length})${sin.some(v=>v.masBarato)?' · '+sin.filter(v=>v.masBarato).length+' más barato'+(sin.filter(v=>v.masBarato).length>1?'s':''):''}</button></div>${ab?`<div class="ac-riv">${sin.map(fila).join('')}</div>`:''}`:''}
@@ -3008,17 +3221,17 @@ function acCtxEstado(){
   const st=qs('ac-ctx-status');if(!st)return;const c=AC.ctx;if(!c){st.textContent='';return;}
   const partes=[];if(c.hayStock)partes.push('stock');if(c.hayVentas)partes.push('ventas');
   st.style.color=c.errores&&c.errores.length?'var(--red)':'var(--text3)';
-  st.innerHTML=(partes.length?`📦🛒 ${partes.join(' + ')} de los Sheets (no en vivo; leído hace ${acCtxLeido()||0} min) <button class="btn-xs" onclick="acCtxCargar(true)" title="Vuelve a leer los dos Sheets">↻</button>`:'')+(c.errores&&c.errores.length?' · ❌ '+acEsc(c.errores.join(' · ')):'')+((c.avisos||[]).length?` <span style="color:var(--yellow)" title="${acEsc(c.avisos.join('\n'))}">⚠ ${c.avisos.length}</span>`:'');
+  st.innerHTML=(partes.length?`${ico('box',14)}${ico('cart',14)} ${partes.join(' + ')} de los Sheets (no en vivo; leído hace ${acCtxLeido()||0} min) <button class="btn-xs" onclick="acCtxCargar(true)" title="Vuelve a leer los dos Sheets" aria-label="Volver a leer los dos Sheets">${ico('refresh',13)}</button>`:'')+(c.errores&&c.errores.length?' · '+ico('x-circle',13)+' '+acEsc(c.errores.join(' · ')):'')+((c.avisos||[]).length?` <span style="color:var(--yellow)" title="${acEsc(c.avisos.join('\n'))}">${ico('alert',13)} ${c.avisos.length}</span>`:'');
 }
 function acCtxDe(f){if(!AC.ctx)return null;return acCtxBuscar(AC.ctx,f.sku);}
 function acCtxFn(){return AC.ctx?(sku=>{const r=acCtxBuscar(AC.ctx,sku);return r?r.e:null;}):null;}
 function acCtxChips(f){
   const r=acCtxDe(f),ab=!!(AC.ctxAbierto&&AC.ctxAbierto[f.key]);
   if(!r){const t=AC.ctx?'Este SKU no está en los Sheets de stock ni de ventas':AC.ctxCargando?'Leyendo stock y ventas...':'Stock y ventas no cargados (falta la API key de Sheets o falló la lectura)';
-    return `<div class="ac-ctx" onclick="acCtxToggle('${acEsc(f.key)}')" style="cursor:pointer;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:3px" title="${t}">${AC.ctxCargando&&!AC.ctx?'leyendo…':'📦 — · 🛒 —'}${acMlChip(f)} <span>${ab?'▾':'▸'}</span></div>`;}
+    return `<div class="ac-ctx" onclick="acCtxToggle('${acEsc(f.key)}')" style="cursor:pointer;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:3px" title="${t}">${AC.ctxCargando&&!AC.ctx?'leyendo…':ico('box',13)+' — · '+ico('cart',13)+' —'}${acMlChip(f)} <span>${ab?'▾':'▸'}</span></div>`;}
   const s=acCtxResumen(r.e),col=s.sinStock?'var(--red)':s.bajo?'var(--yellow)':'var(--text2)';
-  const stock=s.total==null?'📦 —':`📦 <b>${fmtN(s.total)}</b>${s.sinStock?' sin stock':s.dias!=null?` <span style="font-size:9px">(~${Math.round(s.dias)} d)</span>`:''}`;
-  const ven=s.v30==null?'🛒 —':`🛒 30d: <b>${fmtN(s.v30)}</b>`;
+  const stock=s.total==null?ico('box',13)+' —':`${ico('box',13)} <b>${fmtN(s.total)}</b>${s.sinStock?' sin stock':s.dias!=null?` <span style="font-size:9px">(~${Math.round(s.dias)} d)</span>`:''}`;
+  const ven=s.v30==null?ico('cart',13)+' —':`${ico('cart',13)} 30d: <b>${fmtN(s.v30)}</b>`;
   const ml=acMlChip(f);
   return `<div class="ac-ctx" onclick="acCtxToggle('${acEsc(f.key)}')" style="cursor:pointer;font-size:10px;color:${col};font-family:'DM Mono',monospace;margin-top:3px" title="Clic para ver el desglose (stock por depósito, ventas 7/30/90/180 d y variantes)">${stock} · ${ven}${ml} <span style="color:var(--text3)">${ab?'▾':'▸'}</span></div>`;
 }
@@ -3036,7 +3249,7 @@ function acCtxDetalleHtml(f){
 }
 // ── 3.2 Histórico por SKU: serie de precio por competidor (7/30/90 d), fecha del último cambio y eventos del SKU. Solo lectura de lo que ya trae /competencia/analisis (dias=90).
 // Precios por UNIDAD (precio ÷ cantidad de la publicación) para que un kit ×2 y uno suelto se vean comparables; la línea punteada es nuestro PM ML.
-const AC_HIST_COLORES=['#00a0c6','#e67e22','#8e44ad','#27ae60','#c0392b','#7f8c8d','#d4ac0d','#2c3e50'];
+const AC_HIST_COLORES=['#1B8195','#C2570C','#7B3FA0','#1F8A4C','#B93A2B','#5F6F78','#9A7B00','#0B2733'];   // series del gráfico: todas con >= 3,8:1 sobre blanco y sobre la fila zebra (la primera es --celeste-600)
 function acIsoMas(iso,n){const d=new Date(iso+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
 function acHistHoy(D){return (D.referencias||[]).reduce((m,x)=>x.ultima_lectura&&x.ultima_lectura.fecha>m?x.ultima_lectura.fecha:m,'')||new Date().toISOString().slice(0,10);}
 // Serie de cada referencia dentro de la ventana: el precio vigente al inicio queda anclado en `desde` y el último se mantiene hasta `hoy` (escalón: el precio no cambia entre lecturas). pts reales = lecturas.
@@ -3055,8 +3268,8 @@ function acHistSvg(series,pmUnit,dias,hoy){
   let lo=Math.min(...vals),hi=Math.max(...vals);if(hi===lo){hi=lo*1.05+1;lo=lo*0.95;}const pad=(hi-lo)*0.08;lo-=pad;hi+=pad;
   const X=d=>L+(Math.max(0,Math.min(dias,(Date.parse(d+'T00:00:00Z')-Date.parse(desde+'T00:00:00Z'))/86400000))/dias)*(W-L-R),Y=v=>T+(1-(v-lo)/(hi-lo))*(H-T-B);
   let g='';
-  for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4,y=Y(v).toFixed(1);g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--border)" stroke-width="1"/><text x="${L-6}" y="${(+y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text3)">${fmt$(v)}</text>`;}
-  [[desde,'start'],[acIsoMas(hoy,-Math.round(dias/2)),'middle'],[hoy,'end']].forEach(([d,an])=>{g+=`<text x="${X(d).toFixed(1)}" y="${H-8}" text-anchor="${an}" font-size="9" fill="var(--text3)">${acFechaCorta(d)}</text>`;});
+  for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4,y=Y(v).toFixed(1);g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--border)" stroke-width="1"/><text x="${L-6}" y="${(+y+3).toFixed(1)}" text-anchor="end" font-size="12" fill="var(--text3)">${fmt$(v)}</text>`;}
+  [[desde,'start'],[acIsoMas(hoy,-Math.round(dias/2)),'middle'],[hoy,'end']].forEach(([d,an])=>{g+=`<text x="${X(d).toFixed(1)}" y="${H-8}" text-anchor="${an}" font-size="12" fill="var(--text3)">${acFechaCorta(d)}</text>`;});
   if(pmUnit>0)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(pmUnit).toFixed(1)}" y2="${Y(pmUnit).toFixed(1)}" stroke="var(--text2)" stroke-width="1.2" stroke-dasharray="5 4"><title>Nuestro PM ML ${fmt$(pmUnit)}</title></line>`;
   series.forEach((s,i)=>{const col=AC_HIST_COLORES[i%AC_HIST_COLORES.length];let d='';
     s.pasos.forEach((p,j)=>{const x=X(p[0]).toFixed(1),y=Y(p[1]).toFixed(1);d+=j?` H${x} V${y}`:`M${x},${y}`;});
@@ -3107,42 +3320,50 @@ function acCatOrdenar(gs,modo){const v=g=>{const t=g.tiendas.map(x=>x.conteo&&pa
 // Diagnóstico de la vista (para validar con datos reales de un vistazo): qué no se pudo cruzar.
 function acCatDiag(gs){const t=gs.reduce((a,g)=>a.concat(g.tiendas),[]);
   return {subs:gs.length,sinSkus:gs.filter(g=>!g.nSkus).length,sinCompetencia:gs.filter(g=>g.nSkus&&!g.rows.length).length,skusSinCompetencia:gs.reduce((n,g)=>n+g.nSkus-g.rows.length,0),tiendas:t.length,tiendasSinConteo:t.filter(x=>!x.conteo).length,incompletas:t.filter(x=>x.conteo&&!x.conteo.completa).length,fueraPlanilla:t.filter(x=>x.desactualizada).length};}
-function acTiendaHtml(t){
-  const c=t.conteo,nm=`<b>${acEsc(t.entidad||'?')}</b>`+(t.desactualizada?' <span class="badge badge-gray" title="Ya no figura en A-CATEGORIAS de la planilla de Maca (se conserva el último dato)">fuera de planilla</span>':'');
-  if(!c)return `<div style="margin-bottom:6px">${nm}<div style="font-size:10px;color:var(--text3)">sin conteo de publicaciones todavía</div></div>`;
-  const vp=parseFloat(c.var_pct),med=c.mediana_7d!=null?` · mediana 7 d ${c.mediana_7d}${!isNaN(vp)?` (<span style="color:${vp<0?'var(--red)':'var(--green)'}">${vp>0?'+':''}${vp}%</span>)`:''}`:'';
-  const cam=(c.nuevas!=null||c.desaparecidas!=null)?` · <span title="Publicaciones nuevas / desaparecidas en la última lectura completa">+${c.nuevas==null?'?':c.nuevas} / −${c.desaparecidas==null?'?':c.desaparecidas}</span>`:'';
-  const inc=c.completa?'':` <span class="badge badge-red" title="${acEsc(c.motivo||'lectura incompleta')}">lectura incompleta</span>`;
+function acPctAR(v){return (v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(1).replace('.',',')+'%';}
+// Una tienda del panel lateral (Leídas / ML · mediana 7 d · nuevas y desaparecidas). Sin conteo: lo dice. Sin color como única señal: la variación lleva signo.
+function acTiendaFilaHtml(t){
+  const c=t.conteo,fp=c?parseFloat(c.var_pct):NaN;
+  const nm=`<b>${acEsc(t.entidad||'?')}</b>`+(t.desactualizada?' <span class="badge badge-gray" title="Ya no figura en A-CATEGORIAS de la planilla de Maca (se conserva el último dato)">fuera de planilla</span>':'');
+  if(!c)return `<tr><td>${nm}</td><td colspan="3" style="color:var(--texto-suave)">sin conteo de publicaciones todavía</td></tr>`;
+  const inc=c.completa?'':` <span class="badge badge-red" title="${acEsc(c.motivo||'lectura incompleta')}">${ico('alert',12)} lectura incompleta</span>`;
   const deb=c.estado_debilidad?` <span class="badge badge-yellow">${acEsc(c.estado_debilidad)}</span>`:'';
-  return `<div style="margin-bottom:6px;line-height:1.5">${nm}<div style="font-family:'DM Mono',monospace;font-size:11px">${c.leidas==null?'—':c.leidas} pub.${med}${cam}${inc}${deb}</div><div style="font-size:10px;color:var(--text3)">lectura del ${acFechaCorta(c.fecha)}</div></div>`;}
+  const med=c.mediana_7d!=null?`${c.mediana_7d}${!isNaN(fp)?` <span style="color:var(--texto-suave)">${acPctAR(fp)}</span>`:''}`:'—';
+  const cam=(c.nuevas!=null||c.desaparecidas!=null)?`<span title="Publicaciones nuevas / desaparecidas en la última lectura completa">+${c.nuevas==null?'?':c.nuevas} / −${c.desaparecidas==null?'?':c.desaparecidas}</span>`:'<span style="color:var(--texto-suave)" title="Todavía sin comparación (primer día o lectura incompleta)">—</span>';
+  return `<tr><td>${nm}${inc}${deb}<div style="font-size:12px;color:var(--texto-suave)">lectura del ${acFechaCorta(c.fecha)}</div></td><td>${c.leidas==null?'—':c.leidas} / ${c.declaradas==null?'—':c.declaradas}</td><td>${med}</td><td>${cam}</td></tr>`;}
+function acTiendasPanelHtml(gs){
+  const u=new Map();gs.forEach(g=>g.tiendas.forEach(t=>{const k=t.entidad_id||t.entidad;if(!u.has(k))u.set(k,t);}));
+  const ts=[...u.values()].sort((a,b)=>String(a.entidad).localeCompare(b.entidad));
+  const sinCmp=ts.some(t=>t.conteo&&t.conteo.nuevas==null&&t.conteo.desaparecidas==null);
+  return `<section class="table-wrap ac-cat-der" aria-label="Tiendas"><table><thead><tr><th>Tienda</th><th>Leídas / ML</th><th>Mediana 7 d</th><th>Nuevas / desap.</th></tr></thead><tbody>${ts.map(acTiendaFilaHtml).join('')||'<tr><td colspan="4" style="color:var(--texto-suave)">Sin tiendas</td></tr>'}</tbody></table>${sinCmp?'<div class="ac-nota">«—» en nuevas / desap. = todavía sin comparación (primer día de la tienda o lectura incompleta). Desde la segunda lectura completa aparecen.</div>':''}</section>`;}
 function acCatHtml(gs){
-  if(!gs.length)return '<div style="padding:20px;text-align:center;color:var(--text3)">Sin subcategorías para mostrar (¿Categoria_Competidores vacía, o los filtros no dejan ningún SKU?)</div>';
-  const col=(g,rol)=>`<td style="vertical-align:top;min-width:200px">${g.tiendas.filter(t=>t.rol===rol).map(acTiendaHtml).join('')||'<span style="color:var(--text3)">—</span>'}</td>`;
-  const filas=gs.map((g,i)=>{const ab=AC.catAb[g.sub];
-    const rey=g.conRey?`<span style="color:${g.reyGana?'var(--red)':'var(--green)'}" title="SKU donde algún Rey vende más barato que nuestro PM">${g.reyGana} de ${g.conRey}</span><div style="font-size:10px;color:var(--text3)">nos gana el Rey</div>`:'<span style="color:var(--text3)">sin precio del Rey</span>';
-    const bar=g.conBarato?`<span style="font-family:'DM Mono',monospace">${fmt$(g.barMedP)}</span><div style="font-size:10px;color:var(--text3)">mediana del Barato (por u.)${g.barMedD!=null?' · '+(g.barMedD>0?'+':'')+g.barMedD.toFixed(1)+'% vs nosotros':''}</div>`:'<span style="color:var(--text3)">—</span>';
-    const det=ab?`<tr class="ac-ctx-row"><td colspan="7" style="background:rgba(0,157,188,.05);padding:8px 14px">${g.rows.length?g.rows.map((f,j)=>`<span class="badge badge-gray" style="margin:2px;cursor:pointer" onclick="acCatVerSku(${i},${j})" title="Ver este SKU en la vista por SKU">${acEsc(f.sku)}</span>`).join(''):'<span style="color:var(--text3);font-size:10px">Ningún SKU de la subcategoría con competencia cargada.</span>'}</td></tr>`:'';
-    return `<tr><td style="vertical-align:top"><b>${acEsc(g.sub)}</b><div><button class="btn-xs" onclick="acCatToggle(${i})">${ab?'Ocultar':'Ver'} SKU</button></div></td><td style="vertical-align:top;font-family:'DM Mono',monospace">${g.rows.length}<span style="color:var(--text3)"> / ${g.nSkus}</span><div style="font-size:10px;color:var(--text3)">con competencia / en planilla</div></td><td style="vertical-align:top">${rey}</td><td style="vertical-align:top">${bar}</td>${col(g,'Rey')}${col(g,'Media')}${col(g,'Barato')}</tr>${det}`;}).join('');
-  return `<div class="table-wrap"><table><thead><tr><th>Subcategoría</th><th>Nuestros SKU</th><th>Rey vs nosotros</th><th>Barato</th><th>👑 Tienda Rey</th><th>Tienda Media</th><th>Tienda Barato</th></tr></thead><tbody>${filas}</tbody></table></div>`;}
+  if(!gs.length)return '<div style="padding:20px;text-align:center;color:var(--texto-suave)">Sin subcategorías para mostrar (¿Categoria_Competidores vacía, o los filtros no dejan ningún SKU?)</div>';
+  const resumen=g=>g.tiendas.map(t=>`<span title="${acEsc(t.rol||'Otros')}">${acEsc(t.entidad||'?')} <b>${t.conteo&&t.conteo.leidas!=null?t.conteo.leidas:'—'}</b></span>`).join(' · ');
+  const filas=gs.map((g,i)=>{const ab=!!AC.catAb[g.sub],pct=g.nSkus>0?Math.min(100,Math.round(g.rows.length/g.nSkus*100)):0;
+    const rey=g.conRey?`<b style="color:${g.reyGana?'var(--atencion)':'var(--texto-suave)'}" title="SKU donde algún Rey vende más barato que nuestro PM">${g.reyGana}</b> <span style="color:var(--texto-suave)">de ${g.conRey}</span>`:'<span style="color:var(--texto-suave)" title="Ningún SKU con precio del Rey">—</span>';
+    const bar=g.conBarato?`${fmt$(g.barMedP)}${g.barMedD!=null?` <span style="color:var(--texto-suave)" title="Mediana de la diferencia contra nuestro PM">${acPctAR(g.barMedD)}</span>`:''}`:'<span style="color:var(--texto-suave)">—</span>';
+    const det=ab?`<tr class="ac-ctx-row"><td colspan="5">${g.rows.length?g.rows.map((f,j)=>`<button type="button" class="btn-xs" style="margin:2px" onclick="acCatVerSku(${i},${j})" title="Ver este SKU en la vista por SKU">${acEsc(f.sku)}</button>`).join(''):'<span style="color:var(--texto-suave)">Ningún SKU de la subcategoría con competencia cargada.</span>'}</td></tr>`:'';
+    return `<tr><td><b>${acEsc(g.sub)}</b> <button type="button" class="ac-link" aria-expanded="${ab}" onclick="acCatToggle(${i})">${ab?'Ocultar':'Ver'} SKU</button></td><td><span style="display:inline-flex;align-items:center;gap:8px"><span style="min-width:48px">${g.rows.length} / ${g.nSkus}</span>${'<span class="ac-cober" role="img" aria-label="'+pct+'% de los SKU de la planilla con competencia cargada"><i style="width:'+pct+'%"></i></span>'}</span></td><td>${rey}</td><td>${bar}</td><td style="font-size:12px;color:var(--tinta-2)">${resumen(g)}</td></tr>${det}`;}).join('');
+  return `<div class="ac-cat"><section class="table-wrap ac-cat-izq" aria-label="Subcategorías"><table style="min-width:700px"><thead><tr><th>Subcategoría</th><th>Nuestros SKU</th><th>Rey gana</th><th>Barato, mediana</th><th>Rey · Media · Barata</th></tr></thead><tbody>${filas}</tbody></table></section>${acTiendasPanelHtml(gs)}</div>`;}
+function acPl(n,u,m){return n+' '+(n===1?u:m);}
 function acCatDiagHtml(d){const av=[];
-  if(d.sinSkus)av.push(`${d.sinSkus} subcategorías con SKUs_Nuestros vacío o ilegible`);
-  if(d.sinCompetencia)av.push(`${d.sinCompetencia} subcategorías cuyos SKU no tienen competencia cargada (¿otro formato de SKU?)`);
+  if(d.sinSkus)av.push(`${acPl(d.sinSkus,'subcategoría con SKUs_Nuestros vacío o ilegible','subcategorías con SKUs_Nuestros vacío o ilegible')}`);
+  if(d.sinCompetencia)av.push(`${acPl(d.sinCompetencia,'subcategoría cuyos SKU no tienen','subcategorías cuyos SKU no tienen')} competencia cargada (¿otro formato de SKU?)`);
   if(d.tiendasSinConteo)av.push(`${d.tiendasSinConteo} de ${d.tiendas} tiendas sin conteo de publicaciones (no se unieron a Tiendas_Conteo)`);
-  if(d.incompletas)av.push(`${d.incompletas} tiendas con la última lectura incompleta`);
-  if(d.fueraPlanilla)av.push(`${d.fueraPlanilla} tiendas que ya no figuran en la planilla de Maca`);
-  return av.length?`<div style="margin-bottom:8px;padding:6px 10px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6">${av.map(x=>'⚠ '+x).join('<br>')}</div>`:'';}
+  if(d.incompletas)av.push(`${acPl(d.incompletas,'tienda con la última lectura incompleta','tiendas con la última lectura incompleta')}`);
+  if(d.fueraPlanilla)av.push(`${acPl(d.fueraPlanilla,'tienda que ya no figura','tiendas que ya no figuran')} en la planilla de Maca`);
+  return av.length?`<div class="ac-aviso" role="status" style="margin-bottom:10px">${av.map(x=>`<div style="display:flex;gap:10px;align-items:flex-start">${ico('alert',16)}<span>${x}</span></div>`).join('')}</div>`:'';}
 function acCatRender(filas,fl){
   const cat=AC.modo==='cat',ev=AC.modo==='ev',w=qs('ac-cat-wrap');if(!w)return;
   qs('ac-table-wrap').style.display=(cat||ev)?'none':'';w.style.display=cat?'':'none';qs('ac-ev-wrap').style.display=ev?'':'none';
-  qs('ac-titulo-modo').textContent=cat?'por categoría':ev?'eventos':'por SKU';
-  [['sku',!cat&&!ev],['cat',cat],['ev',ev]].forEach(([m,on])=>{qs('ac-modo-'+m).style.borderColor=on?'var(--accent)':'';});
+  [['sku',!cat&&!ev],['cat',cat],['ev',ev]].forEach(([m,on])=>{qs('ac-modo-'+m).setAttribute('aria-pressed',String(on));});
   if(ev){acEvRender(fl);return;}
   if(!cat)return;
   const as=qs('ac-aside');if(as)as.style.display='none';AC.asideKey=null;
   const hay=!!(fl.search||fl.cats||fl.pms||(fl.vend&&fl.vend.size)||fl.soloCambios||fl.soloGanan||fl.ocultarSinStock);
   AC.catGs=acCatOrdenar(acCategoriasArmar(AC.data,filas,hay,normSku),AC.catSort);
   const ops=[['sub','Subcategoría A-Z'],['ganan','Donde más nos gana el Rey'],['var','Tienda más por debajo de su mediana']].map(([v,t])=>`<option value="${v}"${AC.catSort===v?' selected':''}>${t}</option>`).join('');
-  w.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:10px;color:var(--text2)">Ordenar<select class="fi" onchange="AC.catSort=this.value;acRender()">${ops}</select><span style="color:var(--text3)">${AC.catGs.length} subcategorías · fuente: Categoria_Competidores + Tiendas_Conteo</span></div>${acCatDiagHtml(acCatDiag(AC.catGs))}`+acCatHtml(AC.catGs);
+  w.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px"><label for="ac-cat-orden" style="color:var(--texto-suave)">Orden</label><select id="ac-cat-orden" class="fi" style="min-width:240px;padding:0 10px" onchange="AC.catSort=this.value;acRender()">${ops}</select><span class="ac-sub">${AC.catGs.length} subcategorías · fuente: Categoria_Competidores + Tiendas_Conteo</span></div>${acCatDiagHtml(acCatDiag(AC.catGs))}`+acCatHtml(AC.catGs);
   qs('ac-count').textContent=AC.catGs.length+' subcategorías';}
 function acModo(m){AC.modo=m;acRender();}
 function acCatToggle(i){const g=(AC.catGs||[])[i];if(!g)return;AC.catAb[g.sub]=!AC.catAb[g.sub];acRender();}
@@ -3223,7 +3444,7 @@ async function acMlCargar(key,refrescar){
 function acMlChip(f){
   const m=(AC.ml||{})[f.key];if(!m)return '';
   if(m.cargando)return ' · <span style="color:var(--text3)">ML …</span>';
-  if(m.error)return ' · <span style="color:var(--red)" title="'+acEsc(m.error)+'">ML ❌</span>';
+  if(m.error)return ' · <span style="color:var(--red)" title="'+acEsc(m.error)+'">ML '+ico('x-circle',13)+'</span>';
   const r=acMlResumen(m.data.publicaciones,acMlPrecioPM(f.sku));
   if(!r.act.length)return ' · <span style="color:var(--text3)" title="Sin publicaciones activas de este SKU en IT/MT">ML —</span>';
   const p=r.min===r.max?'$'+fmtN(Math.round(r.min)):'$'+fmtN(Math.round(r.min))+'–'+fmtN(Math.round(r.max));
@@ -3232,19 +3453,19 @@ function acMlChip(f){
 function acMlDetalleHtml(f){
   const m=(AC.ml||{})[f.key],hdr='<div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:2px 0 4px">Mis publicaciones en ML (precio real)</div>';
   if(!m||m.cargando)return `<div style="flex-basis:100%">${hdr}<span style="color:var(--text3)">leyendo precios en ML…</span></div>`;
-  if(m.error)return `<div style="flex-basis:100%">${hdr}<span style="color:var(--red)">❌ ${acEsc(m.error)}</span> <button class="btn-xs" onclick="acMlCargar('${acEsc(f.key)}',true)">Reintentar</button></div>`;
+  if(m.error)return `<div style="flex-basis:100%">${hdr}<span style="color:var(--red)">${ico('x-circle',13)} ${acEsc(m.error)}</span> <button class="btn-xs" onclick="acMlCargar('${acEsc(f.key)}',true)">Reintentar</button></div>`;
   const d=m.data,pm=acMlPrecioPM(f.sku),$=v=>v==null?'—':'$'+fmtN(Math.round(v));
   const filas=(d.publicaciones||[]).map(p=>{
     const dp=pm&&p.precio_real?(p.precio_real-pm)/pm*100:null,mal=dp!=null&&Math.abs(dp)>AC_ML_TOL_PM*100&&p.estado==='active';
     return `<tr style="font-family:'DM Mono',monospace"><td style="padding-right:8px"><a href="${acEsc(p.permalink||'#')}" target="_blank" rel="noopener" style="color:var(--accent)">${acEsc(p.item_id)}</a></td><td>${acEsc(p.cuenta)}</td><td>${p.estado==='active'?'activa':acEsc(p.estado)}</td><td style="text-align:right"><b>${$(p.precio_real)}</b></td><td style="text-align:right;color:var(--text3)">${p.campana?'<s>'+$(p.precio_tachado)+'</s>':''}</td><td style="padding-left:8px">${p.campana?acEsc(p.campana.nombre||p.campana.tipo):''}</td><td style="text-align:right">${p.stock==null?'—':fmtN(p.stock)}</td><td style="text-align:right;color:${mal?'var(--yellow)':'var(--text3)'}">${dp==null?'':(dp>0?'+':'')+dp.toFixed(1)+'%'}</td></tr>`;}).join('');
   const t=filas?`<table style="font-size:10px"><tr style="color:var(--text3)"><td>Publicación</td><td>Cuenta</td><td>Estado</td><td>Precio real</td><td>Tachado</td><td>Campaña</td><td>Stock ML</td><td>vs PM${pm?' ('+$(pm)+')':''}</td></tr>${filas}</table>`:'<span style="color:var(--text3)">Este SKU no tiene publicaciones propias en IT ni MT.</span>';
-  const av=(d.errores||[]).length?`<div style="color:var(--yellow);font-size:10px">⚠ ${acEsc(d.errores.map(e=>(e.cuenta?e.cuenta+': ':'')+e.error).join(' · '))}</div>`:'';
-  return `<div style="flex-basis:100%">${hdr}${t}${av}<div style="font-size:9px;color:var(--text3);margin-top:3px">Leído de ML hace ${Math.round((Date.now()-m.en)/60000)} min (caché 5 min) <button class="btn-xs" onclick="acMlCargar('${acEsc(f.key)}',true)">↻</button>${pm?'':' · sin precio ML en el PM para comparar'}</div></div>`;
+  const av=(d.errores||[]).length?`<div style="color:var(--yellow);font-size:10px">${ico('alert',13)} ${acEsc(d.errores.map(e=>(e.cuenta?e.cuenta+': ':'')+e.error).join(' · '))}</div>`:'';
+  return `<div style="flex-basis:100%">${hdr}${t}${av}<div style="font-size:9px;color:var(--text3);margin-top:3px">Leído de ML hace ${Math.round((Date.now()-m.en)/60000)} min (caché 5 min) <button class="btn-xs" onclick="acMlCargar('${acEsc(f.key)}',true)" aria-label="Volver a leer de ML" title="Volver a leer de ML">${ico('refresh',13)}</button>${pm?'':' · sin precio ML en el PM para comparar'}</div></div>`;
 }
 
 async function acCargar(refrescar){
   const st=qs('ac-status'),bu=getBackendUrl();
-  if(!bu){st.textContent='❌ Falta la URL del backend (Configuración).';return;}
+  if(!bu){st.textContent='Error: falta la URL del backend (Configuración).';return;}
   if(AC.cargando)return;AC.cargando=true;qs('btn-ac-load').disabled=true;st.textContent='Leyendo competencia...';
   try{
     cargarTablasML();
@@ -3262,11 +3483,11 @@ async function acCargar(refrescar){
     const refs=d.referencias||[],conPrecio=refs.filter(x=>x.ultimo).length,cambios=refs.filter(x=>x.ultimo&&x.anterior&&x.desde===x.ultimo.fecha).length;
     const ult=refs.reduce((m,x)=>x.ultima_lectura&&x.ultima_lectura.fecha>m?x.ultima_lectura.fecha:m,'');
     qs('ac-stats').innerHTML=[[new Set(refs.map(x=>x.sku)).size,'SKU con competencia'],[refs.length,'Referencias activas'],[conPrecio,'Con precio leído'],[cambios,'Cambiaron en la última lectura'],[ult?acFechaCorta(ult):'—','Última lectura']].map(([v,l])=>`<div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`).join('');
-    const av=qs('ac-avisos');av.style.display=(d.avisos&&d.avisos.length)?'block':'none';av.innerHTML=(d.avisos||[]).map(a=>'⚠ '+acEsc(a)).join('<br>');
+    const av=qs('ac-avisos');av.style.display=(d.avisos&&d.avisos.length)?'block':'none';av.innerHTML=(d.avisos||[]).map(a=>'<div style="display:flex;gap:10px;align-items:flex-start">'+ico('alert',16)+'<span>'+acEsc(a)+'</span></div>').join('');
     st.textContent=`Datos leídos hace ${d.cache?d.cache.leido_hace_seg:0}s${d.cache&&d.cache.refresco_ignorado?' (releer ignorado: muy reciente o el Sheet falló)':''}`;
     acRender();
     acCtxCargar(!!refrescar);
-  }catch(e){st.textContent='❌ '+(e.message||e);}
+  }catch(e){st.textContent='Error: '+(e.message||e);}
   AC.cargando=false;qs('btn-ac-load').disabled=false;
 }
 async function loadIntelComercial(){
