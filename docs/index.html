@@ -353,6 +353,7 @@ body[data-page="analisis-competencia"]{
 #page-analisis-competencia input,#page-analisis-competencia select{font-family:var(--fuente)!important}
 #page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,#page-analisis-competencia select.fi,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{font-size:var(--fs-campo)!important}
 #page-analisis-competencia #ac-tc{width:96px!important}
+#page-analisis-competencia #ac-ev-umbral{min-height:44px;width:72px!important;padding:0 8px!important;border:1px solid var(--borde)!important;border-radius:6px!important;font-size:var(--fs-campo)!important;color:var(--tinta)!important;background:var(--superficie)!important}
 #page-analisis-competencia ::placeholder{color:var(--texto-suave);opacity:1}
 #page-analisis-competencia .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
 #page-analisis-competencia .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
@@ -1902,7 +1903,6 @@ const DASH_PAGES=['dashboard','historico','cobranzas','brasil'];
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
-  if(!el)el=document.querySelector('.sidebar-item[data-page="'+page+'"]');
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
