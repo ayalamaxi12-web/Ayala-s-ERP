@@ -1,6 +1,6 @@
 # Etapa 3.4 — Auditoría para jubilar los módulos viejos de competencia
 
-Estado: **auditoría y propuesta, sin cambios de código** (paso 1 y 2). No se jubila nada hasta el OK de Maxx, un módulo por PR.
+Estado: **auditoría y propuesta, sin cambios de código** (paso 1 y 2); abajo, las decisiones de Maxx (§7). Un módulo por PR; no se borra nada sin su aviso.
 Alcance: **Competidores ML**, **Intel. Competitiva** y **SKUs & Referencias** frente a la pantalla nueva **Análisis de Competencia** (Por SKU, Por categoría, Jugar, Histórico).
 Fuente: lectura de `docs/index.html`, `backend/main.py` y los docs de competencia en `main` (commit `dadcbcc`). Los flujos de n8n **no están en el repo** (ver §4).
 
@@ -79,3 +79,10 @@ En cada PR de jubilación: tag `pre-jubilacion-competencia` en `main`, sacar del
 
 ## 6. Nota para la etapa «Jugar mi precio» con envío
 Para elegir la publicación a la que se envía el precio u oferta hay que mostrar **ventas y días de publicada** de cada publicación. Hoy `GET /competencia/publicaciones-propias` y `/competencia/precio-ml` no devuelven ni `sold_quantity` ni la fecha de alta (`start_time`/`date_created`): hay que agregarlos (a revisar contra ML real).
+
+## 7. Decisiones de Maxx (20/10/2026)
+- **SKUs & Referencias:** OK al paso 3, con tres condiciones: (1) antes se mueve el cargador `INTEL` que comparten Entidades y Referencias; (2) la página **Referencias** (Distribuidor, Mayorista y Cuenta Propia) **NO se jubila**; (3) Maxx confirma con Maca que solo lee y **avisa** antes de borrar nada.
+- **Intel. Competitiva:** primero se construye en la pantalla nueva la lista de eventos, el umbral de «baja fuerte» configurable y el export a CSV. El **Detector de Ads y las Alertas se descartan** (no hacen lo que dicen). Después se jubila el módulo, en su PR.
+- **Competidores ML: no se jubila ahora.** De él depende el **panel de parámetros de margen** (`compMargenAt`, `COMPDESC` y los campos `cfg-*`): la pantalla nueva, Jugar y Mix los usan. **Migrarlo es parte de la etapa «Jugar mi precio» con envío**, que va después; recién ahí se puede jubilar (junto con «✏ Ecom», «Refrescar historial» y la decisión sobre las ventas/títulos de `V-*`).
+- **n8n:** Maxx pasa los flujos exportados. **No se borra ningún endpoint hasta revisarlos.**
+- Antes de borrar código: tag `pre-jubilacion-competencia` en `main`.
