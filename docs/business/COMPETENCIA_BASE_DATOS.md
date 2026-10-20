@@ -130,6 +130,13 @@ Botones **Por SKU / Por categoría** arriba de la pantalla. Una fila por subcate
 - Orden: subcategoría A-Z, donde más nos gana el Rey, o tienda más por debajo de su mediana. Solo lectura; no se jubila ningún módulo (3.4 aparte). No cambia ningún cálculo de margen.
 - La tienda se une al conteo por `Entidad_ID` (si falta, por nombre normalizado). Tests: `backend/test_front_categoria.py` (datos sintéticos, node).
 
+### Etapa 3.4 (previa a jubilar Intel. Competitiva) — vista «Eventos» en Análisis de Competencia
+Tercer botón **Eventos** junto a Por SKU / Por categoría: lista de `eventos` de `/competencia/analisis` (ahora `dias=90`; `Eventos_Competencia`): Bajó, Subió, Publicación caída, Reapareció, Tienda sin resultados / bloqueada, Stock bajo.
+- Período 7 / 30 / 90 d, chips por tipo de evento y los filtros de arriba (buscador, vendedores, categoría, PM).
+- **Umbral de «baja fuerte» configurable** (por defecto 10 %, igual que el «cambio fuerte» de Intel. Competitiva; se guarda en este navegador, `localStorage` `ac_umbral_baja_fuerte`): una baja de ese porcentaje o más lleva la marca «baja fuerte»; «Solo bajas fuertes» filtra.
+- Tarjetas: bajaron / subieron / bajas fuertes / otros / total. **Exportar CSV** (UTF-8 con BOM, comillas escapadas) con todos los eventos filtrados.
+- Tests: `backend/test_front_eventos.py` (node, datos sintéticos).
+
 ### Etapa 3.4d — cargador compartido de Inteligencia Comercial (paso previo a jubilar «SKUs & Referencias»)
 `INTEL` (referencias, entidades, `bySku`) y la lectura del Sheet viven ahora en un bloque propio de `docs/index.html` (`intelCargarEntidades`, `intelCargarReferencias`, `intelReindexar`), no en la página «SKUs & Referencias». SKUs & Referencias, Entidades y Referencias usan las mismas funciones; las páginas solo pintan. Así, cuando se jubile SKUs & Referencias (con el aviso de Maxx) no se rompe ninguna otra.
 Comportamiento idéntico (verificado en Chromium con las tres páginas contra `main`). **Nota:** la página «Referencias» lee solo las primeras **1000** filas de `Referencias_Mercado` (SKUs & Referencias lee 5000); no se tocó, pero si el Sheet pasa de 1000 referencias esa página las trunca. Tests: `backend/test_front_intel_datos.py`.
