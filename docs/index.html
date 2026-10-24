@@ -229,7 +229,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --atencion:#B45309;--error:#DC2626;--ok:#15803D;
   /* Marcas de marketplace (del logo oficial) */
   --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;   /* amarillo vivo (solo de fondo), azul, borde de la barra, encabezado de tabla */
-  --mk-ml-btn-borde:#C9B300;--mk-ml-hover:#F2D800;--mk-ml-dorado:#7A5F00;--mk-ml-dorado-osc:#5C4A00;--mk-ml-chip:#FFF1A8;--mk-ml-franja:#FFF9DB;--mk-ml-franja-borde:#EBDD8A;--mk-ml-check:#B89F00;   /* borde del botón, hover del botón, texto dorado, texto sobre chip, chip, franja y su borde, checkbox */
+  --mk-ml-btn-borde:#C9B300;--mk-ml-hover:#F2D800;--mk-ml-dorado:#7A5F00;--mk-ml-dorado-osc:#5C4A00;--mk-ml-chip:#FFF1A8;--mk-ml-franja:#FFF9DB;--mk-ml-franja-borde:#EBDD8A;--mk-ml-check:#8F7A00;   /* borde del botón, hover del botón, texto dorado, texto sobre chip, chip, franja y su borde, checkbox */
   /* Tipografía */
   --fuente:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
   --fs-cuerpo:14px;--fs-campo:14px;--fs-tabla:13px;   /* escritorio: manda la guía (tablas 13 px) */
@@ -515,7 +515,7 @@ body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-n
     <div class="sidebar-section-label">Sistema</div>
     <a href="#" class="sidebar-item" data-page="config" onclick="goPage('config',this);return false;"><span class="icon" data-ico="sliders" aria-hidden="true"></span>Configuración</a>
     <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Reglas de Precio</a>
-    <a href="#" class="sidebar-item" data-page="mltools" data-mod="ml" onclick="goPage('mltools',this);return false;"><span class="icon" data-ico="wrench" aria-hidden="true"></span>ML Tools</a>
+    <a href="#" class="sidebar-item" data-page="mltools" onclick="goPage('mltools',this);return false;"><span class="icon" data-ico="wrench" aria-hidden="true"></span>ML Tools</a>
   </div>
 </nav>
 <div class="app-body">
@@ -1775,8 +1775,8 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 // ICONOS-FIN
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
-const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml','mltools':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
+const PAGINAS_ESTILO_NUEVO=new Set(['analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
