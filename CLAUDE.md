@@ -139,9 +139,7 @@ Sidebar pages, grouped by what they do:
 - **Análisis de Competencia** — la pantalla de competencia vigente: Por SKU (con Histórico y Jugar mi precio), Por categoría y Eventos (lista, umbral de «baja fuerte»
   configurable y CSV), sobre `GET /competencia/analisis`. Filtro de vendedores: el buscador es predictivo (SKU + todos los vendedores que coinciden, sin mayúsculas ni tildes), los elegidos son chips y «Ver todos los vendedores» abre la lista completa; solo filtra en pantalla. Reemplaza a **Intel. Competitiva** (jubilada: su link viejo lleva a la vista Eventos; no existe más en el código).
 - **SKUs & Referencias** — jubilada (era de solo lectura; Maca carga las referencias en su planilla y el scraper las sincroniza). Su link viejo abre Análisis de Competencia. **Entidades, Referencias y Mix siguen vigentes** (comparten el cargador `intelCargarEntidades` / `intelCargarReferencias`).
-- **Competidores ML** — todavía vigente: de él dependen el panel de parámetros de margen (`compMargenAt`, `COMPDESC`, campos `cfg-*`; los usan Análisis de Competencia,
-  Jugar y Mix), «✏ Ecom» (envía precio a Ecom), «Refrescar historial» (`/competidores/refresh`) y las ventas/títulos de las pestañas `V-*`. Se jubila recién en la etapa
-  «Jugar mi precio» con envío (ver `docs/business/COMPETENCIA_JUBILACION_AUDITORIA.md`).
+- **Competidores ML** — todavía vigente. **Etapa A hecha:** el panel de parámetros de margen (comisión, costo fijo ML, IVA, IIBB, cheque, envío y TC, ids `cfg-*`, `ac-tc`, `COMPDESC`, `compMargenAt`) vive ahora en **Análisis de Competencia** (la usan también Jugar y Mix); Competidores solo conserva «Baja s/comp.» (`cfg-baja`) y una franja que muestra los parámetros y lleva a Análisis. Siguen en Competidores: «✏ Ecom» (envía precio a Ecom), «Refrescar historial» (`/competidores/refresh`) y las ventas/títulos de las pestañas `V-*`. Se jubila recién en la etapa «Jugar mi precio» con envío (ver `docs/business/COMPETENCIA_JUBILACION_AUDITORIA.md`).
 - **Configuración / Reglas de Precio / ML Tools** — connects the backend URL, ML/Ecom accounts, PM
   sheets, and Sheets API key; edits the `RULES` multiplier table.
 
