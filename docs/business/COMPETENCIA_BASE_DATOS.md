@@ -139,7 +139,7 @@ Tercer botón **Eventos** junto a Por SKU / Por categoría: lista de `eventos` d
 
 ### Etapa 3.4d — cargador compartido de Inteligencia Comercial (paso previo a jubilar «SKUs & Referencias»)
 `INTEL` (referencias, entidades, `bySku`) y la lectura del Sheet viven ahora en un bloque propio de `docs/index.html` (`intelCargarEntidades`, `intelCargarReferencias`, `intelReindexar`), no en la página «SKUs & Referencias». SKUs & Referencias, Entidades y Referencias usan las mismas funciones; las páginas solo pintan. Así, cuando se jubile SKUs & Referencias (con el aviso de Maxx) no se rompe ninguna otra.
-Comportamiento idéntico (verificado en Chromium con las tres páginas contra `main`). **Nota:** la página «Referencias» lee solo las primeras **1000** filas de `Referencias_Mercado` (SKUs & Referencias lee 5000); no se tocó, pero si el Sheet pasa de 1000 referencias esa página las trunca. Tests: `backend/test_front_intel_datos.py`.
+Comportamiento idéntico (verificado en Chromium con las tres páginas contra `main`). **Actualización:** SKUs & Referencias ya está jubilada (PR de jubilación 3.4f); el cargador lo siguen usando Entidades y Referencias, y `INTEL.bySku` / `intelReindexar` se borraron porque solo los usaba esa página. **Nota:** la página «Referencias» lee solo las primeras **1000** filas de `Referencias_Mercado` (SKUs & Referencias lee 5000); no se tocó, pero si el Sheet pasa de 1000 referencias esa página las trunca. Tests: `backend/test_front_intel_datos.py`.
 
 ### Costo de Ecom guardado + tabla única de cuotas + resolver SKU → publicaciones (A y B0)
 - **Costo cacheado (A):** el catálogo de costos de Ecom (~80 s) se baja UNA vez por día y queda guardado en la base (`costo_ecom_snapshot`, migración `h2c3d4e5f6a7`, últimas 7 fotos).

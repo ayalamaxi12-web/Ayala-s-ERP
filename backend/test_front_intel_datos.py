@@ -1,5 +1,5 @@
-"""Cargador compartido de Inteligencia Comercial (docs/index.html: INTEL, intelCargarEntidades / intelCargarReferencias / intelReindexar): lo usan SKUs & Referencias,
-Entidades y Referencias. Corre en node con un fetchSheet falso y datos SINTÉTICOS; se saltea sin node."""
+"""Cargador compartido de Inteligencia Comercial (docs/index.html: INTEL, intelCargarEntidades / intelCargarReferencias): lo usan Entidades y Referencias
+(SKUs & Referencias, que también lo usaba, está jubilada). Corre en node con un fetchSheet falso y datos SINTÉTICOS; se saltea sin node."""
 import json
 import re
 import shutil
@@ -16,8 +16,7 @@ ENTS = [['Entidad_ID', 'Nombre'], ['E1', 'TIENDA A'], ['E2', 'TIENDA B']]
 
 def correr(cuerpo, hojas=None):
     s = open(INDEX, encoding='utf-8').read()
-    src = re.search(r"const INTEL=\{.*?\};", s).group(0) + '\n' + re.search(r"const INTEL_RANGO_REFS=.*?;", s).group(0) + '\n' + '\n'.join(
-        _fn(s, n) if f'function {n}(' in s else '' for n in ('_rowsToObjs', 'intelReindexar')) + '\n'
+    src = re.search(r"const INTEL=\{.*?\};", s).group(0) + '\n' + re.search(r"const INTEL_RANGO_REFS=.*?;", s).group(0) + '\n' + _fn(s, '_rowsToObjs') + '\n'
     for n in ('intelCargarEntidades', 'intelCargarReferencias'):                                  # son async: _fn busca 'function nombre('
         i = s.index(f'async function {n}(')
         j = s.index('{', i)
@@ -34,12 +33,10 @@ def correr(cuerpo, hojas=None):
     return json.loads(out)
 
 
-def test_carga_indexa_por_sku_y_une_cada_referencia_con_su_entidad():
-    r = correr("const a=await intelCargarEntidades(),b=await intelCargarReferencias();console.log(JSON.stringify([a,b,Object.keys(INTEL.bySku),INTEL.bySku['SKU-9001'].map(x=>x._entidad&&x._entidad.Nombre),INTEL.bySku['SKU-9002'][0]._entidad,INTEL.referencias.length,llamadas]))")
-    assert r[:2] == [True, True] and r[2] == ['SKU-9001', 'SKU-9002']
-    assert r[3] == ['TIENDA A', 'TIENDA B'] and r[4] is None                    # E9 no existe: referencia sin entidad, no rompe
-    assert r[5] == 3                                                            # la fila vacía se descarta
-    assert r[6] == ['Entidades!A1:Z1000', 'Referencias_Mercado!A1:Z5000']     # rangos por defecto
+def test_carga_entidades_y_referencias_descarta_filas_vacias():
+    r = correr("const a=await intelCargarEntidades(),b=await intelCargarReferencias();console.log(JSON.stringify([a,b,INTEL.referencias.length,INTEL.entidades.length,INTEL.referencias[0].SKU,INTEL.entidades[1].Nombre,llamadas]))")
+    assert r[:4] == [True, True, 3, 2] and r[4] == 'SKU-9001' and r[5] == 'TIENDA B'          # la fila vacía de referencias se descarta
+    assert r[6] == ['Entidades!A1:Z1000', 'Referencias_Mercado!A1:Z5000']                       # rangos por defecto
 
 
 def test_el_rango_se_puede_elegir_y_una_pestana_inexistente_devuelve_false_sin_tocar_el_estado():
@@ -48,6 +45,10 @@ def test_el_rango_se_puede_elegir_y_una_pestana_inexistente_devuelve_false_sin_t
     assert r == [['Referencias_Mercado!A1:Z1000', 'Entidades!A1:Z1000'], False, 3, 3, 0]
 
 
-def test_las_referencias_se_reindexan_cuando_llegan_las_entidades_despues():
-    r = correr("await intelCargarReferencias();const sin=INTEL.bySku['SKU-9001'][0]._entidad;await intelCargarEntidades();console.log(JSON.stringify([sin,INTEL.bySku['SKU-9001'][0]._entidad.Nombre]))")
-    assert r == [None, 'TIENDA A']
+def test_sku_e_inventario_de_la_pagina_jubilada_ya_no_estan_en_el_html():
+    s = open(INDEX, encoding='utf-8').read()
+    for rastro in ('page-intel-comercial', 'loadIntelComercial', 'renderIntelComercial', 'INTEL.bySku', 'intelReindexar', 'btn-load-intel-comercial', 'data-page="intel-comercial"'):
+        assert rastro not in s, rastro
+    assert "page==='intel-comercial'){page='analisis-competencia'" in s                            # el link viejo lleva a Análisis de Competencia
+    for vive in ('page-intel-entidades', 'page-intel-referencias', 'loadEntidadesPage', 'loadReferenciasPage'):
+        assert vive in s, vive                                                                       # Entidades y Referencias NO se tocan

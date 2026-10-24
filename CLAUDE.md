@@ -138,6 +138,7 @@ Sidebar pages, grouped by what they do:
   accounts (IT/MT).
 - **Análisis de Competencia** — la pantalla de competencia vigente: Por SKU (con Histórico y Jugar mi precio), Por categoría y Eventos (lista, umbral de «baja fuerte»
   configurable y CSV), sobre `GET /competencia/analisis`. Reemplaza a **Intel. Competitiva** (jubilada: su link viejo lleva a la vista Eventos; no existe más en el código).
+- **SKUs & Referencias** — jubilada (era de solo lectura; Maca carga las referencias en su planilla y el scraper las sincroniza). Su link viejo abre Análisis de Competencia. **Entidades, Referencias y Mix siguen vigentes** (comparten el cargador `intelCargarEntidades` / `intelCargarReferencias`).
 - **Competidores ML** — todavía vigente: de él dependen el panel de parámetros de margen (`compMargenAt`, `COMPDESC`, campos `cfg-*`; los usan Análisis de Competencia,
   Jugar y Mix), «✏ Ecom» (envía precio a Ecom), «Refrescar historial» (`/competidores/refresh`) y las ventas/títulos de las pestañas `V-*`. Se jubila recién en la etapa
   «Jugar mi precio» con envío (ver `docs/business/COMPETENCIA_JUBILACION_AUDITORIA.md`).
