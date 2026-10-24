@@ -382,3 +382,20 @@ def test_endpoints_sync_y_carga_por_filas(cliente, monkeypatch):
     assert r.json()["nuevos"] == 1
     assert cliente.get("/rentabilidad/pricing/skus").json()["ultima_sync_pm"]
     assert cliente.post("/rentabilidad/pricing/carga-pm-filas", json={"pm": "X", "filas": [["Nada"]]}).status_code == 422
+
+
+def test_iva_de_respaldo_dice_de_donde_salio_y_el_aviso_va_en_texto():
+    from decimal import Decimal
+    from rentabilidad import api, costos_ecom
+
+    class Tactica:
+        def precargar(self): raise RuntimeError("sin conexión")
+        def factor(self, sku): raise RuntimeError("sin conexión")
+
+    class Cat:
+        def factor_iva(self, sku): return Decimal("1.21")
+
+    p = costos_ecom.IvaConRespaldoEcom(tactica=Tactica(), catalogo=lambda: Cat())
+    p.precargar()
+    assert p.tactica_caida and p.factor_con_origen("X") == (Decimal("1.21"), "ECOM") and p.factor("X") == Decimal("1.21")
+    assert api._AVISO_TACTICA_CAIDA == "Táctica no respondió (¿VPN apagada?). IVA tomado de Ecom."

@@ -399,6 +399,7 @@ class DatosSku:
     pm: str | None
     categoria: str | None
     subcategoria: str | None
+    aviso_iva: str | None = None  # texto cuando el IVA no salió de Táctica (ver api._datos_sku_fn)
 
 
 DatosFn = Callable[[str], DatosSku]
@@ -489,6 +490,8 @@ def calcular_sku(
         elif not datos.iva_factor:
             fila["avisos"].insert(0, "Sin alícuota de IVA en Táctica")
         else:
+            if datos.aviso_iva:
+                fila["avisos"].insert(0, datos.aviso_iva)
             try:
                 r = motor.precio_a_margen(precio, entrada, par)
                 fila.update(margen=r.margen, rentabilidad=r.rentabilidad)

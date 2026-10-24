@@ -379,15 +379,20 @@ class IvaConRespaldoEcom:
             self.tactica_caida = True
         self._catalogo_fn()
 
-    def factor(self, sku: str) -> Decimal | None:
+    def factor_con_origen(self, sku: str) -> tuple[Decimal | None, str | None]:
+        """(factor, origen): `TACTICA`, `ECOM` (respaldo) o None si no hay IVA en ninguna. Mismo orden de búsqueda que `factor`."""
         if not self.tactica_caida:
             try:
                 f = self._tactica.factor(sku)
                 if f is not None:
-                    return f
+                    return f, "TACTICA"
             except Exception:
                 self.tactica_caida = True
-        return self._catalogo_fn().factor_iva(sku)
+        f = self._catalogo_fn().factor_iva(sku)
+        return (f, "ECOM") if f is not None else (None, None)
+
+    def factor(self, sku: str) -> Decimal | None:
+        return self.factor_con_origen(sku)[0]
 
 
 def proveedores_de_costo_e_iva() -> tuple[CostoEcomProvider, IvaConRespaldoEcom]:
