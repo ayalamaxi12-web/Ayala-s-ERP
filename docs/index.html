@@ -228,7 +228,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --aviso-fondo:#FFFBEB;--aviso-texto:#78350F;--aviso-borde:#FCD34D;
   --atencion:#B45309;--error:#DC2626;--ok:#15803D;
   /* Marcas de marketplace (del logo oficial) */
-  --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;
+  --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;   /* amarillo vivo (solo de fondo), azul, borde de la barra, encabezado de tabla */
+  --mk-ml-btn-borde:#C9B300;--mk-ml-hover:#F2D800;--mk-ml-dorado:#7A5F00;--mk-ml-dorado-osc:#5C4A00;--mk-ml-chip:#FFF1A8;--mk-ml-franja:#FFF9DB;--mk-ml-franja-borde:#EBDD8A;--mk-ml-check:#8F7A00;   /* borde del botón, hover del botón, texto dorado, texto sobre chip, chip, franja y su borde, checkbox */
   /* Tipografía */
   --fuente:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
   --fs-cuerpo:14px;--fs-campo:14px;--fs-tabla:13px;   /* escritorio: manda la guía (tablas 13 px) */
@@ -237,14 +238,24 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mod-barra:var(--celeste-marca);--mod-sobre-barra:var(--tinta);--mod-barra-borde:var(--celeste-marca);   /* barra superior de módulo */
   --mod-encabezado:var(--encabezado-tabla);--mod-encabezado-texto:var(--tinta-2);--mod-encabezado-borde:var(--borde);   /* encabezado de tabla */
   --mod-segmento-activo:var(--tinta);
+  --mod-texto:var(--celeste-700);--mod-suave:var(--celeste-100);--mod-suave-borde:var(--celeste-200);--mod-suave-texto:var(--celeste-700);--mod-primario-hover:var(--celeste-700);
+  --mod-btn-fondo:var(--celeste-600);--mod-btn-texto:#FFFFFF;--mod-btn-borde:var(--celeste-600);--mod-btn-hover:var(--celeste-700);   /* botón primario */
+  --mod-sec-borde:var(--celeste-600);--mod-sec-texto:var(--celeste-600);--mod-sec-hover:var(--celeste-50);   /* botón secundario */
+  --mod-activo-fondo:var(--tinta);--mod-activo-texto:#FFFFFF;--mod-activo-borde:var(--tinta);--mod-seg-fondo:var(--segmentado);   /* pestaña / botón activo y su contenedor */
+  --mod-franja-fondo:transparent;--mod-franja-borde:transparent;--mod-resalte:rgba(0,157,188,.08);--mod-check:var(--celeste-600);--mod-foco:var(--celeste-600);   /* franjas de filtros y parámetros, checkbox, anillo de foco */   /* texto de enlace / acento, chips y botones suaves, hover del primario */
 }
 @media(max-width:768px){:root{--fs-cuerpo:16px;--fs-campo:16px}}   /* hasta 768 px: cuerpo y campos a 16 px (evita el zoom de iOS al enfocar un campo); las tablas siguen en --fs-tabla y scrollean dentro de su caja */
 /* Temas de marketplace: <body data-modulo="…">. El color del marketplace solo aparece en su barra, el ítem activo del menú, los botones primarios, el selector de cuenta y el encabezado de tabla. */
 [data-modulo="ml"]{
-  --mod-acento:var(--mk-ml);--mod-sobre-acento:var(--mk-ml-tinta);--mod-primario:var(--mk-ml-tinta);   /* Mercado Libre: definido */
+  --mod-acento:var(--mk-ml);--mod-sobre-acento:var(--mk-ml-tinta);--mod-primario:var(--mk-ml-dorado);   /* Mercado Libre: el amarillo vivo va SOLO de fondo; el texto y los acentos de texto usan el dorado */
   --mod-barra:var(--mk-ml);--mod-sobre-barra:var(--mk-ml-tinta);--mod-barra-borde:var(--mk-ml-borde);
-  --mod-encabezado:var(--mk-ml-suave);--mod-encabezado-texto:var(--mk-ml-tinta);--mod-encabezado-borde:var(--mk-ml-borde);
-  --mod-segmento-activo:var(--mk-ml-tinta);
+  --mod-encabezado:var(--mk-ml-suave);--mod-encabezado-texto:var(--mk-ml-tinta);--mod-encabezado-borde:var(--mk-ml-franja-borde);
+  --mod-segmento-activo:var(--mk-ml);
+  --mod-texto:var(--mk-ml-dorado);--mod-suave:var(--mk-ml-chip);--mod-suave-borde:var(--mk-ml-franja-borde);--mod-suave-texto:var(--mk-ml-dorado-osc);--mod-primario-hover:var(--mk-ml-hover);
+  --mod-btn-fondo:var(--mk-ml);--mod-btn-texto:var(--mk-ml-tinta);--mod-btn-borde:var(--mk-ml-btn-borde);--mod-btn-hover:var(--mk-ml-hover);
+  --mod-sec-borde:var(--mk-ml-dorado);--mod-sec-texto:var(--mk-ml-dorado-osc);--mod-sec-hover:var(--mk-ml-franja);
+  --mod-activo-fondo:var(--mk-ml);--mod-activo-texto:var(--mk-ml-tinta);--mod-activo-borde:var(--mk-ml-btn-borde);--mod-seg-fondo:var(--mk-ml-chip);
+  --mod-franja-fondo:var(--mk-ml-franja);--mod-franja-borde:var(--mk-ml-franja-borde);--mod-resalte:var(--mk-ml-franja);--mod-check:var(--mk-ml-check);--mod-foco:var(--mk-ml-tinta);
 }
 /* [data-modulo="fravega"], [data-modulo="oncity"], [data-modulo="megatone"]: A DEFINIR — el color sale del logo oficial con docs/assets/logos/muestrear_color.py (ver la tabla en la guía). */
 </style>
@@ -256,16 +267,16 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   background:var(--mod-barra);color:var(--mod-sobre-barra);border-bottom:1px solid var(--mod-barra-borde);backdrop-filter:none;font-family:var(--fuente)}
 .tb-brand{display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;border-radius:6px}
 .tb-logo{height:28px;width:auto;display:block}
-.tb-logo-tinta,.tb-x,.tb-logo-mk,.tb-prov{display:none}
+.tb-logo-tinta,.tb-x,.tb-mk{display:none}
 .tb-x{font-size:22px;font-weight:500;line-height:1}
 .tb-erp{font-size:13px;font-weight:700;letter-spacing:.08em}
 .tb-modulo{margin-left:auto;font-size:13px;font-weight:600}
-.tb-prov{padding:2px 8px;border-radius:999px;background:rgba(45,50,119,.12);font-size:11px;font-weight:600}   /* TODO visible: logo de ML provisorio */
+.tb-isotipo{display:block;height:36px;width:auto}
+.tb-mk-texto{font-size:18px;font-weight:700;color:var(--mk-ml-tinta);line-height:1}
 body[data-modulo="ml"] .tb-logo-blanco,body[data-modulo="ml"] .tb-erp{display:none}
-body[data-modulo="ml"] .tb-logo-tinta,body[data-modulo="ml"] .tb-logo-mk{display:block}
-body[data-modulo="ml"] .tb-logo-mk{height:42px}
+body[data-modulo="ml"] .tb-logo-tinta{display:block}
 body[data-modulo="ml"] .tb-x{display:inline}
-body[data-modulo="ml"] .tb-prov{display:inline-block}
+body[data-modulo="ml"] .tb-mk{display:inline-flex;align-items:center;gap:8px}
 .menu-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;border:1px solid color-mix(in srgb,var(--mod-sobre-barra) 40%,transparent);border-radius:8px;background:transparent;color:var(--mod-sobre-barra);cursor:pointer}
 .menu-toggle:hover{background:color-mix(in srgb,var(--mod-sobre-barra) 10%,transparent);border-color:var(--mod-sobre-barra);color:var(--mod-sobre-barra)}
 .topbar :focus-visible{outline:2px solid var(--mod-sobre-barra);outline-offset:2px}
@@ -301,96 +312,140 @@ body[data-modulo="ml"] .sidebar-item.active::after{display:none}
   .tb-modulo{margin-left:auto}
 }
 @media(max-width:599px){.tb-modulo{display:none}.topbar #status-global{margin-left:auto}}
-/* — Análisis de Competencia: las variables viejas se remapean SOLO mientras esa página está activa (la pantalla y todo lo que cuelga de ella: avisos, menús, toasts) — */
-body[data-page="analisis-competencia"]{
+/* — CAPA DE ESTILO COMPARTIDA: las variables viejas se remapean a los tokens SOLO mientras la página activa está en PAGINAS_ESTILO_NUEVO (body[data-nuevo]); así lo heredan la página y todo lo que cuelga de ella (avisos, menús, toasts). Los módulos nuevos entran sumando su página a esa lista — */
+body[data-nuevo]{
   --bg:var(--fondo);--surface:var(--superficie);--surface2:var(--zebra);--border:var(--borde);
-  --accent:var(--celeste-700);--accent-light:var(--celeste-600);--accent2:var(--celeste-700);--accent3:var(--atencion);--accent4:var(--error-texto);
+  --accent:var(--mod-texto);--accent-light:var(--mod-primario);--accent2:var(--mod-texto);--accent3:var(--atencion);--accent4:var(--error-texto);
   --text:var(--tinta);--text2:var(--texto-suave);--text3:var(--texto-suave);
   --green:var(--ok);--yellow:var(--atencion);--red:var(--error-texto);--orange:var(--atencion);
   background:var(--fondo);color:var(--tinta);font-family:var(--fuente)}
-#page-analisis-competencia{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:var(--fs-cuerpo)}
-#page-analisis-competencia :focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px}
-#page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .badge,#page-analisis-competencia .ac-aside,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2,
-#page-analisis-competencia .ms-trigger,#page-analisis-competencia .ms-option,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ms-actions button,#page-analisis-competencia .filter-label,
-#page-analisis-competencia .stat-label,#page-analisis-competencia .ac-sug div.it,#page-analisis-competencia .btn{font-family:var(--fuente)!important}
-#page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .stat-value,#page-analisis-competencia td{font-variant-numeric:tabular-nums}
-#page-analisis-competencia [style*="font-size:8px"],#page-analisis-competencia [style*="font-size:9px"],#page-analisis-competencia [style*="font-size:10px"],#page-analisis-competencia [style*="font-size:11px"]{font-size:12px!important}
+body[data-nuevo] .page{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:var(--fs-cuerpo)}
+body[data-nuevo] .page :focus-visible{outline:2px solid var(--mod-foco);outline-offset:2px}
+body[data-nuevo] .page [style*="DM Mono"],body[data-nuevo] .page .badge,body[data-nuevo] .page .ac-aside,body[data-nuevo] .page .ac-frow input,body[data-nuevo] .page .ac-sel2,
+body[data-nuevo] .page .ms-trigger,body[data-nuevo] .page .ms-option,body[data-nuevo] .page .ms-search input,body[data-nuevo] .page .ms-actions button,body[data-nuevo] .page .filter-label,
+body[data-nuevo] .page .stat-label,body[data-nuevo] .page .ac-sug div.it,body[data-nuevo] .page .btn{font-family:var(--fuente)!important}
+body[data-nuevo] .page [style*="DM Mono"],body[data-nuevo] .page .stat-value,body[data-nuevo] .page td{font-variant-numeric:tabular-nums}
+body[data-nuevo] .page [style*="font-size:8px"],body[data-nuevo] .page [style*="font-size:9px"],body[data-nuevo] .page [style*="font-size:10px"],body[data-nuevo] .page [style*="font-size:11px"]{font-size:12px!important}
 .ac-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
 .ac-cab h1{margin:0;font-size:22px;font-weight:600;line-height:1.2}
 .ac-sub{font-size:13px;color:var(--texto-suave)}
-.ac-seg{display:flex;gap:2px;padding:3px;background:var(--segmentado);border-radius:8px}
+.ac-seg{display:flex;gap:2px;padding:3px;background:var(--mod-seg-fondo);border-radius:8px}
 .ac-seg button{min-height:44px;padding:0 18px;border:0;border-radius:6px;background:transparent;color:var(--tinta-2);font:400 14px var(--fuente);cursor:pointer}
-.ac-seg button[aria-pressed="true"]{background:var(--mod-segmento-activo);color:#fff;font-weight:600}
+.ac-seg button[aria-pressed="true"]{background:var(--mod-activo-fondo);color:var(--mod-activo-texto);box-shadow:inset 0 0 0 1px var(--mod-activo-borde);font-weight:600}
 .ac-acciones{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-#page-analisis-competencia .btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--mod-primario);border-radius:8px;background:var(--superficie);color:var(--mod-primario);font-size:14px;font-weight:600}
-#page-analisis-competencia .btn:hover{background:var(--celeste-50);color:var(--mod-primario);border-color:var(--mod-primario)}
-#page-analisis-competencia .btn.primary{background:var(--mod-primario);border-color:var(--mod-primario);color:#fff}
-#page-analisis-competencia .btn.primary:hover{background:var(--celeste-700)}
-#page-analisis-competencia .btn-xs{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--celeste-200);border-radius:6px;background:var(--celeste-100);color:var(--celeste-700);font:600 12px var(--fuente)}
-#page-analisis-competencia .btn-xs:hover{background:var(--celeste-200)}
-#page-analisis-competencia .badge{padding:2px 8px;font-size:12px;font-weight:600}
-#page-analisis-competencia .badge-blue{background:var(--celeste-100);color:var(--celeste-700)}
-#page-analisis-competencia .badge-gray{background:var(--divisor);color:var(--tinta-2)}
-#page-analisis-competencia .badge-green{background:var(--ok-fondo);color:var(--ok-texto)}
-#page-analisis-competencia .badge-red{background:var(--error-fondo);color:var(--error-texto)}
-#page-analisis-competencia .badge-yellow{background:var(--aviso-fondo);color:var(--aviso-texto)}
+body[data-nuevo] .page .btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--mod-sec-borde);border-radius:8px;background:var(--superficie);color:var(--mod-sec-texto);font-size:14px;font-weight:600}
+body[data-nuevo] .page .btn:hover{background:var(--mod-sec-hover);color:var(--mod-sec-texto);border-color:var(--mod-sec-borde)}
+body[data-nuevo] .page .btn.primary{background:var(--mod-btn-fondo);border-color:var(--mod-btn-borde);color:var(--mod-btn-texto)}
+body[data-nuevo] .page .btn.primary:hover{background:var(--mod-btn-hover);border-color:var(--mod-btn-borde);color:var(--mod-btn-texto)}
+body[data-nuevo] .page .btn-xs{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--mod-suave-borde);border-radius:6px;background:var(--mod-suave);color:var(--mod-suave-texto);font:600 12px var(--fuente)}
+body[data-nuevo] .page .btn-xs:hover{background:var(--mod-suave-borde)}
+body[data-nuevo] .page .badge{padding:2px 8px;font-size:12px;font-weight:600}
+body[data-nuevo] .page .badge-blue{background:var(--mod-suave);color:var(--mod-suave-texto)}
+body[data-nuevo] .page .badge-orange{color:var(--aviso-texto)}   /* naranja de ML: el texto pasa a 4,5:1 */
+body[data-nuevo] .page .badge-gray{background:var(--divisor);color:var(--tinta-2)}
+body[data-nuevo] .page .badge-green{background:var(--ok-fondo);color:var(--ok-texto)}
+body[data-nuevo] .page .badge-red{background:var(--error-fondo);color:var(--error-texto)}
+body[data-nuevo] .page .badge-yellow{background:var(--aviso-fondo);color:var(--aviso-texto)}
 .ac-aviso{display:flex;flex-direction:column;gap:6px;padding:10px 14px;background:var(--aviso-fondo);border:1px solid var(--aviso-borde);border-radius:8px;color:var(--aviso-texto);font-size:13px;line-height:1.5}
 .ac-aviso svg{flex:none;margin-top:2px}
-#page-analisis-competencia .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;background:var(--superficie);border:1px solid var(--borde);border-radius:8px}
-#page-analisis-competencia .stat-card{display:flex;flex-direction:column-reverse;gap:0;padding:12px 16px;border:0;border-right:1px solid var(--divisor);border-radius:0;background:transparent}
-#page-analisis-competencia .stat-card:last-child{border-right:0}
-#page-analisis-competencia .stat-value{margin:0;font:500 22px/1.3 var(--fuente);color:var(--tinta)}
-#page-analisis-competencia .stat-label{font-size:12px;color:var(--texto-suave)}
-#page-analisis-competencia .erp-filters{gap:10px;padding:0;background:transparent;align-items:flex-end}
-#page-analisis-competencia .filter-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
-#page-analisis-competencia .ms-trigger,#page-analisis-competencia select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)}
-#page-analisis-competencia .ms-trigger{display:flex;align-items:center;padding:0 28px 0 10px;min-width:150px}
-#page-analisis-competencia .ms-trigger::after{color:var(--texto-suave);font-size:12px}
-#page-analisis-competencia .ms-dropdown,#page-analisis-competencia .ac-sug{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;box-shadow:0 4px 12px rgba(11,39,51,.12)}
-#page-analisis-competencia .ms-option,#page-analisis-competencia .ac-sug div.it{font-size:13px;color:var(--tinta-2)}
-#page-analisis-competencia .ms-option:hover,#page-analisis-competencia .ac-sug div.it.on,#page-analisis-competencia .ac-sug div.it:hover{background:var(--celeste-100);color:var(--tinta)}
-#page-analisis-competencia .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
-#page-analisis-competencia input[type=checkbox]{accent-color:var(--celeste-600);width:16px;height:16px}
-#page-analisis-competencia label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
-#page-analisis-competencia input,#page-analisis-competencia select{font-family:var(--fuente)!important}
-#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,#page-analisis-competencia select.fi,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{font-size:var(--fs-campo)!important}
+body[data-nuevo] .page .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;background:var(--superficie);border:1px solid var(--borde);border-radius:8px}
+body[data-nuevo] .page .stat-card{display:flex;flex-direction:column-reverse;gap:0;padding:12px 16px;border:0;border-right:1px solid var(--divisor);border-radius:0;background:transparent}
+body[data-nuevo] .page .stat-card:last-child{border-right:0}
+body[data-nuevo] .page .stat-value{margin:0;font:500 22px/1.3 var(--fuente);color:var(--tinta)}
+body[data-nuevo] .page .stat-label{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .page .erp-filters{gap:10px;padding:0;background:transparent;align-items:flex-end}
+body[data-nuevo] .page .filter-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
+body[data-nuevo] .page .ms-trigger,body[data-nuevo] .page select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)}
+body[data-nuevo] .page .ms-trigger{display:flex;align-items:center;padding:0 28px 0 10px;min-width:150px}
+body[data-nuevo] .page .ms-trigger::after{color:var(--texto-suave);font-size:12px}
+body[data-nuevo] .page .ms-dropdown,body[data-nuevo] .page .ac-sug{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;box-shadow:0 4px 12px rgba(11,39,51,.12)}
+body[data-nuevo] .page .ms-option,body[data-nuevo] .page .ac-sug div.it{font-size:13px;color:var(--tinta-2)}
+body[data-nuevo] .page .ms-option:hover,body[data-nuevo] .page .ac-sug div.it.on,body[data-nuevo] .page .ac-sug div.it:hover{background:var(--mod-suave);color:var(--tinta)}
+body[data-nuevo] .page .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
+body[data-nuevo] .page input[type=checkbox]{accent-color:var(--mod-check);width:16px;height:16px}
+body[data-nuevo] .page label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
+body[data-nuevo] .page input,body[data-nuevo] .page select{font-family:var(--fuente)!important}
+#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,body[data-nuevo] .page select.fi,body[data-nuevo] .page .ms-search input,body[data-nuevo] .page .ac-frow input,body[data-nuevo] .page .ac-sel2{font-size:var(--fs-campo)!important}
 #page-analisis-competencia #ac-tc{width:96px!important}
 #page-analisis-competencia #ac-ev-umbral{min-height:44px;width:72px!important;padding:0 8px!important;border:1px solid var(--borde)!important;border-radius:6px!important;font-size:var(--fs-campo)!important;color:var(--tinta)!important;background:var(--superficie)!important}
-#page-analisis-competencia ::placeholder{color:var(--texto-suave);opacity:1}
-#page-analisis-competencia .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
-#page-analisis-competencia .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
-#page-analisis-competencia .table-wrap::-webkit-scrollbar-thumb{background:var(--celeste-300);border-color:var(--zebra)}
-#page-analisis-competencia .table-wrap table{font-size:var(--fs-tabla)}
-#page-analisis-competencia .table-wrap thead{background:var(--mod-encabezado)}
-#page-analisis-competencia .table-wrap th{padding:9px 14px;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mod-encabezado-texto);border-bottom:1px solid var(--mod-encabezado-borde);cursor:default}
-#page-analisis-competencia .table-wrap td{padding:10px 14px;border-bottom:1px solid var(--divisor)}
-#page-analisis-competencia .table-wrap tbody tr:nth-child(even) td{background:var(--zebra)}
-#page-analisis-competencia .table-wrap tr:hover td{background:var(--celeste-50)}
-#page-analisis-competencia .table-wrap tr.ac-sel td{background:var(--celeste-100)}
-#page-analisis-competencia .table-wrap tr.ac-ctx-row td{background:var(--celeste-50)}
-#page-analisis-competencia .pagination{color:var(--texto-suave);border-top:1px solid var(--divisor)}
-#page-analisis-competencia .ac-aside{top:68px;max-height:calc(100vh - 80px);background:var(--superficie);border:1px solid var(--celeste-600);font-size:13px}
-#page-analisis-competencia .ac-frow{border-bottom:1px solid var(--divisor)}
-#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px}
-#page-analisis-competencia .ac-mcard{background:var(--zebra);border:1px solid var(--divisor)}
-#page-analisis-competencia .ac-mcard .l,#page-analisis-competencia .ac-mcard .d{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
-#page-analisis-competencia .ac-riv>div{border-bottom:1px solid var(--divisor)}
-#page-analisis-competencia .ac-chip{font-size:12px;font-weight:600}
+body[data-nuevo] .page ::placeholder{color:var(--texto-suave);opacity:1}
+body[data-nuevo] .page .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
+body[data-nuevo] .page .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
+body[data-nuevo] .page .table-wrap::-webkit-scrollbar-thumb{background:var(--celeste-300);border-color:var(--zebra)}
+body[data-nuevo] .page .table-wrap table{font-size:var(--fs-tabla)}
+body[data-nuevo] .page .table-wrap thead{background:var(--mod-encabezado)}
+body[data-nuevo] .page .table-wrap th{padding:9px 14px;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mod-encabezado-texto);border-bottom:1px solid var(--mod-encabezado-borde);cursor:default}
+body[data-nuevo] .page .table-wrap td{padding:10px 14px;border-bottom:1px solid var(--divisor)}
+body[data-nuevo] .page .table-wrap tbody tr:nth-child(even) td{background:var(--zebra)}
+body[data-nuevo] .page .table-wrap tr:hover td{background:var(--celeste-50)}
+body[data-nuevo] .page .table-wrap tr.ac-sel td{background:var(--mod-suave)}
+body[data-nuevo] .page .table-wrap tr.ac-ctx-row td{background:var(--celeste-50)}
+body[data-nuevo] .page .pagination{color:var(--texto-suave);border-top:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-aside{top:68px;max-height:calc(100vh - 80px);background:var(--superficie);border:1px solid var(--mod-primario);font-size:13px}
+body[data-nuevo] .page .ac-frow{border-bottom:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-frow input,body[data-nuevo] .page .ac-sel2{min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px}
+body[data-nuevo] .page .ac-mcard{background:var(--zebra);border:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-mcard .l,body[data-nuevo] .page .ac-mcard .d{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
+body[data-nuevo] .page .ac-riv>div{border-bottom:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-chip{font-size:12px;font-weight:600}
 .ac-cober{display:inline-block;width:60px;height:6px;border-radius:3px;background:var(--pista);vertical-align:middle}
-.ac-cober>i{display:block;height:6px;border-radius:3px;background:var(--celeste-600)}
-.ac-link{padding:0;border:0;background:none;color:var(--celeste-700);font:600 13px var(--fuente);text-decoration:underline;cursor:pointer;min-height:24px}
+.ac-cober>i{display:block;height:6px;border-radius:3px;background:var(--mod-primario)}
+.ac-link{padding:0;border:0;background:none;color:var(--mod-texto);font:600 13px var(--fuente);text-decoration:underline;cursor:pointer;min-height:24px}
 .ac-cat{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
 .ac-cat>.table-wrap{min-width:0}
 .ac-cat-izq{flex:1 1 560px}.ac-cat-der{flex:0 1 520px}.ac-cat-der td:first-child{min-width:170px}
-#page-analisis-competencia .ac-cat-der th,#page-analisis-competencia .ac-cat-der td{padding-left:10px;padding-right:10px}
+body[data-nuevo] .page .ac-cat-der th,body[data-nuevo] .page .ac-cat-der td{padding-left:10px;padding-right:10px}
 .ac-nota{padding:10px 14px;border-top:1px solid var(--divisor);font-size:12px;color:var(--texto-suave)}
 /* Página Referencias (todavía con el estilo oscuro viejo hasta el PR de estilo interno): los dos textos que no llegaban a 4,5:1 */
 #page-intel-referencias .btn.primary{background:var(--celeste-600);border-color:var(--celeste-600)}
 #page-intel-referencias #referencias-status{color:var(--text2)!important;font-size:12px!important;font-family:var(--fuente)!important}   /* el span trae estilos en línea */
 @media(max-width:899px){
-  #page-analisis-competencia{padding:16px}
-  #page-analisis-competencia .ac-aside{position:static;width:auto;max-height:none}
+  body[data-nuevo] .page{padding:16px}
+  body[data-nuevo] .page .ac-aside{position:static;width:auto;max-height:none}
 }
+
+/* — Componentes comunes que usan los módulos viejos (títulos, tarjetas, campos, estados, paginación…) mapeados a los tokens — */
+body[data-nuevo] .section-hdr{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;font-size:22px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--tinta);line-height:1.25}
+body[data-nuevo] .section-hdr::after{display:none}
+body[data-nuevo] .card{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:16px;margin-bottom:12px}
+body[data-nuevo] .card-title{font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--tinta-2);margin-bottom:10px}
+body[data-nuevo] .field{margin-bottom:12px}
+body[data-nuevo] .field label{display:block;margin-bottom:4px;font:400 13px var(--fuente);color:var(--texto-suave)}
+body[data-nuevo] .field input,body[data-nuevo] .field select{min-height:44px;padding:0 10px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font:400 var(--fs-campo) var(--fuente)}
+body[data-nuevo] .field input:focus,body[data-nuevo] .field select:focus{outline:2px solid var(--mod-foco);outline-offset:1px;border-color:var(--mod-foco)}
+body[data-nuevo] .page input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=hidden]):not(.table-wrap *){min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)!important}
+body[data-nuevo] .page .table-wrap input:not([type=checkbox]):not([type=radio]){min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px!important}
+body[data-nuevo] .conn-status{padding:4px 10px;font:600 12px var(--fuente)}
+body[data-nuevo] .conn-status.ok{background:var(--ok-fondo);color:var(--ok-texto)}
+body[data-nuevo] .conn-status.err{background:var(--error-fondo);color:var(--error-texto)}
+body[data-nuevo] .conn-status.idle{background:var(--divisor);color:var(--tinta-2)}
+body[data-nuevo] .page-btn{min-width:32px;height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta-2);font:600 13px var(--fuente)}
+body[data-nuevo] .page-btn:hover{border-color:var(--mod-sec-borde);color:var(--mod-sec-texto)}
+body[data-nuevo] .page-btn.active{background:var(--mod-activo-fondo);border-color:var(--mod-activo-borde);color:var(--mod-activo-texto)}
+body[data-nuevo] .fix-log{padding:10px;border:1px solid var(--divisor);border-radius:6px;background:var(--zebra);color:var(--tinta-2);font:400 13px var(--fuente)}
+body[data-nuevo] .off-badge{background:var(--aviso-fondo);color:var(--aviso-texto);font:600 12px var(--fuente)}
+body[data-nuevo] .loading-block{font:400 14px var(--fuente);color:var(--texto-suave)}
+body[data-nuevo] .spinner{border-color:var(--mod-suave-borde);border-top-color:var(--mod-primario)}
+body[data-nuevo] .mono,body[data-nuevo] .sku-cell{font-family:var(--fuente);font-variant-numeric:tabular-nums}
+body[data-nuevo] .sku-cell{font-size:12px;color:var(--tinta-2)}
+body[data-nuevo] .btn.btn-secondary{background:var(--superficie);color:var(--mod-sec-texto);border-color:var(--mod-sec-borde)}
+body[data-nuevo] .cards-grid{gap:12px}
+body[data-nuevo] .ofm-card{padding:12px 14px;border:1px solid var(--borde);border-radius:8px;background:var(--superficie);font-family:var(--fuente)}
+body[data-nuevo] .ofm-card:hover{border-color:var(--mod-primario)}
+body[data-nuevo] .ofm-card .ofm-card-titulo{font-size:13px;color:var(--tinta)}
+body[data-nuevo] .ofm-card .ofm-card-sub,body[data-nuevo] .ofm-card .ofm-card-fila{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .ofm-card .ofm-card-precio-normal{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .ofm-card .ofm-card-precio-oferta{font-size:18px;color:var(--mod-texto)}
+body[data-nuevo] .ofm-card .ofm-card-desc{font-size:12px;color:var(--ok)}
+body[data-nuevo] .ofm-card.ofm-card-alerta{border-color:var(--error)}
+body[data-nuevo] .ofm-card-alerta-msg{font-size:12px;color:var(--error-texto);background:var(--error-fondo)}
+body[data-nuevo] .ofm-card-panel{background:var(--zebra);border:1px solid var(--divisor)}
+body[data-nuevo] .grid-2{gap:14px}
+/* — Tema ml: franjas de filtros y parámetros en amarillo suave; el aviso (ámbar) se distingue de la franja por el ícono, el borde grueso a la izquierda y el color del texto — */
+body[data-modulo="ml"][data-nuevo] .page .erp-filters,body[data-modulo="ml"][data-nuevo] #comp-desc-panel,body[data-modulo="ml"][data-nuevo] .ofm-card-panel{background:var(--mod-franja-fondo)!important;border:1px solid var(--mod-franja-borde)!important;border-radius:8px;padding:10px 12px}
+body[data-nuevo] #cp-avisos{padding:10px 14px;background:var(--aviso-fondo)!important;border:1px solid var(--aviso-borde)!important;border-radius:8px!important;color:var(--aviso-texto)!important;font-family:var(--fuente)!important;font-size:13px!important;line-height:1.5}   /* aviso de Campañas ML: mismo color ámbar que los demás avisos */
+body[data-modulo="ml"][data-nuevo] .table-wrap tr:hover td{background:var(--mod-franja-fondo)}
+body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-nuevo] #cp-avisos{border-left:4px solid var(--aviso-borde)!important;padding-left:12px}
 </style>
 </head>
 <body>
@@ -401,9 +456,7 @@ body[data-page="analisis-competencia"]{
     <img class="tb-logo tb-logo-blanco" src="assets/logos/global-blanco.png" alt="Global" width="88" height="28">
     <img class="tb-logo tb-logo-tinta" src="assets/logos/global-tinta.png" alt="Global" width="88" height="28">
     <span class="tb-x" aria-hidden="true">×</span>
-    <!-- TODO (Maxx): el logo de Mercado Libre es PROVISORIO (assets/logos/mercadolibre-provisorio.png, baja resolución): reemplazar por el oficial. -->
-    <img class="tb-logo-mk" src="assets/logos/mercadolibre-provisorio.png" alt="Mercado Libre" width="151" height="42">
-    <span class="tb-prov" title="TODO: reemplazar por el logo oficial de Mercado Libre">logo provisorio</span>
+    <span class="tb-mk"><img class="tb-isotipo" src="assets/logos/mercadolibre-isotipo.png" alt="" width="50" height="36"><span class="tb-mk-texto">Mercado Libre</span></span>
   </a>
   <span class="tb-erp">ERP</span>
   <span id="tb-modulo" class="tb-modulo"></span>
@@ -437,12 +490,12 @@ body[data-page="analisis-competencia"]{
     <!-- "Ofertas ML" vieja (page-ofertas-ml, ajuste masivo contra PM Sheet) sacada
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
-    <a href="#" class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
-    <a href="#" class="sidebar-item" data-page="full-ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Full ML</a>
+    <a href="#" class="sidebar-item" data-page="verificar-ml" data-mod="ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
+    <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Full ML</a>
     <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Ofertas ML</a>
     <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
-    <a href="#" class="sidebar-item" data-page="analisis-competencia" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
-    <a href="#" class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this);return false;"><span class="icon" data-ico="trophy" aria-hidden="true"></span>Competidores ML</a>
+    <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
+    <a href="#" class="sidebar-item" data-page="competidores" data-mod="ml" onclick="goPage('competidores',this);return false;"><span class="icon" data-ico="trophy" aria-hidden="true"></span>Competidores ML</a>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Inteligencia Comercial</div>
@@ -1722,7 +1775,8 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 // ICONOS-FIN
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
-const MODULO_MK={'ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml'};   // páginas de marketplace → tema (data-modulo del <body>); los demás marketplaces, cuando haya color y logo oficial
+const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
+const PAGINAS_ESTILO_NUEVO=new Set(['analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -1888,6 +1942,7 @@ function goPage(page,el){
   if(!el)el=document.querySelector('.sidebar-item[data-page="'+page+'"]');
   if(el)el.classList.add('active');
   document.body.dataset.page=page;document.body.dataset.modulo=MODULO_MK[page]||'global';
+  if(PAGINAS_ESTILO_NUEVO.has(page))document.body.dataset.nuevo='1';else delete document.body.dataset.nuevo;
   {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
@@ -2206,13 +2261,13 @@ function cpRender(){
   const pages=Math.ceil(filas.length/CP.pageSize)||1;CP.page=Math.min(CP.page,pages);S.cpPage=CP.page;
   const ef=cpCuentaEfectiva();
   qs('cp-tbody').innerHTML=filas.slice((CP.page-1)*CP.pageSize,CP.page*CP.pageSize).map(f=>{
-    const mTd=p=>{const m=cpMargen(f,p);return `<td style="font-family:'DM Mono',monospace;color:${cpClaseMargen(m,obj)};${p===plan?'font-weight:800;background:rgba(0,157,188,.08)':''}">${m==null?'—':m.toFixed(1)+'%'}</td>`;};
+    const mTd=p=>{const m=cpMargen(f,p);return `<td style="font-family:'DM Mono',monospace;color:${cpClaseMargen(m,obj)};${p===plan?'font-weight:800;background:var(--mod-resalte)':''}">${m==null?'—':m.toFixed(1)+'%'}</td>`;};
     const mod=cpModificada(f,CP.orig),inv=f.editable&&!cpPctValido(f.descuento_total_pct);
     const pctCel=f.editable?`<input type="text" data-fila="${f.fila}" value="${f.descuento_total_pct==null?'':f.descuento_total_pct}" onchange="cpOnPct(${f.fila},this.value)" onkeydown="cpKey(event,${f.fila})" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide el descuento total entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}${!simple&&f.seller_pct!=null?`<div style="font-size:9px;color:var(--accent)" title="Es el valor a copiar en SELLER_PERCENTAGE">vos ${Math.round(f.seller_pct*1000)/1000}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.descuento_total_pct==null?'—':f.descuento_total_pct+'%'} 🔒</span>`;
     const dif=f.precio_pm&&f.precio_cliente?((f.precio_cliente/f.precio_pm-1)*100):null;
     const cuentaChip=f.cuenta&&ef&&f.cuenta!==ef?` <span style="color:var(--yellow)" title="Esta publicación es de la cuenta ${f.cuenta}, no de ${ef}">⚠${f.cuenta}</span>`:'';
     const avisos=cpOrdenarAvisos(f.avisos||[]);
-    return `<tr${mod?' style="background:rgba(0,157,188,.05)"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
+    return `<tr${mod?' style="background:var(--mod-resalte)"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
       +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}${f.comision_pct!=null?`<div style="font-size:8px;color:${f.comision_origen==='ml'?'var(--text3)':'var(--yellow)'}" title="${f.comision_origen==='ml'?'Comisión REAL de esta publicación, leída de ML (Cargo por vender)':f.comision_origen==='categoria'?'No se pudo leer la real de ML: se usa la de la categoría de la tabla (puede no coincidir)':'No se pudo leer la real de ML y la categoría no está cargada: se usa la general'}">com ${f.comision_pct}%${f.comision_origen==='ml'?' ✓ML':' (tabla)'}</div>`:''}</td><td>${pctCel}</td>`
       +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?Math.round(f.meli_pct*1000)/1000+'%':'—'}</td>`)
       +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f._conf===false?' <span title="Vista previa calculada en el navegador: el backend la está confirmando" style="color:var(--yellow)">≈</span>':''}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
@@ -3256,13 +3311,13 @@ function acHistHtml(f,dias){
   const gr=ser.length?acHistSvg(ser,pmUnit,dias,hoy):`<div style="color:var(--text3);font-size:11px;padding:10px 0">Sin lecturas con precio en los últimos ${dias} días.</div>`;
   const filas=f.refs.map(r=>{const i=ser.findIndex(s=>s.id===r.id),col=i>=0?AC_HIST_COLORES[i%AC_HIST_COLORES.length]:'var(--text3)',c=acHistCambio(r),u=r.cantidad>0?r.cantidad:1;
     const cam=c?`${acFechaCorta(c.fecha)} · ${fmt$(c.de/u)} → ${fmt$(c.a/u)} <span style="color:${c.pct<0?'var(--red)':'var(--green)'}">${c.pct<0?'▼':'▲'} ${Math.abs(c.pct).toFixed(1)}%</span>`:'<span style="color:var(--text3)">sin cambios en lo leído</span>';
-    return `<tr><td><span style="color:${col}">●</span> ${acEsc(r.entidad||'?')}${r.cantidad>1?` <span class="badge badge-gray">×${r.cantidad}</span>`:''}</td><td>${acEsc(r.rol||'Otros')}</td><td style="font-family:'DM Mono',monospace">${r.precio!=null?fmt$(r.precio/u):'—'}</td><td>${cam}</td></tr>`;}).join('');
+    return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${col};vertical-align:baseline" aria-hidden="true"></span> ${acEsc(r.entidad||'?')}${r.cantidad>1?` <span class="badge badge-gray">×${r.cantidad}</span>`:''}</td><td>${acEsc(r.rol||'Otros')}</td><td style="font-family:'DM Mono',monospace">${r.precio!=null?fmt$(r.precio/u):'—'}</td><td>${cam}</td></tr>`;}).join('');
   const evs=acHistEventos(AC.data,f.key,dias,hoy,normSku),tipo=e=>AC_EV_TXT[e.tipo]||[acEsc(String(e.tipo||'').replace(/_/g,' ')),'var(--text2)'];
   const evh=evs.length?evs.map(e=>`<div style="font-size:10px;line-height:1.7"><span style="font-family:'DM Mono',monospace;color:var(--text3)">${acFechaCorta(e.fecha)}</span> <span style="color:${tipo(e)[1]}">${tipo(e)[0]}</span> · ${acEsc(e.entidad||'')}${e.anterior!=null&&e.nuevo!=null?` · ${fmt$(e.anterior)} → ${fmt$(e.nuevo)}`:''}${e.detalle?` · <span style="color:var(--text3)">${acEsc(e.detalle)}</span>`:''}</div>`).join(''):'<div style="font-size:10px;color:var(--text3)">Sin eventos en el período.</div>';
   return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><b style="font-size:11px">Histórico de precios · ${acEsc(f.sku)}</b>${chips}<span style="font-size:10px;color:var(--text3)">precio por unidad · punteada = nuestro PM ML${pmUnit?' ('+fmt$(pmUnit)+')':' (sin PM)'}</span></div>${gr}
     <table style="font-size:10px;margin:8px 0;width:auto"><thead><tr><th>Competidor</th><th>Rol</th><th>Hoy (u.)</th><th>Último cambio (por unidad)</th></tr></thead><tbody>${filas}</tbody></table>
     <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:2px">Eventos del SKU (${dias} d)</div>${evh}`;}
-function acHistFilaHtml(f){const d=AC.histAb[f.key];return d?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:10px 14px;border-bottom:1px solid var(--border)">${acHistHtml(acFilaCompleta(f.key)||f,d)}</td></tr>`:'';}
+function acHistFilaHtml(f){const d=AC.histAb[f.key];return d?`<tr class="ac-ctx-row"><td colspan="8" style="background:var(--mod-resalte);padding:10px 14px;border-bottom:1px solid var(--border)">${acHistHtml(acFilaCompleta(f.key)||f,d)}</td></tr>`:'';}
 function acHistToggle(i){const key=AC.keys[i];if(!key)return;if(AC.histAb[key])delete AC.histAb[key];else AC.histAb[key]=30;acRender();}
 function acHistDias(i,n){const key=AC.keys[i];if(key&&AC.histAb[key]){AC.histAb[key]=n;acRender();}}
 // ── 3.3 Por categoría: una fila por subcategoría (mapa A-CATEGORIAS de Maca guardado en Categoria_Competidores). Solo lectura; los SKU salen de la columna SKUs_Nuestros
@@ -3386,7 +3441,7 @@ function acEvUmbral(v){const n=parseFloat(String(v).replace(',','.'));if(n>0&&n<
 function acEvSoloFuertes(on){AC.ev.fuertes=!!on;acRender();}
 function acEvExportar(){const rows=AC.evRows||[];if(!rows.length){toast('Sin eventos para exportar','error');return;}
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([acEvCsv(rows)],{type:'text/csv;charset=utf-8;'}));a.download=`eventos-competencia-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast('Exportado: '+rows.length+' eventos');}
-function acCtxFilaHtml(f){return AC.ctxAbierto&&AC.ctxAbierto[f.key]?`<tr class="ac-ctx-row"><td colspan="8" style="background:rgba(0,157,188,.05);padding:8px 14px;border-bottom:1px solid var(--border)">${acCtxDetalleHtml(f)}</td></tr>`:'';}
+function acCtxFilaHtml(f){return AC.ctxAbierto&&AC.ctxAbierto[f.key]?`<tr class="ac-ctx-row"><td colspan="8" style="background:var(--mod-resalte);padding:8px 14px;border-bottom:1px solid var(--border)">${acCtxDetalleHtml(f)}</td></tr>`:'';}
 // ── Precio real en ML (E2): al abrir el desglose de un SKU se pide GET /competencia/precio-ml (≈1 llamada a ML por publicación activa; el backend lo cachea 5 min).
 // Distinto del PM: el chip marca "≠ PM" cuando el precio real de alguna publicación activa se aparta más del 1% del precio ML del PM.
 const AC_ML_TOL_PM=0.01;
