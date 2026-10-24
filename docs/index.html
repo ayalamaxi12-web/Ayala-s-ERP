@@ -7065,7 +7065,7 @@ function ofmResumenParametros(){const o=OFM,n=v=>String(v).replace('.',',');cons
   if(o.usarComision)p.push('Comisión '+n(o.comisionGeneral)+'%');if(o.usarCostoFijo)p.push('Costo fijo');if(o.usarCuotas)p.push('Cuotas');if(o.usarEnvio)p.push('Envío');
   if(o.usarImpCheque)p.push('Imp.CH '+n(o.impChequePct)+'%');if(o.usarIibb)p.push('IIBB '+n(o.iibbPct)+'%');p.push('TC '+(o.tc?n(o.tc):'BNA auto'));p.push('Umbral '+n(o.umbral)+'%');return p.join(' · ');}
 function compResumenParametros(el){const v=id=>{const e=qs(id);return e?e.value:'';};
-  return ['Baja s/comp. '+v('cfg-baja')+'%','Comisión '+v('cfg-com')+'%','IVA','IIBB '+v('cfg-iibb')+'%','Imp.CH '+v('cfg-impch')+'%','Envío $'+v('cfg-envio'),'TC '+(v('comp-tc')||'BNA auto')].join(' · ');}
+  return ['Comisión '+v('cfg-com')+'%','IVA','IIBB '+v('cfg-iibb')+'%','Imp.CH '+v('cfg-impch')+'%','Envío $'+v('cfg-envio'),'TC '+(v('ac-tc')||'BNA auto')].join(' · ');}
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
   colapsableMontar('ofm-panel','Parámetros de margen',ofmResumenParametros);colapsableMontar('comp-desc-panel','Parámetros de margen',compResumenParametros);
