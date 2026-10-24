@@ -2776,7 +2776,7 @@ const fPM=getMSValues('ms-comp-pm'),fCat=getMSValues('ms-comp-cat');let data=COM
       <td class="mono" style="font-size:10px;text-align:center">${cant>1?cant:'1'}</td>
       <td class="mono" style="font-size:10px;color:var(--accent)">${miPrecio?'$'+fmtN(miPrecio):'Sin PM'}</td>
       <td>${diffStr}</td>
-      <td class="mono" style="font-size:10px;color:#ffd166">${pSug?'$'+fmtN(Math.round(pSug)):'—'}</td>
+      <td class="mono" style="font-size:10px;color:var(--yellow)">${pSug?'$'+fmtN(Math.round(pSug)):'—'}</td>
       <td>${margenStr}${(pSug&&costoARS>0)?` <button class="btn-xs" title="Margen por cuotas" onclick="compToggleCuotas(this)" data-link="${r.link||''}" data-psug="${pSug}" data-costo="${costoARS}" data-iva="${ivaFactor}">▾</button>`:''}</td>
       <td>${modBtn}</td>
       <td>${r.link?`<a href="${r.link}" target="_blank" class="btn-xs" style="text-decoration:none">Ver →</a>`:'-'}</td>
@@ -3734,7 +3734,7 @@ function renderMixResultados(resultados){
       const marg=compMargenAt(r.precio_detectado,ivaSku(r.sku,pm),costoUsdSku(r.sku)*(S.tcBNA||0),0);
       rentHtml=marg.m!==null?(marg.m*100).toFixed(1)+'%':'—';
     }
-    const estadoColor=r.estado==='OK'?'var(--green)':r.estado==='Duplicado'?'#ffd166':'var(--red)';
+    const estadoColor=r.estado==='OK'?'var(--green)':r.estado==='Duplicado'?'var(--yellow)':'var(--red)';
     return `<tr>
       <td class="mono" style="font-weight:600">${r.sku||''}</td>
       <td style="font-size:11px">${r.entidad_nombre||'—'}</td>
@@ -3840,7 +3840,7 @@ function renderDistribucion(){
   tbody.innerHTML=rows.map((d,idx)=>{
     const rid='dist-'+idx;
     const pctStr=d._pct===null?'<span style="color:var(--text3)">Sin controles</span>':`<span class="${d._pct>=90?'price-ok':d._pct>=70?'price-warn':'price-bad'}">${d._pct}%</span>`;
-    const estadoColor=d.Estado==='Activo'?'var(--green)':d.Estado==='Suspendido'?'#ffd166':'var(--red)';
+    const estadoColor=d.Estado==='Activo'?'var(--green)':d.Estado==='Suspendido'?'var(--yellow)':'var(--red)';
     return `<tr style="cursor:pointer" onclick="distribToggleDetail('${rid}')">
       <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${rid}">▶</td>
       <td style="font-weight:600">${d.Distribuidor||''}</td>
