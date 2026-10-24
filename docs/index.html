@@ -237,6 +237,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mod-barra:var(--celeste-marca);--mod-sobre-barra:var(--tinta);--mod-barra-borde:var(--celeste-marca);   /* barra superior de módulo */
   --mod-encabezado:var(--encabezado-tabla);--mod-encabezado-texto:var(--tinta-2);--mod-encabezado-borde:var(--borde);   /* encabezado de tabla */
   --mod-segmento-activo:var(--tinta);
+  --mod-texto:var(--celeste-700);--mod-suave:var(--celeste-100);--mod-suave-borde:var(--celeste-200);--mod-primario-hover:var(--celeste-700);   /* texto de enlace / acento, chips y botones suaves, hover del primario */
 }
 @media(max-width:768px){:root{--fs-cuerpo:16px;--fs-campo:16px}}   /* hasta 768 px: cuerpo y campos a 16 px (evita el zoom de iOS al enfocar un campo); las tablas siguen en --fs-tabla y scrollean dentro de su caja */
 /* Temas de marketplace: <body data-modulo="…">. El color del marketplace solo aparece en su barra, el ítem activo del menú, los botones primarios, el selector de cuenta y el encabezado de tabla. */
@@ -245,6 +246,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mod-barra:var(--mk-ml);--mod-sobre-barra:var(--mk-ml-tinta);--mod-barra-borde:var(--mk-ml-borde);
   --mod-encabezado:var(--mk-ml-suave);--mod-encabezado-texto:var(--mk-ml-tinta);--mod-encabezado-borde:var(--mk-ml-borde);
   --mod-segmento-activo:var(--mk-ml-tinta);
+  --mod-texto:var(--mk-ml-tinta);--mod-suave:var(--mk-ml-suave);--mod-suave-borde:var(--mk-ml-borde);--mod-primario-hover:#1F2559;   /* #1F2559: hover del azul de ML (el del mockup) */
 }
 /* [data-modulo="fravega"], [data-modulo="oncity"], [data-modulo="megatone"]: A DEFINIR — el color sale del logo oficial con docs/assets/logos/muestrear_color.py (ver la tabla en la guía). */
 </style>
@@ -256,16 +258,16 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   background:var(--mod-barra);color:var(--mod-sobre-barra);border-bottom:1px solid var(--mod-barra-borde);backdrop-filter:none;font-family:var(--fuente)}
 .tb-brand{display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;border-radius:6px}
 .tb-logo{height:28px;width:auto;display:block}
-.tb-logo-tinta,.tb-x,.tb-logo-mk,.tb-prov{display:none}
+.tb-logo-tinta,.tb-x,.tb-mk{display:none}
 .tb-x{font-size:22px;font-weight:500;line-height:1}
 .tb-erp{font-size:13px;font-weight:700;letter-spacing:.08em}
 .tb-modulo{margin-left:auto;font-size:13px;font-weight:600}
-.tb-prov{padding:2px 8px;border-radius:999px;background:rgba(45,50,119,.12);font-size:11px;font-weight:600}   /* TODO visible: logo de ML provisorio */
+.tb-isotipo{display:block;height:36px;width:auto}
+.tb-mk-texto{font-size:18px;font-weight:700;color:var(--mk-ml-tinta);line-height:1}
 body[data-modulo="ml"] .tb-logo-blanco,body[data-modulo="ml"] .tb-erp{display:none}
-body[data-modulo="ml"] .tb-logo-tinta,body[data-modulo="ml"] .tb-logo-mk{display:block}
-body[data-modulo="ml"] .tb-logo-mk{height:42px}
+body[data-modulo="ml"] .tb-logo-tinta{display:block}
 body[data-modulo="ml"] .tb-x{display:inline}
-body[data-modulo="ml"] .tb-prov{display:inline-block}
+body[data-modulo="ml"] .tb-mk{display:inline-flex;align-items:center;gap:8px}
 .menu-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;border:1px solid color-mix(in srgb,var(--mod-sobre-barra) 40%,transparent);border-radius:8px;background:transparent;color:var(--mod-sobre-barra);cursor:pointer}
 .menu-toggle:hover{background:color-mix(in srgb,var(--mod-sobre-barra) 10%,transparent);border-color:var(--mod-sobre-barra);color:var(--mod-sobre-barra)}
 .topbar :focus-visible{outline:2px solid var(--mod-sobre-barra);outline-offset:2px}
@@ -301,20 +303,20 @@ body[data-modulo="ml"] .sidebar-item.active::after{display:none}
   .tb-modulo{margin-left:auto}
 }
 @media(max-width:599px){.tb-modulo{display:none}.topbar #status-global{margin-left:auto}}
-/* — Análisis de Competencia: las variables viejas se remapean SOLO mientras esa página está activa (la pantalla y todo lo que cuelga de ella: avisos, menús, toasts) — */
-body[data-page="analisis-competencia"]{
+/* — CAPA DE ESTILO COMPARTIDA: las variables viejas se remapean a los tokens SOLO mientras la página activa está en PAGINAS_ESTILO_NUEVO (body[data-nuevo]); así lo heredan la página y todo lo que cuelga de ella (avisos, menús, toasts). Los módulos nuevos entran sumando su página a esa lista — */
+body[data-nuevo]{
   --bg:var(--fondo);--surface:var(--superficie);--surface2:var(--zebra);--border:var(--borde);
-  --accent:var(--celeste-700);--accent-light:var(--celeste-600);--accent2:var(--celeste-700);--accent3:var(--atencion);--accent4:var(--error-texto);
+  --accent:var(--mod-texto);--accent-light:var(--mod-primario);--accent2:var(--mod-texto);--accent3:var(--atencion);--accent4:var(--error-texto);
   --text:var(--tinta);--text2:var(--texto-suave);--text3:var(--texto-suave);
   --green:var(--ok);--yellow:var(--atencion);--red:var(--error-texto);--orange:var(--atencion);
   background:var(--fondo);color:var(--tinta);font-family:var(--fuente)}
-#page-analisis-competencia{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:var(--fs-cuerpo)}
-#page-analisis-competencia :focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px}
-#page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .badge,#page-analisis-competencia .ac-aside,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2,
-#page-analisis-competencia .ms-trigger,#page-analisis-competencia .ms-option,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ms-actions button,#page-analisis-competencia .filter-label,
-#page-analisis-competencia .stat-label,#page-analisis-competencia .ac-sug div.it,#page-analisis-competencia .btn{font-family:var(--fuente)!important}
-#page-analisis-competencia [style*="DM Mono"],#page-analisis-competencia .stat-value,#page-analisis-competencia td{font-variant-numeric:tabular-nums}
-#page-analisis-competencia [style*="font-size:8px"],#page-analisis-competencia [style*="font-size:9px"],#page-analisis-competencia [style*="font-size:10px"],#page-analisis-competencia [style*="font-size:11px"]{font-size:12px!important}
+body[data-nuevo] .page{padding:20px 24px;gap:14px;font-family:var(--fuente);font-size:var(--fs-cuerpo)}
+body[data-nuevo] .page :focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px}
+body[data-nuevo] .page [style*="DM Mono"],body[data-nuevo] .page .badge,body[data-nuevo] .page .ac-aside,body[data-nuevo] .page .ac-frow input,body[data-nuevo] .page .ac-sel2,
+body[data-nuevo] .page .ms-trigger,body[data-nuevo] .page .ms-option,body[data-nuevo] .page .ms-search input,body[data-nuevo] .page .ms-actions button,body[data-nuevo] .page .filter-label,
+body[data-nuevo] .page .stat-label,body[data-nuevo] .page .ac-sug div.it,body[data-nuevo] .page .btn{font-family:var(--fuente)!important}
+body[data-nuevo] .page [style*="DM Mono"],body[data-nuevo] .page .stat-value,body[data-nuevo] .page td{font-variant-numeric:tabular-nums}
+body[data-nuevo] .page [style*="font-size:8px"],body[data-nuevo] .page [style*="font-size:9px"],body[data-nuevo] .page [style*="font-size:10px"],body[data-nuevo] .page [style*="font-size:11px"]{font-size:12px!important}
 .ac-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
 .ac-cab h1{margin:0;font-size:22px;font-weight:600;line-height:1.2}
 .ac-sub{font-size:13px;color:var(--texto-suave)}
@@ -322,75 +324,113 @@ body[data-page="analisis-competencia"]{
 .ac-seg button{min-height:44px;padding:0 18px;border:0;border-radius:6px;background:transparent;color:var(--tinta-2);font:400 14px var(--fuente);cursor:pointer}
 .ac-seg button[aria-pressed="true"]{background:var(--mod-segmento-activo);color:#fff;font-weight:600}
 .ac-acciones{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-#page-analisis-competencia .btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--mod-primario);border-radius:8px;background:var(--superficie);color:var(--mod-primario);font-size:14px;font-weight:600}
-#page-analisis-competencia .btn:hover{background:var(--celeste-50);color:var(--mod-primario);border-color:var(--mod-primario)}
-#page-analisis-competencia .btn.primary{background:var(--mod-primario);border-color:var(--mod-primario);color:#fff}
-#page-analisis-competencia .btn.primary:hover{background:var(--celeste-700)}
-#page-analisis-competencia .btn-xs{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--celeste-200);border-radius:6px;background:var(--celeste-100);color:var(--celeste-700);font:600 12px var(--fuente)}
-#page-analisis-competencia .btn-xs:hover{background:var(--celeste-200)}
-#page-analisis-competencia .badge{padding:2px 8px;font-size:12px;font-weight:600}
-#page-analisis-competencia .badge-blue{background:var(--celeste-100);color:var(--celeste-700)}
-#page-analisis-competencia .badge-gray{background:var(--divisor);color:var(--tinta-2)}
-#page-analisis-competencia .badge-green{background:var(--ok-fondo);color:var(--ok-texto)}
-#page-analisis-competencia .badge-red{background:var(--error-fondo);color:var(--error-texto)}
-#page-analisis-competencia .badge-yellow{background:var(--aviso-fondo);color:var(--aviso-texto)}
+body[data-nuevo] .page .btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--mod-primario);border-radius:8px;background:var(--superficie);color:var(--mod-primario);font-size:14px;font-weight:600}
+body[data-nuevo] .page .btn:hover{background:var(--celeste-50);color:var(--mod-primario);border-color:var(--mod-primario)}
+body[data-nuevo] .page .btn.primary{background:var(--mod-primario);border-color:var(--mod-primario);color:#fff}
+body[data-nuevo] .page .btn.primary:hover{background:var(--mod-primario-hover);border-color:var(--mod-primario-hover)}
+body[data-nuevo] .page .btn-xs{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--mod-suave-borde);border-radius:6px;background:var(--mod-suave);color:var(--mod-texto);font:600 12px var(--fuente)}
+body[data-nuevo] .page .btn-xs:hover{background:var(--mod-suave-borde)}
+body[data-nuevo] .page .badge{padding:2px 8px;font-size:12px;font-weight:600}
+body[data-nuevo] .page .badge-blue{background:var(--mod-suave);color:var(--mod-texto)}
+body[data-nuevo] .page .badge-gray{background:var(--divisor);color:var(--tinta-2)}
+body[data-nuevo] .page .badge-green{background:var(--ok-fondo);color:var(--ok-texto)}
+body[data-nuevo] .page .badge-red{background:var(--error-fondo);color:var(--error-texto)}
+body[data-nuevo] .page .badge-yellow{background:var(--aviso-fondo);color:var(--aviso-texto)}
 .ac-aviso{display:flex;flex-direction:column;gap:6px;padding:10px 14px;background:var(--aviso-fondo);border:1px solid var(--aviso-borde);border-radius:8px;color:var(--aviso-texto);font-size:13px;line-height:1.5}
 .ac-aviso svg{flex:none;margin-top:2px}
-#page-analisis-competencia .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;background:var(--superficie);border:1px solid var(--borde);border-radius:8px}
-#page-analisis-competencia .stat-card{display:flex;flex-direction:column-reverse;gap:0;padding:12px 16px;border:0;border-right:1px solid var(--divisor);border-radius:0;background:transparent}
-#page-analisis-competencia .stat-card:last-child{border-right:0}
-#page-analisis-competencia .stat-value{margin:0;font:500 22px/1.3 var(--fuente);color:var(--tinta)}
-#page-analisis-competencia .stat-label{font-size:12px;color:var(--texto-suave)}
-#page-analisis-competencia .erp-filters{gap:10px;padding:0;background:transparent;align-items:flex-end}
-#page-analisis-competencia .filter-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
-#page-analisis-competencia .ms-trigger,#page-analisis-competencia select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)}
-#page-analisis-competencia .ms-trigger{display:flex;align-items:center;padding:0 28px 0 10px;min-width:150px}
-#page-analisis-competencia .ms-trigger::after{color:var(--texto-suave);font-size:12px}
-#page-analisis-competencia .ms-dropdown,#page-analisis-competencia .ac-sug{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;box-shadow:0 4px 12px rgba(11,39,51,.12)}
-#page-analisis-competencia .ms-option,#page-analisis-competencia .ac-sug div.it{font-size:13px;color:var(--tinta-2)}
-#page-analisis-competencia .ms-option:hover,#page-analisis-competencia .ac-sug div.it.on,#page-analisis-competencia .ac-sug div.it:hover{background:var(--celeste-100);color:var(--tinta)}
-#page-analisis-competencia .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
-#page-analisis-competencia input[type=checkbox]{accent-color:var(--celeste-600);width:16px;height:16px}
-#page-analisis-competencia label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
-#page-analisis-competencia input,#page-analisis-competencia select{font-family:var(--fuente)!important}
-#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,#page-analisis-competencia select.fi,#page-analisis-competencia .ms-search input,#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{font-size:var(--fs-campo)!important}
+body[data-nuevo] .page .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;background:var(--superficie);border:1px solid var(--borde);border-radius:8px}
+body[data-nuevo] .page .stat-card{display:flex;flex-direction:column-reverse;gap:0;padding:12px 16px;border:0;border-right:1px solid var(--divisor);border-radius:0;background:transparent}
+body[data-nuevo] .page .stat-card:last-child{border-right:0}
+body[data-nuevo] .page .stat-value{margin:0;font:500 22px/1.3 var(--fuente);color:var(--tinta)}
+body[data-nuevo] .page .stat-label{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .page .erp-filters{gap:10px;padding:0;background:transparent;align-items:flex-end}
+body[data-nuevo] .page .filter-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
+body[data-nuevo] .page .ms-trigger,body[data-nuevo] .page select.fi,#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc{min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)}
+body[data-nuevo] .page .ms-trigger{display:flex;align-items:center;padding:0 28px 0 10px;min-width:150px}
+body[data-nuevo] .page .ms-trigger::after{color:var(--texto-suave);font-size:12px}
+body[data-nuevo] .page .ms-dropdown,body[data-nuevo] .page .ac-sug{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;box-shadow:0 4px 12px rgba(11,39,51,.12)}
+body[data-nuevo] .page .ms-option,body[data-nuevo] .page .ac-sug div.it{font-size:13px;color:var(--tinta-2)}
+body[data-nuevo] .page .ms-option:hover,body[data-nuevo] .page .ac-sug div.it.on,body[data-nuevo] .page .ac-sug div.it:hover{background:var(--mod-suave);color:var(--tinta)}
+body[data-nuevo] .page .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
+body[data-nuevo] .page input[type=checkbox]{accent-color:var(--celeste-600);width:16px;height:16px}
+body[data-nuevo] .page label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
+body[data-nuevo] .page input,body[data-nuevo] .page select{font-family:var(--fuente)!important}
+#page-analisis-competencia #ac-search,#page-analisis-competencia #ac-tc,body[data-nuevo] .page select.fi,body[data-nuevo] .page .ms-search input,body[data-nuevo] .page .ac-frow input,body[data-nuevo] .page .ac-sel2{font-size:var(--fs-campo)!important}
 #page-analisis-competencia #ac-tc{width:96px!important}
 #page-analisis-competencia #ac-ev-umbral{min-height:44px;width:72px!important;padding:0 8px!important;border:1px solid var(--borde)!important;border-radius:6px!important;font-size:var(--fs-campo)!important;color:var(--tinta)!important;background:var(--superficie)!important}
-#page-analisis-competencia ::placeholder{color:var(--texto-suave);opacity:1}
-#page-analisis-competencia .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
-#page-analisis-competencia .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
-#page-analisis-competencia .table-wrap::-webkit-scrollbar-thumb{background:var(--celeste-300);border-color:var(--zebra)}
-#page-analisis-competencia .table-wrap table{font-size:var(--fs-tabla)}
-#page-analisis-competencia .table-wrap thead{background:var(--mod-encabezado)}
-#page-analisis-competencia .table-wrap th{padding:9px 14px;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mod-encabezado-texto);border-bottom:1px solid var(--mod-encabezado-borde);cursor:default}
-#page-analisis-competencia .table-wrap td{padding:10px 14px;border-bottom:1px solid var(--divisor)}
-#page-analisis-competencia .table-wrap tbody tr:nth-child(even) td{background:var(--zebra)}
-#page-analisis-competencia .table-wrap tr:hover td{background:var(--celeste-50)}
-#page-analisis-competencia .table-wrap tr.ac-sel td{background:var(--celeste-100)}
-#page-analisis-competencia .table-wrap tr.ac-ctx-row td{background:var(--celeste-50)}
-#page-analisis-competencia .pagination{color:var(--texto-suave);border-top:1px solid var(--divisor)}
-#page-analisis-competencia .ac-aside{top:68px;max-height:calc(100vh - 80px);background:var(--superficie);border:1px solid var(--celeste-600);font-size:13px}
-#page-analisis-competencia .ac-frow{border-bottom:1px solid var(--divisor)}
-#page-analisis-competencia .ac-frow input,#page-analisis-competencia .ac-sel2{min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px}
-#page-analisis-competencia .ac-mcard{background:var(--zebra);border:1px solid var(--divisor)}
-#page-analisis-competencia .ac-mcard .l,#page-analisis-competencia .ac-mcard .d{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
-#page-analisis-competencia .ac-riv>div{border-bottom:1px solid var(--divisor)}
-#page-analisis-competencia .ac-chip{font-size:12px;font-weight:600}
+body[data-nuevo] .page ::placeholder{color:var(--texto-suave);opacity:1}
+body[data-nuevo] .page .table-wrap{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;scrollbar-color:var(--celeste-300) var(--zebra)}
+body[data-nuevo] .page .table-wrap::-webkit-scrollbar-track{background:var(--zebra)}
+body[data-nuevo] .page .table-wrap::-webkit-scrollbar-thumb{background:var(--celeste-300);border-color:var(--zebra)}
+body[data-nuevo] .page .table-wrap table{font-size:var(--fs-tabla)}
+body[data-nuevo] .page .table-wrap thead{background:var(--mod-encabezado)}
+body[data-nuevo] .page .table-wrap th{padding:9px 14px;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mod-encabezado-texto);border-bottom:1px solid var(--mod-encabezado-borde);cursor:default}
+body[data-nuevo] .page .table-wrap td{padding:10px 14px;border-bottom:1px solid var(--divisor)}
+body[data-nuevo] .page .table-wrap tbody tr:nth-child(even) td{background:var(--zebra)}
+body[data-nuevo] .page .table-wrap tr:hover td{background:var(--celeste-50)}
+body[data-nuevo] .page .table-wrap tr.ac-sel td{background:var(--mod-suave)}
+body[data-nuevo] .page .table-wrap tr.ac-ctx-row td{background:var(--celeste-50)}
+body[data-nuevo] .page .pagination{color:var(--texto-suave);border-top:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-aside{top:68px;max-height:calc(100vh - 80px);background:var(--superficie);border:1px solid var(--mod-primario);font-size:13px}
+body[data-nuevo] .page .ac-frow{border-bottom:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-frow input,body[data-nuevo] .page .ac-sel2{min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px}
+body[data-nuevo] .page .ac-mcard{background:var(--zebra);border:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-mcard .l,body[data-nuevo] .page .ac-mcard .d{font-size:12px;letter-spacing:0;text-transform:none;color:var(--texto-suave)}
+body[data-nuevo] .page .ac-riv>div{border-bottom:1px solid var(--divisor)}
+body[data-nuevo] .page .ac-chip{font-size:12px;font-weight:600}
 .ac-cober{display:inline-block;width:60px;height:6px;border-radius:3px;background:var(--pista);vertical-align:middle}
-.ac-cober>i{display:block;height:6px;border-radius:3px;background:var(--celeste-600)}
-.ac-link{padding:0;border:0;background:none;color:var(--celeste-700);font:600 13px var(--fuente);text-decoration:underline;cursor:pointer;min-height:24px}
+.ac-cober>i{display:block;height:6px;border-radius:3px;background:var(--mod-primario)}
+.ac-link{padding:0;border:0;background:none;color:var(--mod-texto);font:600 13px var(--fuente);text-decoration:underline;cursor:pointer;min-height:24px}
 .ac-cat{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
 .ac-cat>.table-wrap{min-width:0}
 .ac-cat-izq{flex:1 1 560px}.ac-cat-der{flex:0 1 520px}.ac-cat-der td:first-child{min-width:170px}
-#page-analisis-competencia .ac-cat-der th,#page-analisis-competencia .ac-cat-der td{padding-left:10px;padding-right:10px}
+body[data-nuevo] .page .ac-cat-der th,body[data-nuevo] .page .ac-cat-der td{padding-left:10px;padding-right:10px}
 .ac-nota{padding:10px 14px;border-top:1px solid var(--divisor);font-size:12px;color:var(--texto-suave)}
 /* Página Referencias (todavía con el estilo oscuro viejo hasta el PR de estilo interno): los dos textos que no llegaban a 4,5:1 */
 #page-intel-referencias .btn.primary{background:var(--celeste-600);border-color:var(--celeste-600)}
 #page-intel-referencias #referencias-status{color:var(--text2)!important;font-size:12px!important;font-family:var(--fuente)!important}   /* el span trae estilos en línea */
 @media(max-width:899px){
-  #page-analisis-competencia{padding:16px}
-  #page-analisis-competencia .ac-aside{position:static;width:auto;max-height:none}
+  body[data-nuevo] .page{padding:16px}
+  body[data-nuevo] .page .ac-aside{position:static;width:auto;max-height:none}
 }
+
+/* — Componentes comunes que usan los módulos viejos (títulos, tarjetas, campos, estados, paginación…) mapeados a los tokens — */
+body[data-nuevo] .section-hdr{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;font-size:22px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--tinta);line-height:1.25}
+body[data-nuevo] .section-hdr::after{display:none}
+body[data-nuevo] .card{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:16px;margin-bottom:12px}
+body[data-nuevo] .card-title{font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--tinta-2);margin-bottom:10px}
+body[data-nuevo] .field{margin-bottom:12px}
+body[data-nuevo] .field label{display:block;margin-bottom:4px;font:400 13px var(--fuente);color:var(--texto-suave)}
+body[data-nuevo] .field input,body[data-nuevo] .field select{min-height:44px;padding:0 10px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font:400 var(--fs-campo) var(--fuente)}
+body[data-nuevo] .field input:focus,body[data-nuevo] .field select:focus{outline:2px solid var(--mod-primario);outline-offset:1px;border-color:var(--mod-primario)}
+body[data-nuevo] .page input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=hidden]):not(.table-wrap *){min-height:44px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:var(--fs-campo)!important}
+body[data-nuevo] .page .table-wrap input:not([type=checkbox]):not([type=radio]){min-height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta);font-size:13px!important}
+body[data-nuevo] .conn-status{padding:4px 10px;font:600 12px var(--fuente)}
+body[data-nuevo] .conn-status.ok{background:var(--ok-fondo);color:var(--ok-texto)}
+body[data-nuevo] .conn-status.err{background:var(--error-fondo);color:var(--error-texto)}
+body[data-nuevo] .conn-status.idle{background:var(--divisor);color:var(--tinta-2)}
+body[data-nuevo] .page-btn{min-width:32px;height:32px;border:1px solid var(--borde);border-radius:6px;background:var(--superficie);color:var(--tinta-2);font:600 13px var(--fuente)}
+body[data-nuevo] .page-btn:hover{border-color:var(--mod-primario);color:var(--mod-primario)}
+body[data-nuevo] .page-btn.active{background:var(--mod-primario);border-color:var(--mod-primario);color:#fff}
+body[data-nuevo] .fix-log{padding:10px;border:1px solid var(--divisor);border-radius:6px;background:var(--zebra);color:var(--tinta-2);font:400 13px var(--fuente)}
+body[data-nuevo] .off-badge{background:var(--aviso-fondo);color:var(--aviso-texto);font:600 12px var(--fuente)}
+body[data-nuevo] .loading-block{font:400 14px var(--fuente);color:var(--texto-suave)}
+body[data-nuevo] .spinner{border-color:var(--mod-suave-borde);border-top-color:var(--mod-primario)}
+body[data-nuevo] .mono,body[data-nuevo] .sku-cell{font-family:var(--fuente);font-variant-numeric:tabular-nums}
+body[data-nuevo] .sku-cell{font-size:12px;color:var(--tinta-2)}
+body[data-nuevo] .btn.btn-secondary{background:var(--superficie);color:var(--mod-primario);border-color:var(--mod-primario)}
+body[data-nuevo] .cards-grid{gap:12px}
+body[data-nuevo] .ofm-card{padding:12px 14px;border:1px solid var(--borde);border-radius:8px;background:var(--superficie);font-family:var(--fuente)}
+body[data-nuevo] .ofm-card:hover{border-color:var(--mod-primario)}
+body[data-nuevo] .ofm-card .ofm-card-titulo{font-size:13px;color:var(--tinta)}
+body[data-nuevo] .ofm-card .ofm-card-sub,body[data-nuevo] .ofm-card .ofm-card-fila{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .ofm-card .ofm-card-precio-normal{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .ofm-card .ofm-card-precio-oferta{font-size:18px;color:var(--mod-texto)}
+body[data-nuevo] .ofm-card .ofm-card-desc{font-size:12px;color:var(--ok)}
+body[data-nuevo] .ofm-card.ofm-card-alerta{border-color:var(--error)}
+body[data-nuevo] .ofm-card-alerta-msg{font-size:12px;color:var(--error-texto);background:var(--error-fondo)}
+body[data-nuevo] .ofm-card-panel{background:var(--zebra);border:1px solid var(--divisor)}
+body[data-nuevo] .grid-2{gap:14px}
 </style>
 </head>
 <body>
@@ -401,9 +441,7 @@ body[data-page="analisis-competencia"]{
     <img class="tb-logo tb-logo-blanco" src="assets/logos/global-blanco.png" alt="Global" width="88" height="28">
     <img class="tb-logo tb-logo-tinta" src="assets/logos/global-tinta.png" alt="Global" width="88" height="28">
     <span class="tb-x" aria-hidden="true">×</span>
-    <!-- TODO (Maxx): el logo de Mercado Libre es PROVISORIO (assets/logos/mercadolibre-provisorio.png, baja resolución): reemplazar por el oficial. -->
-    <img class="tb-logo-mk" src="assets/logos/mercadolibre-provisorio.png" alt="Mercado Libre" width="151" height="42">
-    <span class="tb-prov" title="TODO: reemplazar por el logo oficial de Mercado Libre">logo provisorio</span>
+    <span class="tb-mk"><img class="tb-isotipo" src="assets/logos/mercadolibre-isotipo.png" alt="" width="50" height="36"><span class="tb-mk-texto">Mercado Libre</span></span>
   </a>
   <span class="tb-erp">ERP</span>
   <span id="tb-modulo" class="tb-modulo"></span>
@@ -437,12 +475,12 @@ body[data-page="analisis-competencia"]{
     <!-- "Ofertas ML" vieja (page-ofertas-ml, ajuste masivo contra PM Sheet) sacada
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
-    <a href="#" class="sidebar-item" data-page="verificar-ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
-    <a href="#" class="sidebar-item" data-page="full-ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Full ML</a>
+    <a href="#" class="sidebar-item" data-page="verificar-ml" data-mod="ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
+    <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Full ML</a>
     <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Ofertas ML</a>
     <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
-    <a href="#" class="sidebar-item" data-page="analisis-competencia" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
-    <a href="#" class="sidebar-item" data-page="competidores" onclick="goPage('competidores',this);return false;"><span class="icon" data-ico="trophy" aria-hidden="true"></span>Competidores ML</a>
+    <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
+    <a href="#" class="sidebar-item" data-page="competidores" data-mod="ml" onclick="goPage('competidores',this);return false;"><span class="icon" data-ico="trophy" aria-hidden="true"></span>Competidores ML</a>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Inteligencia Comercial</div>
@@ -462,7 +500,7 @@ body[data-page="analisis-competencia"]{
     <div class="sidebar-section-label">Sistema</div>
     <a href="#" class="sidebar-item" data-page="config" onclick="goPage('config',this);return false;"><span class="icon" data-ico="sliders" aria-hidden="true"></span>Configuración</a>
     <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Reglas de Precio</a>
-    <a href="#" class="sidebar-item" data-page="mltools" onclick="goPage('mltools',this);return false;"><span class="icon" data-ico="wrench" aria-hidden="true"></span>ML Tools</a>
+    <a href="#" class="sidebar-item" data-page="mltools" data-mod="ml" onclick="goPage('mltools',this);return false;"><span class="icon" data-ico="wrench" aria-hidden="true"></span>ML Tools</a>
   </div>
 </nav>
 <div class="app-body">
@@ -1722,7 +1760,8 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 // ICONOS-FIN
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
-const MODULO_MK={'ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml'};   // páginas de marketplace → tema (data-modulo del <body>); los demás marketplaces, cuando haya color y logo oficial
+const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml','mltools':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
+const PAGINAS_ESTILO_NUEVO=new Set(['analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -1888,6 +1927,7 @@ function goPage(page,el){
   if(!el)el=document.querySelector('.sidebar-item[data-page="'+page+'"]');
   if(el)el.classList.add('active');
   document.body.dataset.page=page;document.body.dataset.modulo=MODULO_MK[page]||'global';
+  if(PAGINAS_ESTILO_NUEVO.has(page))document.body.dataset.nuevo='1';else delete document.body.dataset.nuevo;
   {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';

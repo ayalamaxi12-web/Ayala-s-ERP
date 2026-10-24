@@ -103,9 +103,15 @@ Regla para los marketplaces sin color definido: muestrear el color dominante del
 - Los componentes usan las variables `--mod-*`, nunca un hex suelto. Un componente nuevo con un hex suelto no se acepta.
 - No tocar lógica, cálculos ni endpoints. Si una etiqueta de texto cambia, listarlo en el PR.
 
-## 8. Logos (pendiente de Maxx)
-Faltan los archivos oficiales: logo de Global (SVG si existe, si no PNG con fondo transparente) y los logos de Mercado Libre, Frávega, OnCity, Megatone y los demás marketplaces. Van en `docs/assets/logos/` con nombres como `global.svg`, `mercadolibre.svg`, `fravega.svg`. Hasta que estén, usar los marcadores de los mockups (globito más palabra "GLOBAL" y una pastilla con el nombre del marketplace) y dejar un `TODO` visible.
-**Ignorar el adorno de Halloween del logo** (la araña): es de temporada, no forma parte de la marca.
+## 8. Logos
+Están en `docs/assets/logos/`:
+- `global-blanco.png`: para fondos oscuros y para la barra superior celeste de los módulos propios.
+- `global-tinta.png`: para fondos claros o de color (por ejemplo, la barra amarilla de Mercado Libre).
+- `global-celeste.png`: celeste de marca `#24A2B9`, para fondos blancos.
+- `mercadolibre-isotipo.png`: isotipo oficial de Mercado Libre (el apretón de manos) con fondo transparente, que pasó Maxx. Es solo el emblema, sin la palabra. En la barra amarilla va **junto al texto "Mercado Libre"** en `#2D3277`, peso 700, con el emblema de 36 px de alto (la guía admite de 32 a 40 px). Sin TODO ni logo provisorio.
+Los logos de Global salieron de un PNG de 225 px: alcanzan para el menú y la barra superior, pero cuando exista el SVG oficial hay que reemplazarlos.
+Faltan los logos de Frávega, OnCity y Megatone. No hacen falta todavía, porque esos módulos no existen. Cuando existan, se muestrea el color del logo oficial (ver la sección 2) y se agrega acá.
+**Ignorar el adorno de Halloween del logo** (la araña), si aparece: es de temporada, no forma parte de la marca.
 
 ## 9. Plan por fases (cada una en su rama, sin mergear, con capturas antes y después)
 - **Fase 0 — Tokens y temas:** bloque `:root`, temas de marketplace, fuente Figtree. Sin cambios visibles todavía. Mostrar la tabla de tokens aplicados.
@@ -127,7 +133,7 @@ Cada fase termina con: capturas antes y después, resultado de los tests del bac
 ## 11. Registro de implementación
 - **Fase 0 (hecha):** bloque `:root` con tokens y temas, fuente Figtree cargada. Sin cambios visibles (verificado comparando capturas pixel a pixel).
 - **Fase 1 (hecha, pendiente de OK):** barra superior de módulo (propio: celeste `#24A2B9` con logo blanco; marketplace ML: `#FFE600` con «GLOBAL × Mercado Libre»), menú lateral de 208 px con íconos SVG, y Análisis de Competencia completo (Por SKU, Histórico, Jugar y Por categoría). Los demás módulos conservan su estilo oscuro hasta su fase.
-- **Pendientes visibles:** logo de Mercado Libre **provisorio** (`assets/logos/mercadolibre-provisorio.png`, baja resolución; hay un TODO en el HTML y una etiqueta «logo provisorio» en la barra); colores de Frávega, OnCity y Megatone (arriba); buscador de la barra superior (no se agregó: no existe un buscador global y sería una función nueva).
+- **Pendientes visibles:** colores de Frávega, OnCity y Megatone (arriba; sus módulos todavía no existen); buscador de la barra superior (no se agregó: no existe un buscador global y sería una función nueva).
 - **Sin animaciones decorativas:** se sacó la animación del punto del logo (`.logo-dot` / `@keyframes pulse`). Solo quedan las funcionales (el spinner de carga), y todas se apagan con `prefers-reduced-motion`.
 
 ## 12. Ideas para después (no están en ninguna fase)
