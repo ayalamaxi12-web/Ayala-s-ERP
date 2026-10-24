@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Global Electronics — ERP</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Figtree:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;900&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
@@ -218,11 +218,15 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 :root{
   /* Global */
   --tinta:#0B2733;--tinta-2:#25414E;--texto-suave:#4B6472;
-  --celeste-50:#F0F9FB;--fondo:#EDF5F8;--celeste-100:#D9EFF4;--celeste-200:#AEDDE7;--celeste-300:#7CC7D6;--celeste-600:#1B8195;--celeste-700:#146378;
+  --celeste-50:#F0F9FB;--fondo:#F2F3F5;--celeste-100:#D9EFF4;--celeste-200:#AEDDE7;--celeste-300:#7CC7D6;--celeste-600:#1B8195;--celeste-700:#146378;
   --celeste-marca:#24A2B9;                    /* color real del logo: barra de módulos propios, logo, gráficos, texto grande. No para texto chico sobre blanco (3,0:1) */
   --borde:#C3DBE1;--divisor:#D8E8EC;--zebra:#F6FBFD;--superficie:#FFFFFF;
   /* Agregados a la guía (los pide el mockup; sin ellos habría hex sueltos): ítem activo del menú, encabezado de tabla, selector segmentado, tintes de estado */
   --tinta-activo:#14414F;--encabezado-tabla:#DFF0F4;--segmentado:#D3EAF0;--pista:#CBE8EF;
+  --sombra-tarjeta:0 2px 10px rgba(11,39,51,.07);   /* tarjetas blancas: sin borde, con esta sombra */
+  --lateral-fondo:#FFFFFF;--lateral-texto:var(--tinta-2);--lateral-titulo:var(--texto-suave);--lateral-separador:#E3EBEE;--lateral-activo-fondo:var(--celeste-100);--lateral-activo-texto:var(--celeste-700);   /* barra lateral clara */
+  --kpi-teal-fondo:#E1F3F7;--kpi-teal-texto:var(--celeste-700);--kpi-verde-fondo:#E3F5EA;--kpi-verde-texto:#166534;--kpi-violeta-fondo:#ECE7FA;--kpi-violeta-texto:#5B3FA8;--kpi-azul-fondo:#E3EDFB;--kpi-azul-texto:#1D4FA8;--kpi-ambar-fondo:#FDF1D8;--kpi-ambar-texto:#8A5A00;--kpi-rojo-fondo:#FCE6E3;--kpi-rojo-texto:#B42318;   /* baldosas pastel de los números del resumen (KPI) */
+  --grafico-1:var(--celeste-600);--grafico-2:#1D4FA8;--grafico-3:#5B3FA8;--grafico-4:#166534;--grafico-5:#8A5A00;--grafico-6:#B42318;--grafico-7:var(--celeste-marca);--grafico-8:#4B7BD1;--grafico-9:#8B6FD6;--grafico-10:#2F9E5B;--grafico-11:#C98A1B;--grafico-12:#D6584B;   /* gráficos: colores del sistema (la línea principal es --grafico-1) */
   --ok-fondo:#E3F4E8;--ok-texto:#14532D;--error-fondo:#FDECEC;--error-texto:#991B1B;
   /* Semánticos: significan algo, no se usan de decoración */
   --aviso-fondo:#FFFBEB;--aviso-texto:#78350F;--aviso-borde:#FCD34D;
@@ -231,8 +235,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;   /* amarillo vivo (solo de fondo), azul, borde de la barra, encabezado de tabla */
   --mk-ml-btn-borde:#C9B300;--mk-ml-hover:#F2D800;--mk-ml-dorado:#7A5F00;--mk-ml-dorado-osc:#5C4A00;--mk-ml-chip:#FFF1A8;--mk-ml-franja:#FFF9DB;--mk-ml-franja-borde:#EBDD8A;--mk-ml-check:#8F7A00;   /* borde del botón, hover del botón, texto dorado, texto sobre chip, chip, franja y su borde, checkbox */
   /* Tipografía */
-  --fuente:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
-  --r-chico:8px;--r-control:12px;--r-boton:14px;--r-recuadro:14px;--r-tarjeta:16px;--r-chip:999px;   /* radios: controles 12, botones y recuadros 14, tablas y tarjetas 16, chips en píldora */
+  --fuente:'Montserrat',system-ui,-apple-system,'Segoe UI',sans-serif;   /* ÚNICA fuente del ERP */
+  --r-chico:8px;--r-control:12px;--r-boton:999px;--r-recuadro:14px;--r-tarjeta:18px;--r-chip:999px;   /* radios: controles 12, botones y recuadros 14, tablas y tarjetas 16, chips en píldora */
   --campo-num-min:78px;--campo-num-pad:12px;   /* casillas numéricas: ancho mínimo y relleno horizontal (el texto se lee entero) */
   --fs-cuerpo:14px;--fs-campo:14px;--fs-tabla:13px;   /* escritorio: manda la guía (tablas 13 px) */
   /* Tema por defecto = módulo propio de Global */
@@ -242,7 +246,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mod-segmento-activo:var(--tinta);
   --mod-texto:var(--celeste-700);--mod-suave:var(--celeste-100);--mod-suave-borde:var(--celeste-200);--mod-suave-texto:var(--celeste-700);--mod-primario-hover:var(--celeste-700);
   --mod-btn-fondo:var(--celeste-600);--mod-btn-texto:#FFFFFF;--mod-btn-borde:var(--celeste-600);--mod-btn-hover:var(--celeste-700);   /* botón primario */
-  --mod-sec-borde:var(--celeste-600);--mod-sec-texto:var(--celeste-600);--mod-sec-hover:var(--celeste-50);   /* botón secundario */
+  --mod-sec-borde:var(--borde);--mod-sec-texto:var(--celeste-700);--mod-sec-hover:var(--celeste-50);   /* botón secundario */
   --mod-activo-fondo:var(--tinta);--mod-activo-texto:#FFFFFF;--mod-activo-borde:var(--tinta);--mod-seg-fondo:var(--segmentado);   /* pestaña / botón activo y su contenedor */
   --mod-franja-fondo:transparent;--mod-franja-borde:transparent;--mod-resalte:rgba(0,157,188,.08);--mod-check:var(--celeste-600);--mod-foco:var(--celeste-600);   /* franjas de filtros y parámetros, checkbox, anillo de foco */   /* texto de enlace / acento, chips y botones suaves, hover del primario */
 }
@@ -467,11 +471,11 @@ body[data-nuevo] #cp-avisos{padding:10px 14px;background:var(--aviso-fondo)!impo
 body[data-modulo="ml"][data-nuevo] .table-wrap tr:hover td{background:var(--mod-franja-fondo)}
 body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-nuevo] #cp-avisos{border-left:4px solid var(--aviso-borde)!important;padding-left:12px}
 /* — Ofertas ML: tabla compacta, resumen-botones, chips, paginación y búsqueda predictiva — */
-:root{--ofm-tabla-min:960px;--ofm-titulo-max:220px;}
+:root{--ofm-tabla-min:960px;--ofm-titulo-max:120px;}
 body[data-nuevo] .ofm-tabla{width:100%;min-width:var(--ofm-tabla-min);border-collapse:collapse}
 body[data-nuevo] .ofm-tabla th,body[data-nuevo] .ofm-tabla td{white-space:nowrap;vertical-align:middle}
-body[data-nuevo] .ofm-tabla th{padding:9px 10px}
-body[data-nuevo] .ofm-tabla td{padding:6px 10px;height:var(--fila-tabla,40px);border-bottom:1px solid var(--divisor);font-size:var(--fs-tabla)}
+body[data-nuevo] .ofm-tabla th{padding:9px 8px}
+body[data-nuevo] .ofm-tabla td{padding:6px 8px;height:var(--fila-tabla,40px);border-bottom:1px solid var(--divisor);font-size:var(--fs-tabla)}
 body[data-nuevo] .ofm-tabla tbody tr:nth-child(odd){background:var(--zebra)}
 body[data-nuevo] .ofm-tabla tr.ofm-gestionar-row,body[data-nuevo] .ofm-tabla tr.ofm-gestionar-row td{white-space:normal}
 .ofm-num{text-align:right}
@@ -521,6 +525,106 @@ div[style*="border-radius:6px"],div[style*="border-radius:5px"]{border-radius:va
 @media(prefers-reduced-motion:reduce){.col-ico::before{transition:none}}
 body[data-nuevo] .page .section-hdr{margin-bottom:2px}
 body[data-nuevo] .page .section-hdr+div[style*="font-size"]{margin-bottom:12px;font-size:13px!important;line-height:1.4;color:var(--texto-suave)!important}
+</style>
+<style id="estetica-tienda-web">
+/* ══ ESTILO «TIENDA WEB» (opción H de Maxx). Solo presentación, solo tokens. Este bloque va al final para pisar a los anteriores. ══ */
+/* — Tipografía: una sola fuente en todo el ERP, números tabulares, sin mono y sin etiquetas en mayúsculas con espaciado — */
+*{font-family:var(--fuente)!important}
+body{font-variant-numeric:tabular-nums}
+*:not(.sidebar-section-label):not(.tb-erp){text-transform:none!important;letter-spacing:normal!important}
+.sidebar-section-label,.tb-erp{text-transform:uppercase}
+/* — Barra lateral clara (todo el ERP) — */
+.sidebar{background:var(--lateral-fondo)}
+.sidebar-header{border-bottom:1px solid var(--lateral-separador)}
+.sidebar-header h2{color:var(--lateral-titulo)}
+.sidebar-close{color:var(--lateral-texto)}
+.sidebar-section-label{color:var(--lateral-titulo)}
+.sidebar-section+.sidebar-section::before{background:var(--lateral-separador)}
+.sidebar-item{color:var(--lateral-texto);border-radius:var(--r-control)}
+.sidebar-item:hover{background:var(--fondo);color:var(--tinta)}
+.sidebar-item.active{background:var(--lateral-activo-fondo);color:var(--lateral-activo-texto);font-weight:700}
+.sidebar-item.active::after{display:none}
+.sidebar-item[data-mod="ml"]::after{display:block;width:8px;height:8px;margin-left:auto;border-radius:50%;background:var(--mk-ml);border:1px solid var(--mk-ml-btn-borde)}
+body[data-modulo="ml"] .sidebar-item.active[data-mod="ml"]::after{display:none}
+.sidebar :focus-visible{outline-color:var(--celeste-600)}
+/* — Cabecera de las páginas de dashboard (título, subtítulo y acciones) — */
+.page-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:20px 24px 0}
+.page-cab h1{font-size:22px;font-weight:700;line-height:1.25;color:var(--tinta)}
+.page-cab p{margin-top:4px;font-size:13px;color:var(--texto-suave)}
+.page-cab-acc{display:flex;flex-wrap:wrap;gap:10px}
+body[data-nuevo]{background:var(--fondo)}
+@media(min-width:900px){.sidebar{width:236px}.app-body{margin-left:236px}body.sb-oculta .app-body{margin-left:0}}   /* el menú claro es más ancho: Montserrat es más ancha que Figtree */
+@media(max-width:768px){.page-cab{margin:12px 16px 0}#ventas-extra{margin:0 16px!important}}
+/* — Tarjetas blancas: sin borde y con sombra — */
+body[data-nuevo] .card,body[data-nuevo] .page .table-wrap,body[data-nuevo] .page .stats-row,body[data-nuevo] .kpi-card,body[data-nuevo] .chart-card,body[data-nuevo] .compare-box,body[data-nuevo] .dash-filters,body[data-nuevo] .page .ac-aside{border:0;border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta);background:var(--superficie)}
+body[data-nuevo] .page .stat-card{border-right-color:var(--divisor)}
+/* — Botones en píldora (todo el ERP nuevo); en los módulos ML siguen con su tema — */
+body[data-nuevo] :is(.page,.dash-filters,.page-cab,#ventas-extra) .btn,body[data-nuevo] :is(.page,.dash-filters,.page-cab,#ventas-extra) .btn-xs{border-radius:var(--r-boton)}
+body[data-nuevo] :is(.page,.dash-filters,.page-cab,#ventas-extra) .btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--mod-sec-borde);background:var(--superficie);color:var(--mod-sec-texto);font-size:14px;font-weight:600;cursor:pointer}
+body[data-nuevo] :is(.page,.dash-filters,.page-cab,#ventas-extra) .btn:hover{background:var(--mod-sec-hover)}
+body[data-nuevo] :is(.page,.dash-filters,.page-cab,#ventas-extra) .btn.primary{background:var(--mod-btn-fondo);border-color:var(--mod-btn-borde);color:var(--mod-btn-texto);font-weight:700}
+body[data-nuevo] :is(.page,.dash-filters,.page-cab,#ventas-extra) .btn.primary:hover{background:var(--mod-btn-hover)}
+body[data-nuevo] .dash-filters .btn:not(.primary){border:0;background:transparent;color:var(--texto-suave);text-decoration:underline;font-weight:400}
+body[data-nuevo] :is(.page-cab,.dash-filters,#ventas-extra) :focus-visible{outline:2px solid var(--mod-foco);outline-offset:2px}
+/* — Franja de filtros de los dashboards: una tarjeta, como en la tienda — */
+body[data-nuevo] .dash-filters{margin:16px 24px 0;padding:16px 18px;gap:12px;align-items:flex-end}
+body[data-nuevo] .dash-filters .filter-group{gap:4px}
+body[data-nuevo] .dash-filters .filter-label{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .dash-filters .filter-label.p1,body[data-nuevo] .dash-filters .filter-label.p2{color:var(--texto-suave)}
+body[data-nuevo] .dash-filters :is(input[type=date],input[type=text],select.fi,.ms-trigger){min-height:44px;padding:0 12px;border:1px solid var(--borde);border-radius:var(--r-control);background:var(--superficie);color:var(--tinta);font-size:14px;display:flex;align-items:center}
+body[data-nuevo] .dash-filters input[type=date],body[data-nuevo] .dash-filters input[type=text]{display:block}
+body[data-nuevo] .dash-filters .vs-sep{align-self:center;margin-top:18px;font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .dash-filters .filters-sep{display:none}
+body[data-nuevo] .dash-filters .ms-trigger::after{color:var(--texto-suave)}
+@media(max-width:768px){body[data-nuevo] .dash-filters{margin:12px 16px 0;padding:12px}}
+/* — Números del resumen (KPI): baldosa redondeada con ícono pastel, valor de 20 px — */
+body[data-nuevo] .kpi-row{grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+body[data-nuevo] .kpi-card{display:grid;grid-template-columns:44px 1fr;column-gap:12px;align-items:center;padding:16px;overflow:visible;border:0!important}
+body[data-nuevo] .kpi-card::before{content:'';position:static;grid-row:1/span 3;grid-column:1;width:44px;height:44px;border-radius:14px;background:var(--kpi-teal-fondo);height:44px}
+body[data-nuevo] .kpi-card::after{content:'';position:absolute;left:27px;top:50%;width:22px;height:22px;margin-top:-11px;background:var(--kpi-teal-texto);-webkit-mask:var(--kpi-glifo) center/contain no-repeat;mask:var(--kpi-glifo) center/contain no-repeat}
+body[data-nuevo] .kpi-card>*{grid-column:2}
+body[data-nuevo] .kpi-label{margin:0;font-size:12px;font-weight:400;color:var(--texto-suave)}
+body[data-nuevo] .kpi-value{font-size:20px;font-weight:700;line-height:1.25;word-break:normal;overflow-wrap:normal;color:var(--tinta)}
+body[data-nuevo] .kpi-sub{margin-top:0;font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .kpi-card:nth-child(6n+1){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.7 2.5 1.7-1 1.4-2.5 1.8-2.5.8-2.5 1.8 1 1.7 2.5 1.7 2.5-.5 2.5-1.5'/%3E%3C/svg%3E")}
+body[data-nuevo] .kpi-card:nth-child(6n+2){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3h12v18l-3-2-3 2-3-2-3 2z'/%3E%3Cpath d='M9 8h6M9 12h6'/%3E%3C/svg%3E")}
+body[data-nuevo] .kpi-card:nth-child(6n+3){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='12' cy='6' rx='8' ry='3'/%3E%3Cpath d='M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6'/%3E%3C/svg%3E")}
+body[data-nuevo] .kpi-card:nth-child(6n+4){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 5L5 19'/%3E%3Ccircle cx='7' cy='7' r='2'/%3E%3Ccircle cx='17' cy='17' r='2'/%3E%3C/svg%3E")}
+body[data-nuevo] .kpi-card:nth-child(6n+5){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='6' width='18' height='13' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E")}
+body[data-nuevo] .kpi-card:nth-child(6n+6){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4M5 4h12l-2 4 2 4H5'/%3E%3C/svg%3E")}
+body[data-nuevo] .kpi-card:nth-child(6n+2)::before{background:var(--kpi-verde-fondo)}body[data-nuevo] .kpi-card:nth-child(6n+2)::after{background:var(--kpi-verde-texto)}
+body[data-nuevo] .kpi-card:nth-child(6n+3)::before{background:var(--kpi-violeta-fondo)}body[data-nuevo] .kpi-card:nth-child(6n+3)::after{background:var(--kpi-violeta-texto)}
+body[data-nuevo] .kpi-card:nth-child(6n+4)::before{background:var(--kpi-azul-fondo)}body[data-nuevo] .kpi-card:nth-child(6n+4)::after{background:var(--kpi-azul-texto)}
+body[data-nuevo] .kpi-card:nth-child(6n+5)::before{background:var(--kpi-ambar-fondo)}body[data-nuevo] .kpi-card:nth-child(6n+5)::after{background:var(--kpi-ambar-texto)}
+body[data-nuevo] .kpi-card:nth-child(6n+6)::before{background:var(--kpi-rojo-fondo)}body[data-nuevo] .kpi-card:nth-child(6n+6)::after{background:var(--kpi-rojo-texto)}
+/* — Cobranzas: sus 4 números del resumen usan la misma baldosa que los KPI de Ventas — */
+body[data-nuevo] #page-cobranzas .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;background:transparent;box-shadow:none;border-radius:0}
+body[data-nuevo] #page-cobranzas .stat-card{position:relative;display:grid;grid-template-columns:44px 1fr;column-gap:12px;align-items:center;padding:16px;border:0;border-radius:var(--r-tarjeta);background:var(--superficie);box-shadow:var(--sombra-tarjeta)}
+body[data-nuevo] #page-cobranzas .stat-card::before{content:'';grid-row:1/span 2;grid-column:1;width:44px;height:44px;border-radius:14px;background:var(--kpi-teal-fondo)}
+body[data-nuevo] #page-cobranzas .stat-card::after{content:'';position:absolute;left:27px;top:50%;width:22px;height:22px;margin-top:-11px;background:var(--kpi-teal-texto);-webkit-mask:var(--kpi-glifo) center/contain no-repeat;mask:var(--kpi-glifo) center/contain no-repeat}
+body[data-nuevo] #page-cobranzas .stat-label{grid-column:2;grid-row:1;font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] #page-cobranzas .stat-value{grid-column:2;grid-row:2;font-size:20px;font-weight:700;color:var(--tinta)}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+1){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='6' width='18' height='13' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E")}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+2){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M7 15l4-4 3 3 5-6'/%3E%3C/svg%3E")}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+3){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 4h8v6a4 4 0 01-8 0z'/%3E%3Cpath d='M12 14v4M8 21h8M10 18h4'/%3E%3C/svg%3E")}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+4){--kpi-glifo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4M5 4h12l-2 4 2 4H5'/%3E%3C/svg%3E")}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+2)::before{background:var(--kpi-azul-fondo)}body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+2)::after{background:var(--kpi-azul-texto)}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+3)::before{background:var(--kpi-verde-fondo)}body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+3)::after{background:var(--kpi-verde-texto)}
+body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+4)::before{background:var(--kpi-rojo-fondo)}body[data-nuevo] #page-cobranzas .stat-card:nth-child(4n+4)::after{background:var(--kpi-rojo-texto)}
+/* — Tablas dentro de las tarjetas de los dashboards (Cierres guardados, detalle por PM, top SKU, detalle semanal) — */
+body[data-nuevo] :is(#ventas-extra,#page-dashboard,#page-historico,#page-cobranzas,#page-brasil) table{width:100%;border-collapse:collapse;font-size:var(--fs-tabla)}
+body[data-nuevo] :is(#ventas-extra,#page-dashboard,#page-historico,#page-cobranzas,#page-brasil) th{padding:9px 12px;background:var(--mod-encabezado);color:var(--mod-encabezado-texto);font-size:12px;font-weight:600;text-align:left;border-bottom:1px solid var(--mod-encabezado-borde)}
+body[data-nuevo] :is(#ventas-extra,#page-dashboard,#page-historico,#page-cobranzas,#page-brasil) td{padding:8px 12px;border-bottom:1px solid var(--divisor);color:var(--tinta-2)}
+body[data-nuevo] #ventas-extra #rent-historicos-lista,body[data-nuevo] #ventas-extra #rent-status{font-size:13px;color:var(--texto-suave)}
+body[data-nuevo] #ventas-extra .section-hdr{margin:0 0 10px}
+/* — Gráficos y comparaciones — */
+body[data-nuevo] .chart-card{padding:18px 20px}
+body[data-nuevo] .chart-card h3{font-size:16px;font-weight:700;color:var(--tinta);margin-bottom:2px}
+body[data-nuevo] .chart-card p{font-size:12px;color:var(--texto-suave);margin-bottom:10px}
+body[data-nuevo] .compare-col h4{font-size:12px;font-weight:600;color:var(--texto-suave)}
+body[data-nuevo] .compare-col .cs{font-size:12px;color:var(--texto-suave)}
+body[data-nuevo] .page .section-hdr{display:block;margin:6px 0 0;font-size:16px;font-weight:700;color:var(--tinta)}
+body[data-nuevo] .page .section-hdr::after{display:none}
 </style>
 </head>
 <body>
@@ -600,7 +704,6 @@ body[data-nuevo] .page .section-hdr+div[style*="font-size"]{margin-bottom:12px;f
       <div class="section-hdr" style="margin-bottom:2px">📊 Consulta en vivo</div>
       <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Táctica (SQL) + Ecom (API) unificado — el resultado se ve abajo con el mismo módulo que el histórico</div>
     </div>
-    <button class="btn" id="rent-btn-historicos" onclick="rentToggleHistoricos()">🕘 Cierres guardados</button>
   </div>
   <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
     <div class="field" style="margin:0"><label>Fecha desde</label><input type="date" id="rent-desde"></div>
@@ -616,15 +719,7 @@ body[data-nuevo] .page .section-hdr+div[style*="font-size"]{margin-bottom:12px;f
     <div style="display:flex;gap:8px">
       <button class="btn primary" id="rent-btn-consultar" onclick="rentConsultar()">🔍 Consultar</button>
       <button class="btn" id="rent-btn-guardar-cierre" onclick="rentGuardarCierre()" style="display:none">💾 Guardar Cierre</button>
-      <button class="btn" id="rent-btn-liq-fravega" onclick="document.getElementById('rent-liq-fravega-file').click()" title="Liquidación quincenal de Seller Center (.xlsx): reemplaza la comisión estimada de Frávega por la real">📄 Cargar liquidación Frávega</button>
-      <input type="file" id="rent-liq-fravega-file" accept=".xlsx" style="display:none" onchange="rentCargarLiquidacionFravega(this)">
     </div>
-  </div>
-  <div id="rent-status" style="font-size:10px;color:var(--text3);margin-top:8px;font-family:'DM Mono',monospace"></div>
-  <div id="rent-historicos-panel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
-    <div class="section-hdr" style="margin-bottom:10px">🕘 Cierres guardados</div>
-    <div id="rent-historicos-lista" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">Cargando...</div>
-    <div id="rent-historicos-detalle" style="margin-top:12px"></div>
   </div>
   <div id="rent-incidencias-tactica" style="display:none;margin-top:10px"></div>
   <div id="rent-incidencias-ecom" style="display:none;margin-top:10px"></div>
@@ -699,6 +794,22 @@ body[data-nuevo] .page .section-hdr+div[style*="font-size"]{margin-bottom:12px;f
         </div>
       </div>
     </div>
+  </div>
+</div>
+<div id="dash-cab" class="page-cab" style="display:none">
+  <div><h1 id="dash-cab-t"></h1><p id="dash-cab-s"></p></div>
+  <div id="dash-cab-acc" class="page-cab-acc" style="display:none">
+    <button type="button" class="btn" id="rent-btn-historicos" onclick="rentToggleHistoricos()">Cierres guardados</button>
+    <button type="button" class="btn" id="rent-btn-liq-fravega" onclick="document.getElementById('rent-liq-fravega-file').click()" title="Liquidación quincenal de Seller Center (.xlsx): reemplaza la comisión estimada de Frávega por la real">Cargar liquidación Frávega</button>
+    <input type="file" id="rent-liq-fravega-file" accept=".xlsx" style="display:none" onchange="rentCargarLiquidacionFravega(this)">
+  </div>
+</div>
+<div id="ventas-extra" style="display:none;margin:0 24px;flex-direction:column;gap:12px">
+  <div id="rent-status" style="font-size:10px;color:var(--text3);margin-top:0;font-family:'DM Mono',monospace"></div>
+  <div id="rent-historicos-panel" class="card" style="display:none;margin-top:0">
+    <div class="section-hdr" style="margin-bottom:10px">Cierres guardados</div>
+    <div id="rent-historicos-lista" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">Cargando...</div>
+    <div id="rent-historicos-detalle" style="margin-top:12px"></div>
   </div>
 </div>
 <div id="ventas-tabs-bar" style="display:none;gap:2px;margin:10px 20px 0">
@@ -1802,7 +1913,9 @@ const RULES=[
 // carga en Ecom, más alto a propósito). Debe reflejar exactamente
 // CUOTAS_PCT_DEFAULT de backend/ml_ofertas.py -- si se corrige uno, corregir el otro.
 const CUOTAS_PCT_ML={3:8.90,6:13.40,9:17.80,12:21.60};
-const PALETTE=['#3b82f6','#00e5a0','#ffe600','#f59e0b','#ef4444','#a855f7','#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#8b5cf6'];
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const PALETTE=[1,2,3,4,5,6,7,8,9,10,11,12].map(i=>cssv('--grafico-'+i));   // colores de los gráficos: salen de los tokens del sistema
+const GRAF={c1:cssv('--grafico-1'),c2:cssv('--grafico-2'),c3:cssv('--grafico-3'),c4:cssv('--grafico-4'),c5:cssv('--grafico-5'),c6:cssv('--grafico-6'),texto:cssv('--texto-suave'),grilla:cssv('--divisor'),fondo:cssv('--superficie'),fuente:cssv('--fuente')};
 const DASH_SHEET_ID='1CqUTqbDMwRL4SCyh9qkgh5xhQrnxfJR_eQbNEAMnksc';
 const HIST_ID='1Wzs3SmmIGcGd_NJGfe5qJRBYkJBbyKjrl4rF7reojIE';
 const COMP_SHEET_ID='15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY';
@@ -1856,7 +1969,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
 const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const PAGINAS_ESTILO_NUEVO=new Set(['dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -2012,6 +2125,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sbAngosto()&&qs('si
 window.matchMedia(SB_ANGOSTO).addEventListener('change',()=>{closeSidebar();});
 sbRefrescar();
 const DASH_PAGES=['dashboard','historico','cobranzas','brasil'];
+// Bandera: la «Consulta en vivo» (panel con fechas, TC y «Consultar») y la pestaña «En vivo» de Ventas & Rentabilidad quedan ocultas; el código sigue ahí. Poner en true para volver a mostrarlas. «Cierres guardados» y «Cargar liquidación Frávega» NO dependen de esta bandera.
+const VENTAS_EN_VIVO=false;
+const DASH_CAB={dashboard:['Ventas & Rentabilidad','Histórico de Táctica y Ecom, con comparación entre dos períodos.'],historico:['Histórico de Unidades','Unidades vendidas por SKU y mes, con comparación entre SKU.'],cobranzas:['Cobranzas','Cobranzas semanales desde la planilla de ventas.'],brasil:['Brasil','Ventas de Brasil desde la planilla.']};
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
@@ -2026,9 +2142,10 @@ function goPage(page,el){
   {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
-  qs('rent-query-bar').style.display=page==='dashboard'?'block':'none';
-  qs('ventas-tabs-bar').style.display=page==='dashboard'?'flex':'none';
-  if(page==='dashboard')goVentasTab(ventasTab);
+  qs('rent-query-bar').style.display=(page==='dashboard'&&VENTAS_EN_VIVO)?'block':'none';
+  qs('ventas-tabs-bar').style.display=(page==='dashboard'&&VENTAS_EN_VIVO)?'flex':'none';
+  {const c=DASH_CAB[page];qs('dash-cab').style.display=c?'flex':'none';if(c){qs('dash-cab-t').textContent=c[0];qs('dash-cab-s').textContent=c[1];}qs('dash-cab-acc').style.display=page==='dashboard'?'flex':'none';qs('ventas-extra').style.display=page==='dashboard'?'flex':'none';}
+  if(page==='dashboard')goVentasTab(VENTAS_EN_VIVO?ventasTab:'hist');
   else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
   if(['competidores','analisis-competencia','campanas-ml','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
@@ -6501,7 +6618,7 @@ function renderDashboard(inst){
     crossSection=`<div><div class="section-hdr">Histórico por Período</div><div class="chart-card"><h3>Facturación · Rentabilidad · Rent. %</h3><p>Todos los períodos · línea amarilla = Rent %</p><div style="position:relative;height:220px"><canvas id="chartCross"></canvas></div></div></div>`;
     requestAnimationFrame(()=>{
       if(!qs('chartCross'))return;
-      dashCharts.cross=new Chart(qs('chartCross'),{type:'bar',data:{labels:crossData.map(d=>d.label),datasets:[{label:'Facturación',data:crossData.map(d=>d.fact),backgroundColor:'#3b82f633',borderColor:'#3b82f6',borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rentabilidad $',data:crossData.map(d=>d.rent),backgroundColor:'#00e5a033',borderColor:'#00e5a0',borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rent. %',data:crossData.map(d=>d.rentPct),type:'line',borderColor:'#ffe600',backgroundColor:'#ffe60010',borderWidth:2,pointRadius:4,pointBackgroundColor:'#ffe600',tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:10}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='Rent. %'?` Rent: ${ctx.raw.toFixed(1)}%`:` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:10}}},y:{position:'left',grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y2:{position:'right',grid:{display:false},ticks:{color:'#ffe600',font:{family:'DM Mono',size:9},callback:v=>v.toFixed(0)+'%'}}}}});
+      dashCharts.cross=new Chart(qs('chartCross'),{type:'bar',data:{labels:crossData.map(d=>d.label),datasets:[{label:'Facturación',data:crossData.map(d=>d.fact),backgroundColor:GRAF.c1+'33',borderColor:GRAF.c1,borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rentabilidad $',data:crossData.map(d=>d.rent),backgroundColor:GRAF.c4+'33',borderColor:GRAF.c4,borderWidth:1,borderRadius:3,yAxisID:'y'},{label:'Rent. %',data:crossData.map(d=>d.rentPct),type:'line',borderColor:GRAF.c5,backgroundColor:GRAF.c5+'10',borderWidth:2,pointRadius:4,pointBackgroundColor:GRAF.c5,tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},boxWidth:10}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='Rent. %'?` Rent: ${ctx.raw.toFixed(1)}%`:` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:10}}},y:{position:'left',grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},callback:v=>fmt$(v)}},y2:{position:'right',grid:{display:false},ticks:{color:GRAF.c5,font:{family:GRAF.fuente,size:9},callback:v=>v.toFixed(0)+'%'}}}}});
     });
   }
   const rentMap={},cntMap={};data.forEach(d=>{if(d.precioFinal>0){rentMap[d.categoria]=(rentMap[d.categoria]||0)+d.rentabilidad;cntMap[d.categoria]=(cntMap[d.categoria]||0)+1;}});
@@ -6513,7 +6630,7 @@ function renderDashboard(inst){
   pg.innerHTML=`
     <div class="kpi-row">
       <div class="kpi-card c1"><div class="kpi-label">Facturación Total</div><div class="kpi-value">${fmt$(totalFact)}</div><div class="kpi-sub">${fmtUSD(k1.usd)}</div></div>
-      <div class="kpi-card c1" style="border-color:rgba(0,229,160,0.3)"><div class="kpi-label">Facturación SIN IVA</div><div class="kpi-value">${fmt$(totalSinIva)}</div><div class="kpi-sub">${totalSinIva>0?(totalSinIva/totalFact*100).toFixed(1)+'% del total':''}</div></div>
+      <div class="kpi-card c1"><div class="kpi-label">Facturación SIN IVA</div><div class="kpi-value">${fmt$(totalSinIva)}</div><div class="kpi-sub">${totalSinIva>0?(totalSinIva/totalFact*100).toFixed(1)+'% del total':''}</div></div>
       <div class="kpi-card c2"><div class="kpi-label">Rentabilidad $</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.rentabilidad,0))}</div><div class="kpi-sub">${totalSinIva?(allP.reduce((s,d)=>s+d.rentabilidad,0)/totalSinIva*100).toFixed(1):0}% s/ sin IVA</div></div>
       <div class="kpi-card c3"><div class="kpi-label">Rent. % P1</div><div class="kpi-value">${k1.sinIva>0?(k1.rent/k1.sinIva*100).toFixed(1):0}%</div><div class="kpi-sub">${data.length.toLocaleString()} órdenes${useComparison?` · ${data2.length} P2`:''}</div></div>
       <div class="kpi-card c4"><div class="kpi-label">Costo Total</div><div class="kpi-value">${fmt$(allP.reduce((s,d)=>s+d.costo,0))}</div><div class="kpi-sub">${totalFact?((allP.reduce((s,d)=>s+d.costo,0)/totalFact)*100).toFixed(1):0}%</div></div>
@@ -6548,13 +6665,13 @@ function renderDashboard(inst){
     ${crossSection}
     ${buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,rentMap2,inst)}
   `;
-  const ds=[{label:label1,data:chartDays.map(d=>byDay1[d]??null),borderColor:'#3b82f6',backgroundColor:'#3b82f615',borderWidth:2,pointRadius:3,tension:0.1,fill:!useComparison,spanGaps:false}];
-  if(useComparison)ds.push({label:label2,data:chartDays.map(d=>byDay2[d]??null),borderColor:'#f59e0b',backgroundColor:'#f59e0b15',borderWidth:2,pointRadius:3,tension:0.1,fill:false,spanGaps:false});
-  const chartOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:useComparison,labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{title:ctx=>{const i=ctx[0].dataIndex;const[y,m,d]=chartDays[i].split('-');return`${+d}/${+m}/${y}`;},label:ctx=>ctx.raw!=null?` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`:null}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:20}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}}};
+  const ds=[{label:label1,data:chartDays.map(d=>byDay1[d]??null),borderColor:GRAF.c1,backgroundColor:GRAF.c1+'15',borderWidth:2,pointRadius:3,tension:0.1,fill:!useComparison,spanGaps:false}];
+  if(useComparison)ds.push({label:label2,data:chartDays.map(d=>byDay2[d]??null),borderColor:GRAF.c5,backgroundColor:GRAF.c5+'15',borderWidth:2,pointRadius:3,tension:0.1,fill:false,spanGaps:false});
+  const chartOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:useComparison,labels:{color:GRAF.texto,font:{family:GRAF.fuente,size:10},boxWidth:10}},tooltip:{callbacks:{title:ctx=>{const i=ctx[0].dataIndex;const[y,m,d]=chartDays[i].split('-');return`${+d}/${+m}/${y}`;},label:ctx=>ctx.raw!=null?` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`:null}}},scales:{x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},maxTicksLimit:20}},y:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},callback:v=>fmt$(v)}}}};
   const newDiario=new Chart(qs(ids.diario),{type:'line',data:{labels:chartDays.map(fmtDay),datasets:ds},options:chartOpts});
-  const newCanal=new Chart(qs(ids.canalChart),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||'#666')+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||'#666'),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
+  const newCanal=new Chart(qs(ids.canalChart),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||GRAF.c1)+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||GRAF.c1),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9}}}}}});
   const dE=topCanal.filter(([,v])=>v>0);
-  const newDonut=new Chart(qs(ids.donut),{type:'doughnut',data:{labels:dE.map(([k])=>k),datasets:[{data:dE.map(([,v])=>v),backgroundColor:dE.map(([k])=>canalColors[k]||'#666'),borderColor:'#111318',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#5a6478',font:{family:'DM Mono',size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmt$(ctx.raw)} (${totalFact?(ctx.raw/totalFact*100).toFixed(1):0}%)`}}}}});
+  const newDonut=new Chart(qs(ids.donut),{type:'doughnut',data:{labels:dE.map(([k])=>k),datasets:[{data:dE.map(([,v])=>v),backgroundColor:dE.map(([k])=>canalColors[k]||GRAF.c1),borderColor:GRAF.fondo,borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmt$(ctx.raw)} (${totalFact?(ctx.raw/totalFact*100).toFixed(1):0}%)`}}}}});
   if(inst==='vivo'){dashChartsVivo.diario=newDiario;dashChartsVivo.canal=newCanal;dashChartsVivo.donut=newDonut;}
   else{dashCharts.diario=newDiario;dashCharts.canal=newCanal;dashCharts.donut=newDonut;}
 }
@@ -6641,7 +6758,7 @@ async function loadHistorico(){const el=qs('hist-content');el.innerHTML='<div cl
 function populateHistFilters(parsed){initMS('ms-hist-cat',new Set(parsed.items.map(d=>d.categoria).filter(Boolean)));initMS('ms-hist-pm',new Set(parsed.items.map(d=>d.pm).filter(Boolean)));const desde=qs('hist-desde-mes'),hasta=qs('hist-hasta-mes');if(!desde||!hasta)return;const curD=desde.value,curH=hasta.value;desde.innerHTML='<option value="">Desde el inicio</option>';hasta.innerHTML='<option value="">Hasta hoy</option>';parsed.months.forEach(m=>{desde.innerHTML+=`<option value="${m}">${m}</option>`;hasta.innerHTML+=`<option value="${m}">${m}</option>`;});if(curD)desde.value=curD;if(curH)hasta.value=curH;}
 function addHistSku(skuVal){const raw=(skuVal||qs('hist-sku-input').value).trim();const val=raw.toUpperCase().replace(/[\r\n]/g,'');if(!val||histSkus.includes(val)){if(!skuVal)qs('hist-sku-input').value='';return;}histSkus.push(val);if(!skuVal)qs('hist-sku-input').value='';renderSkuTags();renderHistorico();}
 function removeHistSku(sku){histSkus=histSkus.filter(s=>s!==sku);renderSkuTags();renderHistorico();}
-function renderSkuTags(){const el=qs('sku-tags');if(!el)return;el.innerHTML=histSkus.length?histSkus.map((s,i)=>`<div style="display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid ${PALETTE[i%PALETTE.length]}"><span style="color:${PALETTE[i%PALETTE.length]}">${s}</span><button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1" onclick="removeHistSku('${s}')">×</button></div>`).join(''):`<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">Agregá SKUs para comparar</span>`;}
+function renderSkuTags(){const el=qs('sku-tags');if(!el)return;el.innerHTML=histSkus.length?histSkus.map((s,i)=>`<div style="display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid ${PALETTE[i%PALETTE.length]}"><span style="color:var(--tinta)">${s}</span><button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1" onclick="removeHistSku('${s}')">×</button></div>`).join(''):`<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">Agregá SKUs para comparar</span>`;}
 
 let histSortState={col:'total',dir:-1};
 function histSortTable(col,th){
@@ -6730,7 +6847,7 @@ function renderHistorico(){
       const bestCanal=Object.entries(canalMap).sort((a,b)=>b[1]-a[1])[0];
       const canalName=bestCanal?bestCanal[0].toLowerCase().replace(/\bit\b/gi,'Web').replace(/ecom/gi,'Web'):'—';
       statsHTML+=`<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${PALETTE[idx%PALETTE.length]};border-radius:8px;padding:12px 14px;min-width:220px;flex:1">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:${PALETTE[idx%PALETTE.length]};font-weight:700;margin-bottom:8px">${item.sku}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--tinta);font-weight:700;margin-bottom:8px">${item.sku}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px">
           <div><div style="color:var(--text3);font-size:9px;margin-bottom:2px">👑 Mejor mes</div><div style="font-weight:700;color:var(--green)">${bestMonth}</div><div style="color:var(--text2);font-family:'DM Mono',monospace">${fmtN(maxVal)} u.</div></div>
           <div><div style="color:var(--text3);font-size:9px;margin-bottom:2px">📉 Peor mes</div><div style="font-weight:700;color:var(--red)">${worstMonth}</div><div style="color:var(--text2);font-family:'DM Mono',monospace">${minVal?fmtN(minVal):'-'} u.</div></div>
@@ -6783,7 +6900,7 @@ function renderHistorico(){
       <tbody>${tableSKUs.map(item=>{
         const last6=item.monthly.filter(m=>filteredMonths.slice(-6).includes(m.label));
         const isSelected=histSkus.some(s=>s===item.sku||normSku(s)===normSku(item.sku));
-        return`<tr style="cursor:pointer;${isSelected?'background:rgba(59,130,246,0.06);':''}" onclick="addHistSku('${item.sku.replace(/'/g,"\\'")}')">
+        return`<tr style="cursor:pointer;${isSelected?'background:var(--mod-suave);':''}" onclick="addHistSku('${item.sku.replace(/'/g,"\\'")}')">
           <td style="font-weight:700;color:${isSelected?'var(--accent)':'var(--text)'};font-family:'DM Mono',monospace;font-size:10px">${item.sku}${isSelected?' ✓':''}</td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:10px">${item.titulo}</td>
           <td style="font-size:10px;color:var(--text3)">${item.pm}</td>
@@ -6800,7 +6917,7 @@ function renderHistorico(){
   // Wait for DOM to update before creating chart
   requestAnimationFrame(()=>{
   if(!qs('chartHist'))return;
-  dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:24}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});
+  dashCharts.hist=new Chart(qs('chartHist'),{type:'line',data:{labels:filteredMonths,datasets:chartItems.map((item,i)=>({label:item.sku,data:item.monthly.map(m=>m.units),borderColor:PALETTE[i%PALETTE.length],backgroundColor:PALETTE[i%PALETTE.length]+'20',borderWidth:2,pointRadius:3,tension:0.2,fill:false}))},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{labels:{color:GRAF.texto,font:{family:GRAF.fuente,size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} u.`}}},scales:{x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},maxTicksLimit:24}},y:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9}}}}}});
   });
 }
 // ── COBRANZAS ──
@@ -6860,19 +6977,19 @@ function renderCobranzas(){
         labels:cobrData.map(d=>d.semana),
         datasets:[
           {label:'Cobranza',data:cobrData.map(d=>d.total),
-            backgroundColor:cobrData.map(d=>d.total>=promCobr?'#00e5a055':'#ef444455'),
-            borderColor:cobrData.map(d=>d.total>=promCobr?'#00e5a0':'#ef4444'),
+            backgroundColor:cobrData.map(d=>d.total>=promCobr?GRAF.c4+'55':GRAF.c6+'55'),
+            borderColor:cobrData.map(d=>d.total>=promCobr?GRAF.c4:GRAF.c6),
             borderWidth:1,borderRadius:4},
           {label:'Promedio',data:cobrData.map(()=>promCobr),type:'line',
-            borderColor:'#ffe600',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false}
+            borderColor:GRAF.c5,borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false}
         ]
       },
       options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{labels:{color:'#5a6478',font:{family:'DM Mono',size:9},boxWidth:8}},
+        plugins:{legend:{labels:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},boxWidth:8}},
           tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmt$(ctx.raw)}`}}},
         scales:{
-          x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxRotation:45}},
-          y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}
+          x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},maxRotation:45}},
+          y:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},callback:v=>fmt$(v)}}
         }
       }
     });
@@ -6936,7 +7053,7 @@ async function loadBrasil(){
 let brFilters={};
 function applyBrFilters(){brFilters={desde:qs('br-desde').value,hasta:qs('br-hasta').value,canal:getMSValues('ms-br-canal'),sku:qs('br-sku').value.trim().toLowerCase()};renderBrasil();}
 function resetBrFilters(){['br-desde','br-hasta','br-sku'].forEach(id=>qs(id).value='');clearMS('ms-br-canal');brFilters={};renderBrasil();}
-function renderBrasil(){const el=qs('page-brasil');if(!brData.length){el.innerHTML='<div class="loading-block"><span>Sin datos de Brasil</span></div>';return;}const f=brFilters||{};let data=brData;if(f.desde)data=data.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data=data.filter(d=>d.fechaStr<=f.hasta);if(f.canal)data=data.filter(d=>f.canal.includes(d.canal));if(f.sku)data=data.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(!data.length){el.innerHTML='<div class="loading-block"><span>Sin datos para los filtros</span></div>';return;}if(dashCharts.brD){try{dashCharts.brD.destroy();}catch(e){}}if(dashCharts.brC){try{dashCharts.brC.destroy();}catch(e){}}const totalFact=data.reduce((s,d)=>s+d.precioFinal,0);const totalRent=data.reduce((s,d)=>s+d.rentabilidad,0);const totalCosto=data.reduce((s,d)=>s+d.costo,0);const byCanal=groupSum(data,'canal','precioFinal');const topCanal=Object.entries(byCanal).sort((a,b)=>b[1]-a[1]);const byDay={};data.forEach(d=>{if(d.fechaStr)byDay[d.fechaStr]=(byDay[d.fechaStr]||0)+d.precioFinal;});const days=Object.keys(byDay).sort();const fmtDay=str=>{const[y,m,d]=str.split('-');return`${+d}/${+m}`;};const bySku={};data.forEach(d=>d.skus.forEach(s=>{bySku[s]=(bySku[s]||0)+d.precioFinal;}));const topSkus=Object.entries(bySku).sort((a,b)=>b[1]-a[1]).slice(0,12);el.innerHTML=`<div class="kpi-row"><div class="kpi-card c1"><div class="kpi-label">Facturación 🇧🇷</div><div class="kpi-value">${fmt$(totalFact)}</div><div class="kpi-sub">${data.length} órdenes</div></div><div class="kpi-card c2"><div class="kpi-label">Rentabilidad $</div><div class="kpi-value">${fmt$(totalRent)}</div><div class="kpi-sub">${totalFact?(totalRent/totalFact*100).toFixed(1):0}%</div></div><div class="kpi-card c3"><div class="kpi-label">Rent. %</div><div class="kpi-value">${totalFact?(totalRent/totalFact*100).toFixed(1):0}%</div></div><div class="kpi-card c4"><div class="kpi-label">Costo</div><div class="kpi-value">${fmt$(totalCosto)}</div><div class="kpi-sub">${totalFact?((totalCosto/totalFact)*100).toFixed(1):0}%</div></div><div class="kpi-card c5"><div class="kpi-label">Canal Principal</div><div class="kpi-value" style="font-size:13px">${topCanal[0]?.[0]||'—'}</div><div class="kpi-sub">${fmt$(topCanal[0]?.[1]||0)}</div></div></div><div class="chart-card"><h3>Facturación por Día — Brasil</h3><p>${days.length} días con ventas</p><div style="position:relative;height:220px"><canvas id="chartBrD"></canvas></div></div><div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final</p><div style="position:relative;height:200px"><canvas id="chartBrC"></canvas></div></div><div class="table-wrap"><div style="padding:10px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">Top SKUs</div></div><table><thead><tr><th>SKU</th><th>Facturación</th><th>%</th></tr></thead><tbody>${topSkus.map(([sku,fact])=>`<tr><td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">${sku}</td><td class="mono" style="font-size:10px">${fmt$(fact)}</td><td style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${totalFact?(fact/totalFact*100).toFixed(1):0}%</td></tr>`).join('')}</tbody></table></div></div>`;requestAnimationFrame(()=>{window._brDChart=new Chart(qs('chartBrD'),{type:'line',data:{labels:days.map(fmtDay),datasets:[{label:'Facturación',data:days.map(d=>byDay[d]),borderColor:'#3b82f6',backgroundColor:'#3b82f615',borderWidth:2,pointRadius:3,tension:0.1,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:ctx=>{const i=ctx[0].dataIndex;const[y,m,d]=days[i].split('-');return`${+d}/${+m}/${y}`;},label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},maxTicksLimit:20}},y:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}}}}});window._brCChart=new Chart(qs('chartBrC'),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||'#666')+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||'#666'),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:'rgba(0,157,188,0.08)'},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:'#5a6478',font:{family:'DM Mono',size:9}}}}}});});}
+function renderBrasil(){const el=qs('page-brasil');if(!brData.length){el.innerHTML='<div class="loading-block"><span>Sin datos de Brasil</span></div>';return;}const f=brFilters||{};let data=brData;if(f.desde)data=data.filter(d=>d.fechaStr>=f.desde);if(f.hasta)data=data.filter(d=>d.fechaStr<=f.hasta);if(f.canal)data=data.filter(d=>f.canal.includes(d.canal));if(f.sku)data=data.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));if(!data.length){el.innerHTML='<div class="loading-block"><span>Sin datos para los filtros</span></div>';return;}if(dashCharts.brD){try{dashCharts.brD.destroy();}catch(e){}}if(dashCharts.brC){try{dashCharts.brC.destroy();}catch(e){}}const totalFact=data.reduce((s,d)=>s+d.precioFinal,0);const totalRent=data.reduce((s,d)=>s+d.rentabilidad,0);const totalCosto=data.reduce((s,d)=>s+d.costo,0);const byCanal=groupSum(data,'canal','precioFinal');const topCanal=Object.entries(byCanal).sort((a,b)=>b[1]-a[1]);const byDay={};data.forEach(d=>{if(d.fechaStr)byDay[d.fechaStr]=(byDay[d.fechaStr]||0)+d.precioFinal;});const days=Object.keys(byDay).sort();const fmtDay=str=>{const[y,m,d]=str.split('-');return`${+d}/${+m}`;};const bySku={};data.forEach(d=>d.skus.forEach(s=>{bySku[s]=(bySku[s]||0)+d.precioFinal;}));const topSkus=Object.entries(bySku).sort((a,b)=>b[1]-a[1]).slice(0,12);el.innerHTML=`<div class="kpi-row"><div class="kpi-card c1"><div class="kpi-label">Facturación 🇧🇷</div><div class="kpi-value">${fmt$(totalFact)}</div><div class="kpi-sub">${data.length} órdenes</div></div><div class="kpi-card c2"><div class="kpi-label">Rentabilidad $</div><div class="kpi-value">${fmt$(totalRent)}</div><div class="kpi-sub">${totalFact?(totalRent/totalFact*100).toFixed(1):0}%</div></div><div class="kpi-card c3"><div class="kpi-label">Rent. %</div><div class="kpi-value">${totalFact?(totalRent/totalFact*100).toFixed(1):0}%</div></div><div class="kpi-card c4"><div class="kpi-label">Costo</div><div class="kpi-value">${fmt$(totalCosto)}</div><div class="kpi-sub">${totalFact?((totalCosto/totalFact)*100).toFixed(1):0}%</div></div><div class="kpi-card c5"><div class="kpi-label">Canal Principal</div><div class="kpi-value" style="font-size:13px">${topCanal[0]?.[0]||'—'}</div><div class="kpi-sub">${fmt$(topCanal[0]?.[1]||0)}</div></div></div><div class="chart-card"><h3>Facturación por Día — Brasil</h3><p>${days.length} días con ventas</p><div style="position:relative;height:220px"><canvas id="chartBrD"></canvas></div></div><div class="charts-2"><div class="chart-card"><h3>Por Canal</h3><p>Precio Final</p><div style="position:relative;height:200px"><canvas id="chartBrC"></canvas></div></div><div class="table-wrap"><div style="padding:10px 14px;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700">Top SKUs</div></div><table><thead><tr><th>SKU</th><th>Facturación</th><th>%</th></tr></thead><tbody>${topSkus.map(([sku,fact])=>`<tr><td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">${sku}</td><td class="mono" style="font-size:10px">${fmt$(fact)}</td><td style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${totalFact?(fact/totalFact*100).toFixed(1):0}%</td></tr>`).join('')}</tbody></table></div></div>`;requestAnimationFrame(()=>{window._brDChart=new Chart(qs('chartBrD'),{type:'line',data:{labels:days.map(fmtDay),datasets:[{label:'Facturación',data:days.map(d=>byDay[d]),borderColor:GRAF.c1,backgroundColor:GRAF.c1+'15',borderWidth:2,pointRadius:3,tension:0.1,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:ctx=>{const i=ctx[0].dataIndex;const[y,m,d]=days[i].split('-');return`${+d}/${+m}/${y}`;},label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},maxTicksLimit:20}},y:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},callback:v=>fmt$(v)}}}}});window._brCChart=new Chart(qs('chartBrC'),{type:'bar',data:{labels:topCanal.map(([k])=>k),datasets:[{data:topCanal.map(([,v])=>v),backgroundColor:topCanal.map(([k])=>(canalColors[k]||GRAF.c1)+'bb'),borderColor:topCanal.map(([k])=>canalColors[k]||GRAF.c1),borderWidth:1,borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmt$(ctx.raw)}`}}},scales:{x:{grid:{color:GRAF.grilla},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9},callback:v=>fmt$(v)}},y:{grid:{display:false},ticks:{color:GRAF.texto,font:{family:GRAF.fuente,size:9}}}}}});});}
 
 // ── COMPETIDORES REFRESH ──
 async function compRefreshHistorial(){

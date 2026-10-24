@@ -141,3 +141,16 @@ Cada fase termina con: capturas antes y después, resultado de los tests del bac
 ## 12. Ideas para después (no están en ninguna fase)
 - **Buscador global de SKU y publicación** en la barra superior (la guía y los mockups lo dibujan, pero hoy no existe un buscador global: sería una función nueva, no estética; por eso la barra no lo tiene).
 - **Barra lateral (PR «Estética, barra lateral»):** separadores de 1 px entre grupos y botón único para ocultar / mostrar el menú (ver §4).
+
+
+## 11. Estilo «tienda web» (decisión de Maxx: opción H, mockup `mockup_ventas_tienda_web.html`)
+Reemplaza al fondo oscuro de los módulos que no son de Mercado Libre. Solo presentación y solo tokens (`:root` de `docs/index.html`, bloque `estetica-tokens`; el CSS vive en `<style id="estetica-tienda-web">`).
+- **Fondo y tarjetas:** fondo `--fondo` `#F2F3F5`; tarjetas blancas, radio `--r-tarjeta` 18 px, **sin borde**, sombra `--sombra-tarjeta` (`0 2px 10px rgba(11,39,51,.07)`).
+- **Tipografía:** **Montserrat** (400 a 800) en **todo** el ERP, módulos ML incluidos, con un único token `--fuente`; números con `tabular-nums`; sin letra monoespaciada ni etiquetas en mayúsculas con espaciado (la excepción son los títulos de sección de la barra lateral, como en el mockup).
+- **Botones:** píldora (`--r-boton` 999 px). Primario `#1B8195` con texto blanco; secundario blanco con borde `--borde` y texto `--celeste-700`. En los módulos ML siguen con su tema (amarillo y azul), también en píldora.
+- **Números del resumen (KPI):** baldosa redondeada de 44 px (radio 14) con ícono y fondo pastel (`--kpi-teal/verde/violeta/azul/ambar/rojo-fondo` y `-texto`), valor de 20 px peso 700.
+- **Barra lateral clara en todo el ERP:** fondo blanco (`--lateral-fondo`), ítem activo `--celeste-100` con texto `--celeste-700` (en ML, amarillo `#FFE600` con texto `#2D3277`), títulos `--texto-suave`, separadores `--lateral-separador`, puntito amarillo en los ítems ML. Ancho 236 px.
+- **Barra superior:** sin cambios (celeste de Global en los módulos propios; amarilla «GLOBAL × Mercado Libre» en los de ML).
+- **Gráficos:** colores del sistema (`--grafico-1` = `#1B8195` para la línea principal; hasta `--grafico-12` para series múltiples); el JS los lee de los tokens.
+- **Convivencia:** los módulos que todavía no migraron conservan su interior oscuro con la barra lateral clara y la fuente nueva, hasta su PR. Orden: (1) Ventas & Rentabilidad, Histórico, Cobranzas y Brasil; (2) Motor de Precios, Precios & Márgenes, Verificar Ecom y Verificar Táctica; (3) Inteligencia Comercial, Compras, Distribución y Sistema.
+- **Ventas & Rentabilidad:** la «Consulta en vivo» y la pestaña «En vivo» quedan ocultas con la bandera `VENTAS_EN_VIVO` (en `false`; el código sigue ahí). «Cierres guardados» y «Cargar liquidación Frávega» están arriba a la derecha y no dependen de esa bandera.

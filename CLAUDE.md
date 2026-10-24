@@ -147,6 +147,8 @@ Sidebar pages, grouped by what they do:
 
 - Forma común (tokens en `:root`): radios `--r-control` 12 / `--r-boton` y `--r-recuadro` 14 / `--r-tarjeta` 16 / `--r-chip` píldora; las casillas numéricas llevan `.campo-num` (ancho mínimo `--campo-num-min` 78 px, relleno `--campo-num-pad`, texto a la derecha) y la agrega `campoNumMarcar()` sola, también a las que se dibujan después. Las secciones largas de parámetros usan `colapsableMontar(id,titulo,resumenFn)` (cabecera con resumen visible).
 
+- Estilo «tienda web» (ver `docs/ESTETICA_ERP_GLOBAL.md` §11): fuente única Montserrat (`--fuente`), tarjetas blancas sin borde con `--sombra-tarjeta`, botones en píldora, barra lateral clara. Las páginas que ya lo llevan están en `PAGINAS_ESTILO_NUEVO` (body[data-nuevo]); el resto conserva su interior oscuro hasta su PR. En Ventas & Rentabilidad, la bandera `VENTAS_EN_VIVO` (false) oculta la «Consulta en vivo» y la pestaña «En vivo».
+
 - Both main files are effectively monolithic and minified-by-convention (long single-line
   functions, no whitespace formatting) rather than reformatted/refactored piecemeal — match the
   existing density when editing nearby code rather than reformatting whole functions.
