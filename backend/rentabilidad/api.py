@@ -1020,6 +1020,9 @@ def pricing_carga_pm_filas(payload: FilasPmIn) -> SyncPmOut:
                      nuevos=r.nuevos, cambiados=r.cambiados, sin_cambios=r.sin_cambios)
 
 
+_AVISO_TACTICA_CAIDA = "Táctica no respondió (¿VPN apagada?). IVA tomado de Ecom."
+
+
 def _datos_sku_fn(avisos: list[str]):
     """Costo del catálogo de Ecom (fuente primaria, criterio de margen §7),
     IVA de Táctica con respaldo del IVA de Ecom, y PM/categoría de GRAL
@@ -1037,23 +1040,27 @@ def _datos_sku_fn(avisos: list[str]):
         ecom_ok = False
         avisos.append(f"El catálogo de Ecom no respondió ({type(e).__name__}): sin costo ni IVA, no se calculan márgenes.")
     if ecom_ok and iva_p.tactica_caida:
-        avisos.append("Táctica no respondió: el IVA sale del artículo en Ecom.")
+        avisos.append(_AVISO_TACTICA_CAIDA)
     try:
         clasif._indices()
     except Exception as e:
         clasif_ok = False
-        avisos.append(f"No se pudo leer GRAL CATEGORIAS ({type(e).__name__}): sin PM ni categoría (ML usa la comisión general).")
+        avisos.append(f"No se pudo leer GRAL CATEGORIAS ({type(e).__name__}: {e}): sin PM ni categoría (ML usa la comisión general).")
 
     def datos(sku: str) -> pricing_pm.DatosSku:
-        costo = iva = None
+        costo = iva = aviso = None
         if ecom_ok:
             costo = costo_p.obtener(sku) or costo_p.obtener(sku.upper())
-            iva = iva_p.factor(sku) or iva_p.factor(sku.upper())
+            iva, origen = iva_p.factor_con_origen(sku)
+            if iva is None:
+                iva, origen = iva_p.factor_con_origen(sku.upper())
+            if origen == "ECOM":
+                aviso = "IVA tomado de Ecom: Táctica no respondió (¿VPN apagada?)." if iva_p.tactica_caida else "IVA tomado de Ecom: el SKU no está en Táctica."
         c = clasif.clasificacion_ecom(sku) if clasif_ok else {}
         categoria = c.get("categoria")
         return pricing_pm.DatosSku(
             costo_usd=costo, iva_factor=iva, pm=c.get("pm"),
-            categoria=None if categoria == "SIN PM" else categoria, subcategoria=c.get("subcategoria"),
+            categoria=None if categoria == "SIN PM" else categoria, subcategoria=c.get("subcategoria"), aviso_iva=aviso,
         )
 
     return datos

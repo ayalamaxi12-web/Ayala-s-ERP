@@ -1736,7 +1736,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
   </div>
   <div style="margin:6px 0"><span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span></div>
   <div class="erp-filters" style="margin:10px 0">
-    <input type="text" id="pr-buscar" class="fi" placeholder="Buscar SKU..." style="width:160px" onkeydown="if(event.key==='Enter')pricingLoad()">
+    <input type="text" id="pr-buscar" class="fi" placeholder="Buscar SKU..." style="width:30ch;max-width:100%" onkeydown="if(event.key==='Enter')pricingLoad()">
     <select id="pr-pm" class="fi"><option value="">Todos los PM</option></select>
     <select id="pr-cat" class="fi"><option value="">Todas las categorías</option></select>
     <select id="pr-canal" class="fi"><option value="">Todos los canales</option><option value="WEB">Web</option><option value="ML">ML</option><option value="FRAVEGA">Frávega</option><option value="ONCITY">OnCity</option></select>
@@ -5372,7 +5372,7 @@ function prCelda(c){
   if(!c)return '<td style="color:var(--text3)">—</td>';
   const av=(c.avisos||[]).filter(Boolean),tip=av.join(' · ').replace(/"/g,'&quot;');
   const real=c.real!=null?`<div style="font-size:9px;color:var(--text3)">real ${prPct(c.real)} (${c.real_ordenes})</div>`:'';
-  return `<td title="${tip}"><div style="font-weight:700;color:${prColor(c.margen)}">${prPct(c.margen)}${av.length?' <span style="color:var(--yellow)">⚠</span>':''}</div><div style="font-size:9px;color:var(--text2)">${fmt$(c.precio)}</div>${real}</td>`;
+  return `<td title="${tip}"><div style="font-weight:700;color:${prColor(c.margen)}">${prPct(c.margen)}${av.length?' <span style="color:var(--yellow)">⚠</span>':''}</div>${(()=>{const x=av.find(t=>t.startsWith('IVA tomado de Ecom'));return x?`<div style="font-size:9px;color:var(--yellow)">${x.replace('IVA tomado de Ecom','IVA de Ecom').replace(/ \(¿VPN apagada\?\)\.?$/,'').replace(/\.$/,'')}</div>`:'';})()}<div style="font-size:9px;color:var(--text2)">${fmt$(c.precio)}</div>${real}</td>`;
 }
 async function pricingLoad(){
   const url=getBackendUrl();if(!url){toast('Configurá la URL del backend','error');return;}
