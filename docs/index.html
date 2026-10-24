@@ -617,6 +617,16 @@ body[data-nuevo] :is(#ventas-extra,#page-dashboard,#page-historico,#page-cobranz
 body[data-nuevo] :is(#ventas-extra,#page-dashboard,#page-historico,#page-cobranzas,#page-brasil) td{padding:8px 12px;border-bottom:1px solid var(--divisor);color:var(--tinta-2)}
 body[data-nuevo] #ventas-extra #rent-historicos-lista,body[data-nuevo] #ventas-extra #rent-status{font-size:13px;color:var(--texto-suave)}
 body[data-nuevo] #ventas-extra .section-hdr{margin:0 0 10px}
+/* — PR 2: Motor de Precios, Precios & Márgenes, Verificar Ecom y Verificar Táctica — */
+body[data-nuevo] :is(#page-verificar-ecom,#page-verificar-tactica,#page-pricing) .sku-cell{white-space:nowrap}
+body[data-nuevo] :is(#page-verificar-ecom,#page-verificar-tactica) .stats-row{margin-bottom:14px}
+body[data-nuevo] #pm-blocks>div>div{flex-wrap:wrap}
+body[data-nuevo] #pm-blocks input{min-width:0;flex:1 1 120px!important}
+body[data-nuevo] #pm-blocks input[id$="-id"]{flex:1 0 170px!important}
+body[data-nuevo] #pm-blocks input[id$="-tab"]{width:auto!important;flex:0 1 130px}
+body[data-nuevo] :is(#page-verificar-ecom,#page-verificar-tactica,#page-pricing,#page-ayala-core) .grid-2>*{min-width:0}
+body[data-nuevo] #page-ayala-core>div[style*="margin-top:24px"],body[data-nuevo] #page-ayala-core>div[style*="margin:10px 0"],body[data-nuevo] #page-ayala-core>div[style*="margin:0 0 14px"]{margin:0!important;padding:16px 18px;background:var(--superficie);border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta)}
+body[data-nuevo] #page-ayala-core .section-hdr{margin-top:0}
 /* — Gráficos y comparaciones — */
 body[data-nuevo] .chart-card{padding:18px 20px}
 body[data-nuevo] .chart-card h3{font-size:16px;font-weight:700;color:var(--tinta);margin-bottom:2px}
@@ -1969,7 +1979,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
 const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const PAGINAS_ESTILO_NUEVO=new Set(['ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
