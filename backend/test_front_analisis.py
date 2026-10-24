@@ -102,3 +102,29 @@ def test_el_filtro_por_sku_tambien_ignora_guiones_y_espacios():
 def test_orden_por_cambio_y_por_diferencia():
     assert [x['sku'] for x in correr(D, {}, 'cambio')][0] == 'PV-1'
     assert [x['sku'] for x in correr(D, {}, 'dif')][:2] == ['PV-2', 'PV-1']      # PV-2 es la que más barato nos tiene (-63%); PV-3 (sin dato) al final
+
+
+def _vend(q, lista):
+    src = open(INDEX, encoding='utf-8').read()
+    fns = '\n'.join(_fn(src, n) for n in ('acNormTxt', 'acBuscarVendedores', 'acResaltar')) + "\nfunction acEsc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');}"
+    js = fns + "\nconst r=acBuscarVendedores(process.argv[1],JSON.parse(process.argv[2]));console.log(JSON.stringify(r.map(x=>[x.v,acResaltar(x.v,x.i,x.n)])));"
+    return json.loads(subprocess.run(['node', '-e', js, q, json.dumps(lista)], capture_output=True, text=True, check=True).stdout)
+
+
+def test_buscador_de_vendedores_coincide_en_cualquier_parte_sin_mayusculas_ni_tildes_y_resalta():
+    lista = ['Tecnología Sur', 'Técnico Norte', 'Distribuidora Ñandú', 'ElectroHogar', 'Mundo Tóner', 'PC Store']
+    assert [x[0] for x in _vend('TEC', lista)] == ['Técnico Norte', 'Tecnología Sur']          # mayúsculas y tildes no importan; sin tope de resultados
+    assert [x[0] for x in _vend('nandu', lista)] == ['Distribuidora Ñandú']                       # Ñ y ú
+    assert [x[0] for x in _vend('hogar', lista)] == ['ElectroHogar']                              # cualquier parte del nombre, no solo el comienzo
+    assert _vend('tecnologia', lista)[0][1] == '<mark>Tecnología</mark> Sur'                      # resalta con el texto original (con tilde)
+    assert _vend('  ', lista) == [] and _vend('zzz', lista) == []
+    assert len(_vend('a', [f'Vend {i}' for i in range(60)] + ['Alfa'])) == 1                       # sin tope: todos los que coinciden
+    assert [x[0] for x in _vend('o', ['Zeta', 'Oro', 'Boa'])] == ['Oro', 'Boa']                  # primero los que empiezan con lo escrito
+
+
+def test_el_buscador_y_el_filtro_de_vendedores_son_accesibles_y_no_quedan_botones_fijos():
+    s = open(INDEX, encoding='utf-8').read()
+    for a in ('role="combobox"', 'aria-expanded="false"', 'aria-controls="ac-sug"', 'aria-autocomplete="list"', 'id="ac-sug" class="ac-sug" role="listbox"'):
+        assert a in s, a
+    assert 'role="option"' in s and 'aria-activedescendant' in s and "Ver todos los vendedores" in s and 'aria-controls="ac-vend-panel"' in s
+    assert 'Limpiar vendedores' in s and 'Mostrando solo los SKU de' in s and 'acVendBtns' not in s

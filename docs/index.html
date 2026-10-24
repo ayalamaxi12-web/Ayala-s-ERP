@@ -362,6 +362,24 @@ body[data-nuevo] .page .ms-dropdown,body[data-nuevo] .page .ac-sug{background:va
 body[data-nuevo] .page .ms-option,body[data-nuevo] .page .ac-sug div.it{font-size:13px;color:var(--tinta-2)}
 body[data-nuevo] .page .ms-option:hover,body[data-nuevo] .page .ac-sug div.it.on,body[data-nuevo] .page .ac-sug div.it:hover{background:var(--mod-suave);color:var(--tinta)}
 body[data-nuevo] .page .ms-search input{min-height:36px;border:1px solid var(--borde);border-radius:6px;font-size:13px}
+/* — Filtro de vendedores (Análisis de Competencia) — */
+#page-analisis-competencia .ac-sug .ac-sug-h{padding:6px 10px 4px;font:700 12px var(--fuente);letter-spacing:.04em;text-transform:uppercase;color:var(--texto-suave);background:var(--zebra);border-top:1px solid var(--divisor)}
+#page-analisis-competencia .ac-sug .ac-sug-h:first-child{border-top:0}
+#page-analisis-competencia .ac-sug mark{background:var(--mod-suave-borde,var(--celeste-200));color:var(--tinta);font-weight:700;border-radius:2px;padding:0 1px}
+#page-analisis-competencia .ac-sug .ac-sug-ok{margin-left:auto;font-size:12px;font-weight:600;color:var(--mod-texto,var(--celeste-700))}
+#page-analisis-competencia .ac-sug div.it[aria-selected="true"]{background:var(--mod-suave,var(--celeste-100))}
+#page-analisis-competencia .ac-vrow{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin:6px 0 10px}
+#page-analisis-competencia .ac-vchips{display:contents}
+#page-analisis-competencia .ac-vchip{display:inline-flex;align-items:center;gap:2px;padding:2px 2px 2px 8px;border:1px solid var(--mod-suave-borde,var(--celeste-200));border-radius:999px;background:var(--mod-suave,var(--celeste-100));color:var(--mod-texto,var(--celeste-700));font:600 12px var(--fuente)}
+#page-analisis-competencia .ac-vchip button{min-width:24px;min-height:24px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;font:700 14px/1 var(--fuente);cursor:pointer}
+#page-analisis-competencia .ac-vchip button:hover{background:var(--mod-suave-borde,var(--celeste-200))}
+#page-analisis-competencia .ac-vmsg{margin-left:auto;font:400 12px var(--fuente);color:var(--texto-suave)}
+#page-analisis-competencia .ac-vpanel{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 8px;max-height:200px;overflow-y:auto;margin:-4px 0 10px;padding:8px;border:1px solid var(--borde);border-radius:8px;background:var(--superficie)}
+#page-analisis-competencia .ac-vopt{min-height:32px;padding:4px 8px;border:0;border-radius:6px;background:transparent;color:var(--tinta-2);font:400 13px var(--fuente);text-align:left;cursor:pointer;overflow-wrap:anywhere}
+#page-analisis-competencia .ac-vopt:hover{background:var(--zebra)}
+#page-analisis-competencia .ac-vopt.on{background:var(--mod-suave,var(--celeste-100));color:var(--tinta);font-weight:700}
+#page-analisis-competencia .ac-vrow button:focus-visible,#page-analisis-competencia .ac-vopt:focus-visible,#page-analisis-competencia .ac-vchip button:focus-visible{outline:2px solid var(--mod-primario,var(--celeste-600));outline-offset:1px}
+@media (max-width:768px){#page-analisis-competencia .ac-vmsg{flex-basis:100%;margin-left:0}}
 body[data-nuevo] .page input[type=checkbox]{accent-color:var(--mod-check);width:16px;height:16px}
 body[data-nuevo] .page label{font-size:max(13px,calc(var(--fs-cuerpo) - 1px))}
 body[data-nuevo] .page input,body[data-nuevo] .page select{font-family:var(--fuente)!important}
@@ -956,7 +974,7 @@ body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-n
   <div class="stats-row" id="ac-stats" style="display:none"></div>
   <div id="ac-filtros" style="display:none">
     <div class="erp-filters" style="flex-wrap:wrap">
-      <div style="position:relative;flex:1;min-width:200px"><div id="ac-sug" class="ac-sug" style="display:none"></div><input type="text" id="ac-search" placeholder="Buscar SKU, vendedor o link..." autocomplete="off" oninput="AC.page=1;acRender();acSugerir()" onkeydown="acSugKey(event)" onfocus="acSugerir()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none"></div>
+      <div style="position:relative;flex:1;min-width:200px"><div id="ac-sug" class="ac-sug" role="listbox" aria-label="Sugerencias de SKU y vendedores" style="display:none"></div><input type="text" id="ac-search" role="combobox" aria-expanded="false" aria-controls="ac-sug" aria-autocomplete="list" aria-label="Buscar SKU, vendedor o link" placeholder="Buscar SKU, vendedor o link..." autocomplete="off" oninput="AC.page=1;acRender();acSugerir()" onkeydown="acSugKey(event)" onfocus="acSugerir()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none"></div>
       <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-ac-cat"><div class="ms-trigger" onclick="toggleMS('ms-ac-cat')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ac-cat')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ac-cat')">Todos</button><button onclick="clearMS('ms-ac-cat')">Ninguno</button></div></div></div></div>
       <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-ac-pm"><div class="ms-trigger" onclick="toggleMS('ms-ac-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ac-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ac-pm')">Todos</button><button onclick="clearMS('ms-ac-pm')">Ninguno</button></div></div></div></div>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="ac-solo-cambios" onchange="AC.page=1;acRender()">Solo con cambios</label>
@@ -967,7 +985,8 @@ body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-n
       <span id="ac-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
       <span id="ac-ctx-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     </div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0 10px"><span class="filter-label" style="margin-right:4px">Vendedores</span><span id="ac-vendedores" style="display:flex;gap:6px;flex-wrap:wrap"></span><button class="btn-xs" onclick="acVendTodos()">Todos</button></div>
+    <div class="ac-vrow"><button type="button" class="btn-xs" id="ac-vend-toggle" aria-expanded="false" aria-controls="ac-vend-panel" onclick="acVendPanelToggle()">Ver todos los vendedores</button><span id="ac-vend-chips" class="ac-vchips"></span><button type="button" class="btn-xs" id="ac-vend-limpiar" onclick="acVendTodos()" style="display:none">Limpiar vendedores</button><span id="ac-vend-msg" class="ac-vmsg" role="status"></span></div>
+    <div id="ac-vend-panel" class="ac-vpanel" role="group" aria-label="Todos los vendedores" style="display:none"></div>
     <div id="ac-margen-info" style="margin-bottom:8px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></div>
   </div>
   <div id="ac-main">
@@ -3149,23 +3168,45 @@ function acNormBusq(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'
 function acSugerencias(q,filas,max){const n=acNormBusq(q);if(!n)return [];const out=[];
   filas.forEach(f=>{const k=acNormBusq(f.sku);const i=k.indexOf(n);if(i>=0)out.push({f,orden:k===n?0:i===0?1:2});});
   out.sort((a,b)=>a.orden-b.orden||a.f.sku.localeCompare(b.f.sku));return out.slice(0,max||10).map(x=>x.f);}
-function acSugerir(){const box=qs('ac-sug'),q=(qs('ac-search')||{}).value||'';if(!box)return;
-  const l=q.trim().length>=1?acSugerencias(q,AC.filas,10):[];AC.sug=l;AC.sugSel=-1;
-  if(!l.length){box.style.display='none';box.innerHTML='';return;}
-  box.style.display='block';
-  box.innerHTML=l.map((f,i)=>`<div class="it" data-i="${i}" onmousedown="event.preventDefault();acSugElegir(${i})"><b style="color:var(--accent)">${acEsc(f.sku)}</b><span style="color:var(--text3);font-size:10px">${acEsc(f.cat)} · ${acEsc(f.pmName)}</span><span style="margin-left:auto;color:var(--text3);font-size:10px">${f.refs.length} rival${f.refs.length===1?'':'es'}</span></div>`).join('');}
-function acSugCerrar(){const box=qs('ac-sug');if(box){box.style.display='none';box.innerHTML='';}AC.sug=[];AC.sugSel=-1;}
-function acSugElegir(i){const f=(AC.sug||[])[i];if(!f)return;qs('ac-search').value=f.sku;acSugCerrar();AC.page=1;acRender();}
-function acSugKey(e){const box=qs('ac-sug');if(e.key==='Escape'){acSugCerrar();return;}if(!box||box.style.display==='none'||!(AC.sug||[]).length)return;
+// Buscador predictivo: SKU (hasta 10) + TODOS los vendedores cuyo nombre contiene lo escrito (cualquier parte, sin importar mayúsculas ni tildes). Es solo filtrado en pantalla.
+function acNormTxt(t){return String(t||'').split('').map(c=>c.normalize('NFD').charAt(0).toLowerCase()).join('');}   // un carácter por carácter: los índices coinciden con el nombre original
+function acVendedoresLista(){return [...new Set(((AC.data||{}).referencias||[]).map(r=>r.entidad).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));}
+function acBuscarVendedores(q,lista){const n=acNormTxt(q).trim();if(!n)return [];const out=[];lista.forEach(v=>{const i=acNormTxt(v).indexOf(n);if(i>=0)out.push({v,i,n:n.length});});
+  return out.sort((a,b)=>(a.i>0)-(b.i>0)||a.v.localeCompare(b.v,'es'));}
+function acResaltar(v,i,n){return acEsc(v.slice(0,i))+'<mark>'+acEsc(v.slice(i,i+n))+'</mark>'+acEsc(v.slice(i+n));}
+function acSugerir(){const box=qs('ac-sug'),inp=qs('ac-search'),q=(inp||{}).value||'';if(!box)return;
+  const skus=q.trim().length>=1?acSugerencias(q,AC.filas,10):[],vs=acBuscarVendedores(q,acVendedoresLista());
+  AC.sug=skus.map(f=>({t:'sku',f})).concat(vs.map(x=>({t:'vend',v:x.v,i:x.i,n:x.n})));AC.sugSel=-1;
+  if(!AC.sug.length){acSugCerrar();return;}
+  let h='',k=0;
+  if(skus.length){h+='<div class="ac-sug-h" role="presentation">SKU</div>';
+    skus.forEach(f=>{h+=`<div class="it" role="option" id="ac-opt-${k}" aria-selected="false" data-i="${k}" onmousedown="event.preventDefault();acSugElegir(${k})"><b style="color:var(--accent)">${acEsc(f.sku)}</b><span style="color:var(--text3);font-size:10px">${acEsc(f.cat)} · ${acEsc(f.pmName)}</span><span style="margin-left:auto;color:var(--text3);font-size:10px">${f.refs.length} rival${f.refs.length===1?'':'es'}</span></div>`;k++;});}
+  if(vs.length){h+=`<div class="ac-sug-h" role="presentation">Vendedores · ${vs.length} ${vs.length===1?'coincide':'coinciden'}</div>`;
+    vs.forEach(x=>{const on=AC.vend.has(x.v);h+=`<div class="it" role="option" id="ac-opt-${k}" aria-selected="${on}" data-i="${k}" onmousedown="event.preventDefault();acSugElegir(${k})"><span>${acResaltar(x.v,x.i,x.n)}</span>${on?'<span class="ac-sug-ok">✓ elegido</span>':''}</div>`;k++;});}
+  box.innerHTML=h;box.style.display='block';box.scrollTop=0;if(inp){inp.setAttribute('aria-expanded','true');inp.removeAttribute('aria-activedescendant');}}
+function acSugCerrar(){const box=qs('ac-sug'),inp=qs('ac-search');if(box){box.style.display='none';box.innerHTML='';}if(inp){inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');}AC.sug=[];AC.sugSel=-1;}
+function acSugElegir(i){const it=(AC.sug||[])[i];if(!it)return;
+  if(it.t==='sku'){qs('ac-search').value=it.f.sku;acSugCerrar();AC.page=1;acRender();return;}
+  qs('ac-search').value='';acSugCerrar();acToggleVend(it.v);}   // elegir un vendedor lo suma como filtro y deja el buscador libre para elegir otro
+function acSugKey(e){const box=qs('ac-sug'),inp=qs('ac-search');if(e.key==='Escape'){acSugCerrar();return;}
+  if((e.key==='ArrowDown'||e.key==='ArrowUp')&&(!box||box.style.display==='none')){e.preventDefault();acSugerir();return;}
+  if(!box||box.style.display==='none'||!(AC.sug||[]).length)return;
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const n=AC.sug.length;AC.sugSel=((AC.sugSel+1+(e.key==='ArrowDown'?1:-1)+n+1)%(n+1))-1;
-    box.querySelectorAll('.it').forEach((el,i)=>el.classList.toggle('on',i===AC.sugSel));}
+    box.querySelectorAll('.it').forEach((el,i)=>{const on=i===AC.sugSel;el.classList.toggle('on',on);if(on)el.scrollIntoView({block:'nearest'});});
+    if(AC.sugSel>=0)inp.setAttribute('aria-activedescendant','ac-opt-'+AC.sugSel);else inp.removeAttribute('aria-activedescendant');}
   else if(e.key==='Enter'&&AC.sugSel>=0){e.preventDefault();acSugElegir(AC.sugSel);}}
 document.addEventListener('click',e=>{if(!e.target.closest('#ac-sug')&&e.target.id!=='ac-search')acSugCerrar();});
 function acIrPagina(){AC.page=S.acPage;acRender();}
-function acVendBtns(){const ents=[...new Set((AC.data.referencias||[]).map(r=>r.entidad).filter(Boolean))].sort();
-  qs('ac-vendedores').innerHTML=ents.map(v=>`<button class="btn-xs" data-v="${acEsc(v)}" onclick="acToggleVend(this.dataset.v)" style="opacity:${AC.vend.size&&!AC.vend.has(v)?0.4:1};${AC.vend.has(v)?'border-color:var(--accent);color:var(--accent)':''}">${acEsc(v)}</button>`).join('');}
-function acToggleVend(v){if(AC.vend.has(v))AC.vend.delete(v);else AC.vend.add(v);AC.page=1;acVendBtns();acRender();}
-function acVendTodos(){AC.vend.clear();AC.page=1;acVendBtns();acRender();}
+// Filtro por vendedores: chips de los elegidos + panel compacto con la lista completa (desplegable). AC.vend es el único estado; acFiltrar ya lo usa.
+function acVendRender(){const lista=acVendedoresLista(),n=AC.vend.size;
+  qs('ac-vend-chips').innerHTML=[...AC.vend].map(v=>`<span class="ac-vchip">${acEsc(v)}<button type="button" data-v="${acEsc(v)}" aria-label="Quitar vendedor ${acEsc(v)}" onclick="acToggleVend(this.dataset.v)">×</button></span>`).join('');
+  qs('ac-vend-limpiar').style.display=n?'':'none';
+  qs('ac-vend-msg').textContent=n?`Mostrando solo los SKU de ${n===1?'este vendedor':'estos '+n+' vendedores'}`:'';
+  qs('ac-vend-panel').innerHTML=lista.map(v=>`<button type="button" class="ac-vopt${AC.vend.has(v)?' on':''}" data-v="${acEsc(v)}" aria-pressed="${AC.vend.has(v)}" onclick="acToggleVend(this.dataset.v)">${AC.vend.has(v)?'✓ ':''}${acEsc(v)}</button>`).join('')||'<span class="ac-sub">Todavía no hay vendedores cargados.</span>';
+  const t=qs('ac-vend-toggle');t.textContent=(qs('ac-vend-panel').style.display==='none'?'Ver todos los vendedores':'Ocultar lista de vendedores')+(lista.length?` (${lista.length})`:'');}
+function acVendPanelToggle(){const p=qs('ac-vend-panel'),ab=p.style.display==='none';p.style.display=ab?'':'none';qs('ac-vend-toggle').setAttribute('aria-expanded',String(ab));acVendRender();}
+function acToggleVend(v){if(AC.vend.has(v))AC.vend.delete(v);else AC.vend.add(v);AC.page=1;acVendRender();acRender();}
+function acVendTodos(){AC.vend.clear();AC.page=1;acVendRender();acRender();}
 async function acEntrar(){if(!AC.cargado&&!AC.cargando)acCargar(false);}
 // ══ CONTEXTO PROPIO POR SKU (stock + ventas) — Análisis de Competencia. Lo lee el navegador de los dos Sheets (solo lectura, API key), no es en vivo.
 // Stock: Sheet 1xtD… pestaña Global (A=SKU, E=Táctica, F=Ecom, G=Total). Ventas: Sheet 1Wzs… pestaña conjunto (A=SKU madre, B=SKU variante,
@@ -3505,7 +3546,7 @@ async function acCargar(refrescar){
     if(!r.ok)throw new Error(d.detail||('status '+r.status));
     AC.data=d;AC.cargado=true;
     const cats=new Set(),pms=new Set();(d.referencias||[]).forEach(x=>{cats.add(getCat(x.sku)||'Sin categoría');const p=(S.pmData||{})[normSku(x.sku||'')];pms.add((p&&p.pmName)||'Sin PM');});
-    initMS('ms-ac-cat',cats);initMS('ms-ac-pm',pms);acVendBtns();
+    initMS('ms-ac-cat',cats);initMS('ms-ac-pm',pms);acVendRender();
     ['ac-filtros','ac-table-wrap','ac-stats'].forEach(id=>qs(id).style.display='');
     const refs=d.referencias||[],conPrecio=refs.filter(x=>x.ultimo).length,cambios=refs.filter(x=>x.ultimo&&x.anterior&&x.desde===x.ultimo.fecha).length;
     const ult=refs.reduce((m,x)=>x.ultima_lectura&&x.ultima_lectura.fecha>m?x.ultima_lectura.fecha:m,'');
