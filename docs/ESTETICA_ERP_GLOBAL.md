@@ -76,6 +76,7 @@ Regla para los marketplaces sin color definido: muestrear el color dominante del
   - Módulo de **marketplace:** fondo del color del marketplace y **"GLOBAL × [logo del marketplace]"**, cada uno con su logo oficial (alto de 28 a 42 px, separador "×"). Ejemplo: Mercado Libre, amarillo `#FFE600` con el logo de Global en tinta y el de ML.
   - El resto de la pantalla mantiene el estilo Global. El color del marketplace aparece solo en la barra, el ítem activo del menú, los botones primarios, el selector de cuenta y el encabezado de la tabla (versión suave).
 - **Menú lateral:** ya no lleva logo (está en la barra superior). Va en `--tinta`.
+- **Separadores y botón del menú** (decisión de Maxx, 20/10/2026): entre los grupos del menú hay un separador de 1 px (los títulos de sección se mantienen). Un botón en la barra superior (`#menu-toggle`, `<button>` con `aria-controls="sidebar"` y `aria-expanded`) **oculta y muestra** la barra lateral en escritorio y **recuerda la elección** (`localStorage` `erp_sidebar_oculta`; si el navegador lo bloquea, funciona igual pero sin recordar). En pantalla angosta (< 900 px) es **el mismo botón** el que abre y cierra el menú superpuesto; Esc lo cierra y devuelve el foco al botón. Oculto o cerrado, los ítems quedan fuera del orden de tabulación.
 - **Detalles amigables tomados de la tienda web:** buscador y chips en forma de píldora, esquinas redondeadas y tarjetas blancas sobre fondo gris claro. En el ERP se usan con moderación para que siga siendo denso.
 
 ## 5. Componentes
@@ -131,3 +132,4 @@ Cada fase termina con: capturas antes y después, resultado de los tests del bac
 
 ## 12. Ideas para después (no están en ninguna fase)
 - **Buscador global de SKU y publicación** en la barra superior (la guía y los mockups lo dibujan, pero hoy no existe un buscador global: sería una función nueva, no estética; por eso la barra no lo tiene).
+- **Barra lateral (PR «Estética, barra lateral»):** separadores de 1 px entre grupos y botón único para ocultar / mostrar el menú (ver §4).
