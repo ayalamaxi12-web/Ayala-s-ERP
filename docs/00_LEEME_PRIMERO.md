@@ -144,6 +144,6 @@ No bloquean el arranque. Sí bloquean los módulos indicados.
 | **Análisis de Competencia** (Por SKU, Histórico, Jugar, Por categoría, Eventos) | Vigente: la pantalla de competencia |
 | **Intel. Competitiva** | **Jubilada**: sacada del menú y del código; `goPage('intel-competitiva')` lleva a Análisis de Competencia → Eventos. Sus datos (`V-*`, `Historial Competidores`) no se tocaron. El Detector de Ads y las Alertas se descartaron |
 | **Competidores ML** | Vigente: de él depende el panel de parámetros de margen (`compMargenAt`, `COMPDESC`); se jubila en la etapa «Jugar mi precio» con envío |
-| **SKUs & Referencias** | Pendiente (condiciones de Maxx: cargador compartido movido, la página «Referencias» NO se jubila, confirmación de Maca) |
+| **SKUs & Referencias** | **Jubilada** (solo lectura; Maca carga en su planilla): sacada del menú y del código; `goPage('intel-comercial')` lleva a Análisis de Competencia. No se borró ningún dato ni pestaña |
 | **Referencias**, **Entidades**, **Mix** | Vigentes |
 Detalle y auditoría: `docs/business/COMPETENCIA_JUBILACION_AUDITORIA.md`.

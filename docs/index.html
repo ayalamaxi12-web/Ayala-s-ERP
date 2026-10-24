@@ -440,7 +440,6 @@ body[data-page="analisis-competencia"]{
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Inteligencia Comercial</div>
-    <a href="#" class="sidebar-item" data-page="intel-comercial" onclick="goPage('intel-comercial',this);return false;"><span class="icon" data-ico="layers" aria-hidden="true"></span>SKUs &amp; Referencias</a>
     <a href="#" class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this);return false;"><span class="icon" data-ico="building" aria-hidden="true"></span>Entidades</a>
     <a href="#" class="sidebar-item" data-page="intel-referencias" onclick="goPage('intel-referencias',this);return false;"><span class="icon" data-ico="link" aria-hidden="true"></span>Referencias</a>
     <a href="#" class="sidebar-item" data-page="intel-mix" onclick="goPage('intel-mix',this);return false;"><span class="icon" data-ico="flask" aria-hidden="true"></span>Mix</a>
@@ -972,47 +971,6 @@ body[data-page="analisis-competencia"]{
 </div>
 
 <!-- DISTRIBUCION -->
-<div id="page-intel-comercial" class="page">
-  <div class="section-hdr">Inteligencia Comercial — SKUs &amp; Referencias de Mercado (Fase 1: solo lectura)</div>
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-    <button class="btn primary" id="btn-load-intel-comercial">🔄 Cargar desde Sheets</button>
-    <span id="intel-comercial-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
-  </div>
-  <div id="intel-comercial-stats-wrap" style="display:none">
-    <div class="stats-row">
-      <div class="stat-card"><div class="stat-value" id="ic-total-skus">0</div><div class="stat-label">SKUs con referencias</div></div>
-      <div class="stat-card"><div class="stat-value" id="ic-total-referencias">0</div><div class="stat-label">Referencias totales</div></div>
-      <div class="stat-card"><div class="stat-value" id="ic-tipo-distribuidor">0</div><div class="stat-label">Distribuidor</div></div>
-      <div class="stat-card"><div class="stat-value" id="ic-tipo-competencia">0</div><div class="stat-label">Competencia</div></div>
-      <div class="stat-card"><div class="stat-value" id="ic-tipo-cuenta-propia">0</div><div class="stat-label">Cuenta Propia</div></div>
-      <div class="stat-card"><div class="stat-value" id="ic-tipo-mayorista">0</div><div class="stat-label">Mayorista</div></div>
-    </div>
-  </div>
-  <div class="erp-filters" id="intel-comercial-search-bar" style="display:none">
-    <div style="position:relative;flex:1;min-width:180px">
-      <input type="text" id="intel-comercial-search" placeholder="Buscar SKU..." autocomplete="off" oninput="renderIntelComercial()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
-    </div>
-    <select id="intel-comercial-filter-tipo" class="fi" onchange="renderIntelComercial()">
-      <option value="">Todos los tipos</option>
-      <option value="Distribuidor">Distribuidor</option>
-      <option value="Competencia">Competencia</option>
-      <option value="Cuenta Propia">Cuenta Propia</option>
-      <option value="Mayorista">Mayorista</option>
-    </select>
-    <span id="intel-comercial-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
-  </div>
-  <div class="table-wrap" id="intel-comercial-table-wrap" style="display:none">
-    <table id="intel-comercial-table">
-      <thead><tr>
-        <th></th>
-        <th data-col="sku">SKU</th>
-        <th data-col="refs"># Referencias</th>
-      </tr></thead>
-      <tbody id="intel-comercial-tbody"></tbody>
-    </table>
-  </div>
-</div>
-
 <div id="page-intel-entidades" class="page">
   <div class="section-hdr">Inteligencia Comercial — Entidades</div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
@@ -1903,6 +1861,7 @@ const DASH_PAGES=['dashboard','historico','cobranzas','brasil'];
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
+  if(page==='intel-comercial'){page='analisis-competencia';el=null;}   // SKUs & Referencias (jubilada): su link viejo abre Análisis de Competencia (vista Por SKU)
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
@@ -1927,7 +1886,6 @@ function goPage(page,el){
   if(page==='verificar-ml')renderML();
   if(page==='verificar-tactica')renderTactica();
   if(page==='analisis-competencia')acEntrar();
-  if(page==='intel-comercial'&&!intelComercialLoaded)loadIntelComercial();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
   if(page==='intel-referencias'&&!referenciasPageLoaded)loadReferenciasPage();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
@@ -2850,20 +2808,13 @@ function compToggleCuotas(btn){const tr=btn.closest('tr');const next=tr.nextElem
 function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').forEach(row=>{const btn=row.previousElementSibling&&row.previousElementSibling.querySelector('button[data-psug]');if(btn){compToggleCuotas(btn);compToggleCuotas(btn);}});} document.addEventListener('change',e=>{if(e.target&&/^cfg-(r|q)\d+$/.test(e.target.id))compUpdateCuotasRows();}); const _oRC=renderCompetidores;renderCompetidores=function(){let openLink=null;const op=document.querySelector('.comp-cuotas-row');if(op){const b=op.previousElementSibling&&op.previousElementSibling.querySelector('button[data-link]');if(b)openLink=b.dataset.link;}_oRC();if(openLink){const nb=Array.from(document.querySelectorAll('#competidores-tbody button[data-link]')).find(x=>x.dataset.link===openLink);if(nb)compToggleCuotas(nb);}}; compCfgLoad();
 
 // ── INTELIGENCIA COMERCIAL — DATOS COMPARTIDOS ──
-// Estado y cargador que usan SKUs & Referencias, Entidades y Referencias (Sheet COMP_SHEET_ID: Referencias_Mercado y Entidades). Vive acá, aparte de las páginas, para que
-// jubilar «SKUs & Referencias» no deje a Entidades ni a Referencias sin sus datos. Las páginas solo pintan; la lectura del Sheet pasa por estas funciones.
-const INTEL={referencias:[],entidades:[],bySku:{}};
+// Estado y cargador que usan Entidades y Referencias (Sheet COMP_SHEET_ID: Referencias_Mercado y Entidades). SKUs & Referencias, que también los usaba, está jubilada. Las páginas solo pintan; la lectura del Sheet pasa por estas funciones.
+const INTEL={referencias:[],entidades:[]};
 const INTEL_RANGO_REFS='Referencias_Mercado!A1:Z5000',INTEL_RANGO_ENTS='Entidades!A1:Z1000';
 // Relee `Entidades` (rango opcional). -> false si la pestaña no existe (o no se pudo leer); en ese caso INTEL no cambia.
-async function intelCargarEntidades(rango){const rows=await fetchSheet(COMP_SHEET_ID,rango||INTEL_RANGO_ENTS).catch(()=>null);if(!rows)return false;INTEL.entidades=_rowsToObjs(rows);intelReindexar();return true;}
+async function intelCargarEntidades(rango){const rows=await fetchSheet(COMP_SHEET_ID,rango||INTEL_RANGO_ENTS).catch(()=>null);if(!rows)return false;INTEL.entidades=_rowsToObjs(rows);return true;}
 // Relee `Referencias_Mercado` (rango opcional). -> false si la pestaña no existe.
-async function intelCargarReferencias(rango){const rows=await fetchSheet(COMP_SHEET_ID,rango||INTEL_RANGO_REFS).catch(()=>null);if(!rows)return false;INTEL.referencias=_rowsToObjs(rows);intelReindexar();return true;}
-// Une cada referencia con su entidad (`_entidad`) y la agrupa por SKU (`bySku`).
-function intelReindexar(){const entById={};INTEL.entidades.forEach(e=>{entById[e.Entidad_ID]=e;});INTEL.bySku={};
-  INTEL.referencias.forEach(r=>{r._entidad=entById[r.Entidad_ID]||null;const sku=r.SKU||'';(INTEL.bySku[sku]=INTEL.bySku[sku]||[]).push(r);});}
-
-// ── INTELIGENCIA COMERCIAL (Fase 1 — hub SKU de solo lectura) ──
-let intelComercialLoaded=false;
+async function intelCargarReferencias(rango){const rows=await fetchSheet(COMP_SHEET_ID,rango||INTEL_RANGO_REFS).catch(()=>null);if(!rows)return false;INTEL.referencias=_rowsToObjs(rows);return true;}
 
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
@@ -3490,94 +3441,6 @@ async function acCargar(refrescar){
   }catch(e){st.textContent='Error: '+(e.message||e);}
   AC.cargando=false;qs('btn-ac-load').disabled=false;
 }
-async function loadIntelComercial(){
-  const btn=qs('btn-load-intel-comercial'),status=qs('intel-comercial-status');
-  btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo pestañas...';
-  try{
-    const entsOk=await intelCargarEntidades();
-    if(!entsOk)INTEL.entidades=[];      // sin la pestaña Entidades se sigue igual (las referencias quedan sin entidad)
-    const refsOk=await intelCargarReferencias();
-    if(!refsOk){
-      status.textContent='⚠ No existe la pestaña "Referencias_Mercado" todavía — correr /intel-comercial/init y los bridges primero.';
-      btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';return;
-    }
-    intelComercialLoaded=true;
-    qs('intel-comercial-search-bar').style.display='flex';
-    qs('intel-comercial-table-wrap').style.display='block';
-    qs('intel-comercial-stats-wrap').style.display='block';
-    status.textContent=`${Object.keys(INTEL.bySku).length} SKUs · ${INTEL.referencias.length} referencias · ${INTEL.entidades.length} entidades`;
-    btn.textContent='🔄 Cargar desde Sheets';
-    renderIntelComercial();
-  }catch(e){
-    status.textContent='❌ Error: '+e.message;
-  }
-  btn.disabled=false;
-}
-
-function renderIntelComercial(){
-  const search=(qs('intel-comercial-search').value||'').toLowerCase();
-  const fTipo=qs('intel-comercial-filter-tipo').value;
-  let skus=Object.keys(INTEL.bySku);
-  if(search)skus=skus.filter(s=>s.toLowerCase().includes(search));
-  let rows=skus.map(sku=>{
-    let refs=INTEL.bySku[sku]||[];
-    if(fTipo)refs=refs.filter(r=>r.Tipo===fTipo);
-    return {sku,refs};
-  }).filter(r=>r.refs.length);
-  rows.sort((a,b)=>a.sku.localeCompare(b.sku));
-
-  qs('ic-total-skus').textContent=Object.keys(INTEL.bySku).length;
-  qs('ic-total-referencias').textContent=INTEL.referencias.length;
-  const countTipo=t=>INTEL.referencias.filter(r=>r.Tipo===t).length;
-  qs('ic-tipo-distribuidor').textContent=countTipo('Distribuidor');
-  qs('ic-tipo-competencia').textContent=countTipo('Competencia');
-  qs('ic-tipo-cuenta-propia').textContent=countTipo('Cuenta Propia');
-  qs('ic-tipo-mayorista').textContent=countTipo('Mayorista');
-  qs('intel-comercial-count').textContent=rows.length+' SKUs';
-
-  const tbody=qs('intel-comercial-tbody');
-  if(!rows.length){tbody.innerHTML='<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Sin referencias cargadas</td></tr>';return;}
-  tbody.innerHTML=rows.map((r,idx)=>{
-    const rid='ic-'+idx;
-    return `<tr style="cursor:pointer" onclick="intelToggleDetail('${rid}')">
-      <td style="color:var(--text3);font-size:11px;text-align:center" id="arr-${rid}">▶</td>
-      <td class="mono" style="font-weight:600">${r.sku}</td>
-      <td class="mono" style="text-align:center">${r.refs.length}</td>
-    </tr>
-    <tr id="${rid}" style="display:none"><td colspan="3" style="padding:0">${_intelSkuDetailHTML(r.refs)}</td></tr>`;
-  }).join('');
-}
-
-function _intelSkuDetailHTML(refs){
-  const rowsHtml=refs.map(r=>{
-    const tipoColor=r.Tipo==='Distribuidor'?'var(--accent)':r.Tipo==='Competencia'?'var(--red)':r.Tipo==='Cuenta Propia'?'var(--green)':'#ffd166';
-    const _av=(r.Activo||'').trim().toLowerCase();
-    const activo=_av===''||_av.startsWith('s')||_av==='activo'||_av==='true'||_av==='1';
-    return `<tr>
-      <td style="font-size:10px"><span style="color:${tipoColor};font-weight:600">${r.Tipo||'—'}</span></td>
-      <td style="font-size:10px">${r.Entidad_Nombre||'—'}</td>
-      <td class="mono" style="font-size:10px">${r.PVP_Override||r.PVP_Oficial||'—'}</td>
-      <td style="font-size:10px">${activo?'<span class="price-ok">Sí</span>':'<span class="price-bad">No</span>'}</td>
-      <td style="font-size:10px">${r.Origen||'—'}</td>
-      <td>${r.Link_Publicacion?`<a href="${r.Link_Publicacion}" target="_blank" class="btn-xs" style="text-decoration:none">Abrir →</a>`:'—'}</td>
-    </tr>`;
-  }).join('');
-  return `<div style="background:var(--surface2);padding:10px 16px 14px 40px">
-    <table style="width:100%">
-      <thead><tr><th style="font-size:9px">Tipo</th><th style="font-size:9px">Entidad</th><th style="font-size:9px">PVP</th><th style="font-size:9px">Activo</th><th style="font-size:9px">Origen</th><th style="font-size:9px">Publicación</th></tr></thead>
-      <tbody>${rowsHtml||'<tr><td colspan="6" style="text-align:center;color:var(--text3);font-size:10px;padding:8px">Sin referencias</td></tr>'}</tbody>
-    </table>
-  </div>`;
-}
-
-function intelToggleDetail(id){
-  const row=qs(id),arr=qs('arr-'+id);
-  if(!row)return;
-  const isOpen=row.style.display!=='none';
-  row.style.display=isOpen?'none':'table-row';
-  if(arr)arr.textContent=isOpen?'▶':'▼';
-}
-
 // ── INTELIGENCIA COMERCIAL — ENTIDADES (Fase 3, CRUD) ──
 let entidadesPageLoaded=false;
 
@@ -6978,7 +6841,6 @@ function init(){
   qs('btn-save-rules').addEventListener('click',()=>{saveStor();toast('Reglas guardadas');});
   qs('btn-reload-cats').addEventListener('click',loadCats);
   qs('btn-load-competidores').addEventListener('click',loadCompetidores);
-  qs('btn-load-intel-comercial').addEventListener('click',loadIntelComercial);
   qs('btn-load-distribucion').addEventListener('click',loadDistribucion);
   qs('btn-load-monitor').addEventListener('click',loadMonitorLecturas);
   qs('btn-run-monitor').addEventListener('click',runMonitor);
