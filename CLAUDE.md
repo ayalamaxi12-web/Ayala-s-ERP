@@ -135,7 +135,7 @@ Sidebar pages, grouped by what they do:
   inline "fix" actions that write the corrected price back to the channel via the backend.
 - **Rentabilidad Táctica** — margin/profitability calculator for the "Táctica" sales channel.
 - **Ofertas ML** — bulk-manages MercadoLibre seller campaign offers/promotions across both seller
-  accounts (IT/MT).
+  accounts (IT/MT). The list is a compact table (25 per page) with a predictive search combobox; the six summary numbers are buttons that filter it and the active filters are removable chips (presentation/filtering only: margin and PM-expected maths unchanged).
 - **Análisis de Competencia** — la pantalla de competencia vigente: Por SKU (con Histórico y Jugar mi precio), Por categoría y Eventos (lista, umbral de «baja fuerte»
   configurable y CSV), sobre `GET /competencia/analisis`. Filtro de vendedores: el buscador es predictivo (SKU + todos los vendedores que coinciden, sin mayúsculas ni tildes), los elegidos son chips y «Ver todos los vendedores» abre la lista completa; solo filtra en pantalla. Reemplaza a **Intel. Competitiva** (jubilada: su link viejo lleva a la vista Eventos; no existe más en el código).
 - **SKUs & Referencias** — jubilada (era de solo lectura; Maca carga las referencias en su planilla y el scraper las sincroniza). Su link viejo abre Análisis de Competencia. **Entidades, Referencias y Mix siguen vigentes** (comparten el cargador `intelCargarEntidades` / `intelCargarReferencias`).

@@ -464,6 +464,43 @@ body[data-modulo="ml"][data-nuevo] .page .erp-filters,body[data-modulo="ml"][dat
 body[data-nuevo] #cp-avisos{padding:10px 14px;background:var(--aviso-fondo)!important;border:1px solid var(--aviso-borde)!important;border-radius:8px!important;color:var(--aviso-texto)!important;font-family:var(--fuente)!important;font-size:13px!important;line-height:1.5}   /* aviso de Campañas ML: mismo color ámbar que los demás avisos */
 body[data-modulo="ml"][data-nuevo] .table-wrap tr:hover td{background:var(--mod-franja-fondo)}
 body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-nuevo] #cp-avisos{border-left:4px solid var(--aviso-borde)!important;padding-left:12px}
+/* — Ofertas ML: tabla compacta, resumen-botones, chips, paginación y búsqueda predictiva — */
+:root{--ofm-tabla-min:960px;--ofm-titulo-max:220px;}
+body[data-nuevo] .ofm-tabla{width:100%;min-width:var(--ofm-tabla-min);border-collapse:collapse}
+body[data-nuevo] .ofm-tabla th,body[data-nuevo] .ofm-tabla td{white-space:nowrap;vertical-align:middle}
+body[data-nuevo] .ofm-tabla th{padding:9px 10px}
+body[data-nuevo] .ofm-tabla td{padding:6px 10px;height:var(--fila-tabla,40px);border-bottom:1px solid var(--divisor);font-size:var(--fs-tabla)}
+body[data-nuevo] .ofm-tabla tbody tr:nth-child(odd){background:var(--zebra)}
+body[data-nuevo] .ofm-tabla tr.ofm-gestionar-row,body[data-nuevo] .ofm-tabla tr.ofm-gestionar-row td{white-space:normal}
+.ofm-num{text-align:right}
+.ofm-titulo-fila{display:flex;align-items:center;gap:8px;max-width:var(--ofm-titulo-max)}
+.ofm-titulo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tinta);font-weight:600}
+.ofm-precio-oferta{color:var(--mod-texto)}
+.ofm-vacio{padding:24px;text-align:center;color:var(--texto-suave);white-space:normal}
+.ofm-tabla th{position:relative}
+.ofm-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.ofm-pag{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:12px;margin-top:10px}
+.ofm-pag-txt{font:600 13px var(--fuente);color:var(--tinta-2)}
+.ofm-pag .btn:disabled{opacity:.5;cursor:not-allowed}
+.ofm-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0}
+.ofm-chip{display:inline-flex;align-items:center;gap:2px;padding:2px 2px 2px 10px;border:1px solid var(--mod-suave-borde);border-radius:var(--r-chip);background:var(--mod-suave);color:var(--mod-suave-texto);font:600 12px var(--fuente)}
+.ofm-chip button{min-width:24px;min-height:24px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;font:700 14px/1 var(--fuente);cursor:pointer}
+.ofm-chip button:hover{background:var(--mod-suave-borde)}
+.ofm-chip button:focus-visible,.ofm-chips .btn-xs:focus-visible{outline:2px solid var(--mod-foco);outline-offset:1px}
+button.stat-card{font:inherit;text-align:left;cursor:pointer;color:inherit;background:transparent}
+button.stat-card:hover{background:var(--mod-franja-fondo)}
+button.stat-card:focus-visible{outline:2px solid var(--mod-foco);outline-offset:-2px}
+button.stat-card[aria-pressed="true"]{background:var(--mod-suave);box-shadow:inset 0 -3px 0 var(--mod-activo-borde)}
+button.stat-card[aria-pressed="true"] .stat-label::before{content:'✓ '}
+.ofm-busq{position:relative;flex:1;min-width:200px}
+.ofm-sug{position:absolute;left:0;right:0;top:100%;margin-top:2px;z-index:60;max-height:360px;overflow-y:auto;background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r-recuadro);box-shadow:0 4px 12px rgba(11,39,51,.12)}
+.ofm-sug .ofm-sug-h{padding:6px 12px 4px;font:700 12px var(--fuente);letter-spacing:.04em;text-transform:uppercase;color:var(--texto-suave);background:var(--zebra);border-bottom:1px solid var(--divisor)}
+.ofm-sug div.it{display:flex;flex-direction:column;gap:1px;padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--divisor)}
+.ofm-sug div.it:last-child{border-bottom:0}
+.ofm-sug div.it.on,.ofm-sug div.it:hover{background:var(--mod-suave)}
+.ofm-sug .ofm-sug-t{font:600 13px var(--fuente);color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofm-sug .ofm-sug-s{font:400 12px var(--fuente);color:var(--texto-suave)}
+.ofm-sug mark{background:var(--mod-suave-borde);color:var(--tinta);font-weight:700;border-radius:2px;padding:0 1px}
 </style>
 </head>
 <body>
@@ -1470,37 +1507,37 @@ body[data-modulo="ml"][data-nuevo] .page .ac-aviso,body[data-modulo="ml"][data-n
     <button class="btn btn-secondary" id="ofm-tab-MT" onclick="ofmTab('MT')">📦 Arg</button>
   </div>
 
-  <div class="stats-row" id="ofm-stats-wrap" style="display:none;grid-template-columns:repeat(4,1fr)">
-    <div class="stat-card"><div class="stat-value" id="ofm-total">0</div><div class="stat-label">Ofertas activas</div></div>
-    <div class="stat-card"><div class="stat-value" id="ofm-margen-prom">—</div><div class="stat-label">Margen % promedio</div></div>
-    <div class="stat-card"><div class="stat-value price-bad" id="ofm-bajo-umbral">0</div><div class="stat-label">Bajo umbral</div></div>
-    <div class="stat-card"><div class="stat-value" style="color:var(--text2)" id="ofm-incidencias">0</div><div class="stat-label">Sin costo/IVA Táctica</div></div>
-    <div class="stat-card"><div class="stat-value price-bad" id="ofm-dif-pm">0</div><div class="stat-label">Difieren del PM</div></div>
-    <div class="stat-card"><div class="stat-value price-bad" id="ofm-alertas-estado">0</div><div class="stat-label">Inactivas y/o sin stock</div></div>
+  <div class="stats-row" id="ofm-stats-wrap" style="display:none" role="group" aria-label="Resumen de ofertas: tocá un número para filtrar la tabla">
+    <button type="button" class="stat-card" data-stat="todas" aria-pressed="false" onclick="ofmStatToggle('todas')"><div class="stat-value" id="ofm-total">0</div><div class="stat-label">Ofertas activas</div></button>
+    <button type="button" class="stat-card" data-stat="conMargen" aria-pressed="false" onclick="ofmStatToggle('conMargen')" title="Filtra las ofertas con margen calculado"><div class="stat-value" id="ofm-margen-prom">—</div><div class="stat-label">Margen % promedio</div></button>
+    <button type="button" class="stat-card" data-stat="bajo" aria-pressed="false" onclick="ofmStatToggle('bajo')"><div class="stat-value price-bad" id="ofm-bajo-umbral">0</div><div class="stat-label">Bajo umbral</div></button>
+    <button type="button" class="stat-card" data-stat="incid" aria-pressed="false" onclick="ofmStatToggle('incid')"><div class="stat-value" style="color:var(--text2)" id="ofm-incidencias">0</div><div class="stat-label">Sin costo/IVA Táctica</div></button>
+    <button type="button" class="stat-card" data-stat="dif" aria-pressed="false" onclick="ofmStatToggle('dif')"><div class="stat-value price-bad" id="ofm-dif-pm">0</div><div class="stat-label">Difieren del PM</div></button>
+    <button type="button" class="stat-card" data-stat="alerta" aria-pressed="false" onclick="ofmStatToggle('alerta')"><div class="stat-value price-bad" id="ofm-alertas-estado">0</div><div class="stat-label">Inactivas y/o sin stock</div></button>
   </div>
 
   <div class="erp-filters" id="ofm-filters" style="display:none">
-    <input type="text" id="ofm-search" placeholder="Buscar SKU, título o MLA..." oninput="ofmRender()" style="flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+    <div class="ofm-busq"><input type="text" id="ofm-search" role="combobox" aria-expanded="false" aria-controls="ofm-sug" aria-autocomplete="list" aria-label="Buscar SKU, título o MLA" placeholder="Buscar SKU, título o MLA..." autocomplete="off" oninput="ofmSugerir()" onkeydown="ofmSugKey(event)" onfocus="ofmSugerir()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none"><div id="ofm-sug" class="ofm-sug" role="listbox" aria-label="Ofertas que coinciden" style="display:none"></div></div>
     <div class="ms-wrap" id="ms-ofm-pm"><div class="ms-trigger" onclick="toggleMS('ms-ofm-pm')">Todos los PMs</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ofm-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ofm-pm')">Todos</button><button onclick="clearMS('ms-ofm-pm')">Ninguno</button></div></div></div>
     <div class="ms-wrap" id="ms-ofm-cat"><div class="ms-trigger" onclick="toggleMS('ms-ofm-cat')">Todas las categorías</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-ofm-cat')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-ofm-cat')">Todos</button><button onclick="clearMS('ms-ofm-cat')">Ninguno</button></div></div></div>
-    <select id="ofm-filter-tipo" class="fi" onchange="ofmRender()">
+    <select id="ofm-filter-tipo" class="fi" onchange="ofmFiltroCambio()">
       <option value="">Todos los tipos</option>
       <option value="SELLER_CAMPAIGN">Campaña propia</option>
       <option value="ML">Campaña de ML</option>
       <option value="PRICE_DISCOUNT">Descuento propio</option>
     </select>
-    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)"><input type="checkbox" id="ofm-filter-bajo-umbral" onchange="ofmRender()">Solo bajo umbral</label>
-    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:11px;color:var(--text2)" title="Precio de oferta (lo que paga el cliente) vs. lo que pide el PM: precio base si es cuota simple, o + el % real que cobra ML por esa cuota si tiene cuotas"><input type="checkbox" id="ofm-filter-dif-pm" onchange="ofmRender()">Solo con diferencia vs. PM</label>
-    <select id="ofm-sort" class="fi" onchange="ofmRender()">
+    <select id="ofm-sort" class="fi" onchange="ofmFiltroCambio()">
       <option value="margen-asc">Margen % ↑</option>
       <option value="margen-desc">Margen % ↓</option>
       <option value="desc-desc">% Descuento ↓</option>
     </select>
     <span id="ofm-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
+  <div id="ofm-chips" class="ofm-chips" role="group" aria-label="Filtros activos" style="display:none"></div>
 
   <div id="ofm-table-wrap" style="display:none">
-    <div class="cards-grid" id="ofm-tbody"></div>
+    <div class="table-wrap"><table id="ofm-table" class="ofm-tabla"><thead><tr><th scope="col">Oferta</th><th scope="col">MLA</th><th scope="col">SKU</th><th scope="col">Campaña</th><th scope="col" class="ofm-num">Precio</th><th scope="col" class="ofm-num" title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota, comparado contra el precio de oferta">PM esperado</th><th scope="col" class="ofm-num">Margen</th><th scope="col"><span class="ofm-sr">Acciones</span></th></tr></thead><tbody id="ofm-tbody"></tbody></table></div>
+    <nav class="ofm-pag" id="ofm-pag" aria-label="Paginación de ofertas"></nav>
   </div>
 
   <div style="margin-top:24px">
@@ -4567,19 +4604,61 @@ function ofmTipoBadge(f){
 // Filtro por PM/categoría (sectorizado, pedido de Natalia 2026-09-09) --
 // encadena sobre el wrap que ya usa Competidores ML (toggleMSValue/clearMS/
 // selectAllMS ya vienen envueltos una vez ahí), agrega el caso ms-ofm-*.
-const _oTMVOfm=toggleMSValue;toggleMSValue=function(id,v){_oTMVOfm(id,v);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
-const _oCMSOfm=clearMS;clearMS=function(id){_oCMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
-const _oSAMSOfm=selectAllMS;selectAllMS=function(id){_oSAMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat')ofmRender();};
+const _oTMVOfm=toggleMSValue;toggleMSValue=function(id,v){_oTMVOfm(id,v);if(id==='ms-ofm-pm'||id==='ms-ofm-cat'){OFM_UI.page=1;ofmRender();}};
+const _oCMSOfm=clearMS;clearMS=function(id){_oCMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat'){OFM_UI.page=1;ofmRender();}};
+const _oSAMSOfm=selectAllMS;selectAllMS=function(id){_oSAMSOfm(id);if(id==='ms-ofm-pm'||id==='ms-ofm-cat'){OFM_UI.page=1;ofmRender();}};
+// ── Tabla compacta (25 por página), búsqueda predictiva, resumen como filtros y chips. Solo presentación y filtrado en pantalla: el margen y el PM esperado se calculan igual que antes. ──
+const OFM_UI={page:1,pageSize:25,q:'',stat:new Set(),sug:[],sugSel:-1};
+const OFM_STAT_ROTULO={conMargen:'Con margen calculado',bajo:'Bajo umbral',incid:'Sin costo/IVA Táctica',dif:'Difieren del PM',alerta:'Inactivas y/o sin stock'};
+function ofmNormTxt(t){return String(t==null?'':t).split('').map(c=>c.normalize('NFD').charAt(0).toLowerCase()).join('');}   // un carácter por carácter: los índices coinciden con el texto original
+function ofmResaltar(t,q){t=String(t==null?'':t);const n=ofmNormTxt(q).trim();if(!n)return acEsc(t);const i=ofmNormTxt(t).indexOf(n);return i<0?acEsc(t):acEsc(t.slice(0,i))+'<mark>'+acEsc(t.slice(i,i+n.length))+'</mark>'+acEsc(t.slice(i+n.length));}
+// Ofertas que coinciden por SKU, título o MLA (sin importar mayúsculas ni tildes): primero el SKU/MLA exacto, luego los que empiezan igual, luego el resto. -> {lista:[hasta max], total}
+function ofmBuscarOfertas(q,filas,max){const n=ofmNormTxt(q).trim();if(!n)return{lista:[],total:0};const out=[];
+  filas.forEach(f=>{const sku=ofmNormTxt(f.sku||f.sku_ml||''),mla=ofmNormTxt(f.item_id||''),tit=ofmNormTxt(f.titulo||'');
+    const iS=sku.indexOf(n),iM=mla.indexOf(n),iT=tit.indexOf(n);if(iS<0&&iM<0&&iT<0)return;
+    out.push({f,orden:(sku===n||mla===n)?0:(iS===0||iM===0)?1:(iS>0||iM>0)?2:3+Math.min(iT,50)/100});});
+  out.sort((a,b)=>a.orden-b.orden||String(a.f.titulo||'').localeCompare(String(b.f.titulo||''),'es'));
+  return{lista:out.slice(0,max||50).map(x=>x.f),total:out.length};}
+// Estados del resumen que se pueden usar de filtro. ctx={umbral,tol}. Cada fila ya trae _margen, _pmDiffPct y _alerta.
+function ofmCumpleStat(f,k,ctx){switch(k){
+  case 'conMargen':return !!(f._margen&&f._margen.margenPct!==null);
+  case 'bajo':return !!(f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<ctx.umbral);
+  case 'incid':return !!f.incidencia;
+  case 'dif':return f._pmDiffPct!==null&&f._pmDiffPct!==undefined&&Math.abs(f._pmDiffPct)>ctx.tol;
+  case 'alerta':return !!f._alerta;}return true;}
+// fl={q, stat:Set, tipo, pms:[..]|null, cats:[..]|null}; ctx={umbral,tol,tipoDe(f),pmDe(f),catDe(f)}. Los filtros se combinan (Y).
+function ofmFiltrar(filas,fl,ctx){const q=ofmNormTxt(fl.q||'').trim();
+  return filas.filter(f=>{
+    if(q&&!(ofmNormTxt(f.titulo).includes(q)||ofmNormTxt(f.sku||f.sku_ml).includes(q)||ofmNormTxt(f.item_id).includes(q)))return false;
+    if(fl.tipo&&ctx.tipoDe(f)!==fl.tipo)return false;
+    for(const k of (fl.stat||[]))if(!ofmCumpleStat(f,k,ctx))return false;
+    if(fl.pms&&!fl.pms.includes(ctx.pmDe(f)))return false;
+    if(fl.cats&&!fl.cats.includes(ctx.catDe(f)))return false;
+    return true;});}
+function ofmPaginar(total,pagina,porPagina){const paginas=Math.max(1,Math.ceil(total/porPagina)),p=Math.min(Math.max(1,pagina),paginas),desde=total?(p-1)*porPagina+1:0,hasta=Math.min(total,p*porPagina);return{pagina:p,paginas,desde,hasta};}
+function ofmCtx(){return{umbral:OFM.umbral,tol:(S.tolGreen||1.5),tipoDe:ofmTipoFiltro,pmDe:f=>{const p=S.pmData[normSku(f.sku||'')];return p&&p.pmName;},catDe:f=>getCat(f.sku||'')||'Sin categoría'};}
+function ofmFiltrosActuales(){return{q:OFM_UI.q,stat:OFM_UI.stat,tipo:qs('ofm-filter-tipo')?.value||'',pms:getMSValues('ms-ofm-pm'),cats:getMSValues('ms-ofm-cat')};}
+function ofmFiltroCambio(){OFM_UI.page=1;ofmRender();}
+function ofmStatToggle(k){if(k==='todas')OFM_UI.stat.clear();else if(OFM_UI.stat.has(k))OFM_UI.stat.delete(k);else OFM_UI.stat.add(k);OFM_UI.page=1;ofmRender();}
+function ofmQuitarFiltro(tipo,val){if(tipo==='stat')OFM_UI.stat.delete(val);else if(tipo==='q'){OFM_UI.q='';const i=qs('ofm-search');if(i)i.value='';}
+  else if(tipo==='tipo')qs('ofm-filter-tipo').value='';else if(tipo==='pm')clearMS('ms-ofm-pm');else if(tipo==='cat')clearMS('ms-ofm-cat');
+  OFM_UI.page=1;ofmRender();}
+function ofmLimpiarFiltros(){OFM_UI.stat.clear();OFM_UI.q='';const i=qs('ofm-search');if(i)i.value='';qs('ofm-filter-tipo').value='';ofmSugCerrar();OFM_UI.page=1;clearMS('ms-ofm-pm');clearMS('ms-ofm-cat');ofmRender();}
+function ofmPag(d){OFM_UI.page+=d;ofmRender();qs('ofm-table-wrap').scrollIntoView({block:'nearest'});}
+function ofmChipsHtml(fl){const ch=[],t={SELLER_CAMPAIGN:'Campaña propia',ML:'Campaña de ML',PRICE_DISCOUNT:'Descuento propio'};
+  const chip=(tipo,val,txt)=>`<span class="ofm-chip">${acEsc(txt)}<button type="button" aria-label="Quitar filtro: ${acEsc(txt)}" onclick="ofmQuitarFiltro('${tipo}','${acEsc(val)}')">×</button></span>`;
+  if(fl.q)ch.push(chip('q','','Búsqueda: «'+fl.q+'»'));
+  [...fl.stat].forEach(k=>ch.push(chip('stat',k,OFM_STAT_ROTULO[k])));
+  if(fl.tipo)ch.push(chip('tipo','','Tipo: '+(t[fl.tipo]||fl.tipo)));
+  if(fl.pms)ch.push(chip('pm','','PM: '+fl.pms.join(', ')));
+  if(fl.cats)ch.push(chip('cat','','Categoría: '+fl.cats.join(', ')));
+  return ch.length?ch.join('')+'<button type="button" class="btn-xs" onclick="ofmLimpiarFiltros()">Limpiar filtros</button>':'';}
 function ofmRender(){
   if(!ofmResult){ofmReanclarPanelAbierto();return;}
   const tc=ofmTc();
-  const search=(qs('ofm-search')?.value||'').toLowerCase();
-  const filtroTipo=qs('ofm-filter-tipo')?.value||'';
-  const soloBajoUmbral=qs('ofm-filter-bajo-umbral')?.checked;
-  const soloDifPM=qs('ofm-filter-dif-pm')?.checked;
   const sortVal=qs('ofm-sort')?.value||'margen-asc';
 
-  let filas=ofmResult.filas.filter(f=>f.cuenta===ofmTabCuenta).map(f=>{
+  const todas=ofmResult.filas.filter(f=>f.cuenta===ofmTabCuenta).map(f=>{
     let margen=null;
     if(f._costoUnitSinIva!=null){
       const costoARS=f._costoUnitSinIva*tc;
@@ -4591,35 +4670,28 @@ function ofmRender(){
     // contra el PM daría diferencia todo el tiempo sin ser un problema real.
     const pmEsperado=ofmPrecioEsperadoPM(f);
     const pmDiffPct=(pmEsperado&&f.precio_oferta)?(f.precio_oferta-pmEsperado)/pmEsperado*100:null;
-    return{...f,_margen:margen,_pmEsperado:pmEsperado,_pmDiffPct:pmDiffPct};
+    return{...f,_margen:margen,_pmEsperado:pmEsperado,_pmDiffPct:pmDiffPct,_alerta:ofmAlertaTexto(f)};
   });
+  const ctx=ofmCtx();
 
-  let incidenciasCount=filas.filter(f=>f.incidencia).length;
-  let bajoUmbralCount=filas.filter(f=>f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<OFM.umbral).length;
-  let difPMCount=filas.filter(f=>f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5)).length;
-  let alertaEstadoCount=filas.filter(f=>ofmAlertaTexto(f)).length;
-  qs('ofm-total').textContent=filas.length;
-  const conMargen=filas.filter(f=>f._margen&&f._margen.margenPct!==null);
+  // El resumen cuenta SIEMPRE sobre todas las ofertas de la cuenta (no cambia al filtrar): cada número es un botón que filtra la tabla.
+  qs('ofm-total').textContent=todas.length;
+  const conMargen=todas.filter(f=>f._margen&&f._margen.margenPct!==null);
   qs('ofm-margen-prom').textContent=conMargen.length?(conMargen.reduce((s,f)=>s+f._margen.margenPct,0)/conMargen.length*100).toFixed(1)+'%':'—';
-  qs('ofm-bajo-umbral').textContent=bajoUmbralCount;
-  qs('ofm-incidencias').textContent=incidenciasCount;
-  qs('ofm-dif-pm').textContent=difPMCount;
-  qs('ofm-alertas-estado').textContent=alertaEstadoCount;
+  qs('ofm-bajo-umbral').textContent=todas.filter(f=>ofmCumpleStat(f,'bajo',ctx)).length;
+  qs('ofm-incidencias').textContent=todas.filter(f=>ofmCumpleStat(f,'incid',ctx)).length;
+  qs('ofm-dif-pm').textContent=todas.filter(f=>ofmCumpleStat(f,'dif',ctx)).length;
+  qs('ofm-alertas-estado').textContent=todas.filter(f=>ofmCumpleStat(f,'alerta',ctx)).length;
+  document.querySelectorAll('#ofm-stats-wrap [data-stat]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.stat==='todas'?OFM_UI.stat.size===0:OFM_UI.stat.has(b.dataset.stat))));
 
   // Sectorizado por PM/categoría -- pedido de Natalia 2026-09-09, mismo
   // patrón ya usado en Competidores ML (S.pmData/getCat(), initMS/getMSValues).
   const _pmSetOfm=new Set(),_catSetOfm=new Set();
-  filas.forEach(f=>{const p=S.pmData[normSku(f.sku||'')];if(p&&p.pmName)_pmSetOfm.add(p.pmName);_catSetOfm.add(getCat(f.sku||'')||'Sin categoría');});
+  todas.forEach(f=>{const p=S.pmData[normSku(f.sku||'')];if(p&&p.pmName)_pmSetOfm.add(p.pmName);_catSetOfm.add(getCat(f.sku||'')||'Sin categoría');});
   initMS('ms-ofm-pm',_pmSetOfm);initMS('ms-ofm-cat',_catSetOfm);
-  const fPMOfm=getMSValues('ms-ofm-pm'),fCatOfm=getMSValues('ms-ofm-cat');
 
-  if(search)filas=filas.filter(f=>(f.titulo||'').toLowerCase().includes(search)||(f.sku||'').toLowerCase().includes(search)||(f.item_id||'').toLowerCase().includes(search));
-  if(filtroTipo)filas=filas.filter(f=>ofmTipoFiltro(f)===filtroTipo);
-  if(soloBajoUmbral)filas=filas.filter(f=>f._margen&&f._margen.margenPct!==null&&f._margen.margenPct*100<OFM.umbral);
-  if(soloDifPM)filas=filas.filter(f=>f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5));
-  if(fPMOfm)filas=filas.filter(f=>{const p=S.pmData[normSku(f.sku||'')];return p&&fPMOfm.includes(p.pmName);});
-  if(fCatOfm)filas=filas.filter(f=>fCatOfm.includes(getCat(f.sku||'')||'Sin categoría'));
-
+  const fl=ofmFiltrosActuales();
+  const filas=ofmFiltrar(todas,fl,ctx);
   filas.sort((a,b)=>{
     if(sortVal==='desc-desc')return(b.descuento_pct||0)-(a.descuento_pct||0);
     const ma=a._margen?a._margen.margenPct:null,mb=b._margen?b._margen.margenPct:null;
@@ -4627,46 +4699,48 @@ function ofmRender(){
     return sortVal==='margen-desc'?mb-ma:ma-mb;
   });
 
-  qs('ofm-count').textContent=`${filas.length} ofertas`;
-  qs('ofm-tbody').innerHTML=filas.map(f=>{
+  const pg=ofmPaginar(filas.length,OFM_UI.page,OFM_UI.pageSize);OFM_UI.page=pg.pagina;
+  qs('ofm-count').textContent=`${filas.length} de ${todas.length} ofertas`;
+  const chips=qs('ofm-chips');chips.innerHTML=ofmChipsHtml(fl);chips.style.display=chips.innerHTML?'flex':'none';
+  qs('ofm-tbody').innerHTML=filas.slice(pg.desde?pg.desde-1:0,pg.hasta).map(f=>{
     const m=f._margen;
     const margenColor=!m||m.margenPct===null?'var(--text2)':m.margenPct*100<OFM.umbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
     const link=f.permalink||`https://articulo.mercadolibre.com.ar/${f.item_id}`;
-    const pmDifiere=f._pmDiffPct!==null&&Math.abs(f._pmDiffPct)>(S.tolGreen||1.5);
-    const alerta=ofmAlertaTexto(f);
-    return`<div class="ofm-card${alerta?' ofm-card-alerta':''}" data-item-id="${f.item_id}">
-      ${alerta?`<div class="ofm-card-alerta-msg">⚠ ${alerta}</div>`:''}
-      <div class="ofm-card-titulo" title="${(f.titulo||'').replace(/"/g,'&quot;')}">${f.titulo||''}</div>
-      <div class="ofm-card-sub">
-        <a href="${link}" target="_blank" style="color:var(--accent)">${f.item_id}</a>
-        <span>${f.sku||f.sku_ml||'<span style="color:var(--red)">sin SKU</span>'}</span>
-        <span style="color:var(--text3)">${OFM_DOMAIN_LABELS[f.domain_id]||f.domain_id||'—'}</span>
-        ${ofmTipoBadge(f)}
-      </div>
-      <div class="ofm-card-precios">
-        <span class="ofm-card-precio-normal">$${fmtN(Math.round(f.precio_normal||0))}</span>
-        <span class="ofm-card-precio-oferta">$${fmtN(Math.round(f.precio_oferta||0))}</span>
-        <span class="ofm-card-desc">${f.descuento_pct!=null?'-'+f.descuento_pct.toFixed(1)+'%':'—'}</span>
-        ${f.cuotas_ofrecidas?`<span class="badge badge-blue">${f.cuotas_ofrecidas}x</span>`:'<span class="badge badge-gray">Contado</span>'}
-      </div>
-      <div class="ofm-card-fila">
-        <span title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota (CUOTAS_PCT_ML), comparado contra el precio de oferta">PM esperado: <b style="color:var(--text)">${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'sin PM'}</b></span>
-        <span class="badge ${pmDifiere?'badge-red':'badge-gray'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</span>
-      </div>
-      <div class="ofm-card-fila">
-        <span>Margen</span>
-        <span class="ofm-card-margen" style="color:${margenColor}">${m&&m.margenPct!==null?fmtN(Math.round(m.margen))+' ('+(m.margenPct*100).toFixed(1)+'%)':(f.incidencia||'—')}</span>
-      </div>
-      <div class="ofm-card-acciones">
-        <button class="btn-xs" onclick="ofmToggleGestionar(this,'${f.item_id}')">⚙ Gestionar</button>
-        <a href="${link}" target="_blank" style="color:var(--text3);font-size:11px">🔗 Ver en ML</a>
-      </div>
-    </div>`;
-  }).join('');
-  filas.forEach(f=>{ofmFilaPorId[f.item_id]=f;});
+    const pmDifiere=ofmCumpleStat(f,'dif',ctx);
+    return`<tr data-item-id="${acEsc(f.item_id)}"${f._alerta?' class="ofm-fila-alerta"':''}>
+      <td class="ofm-td-titulo"><div class="ofm-titulo-fila"><span class="ofm-titulo" title="${acEsc(f.titulo)}">${acEsc(f.titulo)}</span>${f._alerta?`<span class="badge badge-red" title="Estado de la publicación en ML">⚠ ${acEsc(f._alerta)}</span>`:''}</div></td>
+      <td><a href="${acEsc(link)}" target="_blank" rel="noopener" style="color:var(--accent)">${acEsc(f.item_id)}</a></td>
+      <td>${f.sku||f.sku_ml?acEsc(f.sku||f.sku_ml):'<span style="color:var(--red)">sin SKU</span>'}</td>
+      <td>${ofmTipoBadge(f)}</td>
+      <td class="ofm-num"><span class="ofm-card-precio-normal">$${fmtN(Math.round(f.precio_normal||0))}</span> <b class="ofm-precio-oferta">$${fmtN(Math.round(f.precio_oferta||0))}</b> <span class="ofm-card-desc">${f.descuento_pct!=null?'-'+f.descuento_pct.toFixed(1)+'%':'—'}</span> ${f.cuotas_ofrecidas?`<span class="badge badge-blue">${f.cuotas_ofrecidas}x</span>`:'<span class="badge badge-gray">Contado</span>'}</td>
+      <td class="ofm-num"><b>${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'sin PM'}</b> <span class="badge ${pmDifiere?'badge-red':'badge-gray'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</span></td>
+      <td class="ofm-num" style="color:${margenColor}">${m&&m.margenPct!==null?fmtN(Math.round(m.margen))+' ('+(m.margenPct*100).toFixed(1)+'%)':acEsc(f.incidencia||'—')}</td>
+      <td><button type="button" class="btn-xs" onclick="ofmToggleGestionar(this,'${acEsc(f.item_id)}')">⚙ Gestionar</button></td>
+    </tr>`;
+  }).join('')||`<tr><td colspan="8" class="ofm-vacio">Ninguna oferta coincide con los filtros.</td></tr>`;
+  qs('ofm-pag').innerHTML=`<button type="button" class="btn" onclick="ofmPag(-1)"${pg.pagina<=1?' disabled':''}>Anterior</button><span class="ofm-pag-txt" role="status" aria-live="polite">${pg.desde}–${pg.hasta} de ${filas.length}</span><button type="button" class="btn" onclick="ofmPag(1)"${pg.pagina>=pg.paginas?' disabled':''}>Siguiente</button>`;
+  todas.forEach(f=>{ofmFilaPorId[f.item_id]=f;});
+  OFM_UI.todas=todas;
   document.querySelectorAll('.ofm-gestionar-row').forEach(row=>row.remove());
   ofmReanclarPanelAbierto();
 }
+// Búsqueda predictiva (combobox): la lista se abre al escribir; Enter sin opción elegida filtra la tabla con lo escrito, y elegir una opción filtra por ese MLA.
+function ofmSugerir(){const box=qs('ofm-sug'),inp=qs('ofm-search');if(!box||!inp)return;const q=inp.value;
+  const r=q.trim()?ofmBuscarOfertas(q,OFM_UI.todas||[],50):{lista:[],total:0};OFM_UI.sug=r.lista;OFM_UI.sugSel=-1;
+  if(!r.lista.length){ofmSugCerrar();return;}
+  box.innerHTML=`<div class="ofm-sug-h" role="presentation">Ofertas · ${r.total} ${r.total===1?'coincide':'coinciden'}${r.total>r.lista.length?` (se muestran ${r.lista.length}; Enter filtra la tabla con todas)`:''}</div>`+
+    r.lista.map((f,i)=>`<div class="it" role="option" id="ofm-opt-${i}" aria-selected="false" data-i="${i}" onmousedown="event.preventDefault();ofmSugElegir(${i})"><span class="ofm-sug-t">${ofmResaltar(f.titulo,q)}</span><span class="ofm-sug-s">${ofmResaltar(f.item_id,q)} · ${ofmResaltar(f.sku||f.sku_ml||'sin SKU',q)}</span></div>`).join('');
+  box.style.display='block';box.scrollTop=0;inp.setAttribute('aria-expanded','true');inp.removeAttribute('aria-activedescendant');}
+function ofmSugCerrar(){const box=qs('ofm-sug'),inp=qs('ofm-search');if(box){box.style.display='none';box.innerHTML='';}if(inp){inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');}OFM_UI.sug=[];OFM_UI.sugSel=-1;}
+function ofmSugElegir(i){const f=(OFM_UI.sug||[])[i];if(!f)return;qs('ofm-search').value=f.item_id;OFM_UI.q=f.item_id;ofmSugCerrar();OFM_UI.page=1;ofmRender();}
+function ofmSugKey(e){const box=qs('ofm-sug'),inp=qs('ofm-search'),abierta=box&&box.style.display!=='none'&&(OFM_UI.sug||[]).length;
+  if(e.key==='Escape'){ofmSugCerrar();return;}
+  if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!abierta){e.preventDefault();ofmSugerir();return;}
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const n=OFM_UI.sug.length;OFM_UI.sugSel=((OFM_UI.sugSel+1+(e.key==='ArrowDown'?1:-1)+n+1)%(n+1))-1;
+    box.querySelectorAll('.it').forEach((el,i)=>{const on=i===OFM_UI.sugSel;el.classList.toggle('on',on);el.setAttribute('aria-selected',String(on));if(on)el.scrollIntoView({block:'nearest'});});
+    if(OFM_UI.sugSel>=0)inp.setAttribute('aria-activedescendant','ofm-opt-'+OFM_UI.sugSel);else inp.removeAttribute('aria-activedescendant');return;}
+  if(e.key==='Enter'){e.preventDefault();if(abierta&&OFM_UI.sugSel>=0){ofmSugElegir(OFM_UI.sugSel);return;}OFM_UI.q=inp.value.trim();ofmSugCerrar();OFM_UI.page=1;ofmRender();}}
+document.addEventListener('click',e=>{if(!e.target.closest('#ofm-sug')&&e.target.id!=='ofm-search')ofmSugCerrar();});
 // Bug real 2026-08-27: cambiar TC/comisión/umbral (arriba) no refrescaba el
 // panel "⚙ Gestionar" que ya estaba abierto -- el de la tabla principal se
 // borraba sin más (reconstrucción de #ofm-tbody) y el del buscador puntual
