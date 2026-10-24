@@ -16,7 +16,7 @@ ENTS = [['Entidad_ID', 'Nombre'], ['E1', 'TIENDA A'], ['E2', 'TIENDA B']]
 
 def correr(cuerpo, hojas=None):
     s = open(INDEX, encoding='utf-8').read()
-    src = re.search(r"const INTEL=\{.*?\};", s).group(0) + '\n' + re.search(r"const INTEL_RANGO_REFS=.*?;", s).group(0) + '\n' + _fn(s, '_rowsToObjs') + '\n'
+    src = s[s.index('// ICONOS-INICIO'):s.index('// ICONOS-FIN')] + _fn(s, 'referenciasAvisoHtml') + '\n' + re.search(r"const INTEL=\{.*?\};", s).group(0) + '\n' + re.search(r"const INTEL_RANGO_REFS=.*?;", s).group(0) + '\n' + _fn(s, '_rowsToObjs') + '\n'
     for n in ('intelCargarEntidades', 'intelCargarReferencias'):                                  # son async: _fn busca 'function nombre('
         i = s.index(f'async function {n}(')
         j = s.index('{', i)
@@ -26,10 +26,10 @@ def correr(cuerpo, hojas=None):
             if d == 0:
                 src += s[i:k + 1] + '\n'
                 break
-    pre = ("const H=JSON.parse(process.argv[1]);const llamadas=[];global.COMP_SHEET_ID='SHEET';"
+    pre = ("const H=JSON.parse(require('fs').readFileSync(0,'utf8'));const llamadas=[];global.COMP_SHEET_ID='SHEET';"
            "global.fetchSheet=async(id,rango)=>{llamadas.push(rango);const k=rango.split('!')[0];if(!(k in H))throw new Error('no existe');return H[k];};\n")
-    out = subprocess.run(['node', '-e', src + '\n' + pre + '(async()=>{' + cuerpo + '})();', json.dumps(hojas if hojas is not None else {'Referencias_Mercado': REFS, 'Entidades': ENTS})],
-                         capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(['node', '-e', src + '\n' + pre + '(async()=>{' + cuerpo + '})();'],
+                         input=json.dumps(hojas if hojas is not None else {'Referencias_Mercado': REFS, 'Entidades': ENTS}), capture_output=True, text=True, check=True).stdout
     return json.loads(out)
 
 
@@ -52,3 +52,29 @@ def test_sku_e_inventario_de_la_pagina_jubilada_ya_no_estan_en_el_html():
     assert "page==='intel-comercial'){page='analisis-competencia'" in s                            # el link viejo lleva a Análisis de Competencia
     for vive in ('page-intel-entidades', 'page-intel-referencias', 'loadEntidadesPage', 'loadReferenciasPage'):
         assert vive in s, vive                                                                       # Entidades y Referencias NO se tocan
+
+
+def filas(n):
+    """n filas en total (encabezado incluido), como las devuelve el Sheet hasta la última con datos."""
+    return [REFS[0]] + [[f'R{i}', f'SKU-{i}', 'E1', 'Competencia'] for i in range(1, n)]
+
+
+def test_aviso_de_limite_cuando_la_lectura_llega_al_tope_de_filas():
+    cuerpo = "const f=await intelCargarReferencias(X.rango);console.log(JSON.stringify([f,INTEL.referencias.length,INTEL.refsTope,INTEL.refsTruncadas]))"
+    pagina = lambda n, rango=None: correr(cuerpo.replace('X.rango', repr(rango) if rango else 'undefined'), {'Referencias_Mercado': filas(n)})
+    assert pagina(5000) == [True, 4999, 5000, True]                           # 5000 filas = el tope: puede haber más
+    assert pagina(4999) == [True, 4998, 5000, False]                          # una menos: se leyó todo
+    assert pagina(1000, 'Referencias_Mercado!A1:Z1000') == [True, 999, 1000, True]   # el tope sale del rango pedido
+    assert pagina(3) == [True, 2, 5000, False]
+
+
+def test_texto_del_aviso_visible_y_sin_aviso_cuando_no_se_alcanza():
+    h = correr("console.log(JSON.stringify([referenciasAvisoHtml(true,4999,5000),referenciasAvisoHtml(false,10,5000)]))")
+    assert '4.999' in h[0] and '5.000' in h[0] and 'Puede haber más referencias en el Sheet' in h[0] and '<svg' in h[0] and h[1] == ''
+
+
+def test_la_pagina_referencias_ya_no_pide_solo_1000_filas():
+    s = open(INDEX, encoding='utf-8').read()
+    i = s.index('async function loadReferenciasPage'); cuerpo = s[i:s.index('function renderReferenciasPage')]
+    assert 'A1:Z1000' not in cuerpo and 'intelCargarReferencias()' in cuerpo and 'referenciasAvisoLimite()' in cuerpo
+    assert INTEL_RANGO_REFS in s if False else "const INTEL_RANGO_REFS='Referencias_Mercado!A1:Z5000'" in s

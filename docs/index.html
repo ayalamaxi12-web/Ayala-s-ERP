@@ -384,6 +384,9 @@ body[data-page="analisis-competencia"]{
 .ac-cat-izq{flex:1 1 560px}.ac-cat-der{flex:0 1 520px}.ac-cat-der td:first-child{min-width:170px}
 #page-analisis-competencia .ac-cat-der th,#page-analisis-competencia .ac-cat-der td{padding-left:10px;padding-right:10px}
 .ac-nota{padding:10px 14px;border-top:1px solid var(--divisor);font-size:12px;color:var(--texto-suave)}
+/* Página Referencias (todavía con el estilo oscuro viejo hasta el PR de estilo interno): los dos textos que no llegaban a 4,5:1 */
+#page-intel-referencias .btn.primary{background:var(--celeste-600);border-color:var(--celeste-600)}
+#page-intel-referencias #referencias-status{color:var(--text2)!important;font-size:12px!important;font-family:var(--fuente)!important}   /* el span trae estilos en línea */
 @media(max-width:899px){
   #page-analisis-competencia{padding:16px}
   #page-analisis-competencia .ac-aside{position:static;width:auto;max-height:none}
@@ -1031,6 +1034,7 @@ body[data-page="analisis-competencia"]{
     <button class="btn primary" id="btn-load-referencias" onclick="loadReferenciasPage()">🔄 Cargar desde Sheets</button>
     <span id="referencias-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
+  <div id="referencias-aviso" class="ac-aviso" role="status" style="display:none;flex-direction:row;align-items:flex-start;gap:10px"></div>
   <div class="table-wrap" id="referencias-table-wrap" style="display:none">
     <table id="referencias-table">
       <thead><tr>
@@ -2825,12 +2829,13 @@ function compUpdateCuotasRows(){document.querySelectorAll('.comp-cuotas-row').fo
 
 // ── INTELIGENCIA COMERCIAL — DATOS COMPARTIDOS ──
 // Estado y cargador que usan Entidades y Referencias (Sheet COMP_SHEET_ID: Referencias_Mercado y Entidades). SKUs & Referencias, que también los usaba, está jubilada. Las páginas solo pintan; la lectura del Sheet pasa por estas funciones.
-const INTEL={referencias:[],entidades:[]};
+const INTEL={referencias:[],entidades:[],refsTruncadas:false,refsTope:null};   // refsTruncadas: la última lectura de Referencias_Mercado llegó al tope de filas del rango (puede haber más en el Sheet)
 const INTEL_RANGO_REFS='Referencias_Mercado!A1:Z5000',INTEL_RANGO_ENTS='Entidades!A1:Z1000';
 // Relee `Entidades` (rango opcional). -> false si la pestaña no existe (o no se pudo leer); en ese caso INTEL no cambia.
 async function intelCargarEntidades(rango){const rows=await fetchSheet(COMP_SHEET_ID,rango||INTEL_RANGO_ENTS).catch(()=>null);if(!rows)return false;INTEL.entidades=_rowsToObjs(rows);return true;}
 // Relee `Referencias_Mercado` (rango opcional). -> false si la pestaña no existe.
-async function intelCargarReferencias(rango){const rows=await fetchSheet(COMP_SHEET_ID,rango||INTEL_RANGO_REFS).catch(()=>null);if(!rows)return false;INTEL.referencias=_rowsToObjs(rows);return true;}
+async function intelCargarReferencias(rango){const r=rango||INTEL_RANGO_REFS,rows=await fetchSheet(COMP_SHEET_ID,r).catch(()=>null);if(!rows)return false;INTEL.referencias=_rowsToObjs(rows);
+  const m=/(\d+)$/.exec(r);INTEL.refsTope=m?+m[1]:null;INTEL.refsTruncadas=!!(INTEL.refsTope&&rows.length>=INTEL.refsTope);return true;}   // el rango incluye el encabezado: si llegaron tantas filas como el tope, el Sheet puede tener más
 
 // ══ ANÁLISIS DE COMPETENCIA — Etapa 3.1: por SKU, modo reciente ══════════════════════════════════════════════════
 // Datos: GET /competencia/analisis (backend, caché) = último precio/anterior/ganador por referencia. Categoría, PM, costo, IVA y TC se unen acá por SKU
@@ -3598,16 +3603,16 @@ async function loadReferenciasPage(){
   const btn=qs('btn-load-referencias'),status=qs('referencias-status');
   btn.disabled=true;btn.textContent='⏳ Cargando...';status.textContent='Leyendo Referencias_Mercado...';
   try{
-    // Rango de 1000 filas como siempre (SKUs & Referencias lee 5000): no se cambia acá; ver la nota del PR.
-    if(!await intelCargarReferencias('Referencias_Mercado!A1:Z1000')){
+    if(!await intelCargarReferencias()){
       status.textContent='⚠ No existe la pestaña "Referencias_Mercado" todavía — correr /intel-comercial/init primero.';
       btn.disabled=false;btn.textContent='🔄 Cargar desde Sheets';return;
     }
     if(!INTEL.entidades.length)await intelCargarEntidades();
     referenciasPageLoaded=true;
     qs('referencias-table-wrap').style.display='block';
-    status.textContent=`${INTEL.referencias.length} referencias cargadas`;
+    status.textContent=`${INTEL.referencias.length} referencias cargadas`+(INTEL.refsTruncadas?' (límite alcanzado)':'');
     btn.textContent='🔄 Cargar desde Sheets';
+    referenciasAvisoLimite();
     renderReferenciasPage();
   }catch(e){
     status.textContent='❌ Error: '+e.message;
@@ -3615,6 +3620,9 @@ async function loadReferenciasPage(){
   btn.disabled=false;
 }
 
+// Aviso visible cuando la lectura llegó al tope de filas del rango (hoy 5000): la tabla muestra solo las primeras y puede faltar el resto.
+function referenciasAvisoHtml(truncadas,n,tope){return truncadas?`${ico('alert',16)}<span>Se muestran las primeras ${n.toLocaleString('es-AR')} referencias: se llegó al límite de ${tope.toLocaleString('es-AR')} filas que lee esta página. <b>Puede haber más referencias en el Sheet</b> (Referencias_Mercado) que no se ven acá.</span>`:'';}
+function referenciasAvisoLimite(){const el=qs('referencias-aviso');if(!el)return;el.innerHTML=referenciasAvisoHtml(INTEL.refsTruncadas,INTEL.referencias.length,INTEL.refsTope||0);el.style.display=INTEL.refsTruncadas?'flex':'none';}
 function renderReferenciasPage(){
   const rows=INTEL.referencias;
   const tbody=qs('referencias-tbody');
