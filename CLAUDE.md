@@ -145,6 +145,8 @@ Sidebar pages, grouped by what they do:
 
 ## Working in this codebase
 
+- Forma común (tokens en `:root`): radios `--r-control` 12 / `--r-boton` y `--r-recuadro` 14 / `--r-tarjeta` 16 / `--r-chip` píldora; las casillas numéricas llevan `.campo-num` (ancho mínimo `--campo-num-min` 78 px, relleno `--campo-num-pad`, texto a la derecha) y la agrega `campoNumMarcar()` sola, también a las que se dibujan después. Las secciones largas de parámetros usan `colapsableMontar(id,titulo,resumenFn)` (cabecera con resumen visible).
+
 - Both main files are effectively monolithic and minified-by-convention (long single-line
   functions, no whitespace formatting) rather than reformatted/refactored piecemeal — match the
   existing density when editing nearby code rather than reformatting whole functions.
