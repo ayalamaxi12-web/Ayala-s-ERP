@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, Integer, Numeric, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -597,3 +597,54 @@ class ProyeccionSnapshot(Base):
     schema_version: Mapped[str] = mapped_column(String(16))
     tamano_bytes: Mapped[int] = mapped_column(Integer)
     payload: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))
+
+
+class MlFoto(Base):
+    """Última lectura EXITOSA de un módulo de Mercado Libre (Full ML, y después Ofertas ML, Campañas...), una por (módulo, cuenta, parámetros). Al abrir
+    el módulo se muestra esta foto sin leer ML. Una lectura nueva la reemplaza en una sola transacción, después de guardar las alertas: si algo falla
+    queda la anterior intacta. Un intento fallido solo anota `error_msg`/`error_en`; no toca `payload` ni `obtenido_en`. Ver `ml_foto.py`."""
+
+    __tablename__ = "ml_foto"
+    __table_args__ = (UniqueConstraint("modulo", "cuenta", "params", name="uq_ml_foto_clave"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    modulo: Mapped[str] = mapped_column(String(32))
+    cuenta: Mapped[str] = mapped_column(String(16))  # IT | MT | todas
+    params: Mapped[str] = mapped_column(String(64))  # parámetros que cambian la lectura, normalizados ("" si no hay)
+    obtenido_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # de la última foto exitosa
+    estado: Mapped[str | None] = mapped_column(String(16), nullable=True)  # completa | parcial
+    incompletos: Mapped[int] = mapped_column(Integer, default=0)  # cuántos SKU/publicaciones quedaron sin leer (foto parcial)
+    duracion_seg: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    payload: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)  # del último intento fallido, sin URLs
+    error_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MlAlerta(Base):
+    """Alerta de un módulo de ML, guardada aparte de la foto. Clave (módulo, tipo, clave). Con cada foto nueva: las que siguen se actualizan
+    (`ultima_vez`), las nuevas se crean y las que dejaron de aparecer pasan a `ya_no_aparece` SIN borrarse. Solo las marca `vista` la persona; las
+    vistas se borran a los 90 días."""
+
+    __tablename__ = "ml_alerta"
+    __table_args__ = (UniqueConstraint("modulo", "tipo", "clave", name="uq_ml_alerta_clave"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    modulo: Mapped[str] = mapped_column(String(32), index=True)
+    tipo: Mapped[str] = mapped_column(String(48))
+    clave: Mapped[str] = mapped_column(String(128))  # SKU o publicación
+    primera_vez: Mapped[datetime] = mapped_column(DateTime)
+    ultima_vez: Mapped[datetime] = mapped_column(DateTime)
+    estado: Mapped[str] = mapped_column(String(16))  # activa | ya_no_aparece | vista
+    vista_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    detalle: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
+
+
+class MlLoteCache(Base):
+    """Lotes de lectura de ML ya leídos (p. ej. un lote de 20 `inventory_id` de `operations/search`), para no repetir consultas dentro de una misma
+    actualización ni al reintentar tras un corte. Vencen solos (`ml_foto.VIDA_LOTE_MIN`)."""
+
+    __tablename__ = "ml_lote_cache"
+
+    clave: Mapped[str] = mapped_column(String(40), primary_key=True)  # sha1 de la clave de lectura
+    obtenido_en: Mapped[datetime] = mapped_column(DateTime, index=True)
+    payload: Mapped[list] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))
