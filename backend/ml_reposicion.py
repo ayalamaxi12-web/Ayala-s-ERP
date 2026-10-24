@@ -143,6 +143,7 @@ class FilaReposicionMLA:
     stock_tactica: int | None
     envio_pendiente: int = 0            # en paquetes -- ver ml_full.envios_pendientes_por_inventory
     envio_pendiente_ids: list[str] = field(default_factory=list)  # inbound_id reales, para verificar a mano
+    datos_incompletos: bool = False     # las ventas/envíos de esta publicación no se pudieron leer de ML (cuota): el cálculo NO es confiable
 
 
 @dataclass
@@ -151,6 +152,7 @@ class ResultadoReposicionMLA:
     incidencias_sku: list[dict]
     incidencias_sin_vincular: list[dict]
     skus_no_en_ecom: list[str]
+    skus_incompletos: list[str] = field(default_factory=list)  # SKU con datos de ML sin leer (de la conciliación o de las ventas/envíos)
 
 
 def _repartir_sugerido(filas: list[FilaReposicionMLA]) -> None:
@@ -204,6 +206,7 @@ def calcular_reposicion_mla(
     cuentas: list[str] | None = None, dias_ventas: int = 30, semanas_objetivo: float = 3,
     fecha_llegada: date | None = None, hoy: date | None = None,
     progreso_cb: Callable[[int, int, str], None] | None = None,
+    resultado_conciliacion=None,
 ) -> ResultadoReposicionMLA:
     """Orquesta el simulador por publicación: reutiliza `conciliar()` para
     el stock/factor de pack ya resuelto de las dos cuentas (sin volver a
@@ -226,7 +229,9 @@ def calcular_reposicion_mla(
     desde = (hoy - timedelta(days=dias_ventas)).isoformat()
     hasta = hoy.isoformat()
 
-    resultado_conciliacion = conciliar(ml, ecom, cuentas, progreso_cb=progreso_cb)
+    # `resultado_conciliacion`: si el llamador ya tiene la conciliación (misma corrida o una foto reciente), no se vuelve a leer nada de ML ni de Ecom.
+    if resultado_conciliacion is None:
+        resultado_conciliacion = conciliar(ml, ecom, cuentas, progreso_cb=progreso_cb)
 
     ventas_por_inventory: dict[str, dict] = {}
     envios_pendientes_por_inventory: dict[str, dict] = {}
@@ -253,6 +258,7 @@ def calcular_reposicion_mla(
                 ml.envios_pendientes_por_inventory(cuenta, inventory_ids, desde, hasta)
             )
 
+    inventarios_sin_leer = {inv for lote in getattr(ml, "lotes_fallidos", []) for inv in lote["inventory_ids"]}
     filas: list[FilaReposicionMLA] = []
     total_skus = len(resultado_conciliacion.filas)
     for idx_sku, fila_sku in enumerate(resultado_conciliacion.filas):
@@ -300,6 +306,7 @@ def calcular_reposicion_mla(
                 stock_ecom=stock_ecom, stock_tactica=stock_tactica,
                 envio_pendiente=envio_pend["unidades"] if envio_pend else 0,
                 envio_pendiente_ids=envio_pend["inbound_ids"] if envio_pend else [],
+                datos_incompletos=bool(pub.get("inventory_id") in inventarios_sin_leer),
             ))
 
     if progreso_cb and total_skus:
@@ -312,6 +319,7 @@ def calcular_reposicion_mla(
         filas=filas, incidencias_sku=resultado_conciliacion.incidencias_sku,
         incidencias_sin_vincular=resultado_conciliacion.incidencias_sin_vincular,
         skus_no_en_ecom=resultado_conciliacion.skus_no_en_ecom,
+        skus_incompletos=sorted(set(getattr(resultado_conciliacion, "skus_incompletos", [])) | {f.sku for f in filas if f.datos_incompletos}),
     )
 
 

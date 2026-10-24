@@ -627,6 +627,15 @@ body[data-nuevo] #pm-blocks input[id$="-tab"]{width:auto!important;flex:0 1 130p
 body[data-nuevo] :is(#page-verificar-ecom,#page-verificar-tactica,#page-pricing,#page-ayala-core) .grid-2>*{min-width:0}
 body[data-nuevo] #page-ayala-core>div[style*="margin-top:24px"],body[data-nuevo] #page-ayala-core>div[style*="margin:10px 0"],body[data-nuevo] #page-ayala-core>div[style*="margin:0 0 14px"]{margin:0!important;padding:16px 18px;background:var(--superficie);border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta)}
 body[data-nuevo] #page-ayala-core .section-hdr{margin-top:0}
+/* — Full ML con foto guardada: pie con «Última actualización», avisos y alertas — */
+.full-pie{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.full-pie-linea{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.full-pie-txt{font-size:var(--fs-tabla);color:var(--texto-suave)}
+.full-aviso{padding:10px 14px;border-radius:var(--r-recuadro);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.full-aviso-det{flex:1 1 220px}
+.full-alertas>summary{cursor:pointer;font-weight:600;color:var(--tinta);min-height:44px;display:flex;align-items:center}
+.full-alertas>summary:focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px;border-radius:var(--r-control)}
+.full-tag{display:inline-block;padding:1px 8px;border-radius:var(--r-chip);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla);font-weight:600;white-space:nowrap}
 /* — Gráficos y comparaciones — */
 body[data-nuevo] .chart-card{padding:18px 20px}
 body[data-nuevo] .chart-card h3{font-size:16px;font-weight:700;color:var(--tinta);margin-bottom:2px}
@@ -1496,10 +1505,6 @@ body[data-nuevo] .page .section-hdr::after{display:none}
   <div class="card" style="margin-bottom:14px">
     <div class="card-title">🔎 Conciliación de stock (ML vs Ecom)</div>
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (Group/Arg), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn primary" onclick="runFullConciliar()" id="btn-full-conciliar">▶ Ejecutar conciliación</button>
-      <span id="full-conciliar-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Listo</span>
-    </div>
     <div id="full-conciliar-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-conciliar-wrap" style="display:none;margin-top:12px">
       <div id="full-conciliar-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
@@ -1510,6 +1515,7 @@ body[data-nuevo] .page .section-hdr::after{display:none}
         </table>
       </div>
     </div>
+    <div id="full-conciliar-pie" class="full-pie"></div>
   </div>
 
   <div class="card">
@@ -1519,10 +1525,6 @@ body[data-nuevo] .page .section-hdr::after{display:none}
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Fecha estimada de llegada<input type="date" id="full-repo-fecha-llegada" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px"></label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Días de ventas<input type="number" id="full-repo-dias" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Semanas objetivo<input type="number" step="0.5" id="full-repo-semanas" value="3" style="width:48px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn primary" onclick="runFullReposicion()" id="btn-full-reposicion">▶ Simular reposición</button>
-      <span id="full-reposicion-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Listo</span>
     </div>
     <div id="full-reposicion-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-reposicion-wrap" style="display:none;margin-top:12px">
@@ -1543,6 +1545,7 @@ body[data-nuevo] .page .section-hdr::after{display:none}
         </table>
       </div>
     </div>
+    <div id="full-reposicion-pie" class="full-pie"></div>
   </div>
 </div>
 
@@ -2170,6 +2173,7 @@ function goPage(page,el){
   if(page==='analisis-competencia')acEntrar();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
   if(page==='intel-referencias'&&!referenciasPageLoaded)loadReferenciasPage();
+  if(page==='full-ml')fullFotoCargar();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarTablasML().then(()=>{if(ofmResult)ofmRender();});}
   if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
@@ -4304,28 +4308,90 @@ function pollJob(job_id,baseUrl,logEl,statusEl,btn,type){const interval=setInter
 // (docs/business/COMERCIAL/canales/mercadolibre/03_MODULO_FULL.md).
 // Jobs propios (/ml-full/conciliar y /ml-full/reposicion), no comparten
 // la URL de status con pollJob (que asume /ml/{type}/status/{id}). ──
-function pollFullJob(statusUrl,logEl,statusEl,btn,btnLabel,onDone){
+function pollFullJob(statusUrl,logEl,statusEl,btn,btnLabel,onDone,onFail){
+  let fallas=0;const t0=Date.now();
+  const cortar=(interval,msg)=>{clearInterval(interval);statusEl.textContent=msg;btn.disabled=false;btn.textContent=btnLabel;if(onFail)onFail(msg);};
   const interval=setInterval(async()=>{
     try{
-      const res=await fetch(statusUrl);const data=await res.json();
-      if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${l}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}
-      if(data.status==='done'){clearInterval(interval);statusEl.innerHTML='<span style="color:var(--green)">✅ Listo</span>';btn.disabled=false;btn.textContent=btnLabel;onDone(data.result);}
-      else if(data.status==='error'){clearInterval(interval);statusEl.innerHTML=`<span style="color:var(--red)">❌ ${(data.log||[]).slice(-1)[0]||'Error'}</span>`;btn.disabled=false;btn.textContent=btnLabel;}
+      const res=await fetch(statusUrl);const data=await res.json();fallas=0;
+      if(data.log&&data.log.length){logEl.innerHTML=data.log.map(l=>`<div style="padding:1px 0;border-bottom:1px solid var(--border)">${acEsc(l)}</div>`).join('');logEl.scrollTop=logEl.scrollHeight;}
+      if(data.status==='done'){clearInterval(interval);statusEl.textContent='Listo';btn.disabled=false;btn.textContent=btnLabel;onDone(data.result);}
+      else if(data.status==='error'){cortar(interval,data.message||(data.log||[]).slice(-1)[0]||'Error');}
+      else if(data.status==='not_found'){cortar(interval,'La actualización se perdió (el servidor se reinició). Reintentá.');}
       else statusEl.innerHTML=jobStatusHtml(data);
-    }catch(e){console.warn(e);}
+      if(Date.now()-t0>45*60*1000&&document.body.contains(btn)&&btn.disabled)cortar(interval,'La actualización tardó demasiado. Reintentá.');
+    }catch(e){console.warn(e);if(++fallas>=5)cortar(interval,'No se pudo consultar el estado de la actualización. Reintentá.');}
   },4000);
 }
-async function runFullConciliar(){
+function runFullConciliar(){return fullActualizar('conciliar');}
+// ── Full ML con foto guardada (backend: ml_full_foto.py). Al abrir se muestra la última lectura exitosa sin leer ML; "Actualizar" lee de a poco. ──
+const FULL_FOTO={conciliar:{mod:'conciliacion',nombre:'Conciliación',pie:'full-conciliar-pie',btn:'btn-full-conciliar',st:'full-conciliar-status',log:'full-conciliar-log',pintar:r=>renderFullConciliar(r)},
+  reposicion:{mod:'reposicion',nombre:'Simulador de reposición',pie:'full-reposicion-pie',btn:'btn-full-reposicion',st:'full-reposicion-status',log:'full-reposicion-log',pintar:r=>renderFullReposicion(r)}};
+const FULL_TIPOS={diferencia_stock:'Diferencia de stock ML vs Ecom',sin_sku:'Publicación sin SKU',sin_vincular:'Sin vincular en Ecom (factor 1 asumido)',sku_no_en_ecom:'SKU sin match en Ecom',venta_censurada:'Venta censurada (quebró en Full)'};
+const FULL_ESTADOS={activa:'Activa',ya_no_aparece:'Ya no aparece en la última lectura',vista:'Vista'};
+let fullFotoDatos={conciliar:null,reposicion:null},fullActualizando={};
+function fullFecha(iso){return iso?new Date(iso).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';}
+function fullHace(iso){return iso?costosEdadTxt((Date.now()-Date.parse(iso))/1000):'sin datos';}
+async function fullFotoCargar(){
+  const url=getBackendUrl();if(!url)return;
+  for(const k of Object.keys(FULL_FOTO)){
+    try{
+      const res=await fetch(`${url}/ml-full/foto/${FULL_FOTO[k].mod}`);if(!res.ok)throw new Error(res.status);
+      const d=await res.json();fullFotoDatos[k]=d;
+      if(d.existe){
+        if(k==='reposicion'&&d.payload.params){const p=d.payload.params;if(qs('full-repo-fecha-llegada'))qs('full-repo-fecha-llegada').value=p.fecha_llegada||'';qs('full-repo-dias').value=p.dias_ventas;qs('full-repo-semanas').value=p.semanas_objetivo;}
+        FULL_FOTO[k].pintar(d.payload);
+      }
+      fullPieRender(k);
+      if(d.job_id&&!fullActualizando[k])fullSeguirJob(k,d.job_id);
+    }catch(e){console.warn(e);const pie=qs(FULL_FOTO[k].pie);if(pie&&!fullFotoDatos[k])pie.innerHTML='<div class="full-aviso">No se pudo leer la foto guardada. Revisá la URL del backend en Configuración.</div>';}
+  }
+}
+function fullPieRender(k){
+  const c=FULL_FOTO[k],d=fullFotoDatos[k]||{},pie=qs(c.pie);if(!pie)return;
+  const ocupado=!!fullActualizando[k];
+  let h='';
+  if(d.error_msg&&d.existe)h+=`<div class="full-aviso" role="alert">Falló la última actualización, mostrando datos de ${acEsc(fullFecha(d.obtenido_en))} <span class="full-aviso-det">${acEsc(d.error_msg)}</span> <button class="btn" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>Reintentar</button></div>`;
+  else if(d.error_msg)h+=`<div class="full-aviso" role="alert">No se pudo leer Mercado Libre. <span class="full-aviso-det">${acEsc(d.error_msg)}</span> <button class="btn" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>Reintentar</button></div>`;
+  if(d.existe&&d.estado==='parcial')h+=`<div class="full-aviso" role="status">Datos incompletos para ${d.incompletos} SKU: se muestran con la marca "dato anterior" o "datos incompletos". Volvé a actualizar para completarlos.</div>`;
+  const al=d.alertas||[];
+  if(al.length){
+    const n=e=>al.filter(a=>a.estado===e).length;
+    h+=`<details class="full-alertas"><summary>Alertas: ${n('activa')} activas · ${n('ya_no_aparece')} ya no aparecen · ${n('vista')} vistas</summary><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>SKU o publicación</th><th>Estado</th><th>Primera vez</th><th>Última vez vista</th><th></th></tr></thead><tbody>${al.map(a=>`<tr><td>${acEsc(FULL_TIPOS[a.tipo]||a.tipo)}</td><td>${acEsc(a.clave)}</td><td>${acEsc(FULL_ESTADOS[a.estado]||a.estado)}</td><td>${acEsc(fullFecha(a.primera_vez))}</td><td>${acEsc(fullFecha(a.ultima_vez))}</td><td>${a.estado==='vista'?'':`<button class="btn" onclick="fullAlertaVista('${a.id}','${k}')">Marcar vista</button>`}</td></tr>`).join('')}</tbody></table></div></details>`;
+  }
+  const edad=d.existe?`Última actualización: ${fullHace(d.obtenido_en)}`:'Todavía no hay una lectura guardada';
+  h+=`<div class="full-pie-linea"><span id="${c.st}" class="full-pie-txt" role="status">${edad}</span><button class="btn primary" id="${c.btn}" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>${ocupado?'Actualizando...':'Actualizar'}</button></div>`;
+  pie.innerHTML=h;
+}
+async function fullAlertaVista(id,k){
+  const url=getBackendUrl();if(!url)return;
+  try{const r=await fetch(`${url}/ml-full/foto/alertas/${id}/vista`,{method:'POST'});if(!r.ok)throw new Error(r.status);const a=(fullFotoDatos[k].alertas||[]).find(x=>x.id===id);if(a){a.estado='vista';a.vista_en=new Date().toISOString();}fullPieRender(k);}
+  catch(e){toast('No se pudo marcar la alerta como vista','error');}
+}
+function fullSeguirJob(k,job_id){
+  const c=FULL_FOTO[k],url=getBackendUrl();
+  fullActualizando[k]=job_id;fullPieRender(k);
+  const st=qs(c.st),logEl=qs(c.log),btn=qs(c.btn);logEl.style.display='block';
+  const fin=()=>{delete fullActualizando[k];fullFotoCargar();};
+  pollFullJob(`${url}/ml-full/foto/estado/${job_id}`,logEl,st,btn,'Actualizar',fin,msg=>{delete fullActualizando[k];toast(msg,'error');fullFotoCargar();});
+}
+async function fullActualizar(k){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
-  const btn=qs('btn-full-conciliar'),status=qs('full-conciliar-status'),logEl=qs('full-conciliar-log');
-  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
-  qs('full-conciliar-wrap').style.display='none';
+  if(fullActualizando[k])return;
+  const c=FULL_FOTO[k];let q='';
+  if(k==='reposicion'){
+    const fecha=qs('full-repo-fecha-llegada').value;
+    if(!fecha){alert('Ingresá la fecha estimada de llegada del envío');return;}
+    q=`?fecha_llegada=${fecha}&dias_ventas=${qs('full-repo-dias').value||30}&semanas_objetivo=${qs('full-repo-semanas').value||3}`;
+    fullRepoEnviosPend={};fullRepoSeleccion={};
+  }
+  fullActualizando[k]='iniciando';fullPieRender(k);
   try{
-    const res=await fetch(`${url}/ml-full/conciliar/run`,{method:'POST'});
-    const{job_id}=await res.json();
-    status.textContent='Job: '+job_id;
-    pollFullJob(`${url}/ml-full/conciliar/status/${job_id}`,logEl,status,btn,'▶ Ejecutar conciliación',renderFullConciliar);
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Ejecutar conciliación';}
+    const res=await fetch(`${url}/ml-full/foto/${c.mod}/actualizar${q}`,{method:'POST'});
+    if(!res.ok)throw new Error('El servidor respondió '+res.status);
+    const {job_id}=await res.json();
+    fullSeguirJob(k,job_id);
+  }catch(e){delete fullActualizando[k];fullPieRender(k);toast('No se pudo iniciar la actualización: '+e.message,'error');}
 }
 function renderFullConciliar(result){
   qs('full-conciliar-wrap').style.display='block';
@@ -4336,7 +4402,7 @@ function renderFullConciliar(result){
     const difColor=!dif?'var(--text2)':(dif>0?'var(--green)':'var(--red)');
     const pubs=(f.publicaciones||[]).map(p=>`${etiquetaCuenta(p.cuenta)}:${p.item_id} (${p.disponible}${p.factor>1?'×'+p.factor:''}${p.vinculado?'':' ⚠no-vinc'})`).join('<br>');
     return `<tr>
-      <td>${f.sku}</td>
+      <td>${f.sku}${f.dato_anterior?' <span class="full-tag" title="No se pudo leer en la última actualización: se muestra la lectura anterior">dato anterior</span>':''}</td>
       <td style="text-align:right">${f.stock_ml}</td>
       <td style="text-align:right">${f.stock_ecom===null?'—':f.stock_ecom}</td>
       <td style="text-align:right;color:${difColor};font-weight:600">${dif===null?'—':(dif>0?'+':'')+dif}</td>
@@ -4345,22 +4411,7 @@ function renderFullConciliar(result){
   }).join('');
 }
 let fullRepoResult=null, fullRepoTab='IT', fullRepoEnviosPend={}, fullRepoSeleccion={};
-async function runFullReposicion(){
-  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
-  const fecha=qs('full-repo-fecha-llegada').value;
-  if(!fecha){alert('Ingresá la fecha estimada de llegada del envío');return;}
-  const dias=qs('full-repo-dias').value||30,semanas=qs('full-repo-semanas').value||3;
-  const btn=qs('btn-full-reposicion'),status=qs('full-reposicion-status'),logEl=qs('full-reposicion-log');
-  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
-  qs('full-reposicion-wrap').style.display='none';
-  fullRepoEnviosPend={};fullRepoSeleccion={};
-  try{
-    const res=await fetch(`${url}/ml-full/reposicion/run?fecha_llegada=${fecha}&dias_ventas=${dias}&semanas_objetivo=${semanas}`,{method:'POST'});
-    const{job_id}=await res.json();
-    status.textContent='Job: '+job_id;
-    pollFullJob(`${url}/ml-full/reposicion/status/${job_id}`,logEl,status,btn,'▶ Simular reposición',renderFullReposicion);
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='▶ Simular reposición';}
-}
+function runFullReposicion(){return fullActualizar('reposicion');}
 function goFullRepoTab(cuenta){
   fullRepoTab=cuenta;
   const bIT=qs('full-repo-tab-btn-IT'),bMT=qs('full-repo-tab-btn-MT');
@@ -4474,7 +4525,7 @@ function renderFullReposicionTabla(){
       <td style="text-align:center"><input type="checkbox" ${marcado} onchange="fullRepoSeleccion['${f.item_id}']=this.checked;_fullRepoResumen();"></td>
       <td>${f.item_id}</td>
       <td style="font-size:9px;color:var(--text3)">${f.inventory_id||'—'}</td>
-      <td>${f.sku}</td>
+      <td>${f.sku}${f.dato_anterior||f.datos_incompletos?` <span class="full-tag" title="${f.datos_incompletos?'Ventas y envíos sin leer: el cálculo no es confiable':'No se pudo leer en la última actualización: se muestra la lectura anterior'}">${f.datos_incompletos?'datos incompletos':'dato anterior'}</span>`:''}</td>
       <td style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
       <td style="text-align:right">${f.factor>1?'×'+f.factor:'—'}</td>
       <td style="text-align:right">${f.stock_full}</td>

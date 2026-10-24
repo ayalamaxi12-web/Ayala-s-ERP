@@ -24,6 +24,7 @@ from rentabilidad import costos_ecom
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 from proyeccion_snapshot import router as proyeccion_router
+from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
 
 app = FastAPI(title="Ayala's ERP API", version="1.0.0")
@@ -38,6 +39,7 @@ _CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "https://ayalamaxi
 app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Proyeccion-Version"])
 app.include_router(rentabilidad_router)
 app.include_router(proyeccion_router)
+app.include_router(ml_full_foto_router)
 app.include_router(transito_router)
 
 

@@ -43,6 +43,7 @@ Lado Ecom, descubierto por introspección GraphQL contra la cuenta real
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -59,27 +60,61 @@ from rentabilidad.ingesta_ecom_api import EcomApiClient, EcomApiError
 GetFn = Callable[[str, dict, dict], object]
 
 
+class MLCuotaAgotada(RuntimeError):
+    """ML siguió respondiendo 429/503 después de todos los reintentos. El mensaje nunca lleva la URL (ver `mensaje_para_usuario`)."""
+
+    def __init__(self, status: int):
+        super().__init__(f"Mercado Libre respondió {status} (demasiadas consultas seguidas)" if status == 429 else f"Mercado Libre respondió {status} (no disponible por ahora)")
+        self.status = status
+
+
+# Ritmo de lectura. Una sola puerta para TODA lectura de ML de este módulo (conciliación y simulador comparten proceso): como mucho una consulta a la vez
+# y una pausa mínima entre consultas. `stock/fulfillment/operations/search` tiene una cuota más ajustada (ver `_get_real`), por eso su pausa es mayor.
+# Son valores de ritmo nuestros, NO límites publicados por Mercado Libre: ML no documenta la cuota exacta de ese endpoint.
+PAUSA_OPS_SEG = 1.0
+PAUSA_GENERAL_SEG = 0.15
+REINTENTOS = 6            # 1 intento + 5 reintentos con espera creciente (2, 4, 8, 16, 32 s) o el Retry-After que mande ML
+ESPERA_MAX_SEG = 60.0
+_puerta = threading.Lock()
+_ultimo_pedido = {"general": 0.0, "ops": 0.0}
+
+
+def _esperar_turno(url: str) -> None:
+    clase = "ops" if "operations/search" in url else "general"
+    pausa = PAUSA_OPS_SEG if clase == "ops" else PAUSA_GENERAL_SEG
+    with _puerta:
+        falta = _ultimo_pedido[clase] + pausa - time.monotonic()
+        if falta > 0:
+            time.sleep(falta)
+        _ultimo_pedido[clase] = time.monotonic()
+
+
+def _espera_reintento(r, intento: int) -> float:
+    try:
+        pedida = float(r.headers.get("Retry-After"))
+    except (TypeError, ValueError):
+        pedida = 2.0 ** (intento + 1)
+    return min(max(pedida, 0.0), ESPERA_MAX_SEG)
+
+
 def _get_real(url: str, params: dict, headers: dict):
-    """Reintenta con backoff ante `429`/`503` -- visto en producción
-    (2026-08-26) que `stock/fulfillment/operations/search` tiene una cuota
-    bastante más ajustada que el resto de la API de ML (un puñado de
-    llamadas seguidas ya la agota, con el mensaje real
-    `"operation_kvs_ds_v2__fbm_seller_stock_operations is over quota"`), y
-    que ML devuelve `503` transitorios de vez en cuando en otros endpoints
-    (`/items`). Antes esto tumbaba el job entero -- respeta `Retry-After`
-    si ML lo manda, si no espera con backoff exponencial (2s, 4s, 8s)."""
-    ultimo_error = None
-    for intento in range(4):
+    """Lectura GET a ML con ritmo (`_esperar_turno`) y reintentos ante `429`/`503`. Visto en producción (2026-08-26): `stock/fulfillment/operations/search`
+    tiene una cuota bastante más ajustada que el resto de la API (mensaje real `"operation_kvs_ds_v2__fbm_seller_stock_operations is over quota"`) y
+    ML devuelve `503` transitorios en otros endpoints (`/items`). Respeta `Retry-After` si ML lo manda (tope `ESPERA_MAX_SEG`); si no, espera creciente.
+    Si igual no pasa, levanta `MLCuotaAgotada` (sin la URL en el mensaje): el llamador decide si sigue con el resto (resultado parcial)."""
+    ultimo = None
+    for intento in range(REINTENTOS):
+        _esperar_turno(url)
         r = requests.get(url, params=params, headers=headers, timeout=20)
         if r.status_code in (429, 503):
-            ultimo_error = r
-            if intento < 3:
-                espera = float(r.headers.get("Retry-After", 2 ** (intento + 1)))
-                time.sleep(espera)
+            ultimo = r.status_code
+            if intento < REINTENTOS - 1:
+                time.sleep(_espera_reintento(r, intento))
                 continue
+            raise MLCuotaAgotada(ultimo)
         r.raise_for_status()
         return r.json()
-    ultimo_error.raise_for_status()
+    raise MLCuotaAgotada(ultimo or 429)
 
 
 @dataclass
@@ -98,9 +133,42 @@ class MLFullClient:
     """Solo lectura del lado Mercado Libre. `get_fn` inyectable — mismo
     patrón que `PostFn` en `rentabilidad/ingesta_ecom_api.py`."""
 
-    def __init__(self, get_fn: GetFn | None = None, token_fn: Callable[[str], str] | None = None):
+    def __init__(self, get_fn: GetFn | None = None, token_fn: Callable[[str], str] | None = None, cache=None):
         self._get = get_fn or _get_real
         self._token = token_fn or token_de
+        # `cache` opcional (get(clave) -> list | None, put(clave, list)): lotes de `operations/search` ya leídos -- no se vuelven a pedir.
+        self._cache = cache
+        # Lotes que no se pudieron leer ni con reintentos: [{"cuenta", "tipo", "inventory_ids"}]. El llamador los usa para marcar datos incompletos.
+        self.lotes_fallidos: list[dict] = []
+
+    def _operaciones_lote(self, cuenta: str, headers: dict, lote: list[str], desde: str, hasta: str, tipo: str) -> list[dict] | None:
+        """Todas las operaciones de UN lote de `inventory_id` (con paginado `scroll`), reducidas a los campos que se usan. `None` = el lote falló
+        (queda en `lotes_fallidos`) y el llamador sigue con el siguiente. Sirve de la caché si ya se leyó el mismo lote/rango/tipo."""
+        clave = f"{cuenta}|{tipo}|{desde}|{hasta}|{','.join(lote)}"
+        if self._cache is not None:
+            guardado = self._cache.get(clave)
+            if guardado is not None:
+                return guardado
+        seller_id = SELLERS[cuenta]
+        params = {"seller_id": seller_id, "inventory_id": ",".join(lote), "date_from": desde, "date_to": hasta, "type": tipo}
+        ops: list[dict] = []
+        try:
+            for _ in range(50):  # tope de seguridad -- nunca debería hacer falta en un lote de 20
+                d = self._get("https://api.mercadolibre.com/stock/fulfillment/operations/search", params, headers)
+                resultados = d.get("results", [])
+                for op in resultados:
+                    ops.append({"inventory_id": op.get("inventory_id"), "date_created": op.get("date_created"), "detail": op.get("detail"),
+                                "result": op.get("result"), "external_references": op.get("external_references")})
+                scroll = (d.get("paging") or {}).get("scroll")
+                if not scroll or not resultados:
+                    break
+                params = {**params, "scroll": scroll}
+        except MLCuotaAgotada:
+            self.lotes_fallidos.append({"cuenta": cuenta, "tipo": tipo, "inventory_ids": list(lote)})
+            return None
+        if self._cache is not None:
+            self._cache.put(clave, ops)
+        return ops
 
     def items_activos(self, cuenta: str) -> list[str]:
         """Pagina con `search_type=scan` + `scroll_id` -- confirmado
@@ -209,47 +277,22 @@ class MLFullClient:
           anterior -- confirmado que el nombre real es `scroll`, no
           `scroll_id` (se probó `scroll_id` primero: el servidor lo
           ignoraba en silencio y devolvía siempre la primera página)."""
-        seller_id = SELLERS[cuenta]
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         acumulado: dict[str, dict] = {}
-        primera_llamada = True
         for i in range(0, len(inventory_ids), 20):
-            lote = inventory_ids[i:i + 20]
-            params = {
-                "seller_id": seller_id, "inventory_id": ",".join(lote),
-                "date_from": desde, "date_to": hasta, "type": "SALE_CONFIRMATION",
-            }
-            paginas = 0
-            while paginas < 50:  # tope de seguridad -- nunca debería hacer falta en un lote de 20
-                paginas += 1
-                if not primera_llamada:
-                    # Pausa chica entre llamadas -- este endpoint tiene una
-                    # cuota más ajustada que el resto de la API de ML (ver
-                    # docstring de `_get_real`), y un job real con ~250
-                    # publicaciones dispara suficientes llamadas seguidas
-                    # como para agotarla sin este respiro.
-                    time.sleep(0.4)
-                primera_llamada = False
-                d = self._get(
-                    "https://api.mercadolibre.com/stock/fulfillment/operations/search", params, headers
-                )
-                resultados = d.get("results", [])
-                for op in resultados:
-                    inv = op.get("inventory_id")
-                    if not inv:
-                        continue
-                    cantidad = abs((op.get("detail") or {}).get("available_quantity") or 0)
-                    fecha = (op.get("date_created") or "")[:10]
-                    entrada = acumulado.setdefault(inv, {"unidades": 0, "primera": fecha, "ultima": fecha})
-                    entrada["unidades"] += cantidad
-                    if fecha and (not entrada["primera"] or fecha < entrada["primera"]):
-                        entrada["primera"] = fecha
-                    if fecha and (not entrada["ultima"] or fecha > entrada["ultima"]):
-                        entrada["ultima"] = fecha
-                scroll = (d.get("paging") or {}).get("scroll")
-                if not scroll or not resultados:
-                    break
-                params = {**params, "scroll": scroll}
+            ops = self._operaciones_lote(cuenta, headers, inventory_ids[i:i + 20], desde, hasta, "SALE_CONFIRMATION")
+            for op in ops or []:
+                inv = op.get("inventory_id")
+                if not inv:
+                    continue
+                cantidad = abs((op.get("detail") or {}).get("available_quantity") or 0)
+                fecha = (op.get("date_created") or "")[:10]
+                entrada = acumulado.setdefault(inv, {"unidades": 0, "primera": fecha, "ultima": fecha})
+                entrada["unidades"] += cantidad
+                if fecha and (not entrada["primera"] or fecha < entrada["primera"]):
+                    entrada["primera"] = fecha
+                if fecha and (not entrada["ultima"] or fecha > entrada["ultima"]):
+                    entrada["ultima"] = fecha
         return acumulado
 
     def envios_pendientes_por_inventory(
@@ -290,46 +333,26 @@ class MLFullClient:
         pendiente -- los que ya llegaron a 0 no se cuentan) e
         `inbound_ids` (los números reales de esos envíos, para que Maxx
         los busque a mano en ML si quiere confirmar)."""
-        seller_id = SELLERS[cuenta]
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
         # inventory_id -> {inbound_id -> (fecha_mas_reciente, pendiente_a_esa_fecha)}
         ultimo_por_inbound: dict[str, dict[str, tuple[str, int]]] = {}
-        primera_llamada = True
         for i in range(0, len(inventory_ids), 20):
-            lote = inventory_ids[i:i + 20]
-            params = {
-                "seller_id": seller_id, "inventory_id": ",".join(lote),
-                "date_from": desde, "date_to": hasta, "type": "INBOUND_RECEPTION",
-            }
-            paginas = 0
-            while paginas < 50:  # mismo tope de seguridad que ventas_full_por_inventory
-                paginas += 1
-                if not primera_llamada:
-                    time.sleep(0.4)  # misma cuota ajustada, ver docstring de arriba
-                primera_llamada = False
-                d = self._get(
-                    "https://api.mercadolibre.com/stock/fulfillment/operations/search", params, headers
-                )
-                resultados = d.get("results", [])
-                for op in resultados:
-                    inv = op.get("inventory_id")
-                    refs = op.get("external_references") or []
-                    inbound_id = next((r.get("value") for r in refs if r.get("type") == "inbound_id"), None)
-                    if not inv or not inbound_id:
-                        continue
-                    fecha = op.get("date_created") or ""
-                    resumen = op.get("result") or {}
-                    pendiente = resumen.get("not_available_quantity")
-                    if pendiente is None:
-                        pendiente = max(0, (resumen.get("total") or 0) - (resumen.get("available_quantity") or 0))
-                    mapa_inv = ultimo_por_inbound.setdefault(inv, {})
-                    previo = mapa_inv.get(inbound_id)
-                    if previo is None or fecha > previo[0]:
-                        mapa_inv[inbound_id] = (fecha, pendiente)
-                scroll = (d.get("paging") or {}).get("scroll")
-                if not scroll or not resultados:
-                    break
-                params = {**params, "scroll": scroll}
+            ops = self._operaciones_lote(cuenta, headers, inventory_ids[i:i + 20], desde, hasta, "INBOUND_RECEPTION")
+            for op in ops or []:
+                inv = op.get("inventory_id")
+                refs = op.get("external_references") or []
+                inbound_id = next((r.get("value") for r in refs if r.get("type") == "inbound_id"), None)
+                if not inv or not inbound_id:
+                    continue
+                fecha = op.get("date_created") or ""
+                resumen = op.get("result") or {}
+                pendiente = resumen.get("not_available_quantity")
+                if pendiente is None:
+                    pendiente = max(0, (resumen.get("total") or 0) - (resumen.get("available_quantity") or 0))
+                mapa_inv = ultimo_por_inbound.setdefault(inv, {})
+                previo = mapa_inv.get(inbound_id)
+                if previo is None or fecha > previo[0]:
+                    mapa_inv[inbound_id] = (fecha, pendiente)
         acumulado: dict[str, dict] = {}
         for inv, mapa in ultimo_por_inbound.items():
             pendientes = {inbound_id: cant for inbound_id, (_, cant) in mapa.items() if cant > 0}
@@ -678,6 +701,7 @@ class ResultadoConciliacion:
     incidencias_sku: list[dict]  # items ML sin SKU resuelto (ver extraer_items_full)
     incidencias_sin_vincular: list[dict]  # items ML sin vinculación en Ecom -- factor 1 asumido, no confirmado
     skus_no_en_ecom: list[str]
+    skus_incompletos: list[str] = field(default_factory=list)  # SKU cuyo stock de ML no se pudo leer (cuota agotada): NO están en `filas`
 
 
 def conciliar(
@@ -723,12 +747,16 @@ def conciliar(
 
     # Stock por inventory_id (una llamada por inventario único).
     stock_por_inventory: dict[str, dict] = {}
+    inventarios_fallidos: set[str] = set()
     for i, fila in enumerate(filas_dedup):
         if not fila.inventory_id:
             continue
         if progreso_cb:
             progreso_cb(i, len(filas_dedup), "Consultando stock Full")
-        stock_por_inventory[fila.inventory_id] = ml.stock_fulfillment(fila.inventory_id, fila.cuenta)
+        try:
+            stock_por_inventory[fila.inventory_id] = ml.stock_fulfillment(fila.inventory_id, fila.cuenta)
+        except (MLCuotaAgotada, requests.RequestException):
+            inventarios_fallidos.add(fila.inventory_id)  # sigue con el resto: resultado parcial en vez de perder todo
     if progreso_cb:
         progreso_cb(len(filas_dedup), len(filas_dedup), "Consultando stock Full")
 
@@ -755,12 +783,16 @@ def conciliar(
     parent_sku_por_sku: dict[str, str | None] = {}
     publicaciones_por_sku: dict[str, list[dict]] = {}
     incidencias_sin_vincular: list[dict] = []
+    skus_incompletos: set[str] = set()
     for fila in filas_dedup:
         if not fila.inventory_id:
             continue
-        disponible = (stock_por_inventory.get(fila.inventory_id) or {}).get("available_quantity", 0) or 0
         factor_ecom = factor_por_item.get(fila.item_id)
         pares, vinculado, incidencia = _resolver_vinculacion(fila, factor_ecom)
+        if fila.inventory_id in inventarios_fallidos:
+            skus_incompletos.update(sku_r for sku_r, _, _ in pares)
+            continue
+        disponible = (stock_por_inventory.get(fila.inventory_id) or {}).get("available_quantity", 0) or 0
         if incidencia:
             incidencias_sin_vincular.append(incidencia)
         for sku_resuelto, cantidad, parent_sku in pares:
@@ -774,7 +806,8 @@ def conciliar(
 
     filas_resultado: list[FilaConciliacion] = []
     skus_no_en_ecom: list[str] = []
-    for sku, total_ml in acumulado.items():
+    # Un SKU con alguna publicación sin leer tendría un total falso: no se muestra (se avisa en `skus_incompletos`).
+    for sku, total_ml in [(k, v) for k, v in acumulado.items() if k not in skus_incompletos]:
         parent_sku = parent_sku_por_sku.get(sku)
         stock_ecom = ecom.stock_full_por_sku(sku, parent_sku)
         if stock_ecom is None:
@@ -788,6 +821,7 @@ def conciliar(
     return ResultadoConciliacion(
         filas=filas_resultado, incidencias_sku=incidencias_sku,
         incidencias_sin_vincular=incidencias_sin_vincular, skus_no_en_ecom=skus_no_en_ecom,
+        skus_incompletos=sorted(skus_incompletos),
     )
 
 
