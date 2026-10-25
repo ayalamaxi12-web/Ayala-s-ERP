@@ -256,7 +256,10 @@ def refrescar(origen: str = "manual", descargar: Callable[[], CatalogoCostos] | 
 
 
 def refrescar_en_segundo_plano(origen: str = "manual", **kw) -> bool:
-    """Lanza `refrescar` en un hilo y vuelve en seguida. False si ya hay uno corriendo."""
+    """Lanza `refrescar` en un hilo y vuelve en seguida. False si ya hay uno corriendo. Con origen manual/auto también vuelve a leer el IVA de Táctica
+    (la otra única lectura en vivo de los cálculos), en su propio hilo."""
+    if origen != "arranque":
+        refrescar_iva_tactica_en_segundo_plano()
     if _refresco_lock.locked():
         return False
 
@@ -275,7 +278,7 @@ def estado(ahora: Callable[[], float] = time.time) -> dict:
     return {"hay_catalogo": cat is not None, "obtenido_en": cat.obtenido_en if cat else None,
             "antiguedad_seg": round(ahora() - cat.obtenido_en) if cat else None, "origen": meta.get("origen"),
             "duracion_seg": meta.get("duracion_seg"), "cantidad": meta.get("cantidad"), "en_curso": _estado["en_curso"],
-            "ultimo_error": _estado["ultimo_error"], "ultimo_intento": _estado["ultimo_intento"]}
+            "ultimo_error": _estado["ultimo_error"], "ultimo_intento": _estado["ultimo_intento"], "iva_tactica": estado_iva_tactica(ahora)}
 
 
 def obtener_catalogo(ahora: Callable[[], float] = time.time, db_factory: Callable = _sesion_default,
@@ -338,6 +341,103 @@ def precalentar(db_factory: Callable = _sesion_default) -> None:
             refrescar("arranque", db_factory=db_factory)
     except Exception:
         pass  # sin credenciales / sin red: el error queda en estado(); se reintenta con el cron o a mano
+    refrescar_iva_tactica()   # una sola consulta a Táctica por arranque; si falla queda el error en estado_iva_tactica() y el IVA sale de Ecom
+
+
+# ── Foto del IVA de Táctica ──
+# El IVA por SKU sale de la base de Táctica (SQL, por el túnel). Antes cada cálculo (Motor de Precios, Ofertas, simulador) armaba su propio proveedor y
+# volvía a consultar TODO el catálogo de Táctica: con 9 SKU piloto eran 9 consultas SQL seguidas. Ahora la consulta se hace una vez (arranque,
+# botón «Refrescar costos» o pasadas 24 h, siempre en un hilo aparte) y los cálculos leen esta foto de memoria. Si todavía no hay foto o Táctica
+# no respondió, el IVA sale de Ecom (`IvaConRespaldoEcom`) y la pantalla lo avisa en texto.
+_IVA_MAX_EDAD_SEG = 24 * 3600
+_iva_tactica: dict | None = None   # {"factores": {sku: Decimal}, "obtenido_en": float}
+_iva_estado: dict = {"en_curso": False, "ultimo_error": None, "ultimo_intento": None}
+_iva_lock = threading.Lock()
+_iva_refresco_lock = threading.Lock()
+
+
+class TacticaSinFoto(RuntimeError):
+    """Todavía no hay una lectura del IVA de Táctica en memoria (se pide en el arranque o con «Refrescar costos»)."""
+
+
+def refrescar_iva_tactica(consultar: Callable[[], list[dict]] | None = None, ahora: Callable[[], float] = time.time) -> bool:
+    """Lee el catálogo de Táctica (puede tardar hasta ~30 s con reintentos si el túnel está caído) y deja la foto en memoria. Si falla se conserva la
+    foto anterior y se anota el error. Un solo refresco a la vez (False si ya hay uno)."""
+    global _iva_tactica
+    from .adapters import IvaProvider, _consultar_catalogo_tactica_real
+
+    if not _iva_refresco_lock.acquire(blocking=False):
+        return False
+    try:
+        _iva_estado.update(en_curso=True, ultimo_intento=ahora())
+        try:
+            p = IvaProvider(consultar=consultar or _consultar_catalogo_tactica_real)
+            p.precargar()
+            factores = {sku: f for sku in p._catalogo if (f := p.factor(sku)) is not None}
+            with _iva_lock:
+                _iva_tactica = {"factores": factores, "obtenido_en": ahora()}
+            _iva_estado["ultimo_error"] = None
+        except Exception as e:
+            _iva_estado["ultimo_error"] = causa_error_tactica(e)
+        return True
+    finally:
+        _iva_estado["en_curso"] = False
+        _iva_refresco_lock.release()
+
+
+def refrescar_iva_tactica_en_segundo_plano(**kw) -> bool:
+    if _iva_refresco_lock.locked():
+        return False
+    threading.Thread(target=refrescar_iva_tactica, kwargs=kw, daemon=True).start()
+    return True
+
+
+def causa_error_tactica(exc: BaseException) -> str:
+    """Por qué no respondió Táctica, en palabras y sin datos de conexión. Es una clasificación por el texto/tipo del error del driver, no un diagnóstico
+    de red: sin conexión no se distingue túnel caído de VPN apagada de tiempo de espera (por eso se dicen juntos)."""
+    from .config import ConfiguracionFaltante
+
+    if isinstance(exc, ConfiguracionFaltante):
+        return "falta configurar la conexión a Táctica"
+    txt = f"{type(exc).__name__}: {exc}".lower()
+    if any(k in txt for k in ("20009", "20002", "unable to connect", "connection failed", "socks", "refused", "unreachable", "no route", "timeout", "timed out", "20003")):
+        return "no se pudo conectar (¿VPN apagada o túnel caído?)"
+    if "20017" in txt or "eof" in txt:
+        return "la conexión se cortó a mitad de la consulta"
+    return f"error al consultar ({type(exc).__name__})"
+
+
+def estado_iva_tactica(ahora: Callable[[], float] = time.time) -> dict:
+    with _iva_lock:
+        f = _iva_tactica
+    return {"hay_foto": f is not None, "obtenido_en": f["obtenido_en"] if f else None, "antiguedad_seg": round(ahora() - f["obtenido_en"]) if f else None,
+            "cantidad": len(f["factores"]) if f else 0, "en_curso": _iva_estado["en_curso"], "ultimo_error": _iva_estado["ultimo_error"]}
+
+
+def limpiar_iva_tactica() -> None:
+    global _iva_tactica
+    with _iva_lock:
+        _iva_tactica = None
+    _iva_estado.update(en_curso=False, ultimo_error=None, ultimo_intento=None)
+
+
+class IvaTacticaFoto:
+    """Misma interfaz que `adapters.IvaProvider` (`precargar`, `factor`) pero lee la foto en memoria: nunca consulta Táctica dentro de un cálculo."""
+
+    def precargar(self) -> None:
+        with _iva_lock:
+            f = _iva_tactica
+        if f is None:
+            raise TacticaSinFoto(_iva_estado["ultimo_error"] or "todavía no hay una lectura de Táctica en memoria")
+        if time.time() - f["obtenido_en"] > _IVA_MAX_EDAD_SEG:
+            refrescar_iva_tactica_en_segundo_plano()   # se sigue sirviendo la foto vieja mientras tanto
+
+    def factor(self, sku: str) -> Decimal | None:
+        with _iva_lock:
+            f = _iva_tactica
+        if f is None:
+            raise TacticaSinFoto("todavía no hay una lectura de Táctica en memoria")
+        return f["factores"].get(sku)
 
 
 # ── Proveedores con la misma interfaz que los de Táctica (adapters.py) ──
@@ -366,9 +466,7 @@ class IvaConRespaldoEcom:
     motor calcularía todo al 21% sin avisar."""
 
     def __init__(self, tactica=None, catalogo: Callable[[], CatalogoCostos] | None = None):
-        from .adapters import IvaProvider
-
-        self._tactica = tactica or IvaProvider()
+        self._tactica = tactica or IvaTacticaFoto()
         self._catalogo_fn = catalogo or obtener_catalogo
         self.tactica_caida = False
 

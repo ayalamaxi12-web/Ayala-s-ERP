@@ -1270,6 +1270,22 @@ def obtener_tc_bna() -> dict:
     return out
 
 
+def tc_info_rapido() -> dict:
+    """TC para pantallas que no deben esperar a la red (Motor de Precios): memoria o último guardado, y se refresca solo en un hilo aparte."""
+    from rentabilidad import tc_bna
+    try:
+        info = tc_bna.obtener_tc_bna_info_rapido()
+    except tc_bna.TcBnaError:
+        raise HTTPException(status_code=503, detail="No hay TC del BNA ni un TC guardado: no se puede calcular el margen.")
+    if not info.get("tc") or info["tc"] <= 0:
+        raise HTTPException(status_code=503, detail="No hay TC del BNA ni un TC guardado: no se puede calcular el margen.")
+    return info
+
+
+def tc_rapido_requerido() -> Decimal:
+    return Decimal(str(tc_info_rapido()["tc"]))
+
+
 def tc_bna_requerido() -> Decimal:
     """TC para cálculos de margen: nunca 1, nunca 0 -- sin TC corta con 503."""
     tc = obtener_tc_bna().get("tc") or 0
@@ -2699,6 +2715,7 @@ def _ayala_core_motor_sync(
     sku: str, renta_por_condicion: dict[str | int, Decimal],
     envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
     tc_override: Decimal | None = None, costo_override: Decimal | None = None,
+    _proveedores=None, _tc: Decimal | None = None,
 ) -> dict:
     # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
     # pisar el costo sin IVA (USD) a mano para simular. Sin
@@ -2706,7 +2723,7 @@ def _ayala_core_motor_sync(
     # no está ahí). Con `costo`, ni siquiera se
     # consulta Ecom -- también sirve para simular un SKU que todavía no
     # tiene costo cargado ahí.
-    costo_p, iva_p = costos_ecom.proveedores_de_costo_e_iva()
+    costo_p, iva_p = _proveedores or costos_ecom.proveedores_de_costo_e_iva()
     if costo_override is not None:
         costo_usd = costo_override
     else:
@@ -2719,7 +2736,7 @@ def _ayala_core_motor_sync(
     # Pedido de Maxx 2026-09-15: poder pisar el TC de BNA a mano para
     # simular con un valor propio -- sin `tc`, se sigue usando el TC en
     # vivo como siempre.
-    tc = tc_override if tc_override is not None else tc_bna_requerido()
+    tc = tc_override if tc_override is not None else (_tc if _tc is not None else tc_rapido_requerido())
     costo_sin_iva = costo_usd * tc
 
     item_info = None
@@ -2756,13 +2773,71 @@ def _ayala_core_motor_sync(
     if item_info is not None:
         item_info["precio_calculado"] = precios[str(item_info["condicion_detectada"])]
 
+    iva_origen = "ECOM" if getattr(iva_p, "tactica_caida", False) else "TACTICA"
     return {
-        "sku": sku, "costo_sin_iva_usd": float(costo_usd), "iva_factor": float(iva_factor),
+        "sku": sku, "costo_sin_iva_usd": float(costo_usd), "iva_factor": float(iva_factor), "iva_origen": iva_origen,
         "tc": float(tc), "costo_sin_iva_ars": float(costo_sin_iva), "envio_real": float(envio_usado),
         "envio_full": envio_full,
         "renta_por_condicion": {str(k): float(v) for k, v in renta_por_condicion.items()},
         "precios": {k: float(v) for k, v in precios.items()},
         "item": item_info,
+    }
+
+@app.get("/ayala-core/motor-lote")
+async def ayala_core_motor_lote(
+    skus: str = "",
+    renta_contado: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT["contado"]),
+    renta_reducida: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT["reducida"]),
+    renta_3: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[3]),
+    renta_6: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[6]),
+    renta_9: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[9]),
+    renta_12: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[12]),
+    envio_real: float | None = None,
+    envio_full: bool = False,
+    tc: float | None = None,
+):
+    """Los SKU pedidos (coma-separados; vacío = todos los piloto) en UNA sola respuesta, con la MISMA cuenta que `/ayala-core/sku/{sku}/motor`
+    (`_ayala_core_motor_sync`, ningún cambio de fórmula). Los costos de Ecom, el IVA de Táctica y el TC salen de las fotos que ya están en memoria:
+    este endpoint no lee Ecom, Táctica ni el BNA en vivo. Devuelve además con qué datos se calculó (edad de cada foto) y cuánto tardó cada parte."""
+    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
+    lista = [x.strip() for x in skus.split(",") if x.strip()] or list(ayala_core.SKUS_PILOTO)
+    return await run_in_threadpool(
+        _ayala_core_motor_lote_sync, lista, renta_por_condicion,
+        Decimal(str(envio_real)) if envio_real is not None else None, envio_full, Decimal(str(tc)) if tc is not None else None,
+    )
+
+def _ayala_core_motor_lote_sync(
+    skus: list[str], renta_por_condicion: dict[str | int, Decimal], envio_real: Decimal | None, envio_full: bool, tc_override: Decimal | None,
+) -> dict:
+    t0 = time.perf_counter()
+    prov = costos_ecom.proveedores_de_costo_e_iva()
+    try:
+        prov[0].precargar()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"No hay catálogo de costos de Ecom ({type(e).__name__}).")
+    prov[1].precargar()
+    t1 = time.perf_counter()
+    info_tc = tc_info_rapido()
+    tc = tc_override if tc_override is not None else info_tc["tc"]
+    t2 = time.perf_counter()
+    resultados = []
+    for sku in skus:
+        try:
+            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc))
+        except HTTPException as e:
+            resultados.append({"sku": sku, "error": e.detail})
+    t3 = time.perf_counter()
+    est = costos_ecom.estado()
+    iva = costos_ecom.estado_iva_tactica()
+    return {
+        "resultados": resultados,
+        "calculado_con": {
+            "costos_obtenido_en": est.get("obtenido_en"), "costos_antiguedad_seg": est.get("antiguedad_seg"),
+            "iva": "ECOM" if prov[1].tactica_caida else "TACTICA", "iva_tactica_antiguedad_seg": iva.get("antiguedad_seg"),
+            "iva_tactica_error": iva.get("ultimo_error") if prov[1].tactica_caida else None,
+            "tc": float(tc), "tc_origen": "manual" if tc_override is not None else info_tc["source"],
+        },
+        "tiempos_ms": {"fotos": round((t1 - t0) * 1000, 1), "tc": round((t2 - t1) * 1000, 1), "calculo": round((t3 - t2) * 1000, 1), "total": round((t3 - t0) * 1000, 1)},
     }
 
 @app.get("/ayala-core/sku/{sku}/motor")

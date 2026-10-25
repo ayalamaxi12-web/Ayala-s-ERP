@@ -96,6 +96,42 @@ class TcBnaClient:
     def obtener(self) -> Decimal:
         return self.obtener_info()["tc"]
 
+    def obtener_info_rapido(self) -> dict:
+        """Para los cálculos de pantalla (Motor de Precios): NUNCA espera a la red si ya hay un valor. Devuelve el de memoria (aunque haya vencido) o, si
+        no hay, el último guardado en la base, y en ambos casos refresca el BNA en un hilo aparte cuando venció. Solo la primera vez de la historia
+        (sin memoria ni TC guardado) se lee el BNA en el momento. Misma forma que `obtener_info`, más `edad_seg` cuando se conoce."""
+        ahora = self._ahora()
+        if self._valor is not None:
+            if ahora >= self._vence:
+                self._refrescar_en_segundo_plano()
+            return {"tc": self._valor, "source": "cache", "fecha": None}
+        ultimo = None
+        if self._leer_ultimo:
+            try:
+                ultimo = self._leer_ultimo()
+            except Exception:
+                ultimo = None
+        if ultimo is not None:
+            self._refrescar_en_segundo_plano()
+            return {"tc": ultimo[0], "source": "ultimo_guardado", "fecha": ultimo[1]}
+        return self.obtener_info()
+
+    def _refrescar_en_segundo_plano(self) -> None:
+        import threading
+
+        if getattr(self, "_refrescando", False):
+            return
+        self._refrescando = True
+
+        def _correr():
+            try:
+                self.obtener_info()
+            except Exception:
+                pass
+            finally:
+                self._refrescando = False
+        threading.Thread(target=_correr, daemon=True).start()
+
 
 def _guardar_en_db(tc: Decimal) -> None:
     from .db import sesion
@@ -131,3 +167,8 @@ def obtener_tc_bna_info() -> dict:
     """Igual que `obtener_tc_bna` pero con el origen (bna / cache /
     ultimo_guardado) — para `/tc/bna` y para avisar en pantalla."""
     return _cliente_default.obtener_info()
+
+
+def obtener_tc_bna_info_rapido() -> dict:
+    """Ver `TcBnaClient.obtener_info_rapido`: el TC sin esperar a la red (memoria o último guardado; refresca solo)."""
+    return _cliente_default.obtener_info_rapido()
