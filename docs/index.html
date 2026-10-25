@@ -235,6 +235,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --mk-fravega-negro:#000000;--mk-fravega-violeta:#440099;--mk-fravega-magenta:#D30098;--mk-fravega-link:#801DD9;--mk-fravega-azul:#006AFD;--mk-fravega-verde:#208041;--mk-fravega-gris:#F1F1F1;   /* Frávega: marca; magenta solo acentos; verde = cuotas sin interés */
   --mk-oncity-azul:#064FD3;--mk-oncity-turquesa:#05F2D4;--mk-oncity-chip:#CDFBF5;   /* OnCity: el turquesa es solo un detalle (1,4:1), nunca texto */
   --mk-megatone-naranja:#E53308;--mk-megatone-rojo:#E31E25;--mk-megatone-verde:#008A45;--mk-megatone-verde-texto:#00783C;--mk-megatone-gris:#E6E6E6;--mk-megatone-texto:#2A2A28;   /* Megatone: el naranja solo de fondo con texto blanco grande */
+  --fuente-mk-ml:'Nunito Sans',var(--fuente);--fuente-mk-fravega:'Roboto',var(--fuente);--fuente-mk-oncity:'Outfit',var(--fuente);--fuente-mk-megatone:'Rubik',var(--fuente);   /* tipografías de las tarjetas por mercado (se cargan solo al usar «Todos») */
   --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;   /* amarillo vivo (solo de fondo), azul, borde de la barra, encabezado de tabla */
   --mk-ml-btn-borde:#C9B300;--mk-ml-hover:#F2D800;--mk-ml-dorado:#7A5F00;--mk-ml-dorado-osc:#5C4A00;--mk-ml-chip:#FFF1A8;--mk-ml-franja:#FFF9DB;--mk-ml-franja-borde:#EBDD8A;--mk-ml-check:#8F7A00;   /* borde del botón, hover del botón, texto dorado, texto sobre chip, chip, franja y su borde, checkbox */
   /* Tipografía */
@@ -728,6 +729,44 @@ body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 .ac-det-com{margin-top:10px}
 .ac-det-com>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--tinta)}
 .ac-fila-err td{background:var(--aviso-fondo)}
+.ac-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.ac-todos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:16px;margin-bottom:16px}
+.ac-tk{display:flex;flex-direction:column;min-width:0;background:var(--superficie);border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta);overflow:hidden;font-size:var(--fs-tabla);color:var(--tinta-2)}
+.ac-tk-cab{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 16px;min-height:56px}
+.ac-tk-cab h3{margin:0;font-size:1.05em;font-weight:700;color:inherit}
+.ac-tk-logo{height:30px;width:auto;max-width:170px;object-fit:contain}
+.ac-tk-cuerpo{flex:1;min-width:0;padding:12px 16px}
+.ac-tk-tabla{overflow-x:auto}
+.ac-tk table{width:100%;border-collapse:collapse}
+.ac-tk th,.ac-tk td{padding:6px 10px;border-bottom:1px solid var(--divisor);font-weight:inherit;text-align:left;white-space:nowrap}
+.ac-tk thead th{font-weight:700;color:var(--tinta)}
+.ac-tk tbody th{font-weight:600;color:var(--tinta)}
+.ac-tk td small{display:block;font-size:.85em;color:var(--texto-suave)}
+.ac-tk-nota{margin:10px 0 0;color:var(--texto-suave)}
+.ac-tk-pie{padding:12px 16px 16px}
+.ac-tk-btn{min-height:44px;padding:0 20px;border:0;border-radius:var(--r-boton);font:inherit;font-weight:700;cursor:pointer}
+.ac-tk-btn:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+.ac-tk[data-mk=ml],.ac-tk[data-mk=ml] *{font-family:var(--fuente-mk-ml)!important}
+.ac-tk[data-mk=ml] .ac-tk-cab{background:var(--mk-ml);color:var(--mk-ml-tinta)}
+.ac-tk[data-mk=ml] thead th{background:var(--mk-ml-suave);color:var(--mk-ml-tinta)}
+.ac-tk[data-mk=ml] .ac-tk-btn{background:var(--mk-ml-tinta);color:var(--superficie)}
+.ac-tk[data-mk=fravega],.ac-tk[data-mk=fravega] *{font-family:var(--fuente-mk-fravega)!important}
+.ac-tk[data-mk=fravega] .ac-tk-cab{border-bottom:3px solid var(--mk-fravega-violeta)}
+.ac-tk[data-mk=fravega] thead th{background:var(--mk-fravega-gris);color:var(--mk-fravega-negro)}
+.ac-tk[data-mk=fravega] .ac-sin-interes th,.ac-tk[data-mk=fravega] .ac-sin-interes td b,.ac-tk[data-mk=fravega] .ac-si-txt{color:var(--mk-fravega-verde)}
+.ac-tk[data-mk=fravega] .ac-tk-btn{background:var(--mk-fravega-violeta);color:var(--superficie)}
+.ac-tk[data-mk=oncity],.ac-tk[data-mk=oncity] *{font-family:var(--fuente-mk-oncity)!important}
+.ac-tk[data-mk=oncity] .ac-tk-cab{background:var(--mk-oncity-azul);color:var(--superficie)}
+.ac-tk[data-mk=oncity] thead th{background:var(--mk-oncity-chip);color:var(--mk-oncity-azul)}
+.ac-tk[data-mk=oncity] .ac-tk-btn{background:var(--mk-oncity-azul);color:var(--superficie)}
+.ac-tk[data-mk=megatone],.ac-tk[data-mk=megatone] *{font-family:var(--fuente-mk-megatone)!important}
+.ac-tk[data-mk=megatone] .ac-tk-cab{background:var(--mk-megatone-gris)}
+.ac-tk[data-mk=megatone] thead th{background:var(--mk-megatone-gris);color:var(--mk-megatone-texto)}
+.ac-tk[data-mk=megatone] td b{color:var(--mk-megatone-rojo)}
+.ac-tk[data-mk=megatone] .ac-tk-btn{background:var(--mk-megatone-verde-texto);color:var(--superficie)}
+.ac-tk[data-mk=web] .ac-tk-cab{background:var(--celeste-marca);color:var(--tinta)}
+.ac-tk[data-mk=web] thead th{background:var(--celeste-100);color:var(--celeste-700)}
+.ac-tk[data-mk=web] .ac-tk-btn{background:var(--celeste-600);color:var(--superficie)}
 @media (max-width:900px){.ac-rentas{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:520px){.ac-rentas{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-bloque-btn{flex-wrap:wrap}.ac-bloque-res{margin-left:34px;flex-basis:100%}}
 /* — Gráficos y comparaciones — */
@@ -1884,6 +1923,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
     <div class="ac-mk-fila">
       <span class="ac-lbl" id="ac-mk-lbl">Mercado</span>
       <div class="ac-mercado" role="radiogroup" aria-labelledby="ac-mk-lbl" id="ac-mercados">
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="todos" onclick="ayalaCoreMercado('todos')"><span data-ico="grid" aria-hidden="true"></span><span>Todos</span></button>
         <button type="button" role="radio" aria-checked="true" tabindex="0" class="ac-mk" data-mk="ml" onclick="ayalaCoreMercado('ml')"><img src="assets/logos/mercadolibre-isotipo.png" alt="" class="ac-mk-logo"><span>Mercado Libre</span></button>
         <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="fravega" onclick="ayalaCoreMercado('fravega')"><img src="assets/logos/fravega.svg" alt="Frávega" class="ac-mk-logo ac-mk-logo-ancho"></button>
         <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="oncity" onclick="ayalaCoreMercado('oncity')"><img src="assets/logos/oncity.png" alt="OnCity" class="ac-mk-logo"></button>
@@ -1951,6 +1991,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
 
   <div id="ac-datos" class="ac-datos" style="display:none"></div>
   <button type="button" class="btn" id="ac-tildar-todas-btn" style="display:none;margin-bottom:6px" onclick="ayalaCoreTildarTodasUsar()">Tildar todas («Usar»)</button>
+  <div class="ac-todos" id="ac-todos-wrap" style="display:none" aria-label="Precios finales por mercado"></div>
   <div class="table-wrap" id="ac-tabla-wrap" style="display:none"></div>
 
   <div class="ac-bloques-acc" role="group" aria-label="Mostrar u ocultar todos los bloques">
@@ -2112,6 +2153,7 @@ const ICONOS={
  'refresh':'<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>','clock':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
  'alert':'<path d="M10.3 4.2L2.6 18a2 2 0 001.7 3h15.4a2 2 0 001.7-3L13.7 4.2a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
  'crown':'<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>','external':'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>',
+ 'grid':'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
  'calculator':'<rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 6.5h8M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h.01M12 18h.01M15.5 18h.01"/>',
  'chevron':'<path d="M6 9l6 6 6-6"/>','list':'<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>'
 };
@@ -6029,15 +6071,16 @@ function acBloquesResumen(){
 let AC_MLA_ULT='',AC_CARGADO_ULT='';
 // ══ Mercados (Bloque 2, PR 4): Mercado Libre, Frávega, OnCity, Megatone y Web. La cuenta de precios es la misma; cambian las tarifas, que salen de la pestaña «Mercados» del Sheet del ERP ══
 let AC_MERCADO='ml',AC_MK=null,AC_MK_USA={},AC_MK_TOCADO={};
-const AC_MK_ORDEN=['ml','fravega','oncity','megatone','web'];
+const AC_MK_ORDEN=['todos','ml','fravega','oncity','megatone','web'];
+const AC_MK_REALES=['ml','fravega','oncity','megatone','web'];
 const AC_MK_NOMBRE={ml:'Mercado Libre',fravega:'Frávega',oncity:'OnCity',megatone:'Megatone',web:'Web (Mercado Pago)'};
-function ayalaCoreMkInfo(m){return (AC_MK&&AC_MK.mercados&&AC_MK.mercados[m])||{condiciones:m==='ml'?['contado','reducida','3','6','9','12']:['contado','3','6','9','12'],usa_por_defecto:{orden:m!=='ml',cheque:true,iibb:true}};}
+function ayalaCoreMkInfo(m){if(m==='todos')m='ml';return (AC_MK&&AC_MK.mercados&&AC_MK.mercados[m])||{condiciones:m==='ml'?['contado','reducida','3','6','9','12']:['contado','3','6','9','12'],usa_por_defecto:{orden:m!=='ml',cheque:true,iibb:true}};}
 async function ayalaCoreTarifasCargar(){
   const url=getBackendUrl();if(!url)return;
   try{
     const res=await fetch(`${url}/mercados/tarifas`);if(!res.ok)throw new Error(res.status);
     AC_MK=await res.json();
-    AC_MK_ORDEN.forEach(m=>{if(!AC_MK_USA[m])AC_MK_USA[m]={...ayalaCoreMkInfo(m).usa_por_defecto};});
+    AC_MK_REALES.forEach(m=>{if(!AC_MK_USA[m])AC_MK_USA[m]={...ayalaCoreMkInfo(m).usa_por_defecto};});
     const c=AC_MK.comunes||{};
     [['ac-costo-orden','costo_orden'],['ac-cheque','cheque_pct'],['ac-iibb','iibb_pct'],['ac-recargo','recargo_cuotas']].forEach(([id,k])=>{const el=qs(id);if(el&&!AC_MK_TOCADO[id]&&c[k]!=null)el.value=String(c[k]);});
   }catch(e){AC_MK=null;}
@@ -6065,7 +6108,7 @@ async function ayalaCoreMercadosInit(){
   await ayalaCoreTarifasActualizar();
 }
 function ayalaCoreMercadoMontar(){const g=qs('ac-mercados');if(g&&!g.dataset.montado){g.dataset.montado='1';g.addEventListener('keydown',ayalaCoreMercadoTecla);}}
-function ayalaCoreMercado(m){AC_MERCADO=m;ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
+function ayalaCoreMercado(m){AC_MERCADO=m;if(m==='todos')ayalaCoreCargarFuentes();else{const w=qs('ac-todos-wrap');if(w)w.style.display='none';}ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
 function ayalaCoreMercadoTecla(e){
   const k=e.key;if(!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','Home','End'].includes(k))return;
   e.preventDefault();const i=AC_MK_ORDEN.indexOf(AC_MERCADO),n=AC_MK_ORDEN.length;
@@ -6073,52 +6116,35 @@ function ayalaCoreMercadoTecla(e){
   ayalaCoreMercado(AC_MK_ORDEN[j]);const b=document.querySelector(`.ac-mk[data-mk="${AC_MK_ORDEN[j]}"]`);if(b)b.focus();
 }
 function ayalaCoreMercadoAplicar(){
-  const m=AC_MERCADO,info=ayalaCoreMkInfo(m),conds=info.condiciones.map(String);
+  const m=AC_MERCADO,info=ayalaCoreMkInfo(m),conds=(m==='todos'?['contado','reducida','3','6','9','12','18','24']:info.condiciones).map(String);
   document.querySelectorAll('.ac-mk').forEach(b=>{const on=b.dataset.mk===m;b.setAttribute('aria-checked',on);b.tabIndex=on?0:-1;});
   document.querySelectorAll('.ac-rentas label[data-cond]').forEach(l=>{l.hidden=!conds.includes(l.dataset.cond);});
-  const et=document.querySelector('.ac-rentas [data-etq="contado"]');if(et)et.textContent=m==='ml'?'Contado':'Simple';
-  const u=AC_MK_USA[m]||{...info.usa_por_defecto};
+  const et=document.querySelector('.ac-rentas [data-etq="contado"]');if(et)et.textContent=m==='ml'?'Contado':m==='todos'?'Contado / Simple':'Simple';
+  const u=AC_MK_USA[m==='todos'?'ml':m]||{...info.usa_por_defecto};
+  ['ac-usa-orden','ac-usa-cheque','ac-usa-iibb'].forEach(id=>{const el=qs(id);if(el)el.disabled=m==='todos';});
   [['orden','ac-usa-orden'],['cheque','ac-usa-cheque'],['iibb','ac-usa-iibb']].forEach(([k,id])=>{const el=qs(id);if(el)el.checked=!!u[k];});
-  const rb=qs('ac-recargo-box');if(rb)rb.hidden=m!=='web';
-  const ay=qs('ac-comunes-ayuda');if(ay)ay.textContent=m==='ml'?'En Mercado Libre el costo por orden viene desactivado para no cambiar los precios de hoy: activalo solo si querés verlo.':'Los valores son los mismos para todos los mercados (se cargan en la pestaña «Mercados»); acá se activan o no para este mercado.';
-  const r=qs('ac-comunes-res');if(r)r.textContent=`· ${AC_MK_NOMBRE[m]}: ${['orden','cheque','iibb'].filter(k=>u[k]).map(k=>({orden:'costo por orden',cheque:'cheque',iibb:'IIBB'}[k])).join(', ')||'ninguno'}`;
+  const rb=qs('ac-recargo-box');if(rb)rb.hidden=!(m==='web'||m==='todos');
+  const ay=qs('ac-comunes-ayuda');if(ay)ay.textContent=m==='todos'?'Con «Todos» cada mercado usa sus propios interruptores (Mercado Libre sin el costo por orden, el resto con todo activado); elegí un mercado para cambiarlos.':m==='ml'?'En Mercado Libre el costo por orden viene desactivado para no cambiar los precios de hoy: activalo solo si querés verlo.':'Los valores son los mismos para todos los mercados (se cargan en la pestaña «Mercados»); acá se activan o no para este mercado.';
+  const r=qs('ac-comunes-res');if(r)r.textContent=m==='todos'?'· cada mercado con sus interruptores':`· ${AC_MK_NOMBRE[m]}: ${['orden','cheque','iibb'].filter(k=>u[k]).map(k=>({orden:'costo por orden',cheque:'cheque',iibb:'IIBB'}[k])).join(', ')||'ninguno'}`;
   ayalaCoreConfigRender();ayalaCoreImpactoOrden();
 }
-// Cuánto cambia el precio de ML (contado) al activar el costo por orden: un SKU barato y uno caro, con la misma cuenta del motor (dos pedidos por lote, sin tocar nada).
-let AC_IMPACTO_SEQ=0;
-async function ayalaCoreImpactoOrden(){
-  const box=qs('ac-orden-impacto');if(!box)return;
-  const det=qs('ac-comunes');if(AC_MERCADO!=='ml'||!det||!det.open){box.hidden=true;return;}
-  const url=getBackendUrl();if(!url){box.hidden=true;return;}
-  const seq=++AC_IMPACTO_SEQ,x=(qs('ac-costo-orden')?.value||'').trim().replace(',','.'),co=x===''||isNaN(Number(x))?'':`&costo_orden=${Number(x)}`;
-  box.hidden=false;box.textContent='Calculando el efecto del costo por orden...';
-  try{
-    const q=`${ayalaCoreRentaQueryParams()}${ayalaCoreTcParam()}`;
-    const [a,b]=await Promise.all([fetch(`${url}/ayala-core/motor-lote?${q}&usar_costo_orden=false`),fetch(`${url}/ayala-core/motor-lote?${q}&usar_costo_orden=true${co}`)]);
-    if(!a.ok||!b.ok)throw new Error('sin datos');
-    const [sin,con]=[await a.json(),await b.json()];if(seq!==AC_IMPACTO_SEQ)return;
-    const con_=Object.fromEntries(con.resultados.filter(r=>!r.error).map(r=>[r.sku,r])),filas=sin.resultados.filter(r=>!r.error&&con_[r.sku]&&r.precios&&r.precios.contado>0).sort((p1,p2)=>p1.precios.contado-p2.precios.contado);
-    if(!filas.length){box.textContent='No hay SKU con datos para mostrar el efecto.';return;}
-    const f=(r,t)=>{const p0=r.precios.contado,p1=con_[r.sku].precios.contado,dif=p1-p0;return `<tr><td>${t}</td><td>${acEsc(r.sku)}</td><td style="text-align:right">${ayalaCoreFmt(p0)}</td><td style="text-align:right">${ayalaCoreFmt(p1)}</td><td style="text-align:right"><b>+${ayalaCoreFmt(dif)}</b> (${(dif/p0*100).toLocaleString('es-AR',{maximumFractionDigits:2})} %)</td></tr>`;};
-    box.innerHTML=`<div class="table-wrap"><table><caption>Precio de contado en Mercado Libre, sin y con costo por orden</caption><thead><tr><th>Ejemplo</th><th>SKU</th><th style="text-align:right">Sin</th><th style="text-align:right">Con</th><th style="text-align:right">Cambio</th></tr></thead><tbody>${f(filas[0],'Barato')}${f(filas[filas.length-1],'Caro')}</tbody></table></div>`;
-  }catch(e){if(seq===AC_IMPACTO_SEQ)box.textContent='No se pudo calcular el efecto (¿backend sin conexión?).';}
-}
-function ayalaCoreUsaCambio(){AC_MK_USA[AC_MERCADO]={orden:qs('ac-usa-orden').checked,cheque:qs('ac-usa-cheque').checked,iibb:qs('ac-usa-iibb').checked};ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
+function ayalaCoreUsaCambio(){if(AC_MERCADO==='todos')return;AC_MK_USA[AC_MERCADO]={orden:qs('ac-usa-orden').checked,cheque:qs('ac-usa-cheque').checked,iibb:qs('ac-usa-iibb').checked};ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
 function ayalaCoreComunCambio(){clearTimeout(window._acImpT);window._acImpT=setTimeout(ayalaCoreImpactoOrden,500);['ac-costo-orden','ac-cheque','ac-iibb','ac-recargo'].forEach(id=>{AC_MK_TOCADO[id]=true;});ayalaCoreAutoRecalcular();}
 // Un solo lugar para los avisos de configuración: tarifas (hace X · Actualizar) + lo que falta, venció, está a confirmar o copiado, del mercado elegido.
 function ayalaCoreConfigRender(){
   const box=qs('ac-config');if(!box)return;
   if(!AC_MK){box.innerHTML='<div class="ac-aviso-lin">No se pudieron leer las tarifas de los mercados (¿backend sin conexión?).</div>';return;}
   const t=AC_MK.tarifas||{},edad=t.obtenido_en?costosEdadTxt((Date.now()-Date.parse(t.obtenido_en))/1000):null;
-  const generales=(AC_MK.avisos||[]).map(a=>a.texto),delMercado=((AC_MK.avisos_por_mercado||{})[AC_MERCADO])||[];
+  const generales=(AC_MK.avisos||[]).map(a=>a.texto),pm=AC_MK.avisos_por_mercado||{},delMercado=AC_MERCADO==='todos'?AC_MK_REALES.flatMap(k=>(pm[k]||[]).map(x=>(AC_MK_NOMBRE[k].split(' ')[0])+': '+x)):(pm[AC_MERCADO]||[]);
   const todos=[...new Set([...generales,...delMercado])];
   const pend=todos.filter(x=>/falta dato|vencida|todavía no|Falló|todavía no se leyó/.test(x)),conf=todos.filter(x=>!pend.includes(x));
   let h=`<div class="ac-config-lin"><span>Tarifas: ${t.origen==='hoja'?edad:'sin leer del Sheet todavía'}</span><button type="button" class="btn" id="ac-tarifas-btn" onclick="ayalaCoreTarifasActualizar()">Actualizar</button>${t.origen==='codigo'?'<button type="button" class="btn" onclick="ayalaCoreMercadosInit()">Crear pestañas Mercados y Envios</button>':''}</div>`;
   if(todos.length)h+=`<details class="ac-config-av" ${pend.length?'open':''}><summary>${pend.length?`<b>${pend.length} aviso${pend.length===1?'':'s'} de configuración</b>`:'Avisos de configuración'}${conf.length?` · ${conf.length} a confirmar`:''}</summary><ul>${pend.map(x=>`<li class="ac-aviso-txt">${acEsc(x)}</li>`).join('')}${conf.map(x=>`<li>${acEsc(x)}</li>`).join('')}</ul></details>`;
   box.innerHTML=h;
 }
-function ayalaCoreMercadoParams(){
-  const m=AC_MERCADO,u=AC_MK_USA[m]||{},def=ayalaCoreMkInfo(m).usa_por_defecto||{},c=(AC_MK&&AC_MK.comunes)||{};let q='';
+function ayalaCoreMercadoParams(m){
+  m=m||AC_MERCADO;if(m==='todos')return '';
+  const u=AC_MK_USA[m]||{},def=ayalaCoreMkInfo(m).usa_por_defecto||{},c=(AC_MK&&AC_MK.comunes)||{};let q='';
   if(m!=='ml')q+=`&mercado=${m}`;
   [['orden','usar_costo_orden'],['cheque','usar_cheque'],['iibb','usar_iibb']].forEach(([k,p])=>{const v=u[k]!==undefined?u[k]:def[k];if(m!=='ml'||v!==def[k])q+=`&${p}=${v}`;});
   const num=id=>{const x=(qs(id)?.value||'').trim().replace(',','.');return x===''||isNaN(Number(x))?null:Number(x);};
@@ -6142,6 +6168,60 @@ function ayalaCoreConds(d){return (d.condiciones||AC_COND_ORDEN).map(String);}
 function ayalaCoreEsML(d){return !d.mercado||d.mercado==='ml';}
 function ayalaCoreDesgloseHead(d){const o=!ayalaCoreEsML(d)&&d.parametros&&d.parametros.costo_orden>0;return o?AC_DESGLOSE_HEAD.replace('<th style="text-align:right">Renta $</th>','<th style="text-align:right">Costo por orden</th><th style="text-align:right">Renta $</th>'):AC_DESGLOSE_HEAD;}
 function ayalaCoreFilaErrorHtml(d,c,prefijo,n){return `<tr class="ac-fila-err">${prefijo}<td>${ayalaCoreCondLabel(c)}</td><td colspan="${n}"><span class="ac-aviso-txt">${acEsc((d.errores_condicion||{})[c]||'falta dato')}</span></td></tr>`;}
+// ══ Vista «Todos» (Bloque 2, PR 5): una tarjeta por mercado con todos los precios finales por condición de pago. La identidad de cada mercado (logo, color y tipografía) vive SOLO acá y en el selector ══
+let AC_FUENTES_OK=false;
+function ayalaCoreCargarFuentes(){
+  if(AC_FUENTES_OK)return;AC_FUENTES_OK=true;
+  const l=document.createElement('link');l.rel='stylesheet';
+  l.href='https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&family=Outfit:wght@400;600;700&family=Rubik:wght@400;500;700&display=swap';
+  document.head.appendChild(l);
+}
+const AC_TARJETA={
+  ml:{logo:'assets/logos/mercadolibre-isotipo.png',nombre:'Mercado Libre',alt:'',boton:'Ver en Mercado Libre'},
+  fravega:{logo:'assets/logos/fravega.svg',nombre:'Frávega',alt:'Frávega',boton:'Ver en Frávega'},
+  oncity:{logo:'assets/logos/oncity-blanco.png',nombre:'OnCity',alt:'OnCity',boton:'Ver en OnCity'},
+  megatone:{logo:'assets/logos/megatone.png',nombre:'Megatone',alt:'Megatone',boton:'Ver en Megatone'},
+  web:{logo:'assets/logos/global-blanco.png',nombre:'Web (Mercado Pago)',alt:'',boton:'Ver en la Web'}
+};
+function ayalaCoreTarjetaMercadoHtml(m,lote){
+  const t=AC_TARJETA[m],res=(lote.resultados||[]).filter(r=>!r.error),omit=(lote.resultados||[]).filter(r=>r.error);
+  const d0=res[0];
+  const cab=`<div class="ac-tk-cab"><img src="${t.logo}" alt="${t.alt}" class="ac-tk-logo">${t.alt?`<h3 class="ac-sr">${acEsc(t.nombre)}</h3>`:`<h3>${acEsc(t.nombre)}</h3>`}${m!=='ml'?'<span class="ac-tag-conf">a confirmar</span>':''}</div>`;
+  const pie=`<div class="ac-tk-pie"><button type="button" class="ac-tk-btn" onclick="ayalaCoreMercado('${m}')">${t.boton}</button></div>`;
+  if(!d0)return `<article class="ac-tk" data-mk="${m}" aria-label="${acEsc(t.nombre)}">${cab}<div class="ac-tk-cuerpo"><span class="ac-aviso-txt">${omit.length?acEsc(String(omit[0].error)):'Sin datos'}</span></div>${pie}</article>`;
+  const pack=d0.cantidad>1,conds=ayalaCoreConds(d0),etq=c=>c==='contado'?(d0.etiqueta_contado||'Contado'):AC_COND_LABEL[c]||(/^\d+$/.test(c)?c+' cuotas':c);
+  let h=`<div class="ac-tk-tabla"><table><thead><tr><th scope="col">Condición</th>${res.map(r=>`<th scope="col" style="text-align:right">${acEsc(r.sku)}</th>`).join('')}</tr></thead><tbody>`;
+  conds.forEach(c=>{
+    const cuotaSI=m==='fravega'&&c!=='contado';
+    h+=`<tr${cuotaSI?' class="ac-sin-interes"':''}><th scope="row">${etq(c)}${cuotaSI?' <span class="ac-si-txt">sin interés</span>':''}</th>`;
+    res.forEach(r=>{
+      if(r.precios[c]===undefined)h+=`<td style="text-align:right"><span class="ac-aviso-txt">${acEsc((r.errores_condicion||{})[c]||'falta dato')}</span></td>`;
+      else h+=`<td style="text-align:right"><b>${ayalaCoreFmt(r.precios[c])}</b>${pack?`<small>por unidad ${ayalaCoreFmt2(r.precios_unitarios[c])}</small>`:''}</td>`;
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  const p=d0.parametros||{},ord=p.costo_orden>0?` · costo por orden ${ayalaCoreFmt2(p.costo_orden)}`:' · sin costo por orden';
+  const av=(lote.calculado_con&&lote.calculado_con.avisos_mercado)||[];
+  const nota=`<p class="ac-tk-nota">${pack?`Pack x${d0.cantidad}: precio de la publicación y por unidad. `:''}Comisión base ${p.comision_pct==null?'—':Number(p.comision_pct).toLocaleString('es-AR')} %${ord}.${d0.envio_estimado_como_ml?' Envío estimado como ML.':''}${av.length?` ${av.length} aviso${av.length===1?'':'s'} de configuración (arriba).`:''}${omit.length?` Sin datos: ${omit.map(o=>acEsc(o.sku)).join(', ')}.`:''}</p>`;
+  return `<article class="ac-tk" data-mk="${m}" aria-label="${acEsc(t.nombre)}">${cab}<div class="ac-tk-cuerpo">${h}${nota}</div>${pie}</article>`;
+}
+async function ayalaCoreCalcularTodos(url,qbase){
+  ayalaCoreCargarFuentes();
+  const seq=++AC_CALC_SEQ,t0=performance.now(),skus=encodeURIComponent(AC_SEL.join(','));
+  try{
+    const lotes=await Promise.all(AC_MK_REALES.map(async m=>{
+      const r=await fetch(`${url}/ayala-core/motor-lote?${qbase}${ayalaCoreMercadoParams(m)}&skus=${skus}`);
+      if(!r.ok){const e=await r.json().catch(()=>({}));return {m,error:e.detail||('HTTP '+r.status)};}
+      return {m,lote:await r.json()};
+    }));
+    if(seq!==AC_CALC_SEQ)return;
+    const wrap=qs('ac-todos-wrap');
+    wrap.innerHTML=lotes.map(x=>x.lote?ayalaCoreTarjetaMercadoHtml(x.m,x.lote):`<article class="ac-tk" data-mk="${x.m}"><div class="ac-tk-cuerpo"><span class="ac-aviso-txt">${acEsc(AC_TARJETA[x.m].nombre)}: ${acEsc(String(x.error))}</span></div></article>`).join('');
+    const c=(lotes.find(x=>x.lote)||{}).lote;
+    qs('ac-datos').innerHTML=`${AC_SEL.length} SKU en ${AC_MK_REALES.length} mercados${c?`<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(c.calculado_con,Math.round(performance.now()-t0))}</div>`:''}`;
+  }catch(e){if(seq===AC_CALC_SEQ)qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${acEsc(e.message)}</span>`;}
+}
 let AC_CALC_SEQ=0,AC_CALC_TIMER=null,AC_AUTO_OK=false;
 // Pack: unidades por publicación (x1 por defecto, x2…x6 y «Otro»). Con x1 no se manda nada: el pedido es idéntico al de siempre.
 function ayalaCoreCantidadValida(){const sel=qs('ac-cantidad');if(!sel||sel.value!=='otro')return true;const n=Number(qs('ac-cantidad-otro').value);return Number.isInteger(n)&&n>=1&&n<=999;}
@@ -6173,6 +6253,8 @@ async function ayalaCoreCalcular(){
   let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}${ayalaCoreCantidadParam()}${ayalaCoreMercadoParams()}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
+  const tw=qs('ac-todos-wrap');if(tw)tw.style.display=AC_MERCADO==='todos'?'block':'none';
+  if(AC_MERCADO==='todos'){qs('ac-tabla-wrap').style.display='none';qs('ac-tildar-todas-btn').style.display='none';return ayalaCoreCalcularTodos(url,qparams);}
   try{
     if(!sku){
       // Varios SKU -- UN solo pedido por lote (misma cuenta que el pedido por SKU, con las fotos de costos/IVA/TC que ya están en el backend: no lee nada en vivo)
