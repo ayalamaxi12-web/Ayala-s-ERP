@@ -52,7 +52,7 @@ def test_la_web_manda_recargo_y_las_rentas_de_18_y_24():
 def test_selector_accesible_con_logos_reales_y_sin_nombres_escritos_con_fuente():
     s = html()
     g = s[s.index('id="ac-mercados"'):s.index('id="ac-config"')]
-    assert 'role="radiogroup"' in s and g.count('role="radio"') == 5 and 'aria-checked="true"' in g
+    assert 'role="radiogroup"' in s and g.count('role="radio"') == 6 and 'aria-checked="true"' in g
     for logo in ('mercadolibre-isotipo.png', 'fravega.svg', 'oncity.png', 'megatone.png', 'global-celeste.png'):
         assert f'assets/logos/{logo}' in g and os.path.exists(os.path.join(RAIZ, 'assets', 'logos', logo)), logo
     for nombre in ('Frávega', 'OnCity', 'Megatone'):                      # el nombre va como imagen (alt), nunca como texto en el botón
