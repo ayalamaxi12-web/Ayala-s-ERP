@@ -218,6 +218,9 @@
   function mount(root, data, opts) {
     opts = opts || {}; injectCss();
     root.innerHTML = ''; var app = el('div', { class: 'pd', 'data-theme': opts.theme || 'auto' }); root.appendChild(app);
+    // Colores de los gráficos: si la página los define (--pd-g1 azul/principal, --pd-g2 rojo, --pd-g3 ámbar, --pd-g4 verde, --pd-g5 azul claro, --pd-g6 oscuro de apoyo) se usan; si no, los de siempre.
+    function cv(n, d) { var v = getComputedStyle(app).getPropertyValue(n).trim(); return v || d; }
+    var C = { ac: cv('--pd-g1', '#2f5597'), bad: cv('--pd-g2', '#c62828'), warn: cv('--pd-g3', '#b26a00'), good: cv('--pd-g4', '#2e7d32'), ac2: cv('--pd-g5', '#7fa4ee'), alt: cv('--pd-g6', '#8a2a10') };
     var D = data, K = D.kpis || {}, CAP = D.capital || { meses: [], series: {}, kpis: {} }, S = CAP.series || {};
     var TR = D.transito || { requerimientos: [], pagos: [], unidades_por_mes: [], resumen: {}, meses: [] };
     var cols = D.skus.cols, SK = D.skus.rows.map(function (r) { var o = {}; cols.forEach(function (c, i) { o[c] = r[i]; }); return o; });
@@ -263,10 +266,10 @@
       f.appendChild(g);
       var n12 = (CAP.meses || []).slice(0, 12).map(fMes);
       f.appendChild(el('div', { class: 'pd-grid pd-2', style: 'margin-top:10px' }, [
-        card('Compras a emitir por mes (USD, costo nacionalizado)', chartBar({ labels: n12, series: [{ name: 'Compras', values: (S.compras_usd || []).slice(0, 12), color: '#2f5597' }] })),
-        card('Desembolsos vs. cobros por mes (USD)', chartLine({ labels: (CAP.meses || []).map(fMes), series: [{ name: 'Desembolsos', values: S.desembolso || [], color: '#c62828' }, { name: 'Cobros netos', values: S.cobros || [], color: '#2e7d32' }] })),
-        card('Stock a costo real por clase (USD)', chartBar({ labels: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.clase; }), series: [{ name: 'Stock', values: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.stock_usd; }), color: '#b26a00' }] })),
-        card('Margen anualizado por clase (USD)', chartBar({ labels: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.clase; }), series: [{ name: 'Margen', values: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.margen_usd; }), color: '#2e7d32' }] }))]));
+        card('Compras a emitir por mes (USD, costo nacionalizado)', chartBar({ labels: n12, series: [{ name: 'Compras', values: (S.compras_usd || []).slice(0, 12), color: C.ac }] })),
+        card('Desembolsos vs. cobros por mes (USD)', chartLine({ labels: (CAP.meses || []).map(fMes), series: [{ name: 'Desembolsos', values: S.desembolso || [], color: C.bad }, { name: 'Cobros netos', values: S.cobros || [], color: C.good }] })),
+        card('Stock a costo real por clase (USD)', chartBar({ labels: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.clase; }), series: [{ name: 'Stock', values: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.stock_usd; }), color: C.warn }] })),
+        card('Margen anualizado por clase (USD)', chartBar({ labels: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.clase; }), series: [{ name: 'Margen', values: D.clases.filter(function (c) { return c.clase !== 'TOTAL'; }).map(function (c) { return c.margen_usd; }), color: C.good }] }))]));
       var lst = el('ul', { class: 'pd-ul' }, [
         el('li', { text: 'Reyes sin stock hoy y sin nada en camino: ' + fInt(rq.skus) + ' (más ' + fInt(alertaConteo('Reyes sin stock hoy').skus) + ' sin stock pero con pedido en camino); se quedan sin stock en menos de 3 meses: ' + fInt(rq3.skus) + '.' }),
         el('li', { text: 'Capital parado: ' + fUsdC(alertaConteo('REVENTAR').stock_usd) + ' en ' + fInt(alertaConteo('REVENTAR').skus) + ' SKU para liquidar; más ' + fUsdC(alertaConteo('Reyes con STOCK PARADO').stock_usd + alertaConteo('Medios con STOCK PARADO').stock_usd) + ' en Reyes y Medios con exceso.' }),
@@ -293,7 +296,7 @@
       var byClase = {}; rows.forEach(function (r) { byClase[r.c.clase] = (byClase[r.c.clase] || 0) + r.usd; });
       f.appendChild(el('div', { class: 'pd-grid pd-kpis' }, [kpi('Total a comprar', fUsdC(totUsd), idx == null ? 'hasta ago-27' : fMes(meses[idx])), kpi('Unidades', fInt(totU), null), kpi('SKU a pedir', fInt(rows.length), null)]
         .concat(Object.keys(byClase).map(function (k) { return kpi('Clase ' + k, fUsdC(byClase[k]), fPct(totUsd ? byClase[k] / totUsd : 0) + ' del total'); }))));
-      f.appendChild(el('div', { style: 'margin:10px 0' }, card('Compras emitidas por mes (USD)', chartBar({ labels: meses.map(fMes), series: [{ name: 'Compras', values: (S.compras_usd || []).slice(0, 12), colors: meses.map(function (m, i) { return idx === i ? '#c62828' : '#2f5597'; }), color: '#2f5597' }] }))));
+      f.appendChild(el('div', { style: 'margin:10px 0' }, card('Compras emitidas por mes (USD)', chartBar({ labels: meses.map(fMes), series: [{ name: 'Compras', values: (S.compras_usd || []).slice(0, 12), colors: meses.map(function (m, i) { return idx === i ? C.bad : C.ac; }), color: C.ac }] }))));
       f.appendChild(table({ csv: 'compras_' + (idx == null ? 'total' : meses[idx]), sortKey: 4, pageSize: 40, cols: [
         { label: 'SKU', val: function (r) { return r.c.sku; }, sticky: true }, { label: 'Clase', val: function (r) { return r.c.clase; }, node: function (v) { return badge(v); } },
         { label: 'PM', val: function (r) { return r.c.pm; } }, { label: 'Categoría', val: function (r) { return r.c.categoria; } },
@@ -324,8 +327,8 @@
         kpi('ETA vencida y abierto en Táctica', fInt(vencidas), '¿ya llegaron y falta ingresarlos?', 'warn')]));
       var ms = (TR.meses || []).map(fMes);
       f.appendChild(el('div', { class: 'pd-grid pd-2', style: 'margin:10px 0' }, [
-        card('Unidades que entran al stock por mes (pedidos firmes)', chartBar({ labels: ms, fmt: fInt, series: [{ name: 'Unidades', values: TR.unidades_por_mes || [], color: '#2e7d32' }] })),
-        card('Pagos ya comprometidos por mes (USD)', chartBar({ labels: (CAP.meses || []).map(fMes), series: [{ name: 'Saldos a proveedores', values: S.saldos_en_camino || [], color: '#2f5597' }, { name: 'Gravámenes y gastos', values: S.gravamenes_en_camino || [], color: '#b26a00' }] }))]));
+        card('Unidades que entran al stock por mes (pedidos firmes)', chartBar({ labels: ms, fmt: fInt, series: [{ name: 'Unidades', values: TR.unidades_por_mes || [], color: C.good }] })),
+        card('Pagos ya comprometidos por mes (USD)', chartBar({ labels: (CAP.meses || []).map(fMes), series: [{ name: 'Saldos a proveedores', values: S.saldos_en_camino || [], color: C.ac }, { name: 'Gravámenes y gastos', values: S.gravamenes_en_camino || [], color: C.warn }] }))]));
       var tools = el('div', { class: 'pd-tools' }), sl = el('select'); sl.appendChild(el('option', { value: '', text: 'Todas las clasificaciones' }));
       Object.keys(CLASE_TXT).forEach(function (k) { sl.appendChild(el('option', { value: k, text: CLASE_TXT[k] })); });
       sl.value = state.trFiltro; sl.addEventListener('change', function () { state.trFiltro = sl.value; render(); });
@@ -360,10 +363,10 @@
         kpi('Facturación 2027 proyectada', fUsdC(ck['Facturación 2027 proyectada (USD, ene-dic)']), 'sin IVA')]));
       var ms = (CAP.meses || []).map(fMes);
       f.appendChild(el('div', { class: 'pd-grid pd-2', style: 'margin:10px 0' }, [
-        card('Capital a tener para los próximos 3 meses (USD)', chartBar({ labels: ms, series: [{ name: 'Capital 3m', values: S.capital_3m || [], color: '#b26a00' }] })),
-        card('Caja acumulada (USD)', chartLine({ labels: ms, series: [{ name: 'Caja acumulada', values: S.caja_acum || [], color: '#2f5597' }] })),
-        card('Valor del stock proyectado a fin de mes (USD, a costo)', chartLine({ labels: ms, series: [{ name: 'Stock total', values: S.stock_usd || [], color: '#2f5597' }, { name: 'Reventar', values: S.stock_reventar_usd || [], color: '#b26a00' }] })),
-        card('Desembolsos por concepto (USD)', chartBar({ labels: ms, series: [{ name: 'Anticipo', values: S.anticipo || [], color: '#2f5597' }, { name: 'Saldo FOB', values: S.saldo || [], color: '#7fa4ee' }, { name: 'Nacionalización', values: S.nacionalizacion || [], color: '#b26a00' }, { name: 'Saldos pedidos en camino', values: S.saldos_en_camino || [], color: '#c62828' }, { name: 'Aduana pedidos en camino', values: S.gravamenes_en_camino || [], color: '#8a2a10' }] }))]));
+        card('Capital a tener para los próximos 3 meses (USD)', chartBar({ labels: ms, series: [{ name: 'Capital 3m', values: S.capital_3m || [], color: C.warn }] })),
+        card('Caja acumulada (USD)', chartLine({ labels: ms, series: [{ name: 'Caja acumulada', values: S.caja_acum || [], color: C.ac }] })),
+        card('Valor del stock proyectado a fin de mes (USD, a costo)', chartLine({ labels: ms, series: [{ name: 'Stock total', values: S.stock_usd || [], color: C.ac }, { name: 'Reventar', values: S.stock_reventar_usd || [], color: C.warn }] })),
+        card('Desembolsos por concepto (USD)', chartBar({ labels: ms, series: [{ name: 'Anticipo', values: S.anticipo || [], color: C.ac }, { name: 'Saldo FOB', values: S.saldo || [], color: C.ac2 }, { name: 'Nacionalización', values: S.nacionalizacion || [], color: C.warn }, { name: 'Saldos pedidos en camino', values: S.saldos_en_camino || [], color: C.bad }, { name: 'Aduana pedidos en camino', values: S.gravamenes_en_camino || [], color: C.alt }] }))]));
       var rowsDef = [['compras_usd', 'Compras emitidas (costo nacionalizado)'], ['anticipo', 'Pago de anticipo a proveedor'], ['saldo', 'Pago de saldo FOB (al llegar)'], ['nacionalizacion', 'Nacionalización (al llegar)'], ['saldos_en_camino', 'Saldos a proveedores de pedidos en camino'], ['gravamenes_en_camino', 'Gravámenes y gastos de pedidos en camino'],
         ['otros_embarque', 'Otros costos de embarque (RESERVADO)'], ['desembolso', 'TOTAL DESEMBOLSOS', 1], ['capital_3m', 'CAPITAL PRÓXIMOS 3 MESES', 1], ['facturacion', 'Facturación proyectada sin IVA'], ['cobros', 'Cobros netos'],
         ['liquidacion_reventar', 'Caja por liquidar Reventar'], ['opex', 'Gastos operativos (RESERVADO)'], ['flujo', 'FLUJO NETO', 1], ['caja_acum', 'CAJA ACUMULADA', 1], ['stock_usd', 'Valor del stock proyectado'], ['stock_reventar_usd', '  de los cuales Reventar'],
@@ -425,7 +428,7 @@
         ['Canal principal', r.canal], ['Nivel de demanda (u/mes)', f1(r.nivel)], ['Demanda proyectada 2027 (u)', fInt(r.proy2027)], ['En tránsito (u)', fInt(r.transito)], ['Primera llegada', r.primera_llegada ? fMes(r.primera_llegada) : '–'], ['Compra total (u)', fInt(r.compra_unid)], ['Compra total USD', fUsd(r.compra_usd)], ['Alerta de costo', r.alerta_costo || '–'], ['Var. costo 6m', isNum(r.var_costo) ? fPct(r.var_costo, 0) : '–']];
       var body = el('div', { class: 'pd-kv' }); kv.forEach(function (p) { body.appendChild(el('span', { text: p[0] })); body.appendChild(el('span', { text: p[1] == null ? '–' : String(p[1]) })); });
       var inner = el('div', { class: 'pd-card' }, [el('h2', { text: r.sku }), body]);
-      if (c) { inner.appendChild(el('h3', { style: 'margin-top:12px', text: 'Unidades a pedir por mes de emisión' })); inner.appendChild(chartBar({ labels: (CAP.meses || []).slice(0, 12).map(fMes), series: [{ name: 'Unidades', values: c.unid, color: '#2f5597' }], fmt: fInt, h: 150 })); }
+      if (c) { inner.appendChild(el('h3', { style: 'margin-top:12px', text: 'Unidades a pedir por mes de emisión' })); inner.appendChild(chartBar({ labels: (CAP.meses || []).slice(0, 12).map(fMes), series: [{ name: 'Unidades', values: c.unid, color: C.ac }], fmt: fInt, h: 150 })); }
       inner.appendChild(el('button', { class: 'pd-btn', type: 'button', text: 'Cerrar', style: 'margin-top:10px', onclick: function () { m.remove(); } }));
       var m = el('div', { class: 'pd-modal', onclick: function (e) { if (e.target === m) m.remove(); } }, el('div', null, inner)); app.appendChild(m);
     }
@@ -461,8 +464,8 @@
       var f = el('div');
       var rows = D.canales.slice(); if (D.tactica) rows.push({ canal: 'Táctica (facturas)', lineas: D.tactica.lineas, venta_usd: D.tactica.venta_usd, margen_usd: D.tactica.margen_usd, margen_pct: D.tactica.margen_pct });
       var big = rows.filter(function (r) { return r.venta_usd > 20000; });
-      f.appendChild(el('div', { class: 'pd-grid pd-2' }, [card('Margen % por canal (sobre venta sin IVA)', chartBar({ labels: big.map(function (r) { return r.canal.replace('Mercadolibre', 'ML').replace('Woocommerce', 'Web'); }), series: [{ name: 'Margen %', values: big.map(function (r) { return r.margen_pct; }), color: '#2e7d32' }], fmt: function (v) { return fPct(v); } })),
-        card('Venta por canal (USD, 23/04 al 13/10)', chartBar({ labels: big.map(function (r) { return r.canal.replace('Mercadolibre', 'ML').replace('Woocommerce', 'Web'); }), series: [{ name: 'Venta', values: big.map(function (r) { return r.venta_usd; }), color: '#2f5597' }] }))]));
+      f.appendChild(el('div', { class: 'pd-grid pd-2' }, [card('Margen % por canal (sobre venta sin IVA)', chartBar({ labels: big.map(function (r) { return r.canal.replace('Mercadolibre', 'ML').replace('Woocommerce', 'Web'); }), series: [{ name: 'Margen %', values: big.map(function (r) { return r.margen_pct; }), color: C.good }], fmt: function (v) { return fPct(v); } })),
+        card('Venta por canal (USD, 23/04 al 13/10)', chartBar({ labels: big.map(function (r) { return r.canal.replace('Mercadolibre', 'ML').replace('Woocommerce', 'Web'); }), series: [{ name: 'Venta', values: big.map(function (r) { return r.venta_usd; }), color: C.ac }] }))]));
       f.appendChild(el('h2', { style: 'margin:14px 0 6px', text: 'Estructura por canal (% de la venta sin IVA)' }));
       var pc = function (k) { return { label: k[1], val: function (r) { return r[k[0]]; }, fmt: function (v) { return v == null ? '–' : fPct(v, 1); }, num: true }; };
       f.appendChild(table({ cols: [{ label: 'Canal', val: function (r) { return r.canal; }, sticky: true }, { label: 'Líneas', val: function (r) { return r.lineas; }, fmt: fInt, num: true }, { label: 'Venta USD', val: function (r) { return r.venta_usd; }, fmt: fInt, num: true },
@@ -504,9 +507,9 @@
         { label: 'Tipo', val: function (p) { return p.tipo; }, node: function (v) { return badge(v); } }, { label: 'Qué es', val: function (p) { return p.detalle; } }], rows: D.parametros }));
       f.appendChild(el('h2', { style: 'margin:16px 0 6px', text: 'Calidad de la demanda: unidades por mes y de dónde sale cada dato' }));
       var dh = D.demanda_historica;
-      f.appendChild(card(null, chartBar({ labels: dh.map(function (r) { return fMes(r.mes); }), h: 200, fmt: fInt, series: [{ name: 'Unidades', values: dh.map(function (r) { return r.total; }), color: '#2f5597',
-        colors: dh.map(function (r) { var t = (r.estado_tactica || '') + ' ' + (r.estado_it || ''); return t.indexOf('ESTIMADO') >= 0 ? '#e0a800' : (t.indexOf('RECONSTRUIDO') >= 0 || t.indexOf('REPARADO') >= 0) ? '#e8743b' : '#2f5597'; }) }] })));
-      f.appendChild(el('div', { class: 'pd-leg' }, [el('span', null, [(function () { var i = el('i'); i.style.background = '#2f5597'; return i; })(), 'dato de origen']), el('span', null, [(function () { var i = el('i'); i.style.background = '#e8743b'; return i; })(), 'reparado o reconstruido']), el('span', null, [(function () { var i = el('i'); i.style.background = '#e0a800'; return i; })(), 'estimado'])]));
+      f.appendChild(card(null, chartBar({ labels: dh.map(function (r) { return fMes(r.mes); }), h: 200, fmt: fInt, series: [{ name: 'Unidades', values: dh.map(function (r) { return r.total; }), color: C.ac,
+        colors: dh.map(function (r) { var t = (r.estado_tactica || '') + ' ' + (r.estado_it || ''); return t.indexOf('ESTIMADO') >= 0 ? '#e0a800' : (t.indexOf('RECONSTRUIDO') >= 0 || t.indexOf('REPARADO') >= 0) ? '#e8743b' : C.ac; }) }] })));
+      f.appendChild(el('div', { class: 'pd-leg' }, [el('span', null, [(function () { var i = el('i'); i.style.background = C.ac; return i; })(), 'dato de origen']), el('span', null, [(function () { var i = el('i'); i.style.background = '#e8743b'; return i; })(), 'reparado o reconstruido']), el('span', null, [(function () { var i = el('i'); i.style.background = '#e0a800'; return i; })(), 'estimado'])]));
       f.appendChild(el('div', { style: 'margin-top:8px' }, table({ pageSize: 15, sortKey: 0, sortDir: 1, cols: [{ label: 'Mes', val: function (r) { return r.mes; }, fmt: fMes }, { label: 'Fuente Ecom (IT)', val: function (r) { return r.estado_it; } }, { label: 'IT usado', val: function (r) { return r.it_usado; }, fmt: fInt, num: true },
         { label: 'Fuente Táctica', val: function (r) { return r.estado_tactica; } }, { label: 'Táctica usado', val: function (r) { return r.tactica_usado; }, fmt: fInt, num: true }, { label: 'Total', val: function (r) { return r.total; }, fmt: fInt, num: true }, { label: 'TC BNA', val: function (r) { return r.tc; }, fmt: f2, num: true }, { label: 'Nota', val: function (r) { return r.nota; } }], rows: dh })));
       return f;

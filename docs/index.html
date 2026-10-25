@@ -636,6 +636,16 @@ body[data-nuevo] #page-ayala-core .section-hdr{margin-top:0}
 .full-alertas>summary{cursor:pointer;font-weight:600;color:var(--tinta);min-height:44px;display:flex;align-items:center}
 .full-alertas>summary:focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px;border-radius:var(--r-control)}
 .full-tag{display:inline-block;padding:1px 8px;border-radius:var(--r-chip);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla);font-weight:600;white-space:nowrap}
+/* — PR 3: Inteligencia Comercial, Compras, Distribución y Sistema — */
+body[data-nuevo] #page-proyeccion .pd{--bg:transparent;--card:var(--superficie);--tx:var(--tinta);--mu:var(--texto-suave);--bd:var(--borde);--ac:var(--celeste-700);--ac2:var(--celeste-100);--good:var(--ok-texto);--warn:var(--atencion);--bad:var(--error-texto);--badbg:var(--error-fondo);--warnbg:var(--aviso-fondo);--goodbg:var(--ok-fondo);--pd-g1:var(--grafico-1);--pd-g2:var(--grafico-6);--pd-g3:var(--grafico-5);--pd-g4:var(--grafico-4);--pd-g5:var(--grafico-8);--pd-g6:var(--grafico-3);font-family:var(--fuente);padding:0}
+body[data-nuevo] #page-proyeccion .pd *{font-family:var(--fuente)}
+body[data-nuevo] #page-proyeccion .pd button{border-radius:var(--r-boton)}
+body[data-nuevo] #page-proyeccion .pd input,body[data-nuevo] #page-proyeccion .pd select{border-radius:var(--r-control);min-height:44px}
+body[data-nuevo] #page-distribucion .btn-xs{white-space:nowrap}
+body[data-nuevo] #page-distribucion #distribucion-stats-wrap{margin-bottom:14px}
+body[data-nuevo] #page-config input.campo-num{max-width:22ch;text-align:left}
+body[data-nuevo] #page-intel-mix .card>textarea{width:100%}
+body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 /* — Gráficos y comparaciones — */
 body[data-nuevo] .chart-card{padding:18px 20px}
 body[data-nuevo] .chart-card h3{font-size:16px;font-weight:700;color:var(--tinta);margin-bottom:2px}
@@ -1310,11 +1320,13 @@ body[data-nuevo] .page .section-hdr::after{display:none}
 
 <div id="page-intel-mix" class="page">
   <div class="section-hdr">Inteligencia Comercial — Mix (carga masiva)</div>
+  <div class="card">
   <p style="font-size:11px;color:var(--text3);margin:0 0 10px">Una línea por publicación: <code>SKU,link</code>. La Entidad se resuelve o se crea sola por Seller_ID — no hace falta cargarla a mano.</p>
   <textarea id="mix-input" rows="8" placeholder="MONI-OFFICE-21.6IFHD,https://articulo.mercadolibre.com.ar/MLA-...&#10;OTRO-SKU,https://articulo.mercadolibre.com.ar/MLA-..." style="width:100%;max-width:700px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none;resize:vertical"></textarea>
   <div style="display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap">
     <button class="btn primary" id="btn-mix-procesar" onclick="mixProcesar()">⚙ Procesar Mix</button>
     <span id="mix-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
   </div>
   <div class="table-wrap" id="mix-table-wrap" style="display:none">
     <table id="mix-table">
@@ -1982,7 +1994,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
 const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const PAGINAS_ESTILO_NUEVO=new Set(['ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -2194,7 +2206,7 @@ async function proyeccionCargar(forzar){
     if(r.status===503)throw new Error('el backend no tiene ERP_API_KEY definida: no sirve estos datos');
     if(!r.ok)throw new Error('HTTP '+r.status);
     const ver=r.headers.get('X-Proyeccion-Version'),d=await r.json();
-    ProyeccionDashboard.mount(root,d,{theme:'dark'});
+    ProyeccionDashboard.mount(root,d,{theme:'light'});
     proyLoaded=true;st.textContent='● Versión '+(ver||'?')+' · generada '+((d.meta||{}).generado||'?');
   }catch(e){root.innerHTML='';st.textContent='❌ '+e.message;proyLoaded=false;}
 }
