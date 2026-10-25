@@ -77,4 +77,4 @@ def test_pack_selector_x1_a_x6_y_otro_manda_la_cantidad_solo_si_es_mayor_a_1():
         assert frag in s, frag
     assert "return n>1?`&cantidad=${n}`:'';" in _fn(s, 'ayalaCoreCantidadParam')
     assert 'ayalaCoreCantidadParam()' in _fn(s, 'ayalaCoreCalcular') and 'ayalaCoreCantidadParam()' in _fn(s, 'ayalaCoreCompararMLA')
-    assert "'Precio por unidad'" in s and 'Precio de la publicación' in s and "'ac-cantidad','ac-cantidad-otro'" in s
+    assert 'Precio por unidad</th>' in s and 'Precio de la publicación' in s and "'ac-cantidad','ac-cantidad-otro'" in s
