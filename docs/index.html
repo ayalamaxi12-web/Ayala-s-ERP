@@ -232,6 +232,9 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   --aviso-fondo:#FFFBEB;--aviso-texto:#78350F;--aviso-borde:#FCD34D;
   --atencion:#B45309;--error:#DC2626;--ok:#15803D;
   /* Marcas de marketplace (del logo oficial) */
+  --mk-fravega-negro:#000000;--mk-fravega-violeta:#440099;--mk-fravega-magenta:#D30098;--mk-fravega-link:#801DD9;--mk-fravega-azul:#006AFD;--mk-fravega-verde:#208041;--mk-fravega-gris:#F1F1F1;   /* Frávega: marca; magenta solo acentos; verde = cuotas sin interés */
+  --mk-oncity-azul:#064FD3;--mk-oncity-turquesa:#05F2D4;--mk-oncity-chip:#CDFBF5;   /* OnCity: el turquesa es solo un detalle (1,4:1), nunca texto */
+  --mk-megatone-naranja:#E53308;--mk-megatone-rojo:#E31E25;--mk-megatone-verde:#008A45;--mk-megatone-verde-texto:#00783C;--mk-megatone-gris:#E6E6E6;--mk-megatone-texto:#2A2A28;   /* Megatone: el naranja solo de fondo con texto blanco grande */
   --mk-ml:#FFE600;--mk-ml-tinta:#2D3277;--mk-ml-borde:#E0CC00;--mk-ml-suave:#FFF6B8;   /* amarillo vivo (solo de fondo), azul, borde de la barra, encabezado de tabla */
   --mk-ml-btn-borde:#C9B300;--mk-ml-hover:#F2D800;--mk-ml-dorado:#7A5F00;--mk-ml-dorado-osc:#5C4A00;--mk-ml-chip:#FFF1A8;--mk-ml-franja:#FFF9DB;--mk-ml-franja-borde:#EBDD8A;--mk-ml-check:#8F7A00;   /* borde del botón, hover del botón, texto dorado, texto sobre chip, chip, franja y su borde, checkbox */
   /* Tipografía */
@@ -695,6 +698,34 @@ body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 .ac-pack label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
 .ac-pack select,.ac-campo-corto{min-height:44px;width:12ch}
 .ac-pack label[hidden]{display:none}
+.ac-mk-fila{display:flex;flex-direction:column;gap:6px}
+.ac-mk-fila .ac-lbl{font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-mercado{display:flex;flex-wrap:wrap;gap:8px}
+.ac-mk{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:6px 16px;border-radius:var(--r-boton);border:1px solid var(--borde);background:var(--superficie);color:var(--tinta);font:inherit;font-weight:600;cursor:pointer}
+.ac-mk:focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px}
+.ac-mk-logo{height:28px;width:auto;max-width:72px;object-fit:contain}
+.ac-mk-logo-ancho{max-width:120px}
+.ac-mk[aria-checked=true]{border-width:2px;padding:5px 15px}
+.ac-mk[data-mk=ml][aria-checked=true]{background:var(--mk-ml);border-color:var(--mk-ml-tinta);color:var(--mk-ml-tinta)}
+.ac-mk[data-mk=fravega][aria-checked=true]{border-color:var(--mk-fravega-violeta);background:var(--mk-fravega-gris)}
+.ac-mk[data-mk=oncity][aria-checked=true]{border-color:var(--mk-oncity-azul);background:var(--mk-oncity-chip)}
+.ac-mk[data-mk=megatone][aria-checked=true]{border-color:var(--mk-megatone-rojo);background:var(--mk-megatone-gris)}
+.ac-mk[data-mk=web][aria-checked=true]{border-color:var(--celeste-600);background:var(--celeste-100);color:var(--celeste-700)}
+.ac-config{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-config-lin{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.ac-config-av{border-radius:var(--r-recuadro);background:var(--aviso-fondo);border:1px solid var(--aviso-borde);color:var(--aviso-texto);padding:6px 14px}
+.ac-config-av>summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
+.ac-config-av ul{margin:4px 0 8px 18px;padding:0}
+.ac-config-av li{margin:2px 0}
+.ac-comunes>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--celeste-700)}
+.ac-comunes-res{font-weight:400;color:var(--texto-suave);font-size:var(--fs-tabla)}
+.ac-comun{display:flex;flex-direction:column;gap:2px}
+.ac-comun label:first-child{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-comun .ac-check{display:flex;align-items:center;gap:6px;min-height:36px;font-size:var(--fs-tabla);color:var(--tinta-2)}
+.ac-tag-conf{display:inline-block;padding:1px 8px;border-radius:var(--r-chip);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla);font-weight:700;white-space:nowrap}
+.ac-det-com{margin-top:10px}
+.ac-det-com>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--tinta)}
+.ac-fila-err td{background:var(--aviso-fondo)}
 @media (max-width:900px){.ac-rentas{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:520px){.ac-rentas{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-bloque-btn{flex-wrap:wrap}.ac-bloque-res{margin-left:34px;flex-basis:100%}}
 /* — Gráficos y comparaciones — */
@@ -1848,6 +1879,27 @@ igual que la rentabilidad real, que se muestra al lado. -->
   <div class="ac-costos"><span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span></div>
 
   <section class="card ac-calc" aria-label="Calculadora de precios">
+    <div class="ac-mk-fila">
+      <span class="ac-lbl" id="ac-mk-lbl">Mercado</span>
+      <div class="ac-mercado" role="radiogroup" aria-labelledby="ac-mk-lbl" id="ac-mercados">
+        <button type="button" role="radio" aria-checked="true" tabindex="0" class="ac-mk" data-mk="ml" onclick="ayalaCoreMercado('ml')"><img src="assets/logos/mercadolibre-isotipo.png" alt="" class="ac-mk-logo"><span>Mercado Libre</span></button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="fravega" onclick="ayalaCoreMercado('fravega')"><img src="assets/logos/fravega.svg" alt="Frávega" class="ac-mk-logo ac-mk-logo-ancho"></button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="oncity" onclick="ayalaCoreMercado('oncity')"><img src="assets/logos/oncity.png" alt="OnCity" class="ac-mk-logo"></button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="megatone" onclick="ayalaCoreMercado('megatone')"><img src="assets/logos/megatone.png" alt="Megatone" class="ac-mk-logo ac-mk-logo-ancho"></button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk" data-mk="web" onclick="ayalaCoreMercado('web')"><img src="assets/logos/global-celeste.png" alt="" class="ac-mk-logo"><span>Web</span></button>
+      </div>
+    </div>
+    <div class="ac-config" id="ac-config" role="status" aria-live="polite"></div>
+    <details class="ac-comunes" id="ac-comunes">
+      <summary>Descuentos comunes <span class="ac-comunes-res" id="ac-comunes-res"></span></summary>
+      <div class="ac-av-campos">
+        <div class="ac-comun"><label>Costo por orden de Ecom $<input type="text" id="ac-costo-orden" class="ac-campo-largo" inputmode="decimal" oninput="ayalaCoreComunCambio()"></label><label class="ac-check"><input type="checkbox" id="ac-usa-orden" onchange="ayalaCoreUsaCambio()">Aplicar en este mercado</label></div>
+        <div class="ac-comun"><label>Impuesto al cheque %<input type="text" id="ac-cheque" class="ac-campo-largo" inputmode="decimal" oninput="ayalaCoreComunCambio()"></label><label class="ac-check"><input type="checkbox" id="ac-usa-cheque" onchange="ayalaCoreUsaCambio()">Aplicar en este mercado</label></div>
+        <div class="ac-comun"><label>IIBB %<input type="text" id="ac-iibb" class="ac-campo-largo" inputmode="decimal" oninput="ayalaCoreComunCambio()"></label><label class="ac-check"><input type="checkbox" id="ac-usa-iibb" onchange="ayalaCoreUsaCambio()">Aplicar en este mercado</label></div>
+        <div class="ac-comun" id="ac-recargo-box" hidden><label>Recargo sobre comisión de cuotas % <span class="ac-tag-conf">a confirmar</span><input type="text" id="ac-recargo" class="ac-campo-largo" inputmode="decimal" oninput="ayalaCoreComunCambio()"></label></div>
+      </div>
+      <p class="ac-ayuda" id="ac-comunes-ayuda"></p>
+    </details>
     <div class="ac-fila-sku">
       <label for="ac-sku-buscar" class="ac-lbl">SKU</label>
       <div class="ac-chips" id="ac-chips" aria-label="SKU elegidos"></div>
@@ -1863,12 +1915,14 @@ igual que la rentabilidad real, que se muestra al lado. -->
     </div>
     <!-- Un % de renta editable por forma de pago, sin ninguna fórmula derivándolo de otra (pedido de Maxx 2026-09-04). -->
     <div class="ac-rentas" role="group" aria-label="Renta objetivo por forma de pago, en porcentaje">
-      <label>Contado %<input type="text" id="ac-renta-contado" value="32" inputmode="decimal"></label>
-      <label>Reducida %<input type="text" id="ac-renta-reducida" value="32" inputmode="decimal"></label>
-      <label>3 cuotas %<input type="text" id="ac-renta-3" value="30" inputmode="decimal"></label>
-      <label>6 cuotas %<input type="text" id="ac-renta-6" value="28" inputmode="decimal"></label>
-      <label>9 cuotas %<input type="text" id="ac-renta-9" value="26" inputmode="decimal"></label>
-      <label>12 cuotas %<input type="text" id="ac-renta-12" value="24" inputmode="decimal"></label>
+      <label data-cond="contado"><span><span data-etq="contado">Contado</span> %</span><input type="text" id="ac-renta-contado" value="32" inputmode="decimal"></label>
+      <label data-cond="reducida">Reducida %<input type="text" id="ac-renta-reducida" value="32" inputmode="decimal"></label>
+      <label data-cond="3">3 cuotas %<input type="text" id="ac-renta-3" value="30" inputmode="decimal"></label>
+      <label data-cond="6">6 cuotas %<input type="text" id="ac-renta-6" value="28" inputmode="decimal"></label>
+      <label data-cond="9">9 cuotas %<input type="text" id="ac-renta-9" value="26" inputmode="decimal"></label>
+      <label data-cond="12">12 cuotas %<input type="text" id="ac-renta-12" value="24" inputmode="decimal"></label>
+      <label data-cond="18" hidden>18 cuotas %<input type="text" id="ac-renta-18" value="24" inputmode="decimal"></label>
+      <label data-cond="24" hidden>24 cuotas %<input type="text" id="ac-renta-24" value="24" inputmode="decimal"></label>
     </div>
     <div class="ac-pack" role="group" aria-label="Cantidad por publicación">
       <label for="ac-cantidad">Cantidad por publicación
@@ -2257,7 +2311,7 @@ function goPage(page,el){
   if(page==='full-ml')fullFotoCargar();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarTablasML().then(()=>{if(ofmResult)ofmRender();});}
-  if(page==='ayala-core'){if(!ayalaCoreLoaded)ayalaCoreLoad();ayalaCoreAutoRecalcularMontar();ayalaCoreSkuMontar();acBloquesMontar();}
+  if(page==='ayala-core'){if(!ayalaCoreLoaded)ayalaCoreLoad();ayalaCoreAutoRecalcularMontar();ayalaCoreSkuMontar();ayalaCoreMercadoMontar();acBloquesMontar();ayalaCoreTarifasCargar();}
   if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
 }
 
@@ -5574,7 +5628,7 @@ function pricingExport(){
 let ayalaCoreLoaded=false;
 let AC_SKUS=[];
 const AC_COND_LABEL={contado:'Contado',reducida:'Reducida','3':'3 cuotas','6':'6 cuotas','9':'9 cuotas','12':'12 cuotas'};
-function ayalaCoreCondLabel(c){return AC_COND_LABEL[String(c)]||c;}
+function ayalaCoreCondLabel(c){c=String(c);if(c==='contado'&&AC_MERCADO!=='ml')return 'Simple';return AC_COND_LABEL[c]||(/^\d+$/.test(c)?c+' cuotas':c);}
 function ayalaCoreFmt2(n){return n==null?'—':'$'+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function ayalaCoreFmt(n){return n==null?'—':'$'+Number(n).toLocaleString('es-AR',{maximumFractionDigits:0});}
 // Corrección manual de condición, por item_id -- pedido de Maxx
@@ -5772,6 +5826,11 @@ const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
 function ayalaCoreRentaPct(condicion){return Number(qs('ac-renta-'+condicion)?.value||0);}
 const AC_DESGLOSE_HEAD='<th style="text-align:right">Comisión</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío</th><th style="text-align:right">IIBB</th><th style="text-align:right">Imp. cheque</th><th style="text-align:right">Renta $</th>';
 function ayalaCoreDesgloseFila(d,c){
+  if(!ayalaCoreEsML(d)){
+    const g=(d.desglose_mercado||{})[c];if(!g)return '<td colspan="6">—</td>';
+    const o=d.parametros&&d.parametros.costo_orden>0;
+    return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.imp_cheque)}</td>${o?`<td style="text-align:right">${ayalaCoreFmt2(g.costo_orden)}</td>`:''}<td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
+  }
   // `d.renta_por_condicion` viene del backend -- es la renta que ESE
   // resultado usó de verdad, no necesariamente lo que muestran los
   // inputs de arriba ahora mismo (podrían haber cambiado desde el
@@ -5824,24 +5883,34 @@ function ayalaCoreVerCargado(){
   qs('ac-tabla-wrap').style.maxWidth='none';
   qs('ac-tildar-todas-btn').style.display='inline-block';
 }
+function ayalaCoreTablaHtml(items){
+  // items: [{sku,d}] -- una fila por SKU × condición del mercado; «Manual/Usar» (precio forzado) solo existe para Mercado Libre.
+  const multi=items.length>1||items.some(x=>x.mostrarSku),d0=items[0].d,ml=ayalaCoreEsML(d0),pack=d0.cantidad>1;
+  const cols=(pack?1:0)+6+((!ayalaCoreEsML(d0)&&d0.parametros&&d0.parametros.costo_orden>0)?1:0);
+  const cabSku=multi?'<th>SKU</th>':'';
+  let h=`<table><thead><tr>${cabSku}<th>Condición</th><th style="text-align:right">${pack?'Precio de la publicación':'Precio'}</th>${pack?'<th style="text-align:right">Precio por unidad</th>':''}${ml?'<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>':''}${ayalaCoreDesgloseHead(d0)}</tr></thead><tbody>`;
+  items.forEach(({sku,d})=>{
+    const pre=multi?`<td>${acEsc(sku)}</td>`:'';
+    ayalaCoreConds(d).forEach(c=>{
+      if(d.precios[c]===undefined){h+=ayalaCoreFilaErrorHtml(d,c,pre,cols);return;}
+      h+=`<tr>${pre}<td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${pack?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ml?ayalaCorePrecioOverrideCellsHtml(sku,c):''}${ayalaCoreDesgloseFila(d,c)}</tr>`;
+    });
+  });
+  return h+'</tbody></table>'+ayalaCoreComisionDetalleHtml(d0);
+}
 function ayalaCoreRenderMotor(d){
   const sku=d.sku||(AC_SEL.length===1?AC_SEL[0]:'');
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">${d.cantidad>1?'Precio de la publicación':'Precio'}</th>${d.cantidad>1?'<th style="text-align:right">Precio por unidad</th>':''}<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${d.cantidad>1?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
-  }</tbody></table>`;
+  qs('ac-tabla-wrap').innerHTML=ayalaCoreTablaHtml([{sku,d}]);
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
-  qs('ac-tildar-todas-btn').style.display='inline-block';
+  qs('ac-tildar-todas-btn').style.display=ayalaCoreEsML(d)?'inline-block':'none';
 }
 function ayalaCoreRenderMotorMulti(resultados){
   // resultados: [{sku,d}] -- una fila por SKU x condición (30 filas para los 5 piloto)
-  const pack=(resultados[0]&&resultados[0].d.cantidad)||1;
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">${pack>1?'Precio de la publicación':'Precio'}</th>${pack>1?'<th style="text-align:right">Precio por unidad</th>':''}<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${pack>1?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')).join('')
-  }</tbody></table>`;
+  qs('ac-tabla-wrap').innerHTML=ayalaCoreTablaHtml(resultados.map(r=>({...r,mostrarSku:true})));
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
-  qs('ac-tildar-todas-btn').style.display='inline-block';
+  qs('ac-tildar-todas-btn').style.display=resultados.length&&ayalaCoreEsML(resultados[0].d)?'inline-block':'none';
 }
 function ayalaCorePrecioManualCambio(input){
   const sku=input.dataset.sku,c=input.dataset.cond,v=(input.value||'').trim();
@@ -5955,6 +6024,102 @@ function acBloquesResumen(){
   set('cargado',AC_CARGADO_ULT||'nada cargado');
 }
 let AC_MLA_ULT='',AC_CARGADO_ULT='';
+// ══ Mercados (Bloque 2, PR 4): Mercado Libre, Frávega, OnCity, Megatone y Web. La cuenta de precios es la misma; cambian las tarifas, que salen de la pestaña «Mercados» del Sheet del ERP ══
+let AC_MERCADO='ml',AC_MK=null,AC_MK_USA={},AC_MK_TOCADO={};
+const AC_MK_ORDEN=['ml','fravega','oncity','megatone','web'];
+const AC_MK_NOMBRE={ml:'Mercado Libre',fravega:'Frávega',oncity:'OnCity',megatone:'Megatone',web:'Web (Mercado Pago)'};
+function ayalaCoreMkInfo(m){return (AC_MK&&AC_MK.mercados&&AC_MK.mercados[m])||{condiciones:m==='ml'?['contado','reducida','3','6','9','12']:['contado','3','6','9','12'],usa_por_defecto:{orden:m!=='ml',cheque:true,iibb:true}};}
+async function ayalaCoreTarifasCargar(){
+  const url=getBackendUrl();if(!url)return;
+  try{
+    const res=await fetch(`${url}/mercados/tarifas`);if(!res.ok)throw new Error(res.status);
+    AC_MK=await res.json();
+    AC_MK_ORDEN.forEach(m=>{if(!AC_MK_USA[m])AC_MK_USA[m]={...ayalaCoreMkInfo(m).usa_por_defecto};});
+    const c=AC_MK.comunes||{};
+    [['ac-costo-orden','costo_orden'],['ac-cheque','cheque_pct'],['ac-iibb','iibb_pct'],['ac-recargo','recargo_cuotas']].forEach(([id,k])=>{const el=qs(id);if(el&&!AC_MK_TOCADO[id]&&c[k]!=null)el.value=String(c[k]);});
+  }catch(e){AC_MK=null;}
+  ayalaCoreMercadoAplicar();ayalaCoreConfigRender();
+}
+async function ayalaCoreTarifasActualizar(){
+  const url=getBackendUrl();if(!url)return;
+  const b=qs('ac-tarifas-btn');if(b){b.disabled=true;b.textContent='Actualizando...';}
+  try{
+    const res=await fetch(`${url}/mercados/tarifas/actualizar`,{method:'POST'});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(d.detail||('HTTP '+res.status));
+    toast('Tarifas actualizadas');
+  }catch(e){toast('No se pudieron actualizar las tarifas: '+e.message,'error');}
+  await ayalaCoreTarifasCargar();ayalaCoreAutoRecalcular();
+}
+async function ayalaCoreMercadosInit(){
+  const url=getBackendUrl();if(!url)return;
+  if(!confirm('Esto crea en el Sheet del ERP la pestaña «Mercados» (con los valores iniciales) y la pestaña «Envios» (vacía), solo si todavía no existen. No pisa nada. ¿Seguir?'))return;
+  try{
+    const res=await fetch(`${url}/mercados/init`,{method:'POST'});const d=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(d.detail||('HTTP '+res.status));
+    toast('Pestañas: '+Object.entries(d.pestanas||{}).map(([k,v])=>k+' '+v).join(' · '));
+  }catch(e){toast('No se pudieron crear las pestañas: '+e.message,'error');return;}
+  await ayalaCoreTarifasActualizar();
+}
+function ayalaCoreMercadoMontar(){const g=qs('ac-mercados');if(g&&!g.dataset.montado){g.dataset.montado='1';g.addEventListener('keydown',ayalaCoreMercadoTecla);}}
+function ayalaCoreMercado(m){AC_MERCADO=m;ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
+function ayalaCoreMercadoTecla(e){
+  const k=e.key;if(!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','Home','End'].includes(k))return;
+  e.preventDefault();const i=AC_MK_ORDEN.indexOf(AC_MERCADO),n=AC_MK_ORDEN.length;
+  const j=k==='Home'?0:k==='End'?n-1:(i+((k==='ArrowRight'||k==='ArrowDown')?1:-1)+n)%n;
+  ayalaCoreMercado(AC_MK_ORDEN[j]);const b=document.querySelector(`.ac-mk[data-mk="${AC_MK_ORDEN[j]}"]`);if(b)b.focus();
+}
+function ayalaCoreMercadoAplicar(){
+  const m=AC_MERCADO,info=ayalaCoreMkInfo(m),conds=info.condiciones.map(String);
+  document.querySelectorAll('.ac-mk').forEach(b=>{const on=b.dataset.mk===m;b.setAttribute('aria-checked',on);b.tabIndex=on?0:-1;});
+  document.querySelectorAll('.ac-rentas label[data-cond]').forEach(l=>{l.hidden=!conds.includes(l.dataset.cond);});
+  const et=document.querySelector('.ac-rentas [data-etq="contado"]');if(et)et.textContent=m==='ml'?'Contado':'Simple';
+  const u=AC_MK_USA[m]||{...info.usa_por_defecto};
+  [['orden','ac-usa-orden'],['cheque','ac-usa-cheque'],['iibb','ac-usa-iibb']].forEach(([k,id])=>{const el=qs(id);if(el)el.checked=!!u[k];});
+  const rb=qs('ac-recargo-box');if(rb)rb.hidden=m!=='web';
+  const ay=qs('ac-comunes-ayuda');if(ay)ay.textContent=m==='ml'?'En Mercado Libre el costo por orden viene desactivado para no cambiar los precios de hoy: activalo solo si querés verlo.':'Los valores son los mismos para todos los mercados (se cargan en la pestaña «Mercados»); acá se activan o no para este mercado.';
+  const r=qs('ac-comunes-res');if(r)r.textContent=`· ${AC_MK_NOMBRE[m]}: ${['orden','cheque','iibb'].filter(k=>u[k]).map(k=>({orden:'costo por orden',cheque:'cheque',iibb:'IIBB'}[k])).join(', ')||'ninguno'}`;
+  ayalaCoreConfigRender();
+}
+function ayalaCoreUsaCambio(){AC_MK_USA[AC_MERCADO]={orden:qs('ac-usa-orden').checked,cheque:qs('ac-usa-cheque').checked,iibb:qs('ac-usa-iibb').checked};ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
+function ayalaCoreComunCambio(){['ac-costo-orden','ac-cheque','ac-iibb','ac-recargo'].forEach(id=>{AC_MK_TOCADO[id]=true;});ayalaCoreAutoRecalcular();}
+// Un solo lugar para los avisos de configuración: tarifas (hace X · Actualizar) + lo que falta, venció, está a confirmar o copiado, del mercado elegido.
+function ayalaCoreConfigRender(){
+  const box=qs('ac-config');if(!box)return;
+  if(!AC_MK){box.innerHTML='<div class="ac-aviso-lin">No se pudieron leer las tarifas de los mercados (¿backend sin conexión?).</div>';return;}
+  const t=AC_MK.tarifas||{},edad=t.obtenido_en?costosEdadTxt((Date.now()-Date.parse(t.obtenido_en))/1000):null;
+  const generales=(AC_MK.avisos||[]).map(a=>a.texto),delMercado=((AC_MK.avisos_por_mercado||{})[AC_MERCADO])||[];
+  const todos=[...new Set([...generales,...delMercado])];
+  const pend=todos.filter(x=>/falta dato|vencida|todavía no|Falló|todavía no se leyó/.test(x)),conf=todos.filter(x=>!pend.includes(x));
+  let h=`<div class="ac-config-lin"><span>Tarifas: ${t.origen==='hoja'?edad:'sin leer del Sheet todavía'}</span><button type="button" class="btn" id="ac-tarifas-btn" onclick="ayalaCoreTarifasActualizar()">Actualizar</button>${t.origen==='codigo'?'<button type="button" class="btn" onclick="ayalaCoreMercadosInit()">Crear pestañas Mercados y Envios</button>':''}</div>`;
+  if(todos.length)h+=`<details class="ac-config-av" ${pend.length?'open':''}><summary>${pend.length?`<b>${pend.length} aviso${pend.length===1?'':'s'} de configuración</b>`:'Avisos de configuración'}${conf.length?` · ${conf.length} a confirmar`:''}</summary><ul>${pend.map(x=>`<li class="ac-aviso-txt">${acEsc(x)}</li>`).join('')}${conf.map(x=>`<li>${acEsc(x)}</li>`).join('')}</ul></details>`;
+  box.innerHTML=h;
+}
+function ayalaCoreMercadoParams(){
+  const m=AC_MERCADO,u=AC_MK_USA[m]||{},def=ayalaCoreMkInfo(m).usa_por_defecto||{},c=(AC_MK&&AC_MK.comunes)||{};let q='';
+  if(m!=='ml')q+=`&mercado=${m}`;
+  [['orden','usar_costo_orden'],['cheque','usar_cheque'],['iibb','usar_iibb']].forEach(([k,p])=>{const v=u[k]!==undefined?u[k]:def[k];if(m!=='ml'||v!==def[k])q+=`&${p}=${v}`;});
+  const num=id=>{const x=(qs(id)?.value||'').trim().replace(',','.');return x===''||isNaN(Number(x))?null:Number(x);};
+  [['ac-costo-orden','costo_orden','costo_orden'],['ac-cheque','cheque_pct','cheque_pct'],['ac-iibb','iibb_pct','iibb_pct']].forEach(([id,k,p])=>{const x=num(id);if(x!==null&&c[k]!=null&&x!==Number(c[k]))q+=`&${p}=${x}`;});
+  if(m==='web'){const r=num('ac-recargo');if(r!==null)q+=`&recargo_cuotas=${r}`;q+=`&renta_18=${num('ac-renta-18')??24}&renta_24=${num('ac-renta-24')??24}`;}
+  return q;
+}
+// Detalle de comisión (base + cuotas [+ recargo]) por condición: dato «a confirmar».
+function ayalaCoreComisionDetalleHtml(d){
+  if(ayalaCoreEsML(d)||!d.parametros||!d.parametros.desglose)return '';
+  const f=n=>n==null?'—':Number(n).toLocaleString('es-AR',{maximumFractionDigits:2})+' %';
+  const filas=ayalaCoreConds(d).filter(c=>d.parametros.desglose[c]).map(c=>{const g=d.parametros.desglose[c];return `<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${f(g.base)}</td><td style="text-align:right">${f(g.cuotas)}</td>${d.parametros.recargo_cuotas!=null?`<td style="text-align:right">${f(g.recargo)}</td>`:''}<td style="text-align:right"><b>${f(g.total)}</b></td></tr>`;}).join('');
+  return `<details class="ac-det-com" open><summary>Comisión total por condición <span class="ac-tag-conf">a confirmar</span></summary><div class="table-wrap"><table><thead><tr><th>Condición</th><th style="text-align:right">Comisión base</th><th style="text-align:right">Cuotas</th>${d.parametros.recargo_cuotas!=null?'<th style="text-align:right">Recargo</th>':''}<th style="text-align:right">Total</th></tr></thead><tbody>${filas}</tbody></table></div><p class="ac-ayuda">Es la lectura actual de cómo se combinan: la comisión base más el costo de la cuota. Si la base ya incluyera la financiación, habría que avisarlo.</p></details>`;
+}
+function ayalaCoreMercadoTxt(d){
+  if(ayalaCoreEsML(d))return '';
+  const p=d.parametros||{},ord=p.costo_orden>0?` · costo por orden <b>${ayalaCoreFmt2(p.costo_orden)}</b>`:'';
+  return ` · Mercado: <b>${acEsc(d.mercado_nombre||AC_MK_NOMBRE[d.mercado]||d.mercado)}</b> · comisión base <b>${p.comision_pct==null?'—':p.comision_pct+' %'}</b>${ord}${d.envio_estimado_como_ml?' · <span class="ac-tag-conf">envío estimado como ML</span>':''}`;
+}
+function ayalaCoreConds(d){return (d.condiciones||AC_COND_ORDEN).map(String);}
+function ayalaCoreEsML(d){return !d.mercado||d.mercado==='ml';}
+function ayalaCoreDesgloseHead(d){const o=!ayalaCoreEsML(d)&&d.parametros&&d.parametros.costo_orden>0;return o?AC_DESGLOSE_HEAD.replace('<th style="text-align:right">Renta $</th>','<th style="text-align:right">Costo por orden</th><th style="text-align:right">Renta $</th>'):AC_DESGLOSE_HEAD;}
+function ayalaCoreFilaErrorHtml(d,c,prefijo,n){return `<tr class="ac-fila-err">${prefijo}<td>${ayalaCoreCondLabel(c)}</td><td colspan="${n}"><span class="ac-aviso-txt">${acEsc((d.errores_condicion||{})[c]||'falta dato')}</span></td></tr>`;}
 let AC_CALC_SEQ=0,AC_CALC_TIMER=null,AC_AUTO_OK=false;
 // Pack: unidades por publicación (x1 por defecto, x2…x6 y «Otro»). Con x1 no se manda nada: el pedido es idéntico al de siempre.
 function ayalaCoreCantidadValida(){const sel=qs('ac-cantidad');if(!sel||sel.value!=='otro')return true;const n=Number(qs('ac-cantidad-otro').value);return Number.isInteger(n)&&n>=1&&n<=999;}
@@ -5973,7 +6138,7 @@ function ayalaCoreAutoRecalcular(){
   clearTimeout(AC_CALC_TIMER);AC_CALC_TIMER=setTimeout(()=>ayalaCoreCalcular(),300);
 }
 function ayalaCoreAutoRecalcularMontar(){
-  const ids=['ac-cantidad','ac-cantidad-otro','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
+  const ids=['ac-renta-18','ac-renta-24','ac-cantidad','ac-cantidad-otro','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
   ids.forEach(id=>{const el=qs(id);if(el&&!el.dataset.autocalc){el.dataset.autocalc='1';el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',ayalaCoreAutoRecalcular);}});
 }
 async function ayalaCoreCalcular(){
@@ -5983,7 +6148,7 @@ async function ayalaCoreCalcular(){
   const sku=AC_SEL.length===1?AC_SEL[0]:'';
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
   if(!ayalaCoreCantidadValida()){qs('ac-datos').style.display='block';qs('ac-datos').innerHTML='<span class="ac-aviso-txt">La cantidad por publicación tiene que ser un entero entre 1 y 999.</span>';return;}
-  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}${ayalaCoreCantidadParam()}`;
+  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}${ayalaCoreCantidadParam()}${ayalaCoreMercadoParams()}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   try{
@@ -5996,7 +6161,7 @@ async function ayalaCoreCalcular(){
       const lote=await res.json();
       const resultados=lote.resultados.filter(r=>!r.error).map(r=>({sku:r.sku,d:r}));
       const omitidos=lote.resultados.filter(r=>r.error);
-      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${(resultados[0]&&resultados[0].d.cantidad>1)?` · <b>Pack x${resultados[0].d.cantidad}</b> (costo × ${resultados[0].d.cantidad}; el envío es por publicación)`:''}${omitidos.length?` (sin datos: ${omitidos.map(o=>acEsc(o.sku)).join(', ')})`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
+      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${resultados[0]?ayalaCoreMercadoTxt(resultados[0].d):''}${(resultados[0]&&resultados[0].d.cantidad>1)?` · <b>Pack x${resultados[0].d.cantidad}</b> (costo × ${resultados[0].d.cantidad}; el envío es por publicación)`:''}${omitidos.length?` (sin datos: ${omitidos.map(o=>acEsc(o.sku)).join(', ')})`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
       ayalaCoreRenderMotorMulti(resultados);
       return;
     }
@@ -6006,7 +6171,7 @@ async function ayalaCoreCalcular(){
     const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${qparams}${ayalaCoreCostoParam()}`);
     if(!res.ok){const e=await res.json().catch(()=>({}));qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
     const d=await res.json();
-    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}${ayalaCorePackTxt(d)}`;
+    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}${ayalaCorePackTxt(d)}${ayalaCoreMercadoTxt(d)}`;
     ayalaCoreRenderMotor(d);
   }catch(e){qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
@@ -6464,7 +6629,7 @@ async function ayalaCoreCompararMLA(){
     it.condicion_ml=it.condicion_detectada;
     qs('ac-envio-real').value=d.envio_real;
     qs('ac-datos').style.display='block';
-    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}${ayalaCorePackTxt(d)}`;
+    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}${ayalaCorePackTxt(d)}${ayalaCoreMercadoTxt(d)}`;
     ayalaCoreRenderMotor(d);
     ayalaCoreMlaAplicarCondicion(AC_COND_MANUAL[it.item_id]!==undefined?AC_COND_MANUAL[it.item_id]:it.condicion_detectada, cont);
   }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
