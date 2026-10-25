@@ -2939,14 +2939,20 @@ def _leer_precios_excel_matias() -> dict:
     tildar "Usar" -- eso lo sigue decidiendo él, mismo mecanismo de
     "precio forzado" que ya existía). El parseo en sí (puro, testeable) vive
     en `ayala_core.parsear_precios_excel_matias` -- acá solo la lectura."""
+    return _leer_excel_matias()["precios"]
+
+
+def _leer_excel_matias() -> dict:
+    """Una sola lectura de la pestaña: `precios` (SKU con algún precio cargado) y `skus` (TODOS los SKU de la pestaña, con o sin precio)."""
     ss = get_gs().open_by_key(EXCEL_MATIAS_ID)
     ws = ss.worksheet(EXCEL_MATIAS_TAB)
-    return ayala_core.parsear_precios_excel_matias(ws.get_all_values())
+    filas = ws.get_all_values()
+    return {"precios": ayala_core.parsear_precios_excel_matias(filas), "skus": ayala_core.listar_skus_excel_matias(filas)}
 
 @app.get("/ayala-core/precios-excel")
 async def ayala_core_precios_excel():
     try:
-        return {"precios": await run_in_threadpool(_leer_precios_excel_matias)}
+        return await run_in_threadpool(_leer_excel_matias)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error leyendo el Excel: {e}")
 

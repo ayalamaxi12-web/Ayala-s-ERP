@@ -648,6 +648,51 @@ body[data-nuevo] #page-intel-mix .card>textarea{width:100%}
 body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 .ac-calc-con{margin-top:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
 .ac-aviso-txt{color:var(--aviso-texto);font-weight:600}
+/* — Motor de Precios (Bloque 2, PR 2): calculadora, selector de SKU y bloques minimizables — */
+.ac-ayuda{margin:0 0 8px;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-cab{margin-bottom:8px}
+.ac-como>summary,.ac-avanzadas>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--celeste-700)}
+.ac-como>summary:focus-visible,.ac-avanzadas>summary:focus-visible,.ac-bloque-btn:focus-visible{outline:2px solid var(--celeste-600);outline-offset:2px;border-radius:var(--r-control)}
+.ac-como-cuerpo p{margin:0 0 8px;font-size:var(--fs-tabla);color:var(--tinta-2);max-width:90ch}
+.ac-calc{display:flex;flex-direction:column;gap:14px}
+.ac-fila-sku{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:start}
+.ac-fila-sku .ac-lbl{grid-column:1/-1;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-chips{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.ac-chip-sku{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 12px;min-height:36px;border-radius:var(--r-chip);background:var(--celeste-100);color:var(--celeste-700);font-weight:600;font-size:var(--fs-tabla)}
+.ac-chip-x{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;border:0;border-radius:var(--r-chip);background:transparent;color:inherit;cursor:pointer}
+.ac-chip-x:hover{background:var(--celeste-200)}
+.ac-chip-x:focus-visible{outline:2px solid var(--celeste-600);outline-offset:1px}
+.ac-combo-wrap{position:relative;grid-column:1/-1;min-width:0;max-width:60ch}
+.ac-combo-wrap input{width:100%;min-height:44px}
+.ac-sku-acc{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ac-rentas{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.ac-rentas label,.ac-av-campos label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-rentas input{width:100%;min-width:0;min-height:44px;text-align:right}
+.ac-av-campos{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:4px 0 8px}
+.ac-campo-largo{width:22ch;max-width:100%;min-height:44px}
+.ac-av-campos .ac-check{flex-direction:row;align-items:center;gap:8px;min-height:44px;color:var(--tinta-2)}
+.ac-acc{display:flex;gap:8px}
+.ac-datos{margin:0 0 12px;padding:10px 14px;border-radius:var(--r-recuadro);background:var(--superficie);box-shadow:var(--sombra-tarjeta);font-size:var(--fs-tabla);color:var(--tinta-2)}
+.ac-bloques-acc{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 10px}
+.ac-bloque{margin-bottom:12px}
+.ac-bloque-h{margin:0;font:inherit}
+.ac-bloque-btn{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0;border:0;background:transparent;color:var(--tinta);font:inherit;font-weight:700;text-align:left;cursor:pointer}
+.ac-bloque-tit{display:inline-flex;align-items:center;gap:8px}
+.ac-chev{display:inline-flex;transition:transform .15s}
+.ac-bloque-btn[aria-expanded=false] .ac-chev{transform:rotate(-90deg)}
+.ac-bloque-res{display:none;margin-left:auto;font-weight:500;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-bloque.ac-min .ac-bloque-res{display:inline}
+.ac-bloque-cuerpo{margin-top:8px}
+.ac-bloque-cuerpo[hidden]{display:none}
+.ac-fila{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.ac-inline{display:flex;gap:8px;align-items:center;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-log{max-height:96px;overflow-y:auto;border-radius:var(--r-recuadro);padding:8px 12px;margin-bottom:10px;background:var(--zebra);font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-confirmar{margin-top:8px;padding:10px 14px;border-radius:var(--r-recuadro);background:var(--aviso-fondo);border:1px solid var(--aviso-borde);color:var(--aviso-texto)}
+.ac-tag-mano{display:inline-block;padding:1px 8px;border-radius:var(--r-chip);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla);font-weight:700;white-space:nowrap}
+#page-ayala-core table input[type=text],#page-ayala-core table input[type=number]{min-width:15ch;box-sizing:border-box}
+#page-ayala-core .ac-precio-manual{width:16ch!important}
+@media (max-width:900px){.ac-rentas{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:520px){.ac-rentas{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-bloque-btn{flex-wrap:wrap}.ac-bloque-res{margin-left:34px;flex-basis:100%}}
 /* — Gráficos y comparaciones — */
 body[data-nuevo] .chart-card{padding:18px 20px}
 body[data-nuevo] .chart-card h3{font-size:16px;font-weight:700;color:var(--tinta);margin-bottom:2px}
@@ -1783,128 +1828,135 @@ igual que la rentabilidad real, que se muestra al lado. -->
 </div>
 
 <div id="page-ayala-core" class="page">
-  <div style="margin-bottom:4px">
-    <div class="section-hdr" style="margin-bottom:4px">🚀 Ayala Core — Motor de Precios</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Etapa 1 (solo lectura) -- motor propio de reverse-markup para los SKU piloto, reemplaza el precio de Ecom para estos SKU. Costo/IVA reales de Táctica, TC del BNA. No escribe nada a ML todavía.</div>
+  <div class="ac-cab">
+    <div class="section-hdr" style="margin-bottom:4px"><span data-ico="cpu" aria-hidden="true"></span> Motor de Precios</div>
+    <p class="ac-ayuda">Calcula el precio de cada SKU para cada forma de pago a partir del costo de Ecom, el IVA y el TC del día. Solo lectura: no escribe en Mercado Libre.</p>
+    <details class="ac-como" id="ac-como">
+      <summary>Cómo funciona</summary>
+      <div class="ac-como-cuerpo">
+        <p>Motor propio de reverse-markup para los SKU de la planilla «ERP AYALA»: reemplaza el precio de Ecom por uno calculado desde el costo, el IVA y el TC del BNA. Elegís uno o varios SKU, la renta objetivo de cada forma de pago y calculás. No escribe nada en Mercado Libre desde esta tarjeta.</p>
+        <p><b>Precio forzado:</b> tildando «Usar» en la tabla de resultados, un precio final propio reemplaza al calculado más abajo, en «Publicaciones» y en «Comparar un solo MLA». No sirve para simular con otro TC o costo: eso lo hacen los campos TC y Costo de «Opciones avanzadas», que sí recalculan con la fórmula. La columna «Manual» se precarga sola con el precio que tengas en el Excel de Matías («ERP AYALA») para ese SKU y condición; no hace nada hasta que tildes «Usar», y podés editarla igual.</p>
+        <p><b>Condición de pago:</b> la etiqueta <span class="ac-tag-mano">A mano</span> (y el borde amarillo) marca una condición que corregiste a mano: queda fija aunque vuelvas a correr el escaneo. Sin etiqueta es automática y se actualiza en cada corrida.</p>
+      </div>
+    </details>
   </div>
 
-  <div style="margin:6px 0"><span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span></div>
-  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:10px 0;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
-    <span style="display:flex;flex-direction:column;gap:3px">SKU
-      <select id="ac-sku" class="fi" style="min-width:200px"></select>
-    </span>
-    <!-- Reemplazado 2026-09-04 a pedido de Maxx: "en vez de la escalada
-    que tiene ahora, quiero una casilla a completar porcentaje con cada
-    uno de mis diferentes formas de venta" -- un % de Renta editable por
-    condición, sin ninguna fórmula derivándolo de otra (antes: Renta
-    Contado % + Diferencial por cuota, cascada -2pts por escalón). -->
-    <span style="display:flex;flex-direction:column;gap:3px">Renta Contado %
-      <input type="text" id="ac-renta-contado" value="32" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Renta Reducida %
-      <input type="text" id="ac-renta-reducida" value="32" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Renta 3 cuotas %
-      <input type="text" id="ac-renta-3" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Renta 6 cuotas %
-      <input type="text" id="ac-renta-6" value="28" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Renta 9 cuotas %
-      <input type="text" id="ac-renta-9" value="26" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Renta 12 cuotas %
-      <input type="text" id="ac-renta-12" value="24" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <span style="display:flex;flex-direction:column;gap:3px">Envío real $ (opcional)
-      <input type="text" id="ac-envio-real" placeholder="auto si comparás un MLA" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <!-- Pedido de Maxx 2026-09-15: poder simular con un TC propio en vez
-    del de BNA en vivo. Vacío = automático, igual que Envío real. -->
-    <span style="display:flex;flex-direction:column;gap:3px">TC (opcional)
-      <input type="text" id="ac-tc-manual" placeholder="auto (BNA)" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <!-- Pedido de Maxx 2026-09-16: mismo criterio que el TC -- poder
-    simular con un costo sin IVA (USD) propio en vez del de Táctica. -->
-    <span style="display:flex;flex-direction:column;gap:3px">Costo USD s/IVA (opcional)
-      <input type="text" id="ac-costo-manual" placeholder="auto (Táctica)" style="width:120px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center">
-    </span>
-    <label style="display:flex;gap:4px;align-items:center;cursor:pointer;padding-bottom:6px"><input type="checkbox" id="ac-envio-full">Envío a Bodega (Full)</label>
-    <button class="btn primary" onclick="ayalaCoreCalcular()">🧮 Calcular</button>
-  </div>
+  <div class="ac-costos"><span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span></div>
 
-  <!-- Pedido de Maxx 2026-09-21: túnel Táctica caído -- necesita LEER los
-  precios que ya cargó a mano en "ERP AYALA" sin que el motor intente
-  recalcular contra Táctica (que hoy tira 500 si el túnel está caído).
-  100% frontend: usa AC_PRECIOS_EXCEL, ya cacheado en ayalaCoreLoad() vía
-  /ayala-core/precios-excel (Sheets, no toca Táctica) -- cero llamadas
-  nuevas al backend. Acepta cualquier SKU, no solo los SKU piloto del
-  desplegable de arriba (ese viene de SKUS_PILOTO, que no incluye SKU
-  nuevos todavía). -->
-  <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:0 0 14px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
-    <span style="display:flex;flex-direction:column;gap:3px">Ver SKU cargado en "ERP AYALA" (sin motor, sin Táctica)
-      <input type="text" id="ac-sku-excel" placeholder="SKU..." style="width:220px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px" onkeydown="if(event.key==='Enter')ayalaCoreVerCargado()">
-    </span>
-    <button class="btn" onclick="ayalaCoreVerCargado()">📋 Ver precio cargado</button>
-  </div>
+  <section class="card ac-calc" aria-label="Calculadora de precios">
+    <div class="ac-fila-sku">
+      <label for="ac-sku-buscar" class="ac-lbl">SKU</label>
+      <div class="ac-chips" id="ac-chips" aria-label="SKU elegidos"></div>
+      <div class="ac-combo-wrap">
+        <input type="text" id="ac-sku-buscar" role="combobox" aria-expanded="false" aria-controls="ac-sku-lista" aria-autocomplete="list" autocomplete="off" placeholder="Buscar SKU: cualquier parte del código" class="fi">
+        <div id="ac-sku-lista" class="ac-sug" role="listbox" aria-label="Sugerencias de SKU" style="display:none"></div>
+      </div>
+      <div class="ac-sku-acc">
+        <button type="button" class="btn" id="ac-sku-pilotos" onclick="ayalaCoreSkuPilotos()">Todos los piloto</button>
+        <button type="button" class="btn" id="ac-sku-ninguno" onclick="ayalaCoreSkuNinguno()">Ninguno</button>
+        <span id="ac-sku-cuenta" class="ac-ayuda" role="status"></span>
+      </div>
+    </div>
+    <!-- Un % de renta editable por forma de pago, sin ninguna fórmula derivándolo de otra (pedido de Maxx 2026-09-04). -->
+    <div class="ac-rentas" role="group" aria-label="Renta objetivo por forma de pago, en porcentaje">
+      <label>Contado %<input type="text" id="ac-renta-contado" value="32" inputmode="decimal"></label>
+      <label>Reducida %<input type="text" id="ac-renta-reducida" value="32" inputmode="decimal"></label>
+      <label>3 cuotas %<input type="text" id="ac-renta-3" value="30" inputmode="decimal"></label>
+      <label>6 cuotas %<input type="text" id="ac-renta-6" value="28" inputmode="decimal"></label>
+      <label>9 cuotas %<input type="text" id="ac-renta-9" value="26" inputmode="decimal"></label>
+      <label>12 cuotas %<input type="text" id="ac-renta-12" value="24" inputmode="decimal"></label>
+    </div>
+    <details class="ac-avanzadas" id="ac-avanzadas">
+      <summary>Opciones avanzadas</summary>
+      <div class="ac-av-campos">
+        <label>Envío real $<input type="text" id="ac-envio-real" placeholder="automático" class="ac-campo-largo" inputmode="decimal"></label>
+        <label>TC<input type="text" id="ac-tc-manual" placeholder="automático (BNA)" class="ac-campo-largo" inputmode="decimal"></label>
+        <label>Costo USD sin IVA<input type="text" id="ac-costo-manual" placeholder="automático (Ecom)" class="ac-campo-largo" inputmode="decimal"></label>
+        <label class="ac-check"><input type="checkbox" id="ac-envio-full">Envío a Bodega (Full)</label>
+      </div>
+      <p class="ac-ayuda">Vacío = automático. El envío real, si lo dejás vacío, sale de la publicación cuando comparás un MLA. El costo manual solo aplica cuando hay un único SKU elegido.</p>
+    </details>
+    <div class="ac-acc"><button type="button" class="btn primary" onclick="ayalaCoreCalcular()"><span data-ico="calculator" aria-hidden="true"></span> Calcular</button></div>
+  </section>
 
-  <div id="ac-datos" style="display:none;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
-
-  <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px">"Precio forzado": para forzar un precio final propio por condición (tildando "Usar", reemplaza al calculado más abajo en "Detectar publicaciones" y "Comparar un MLA") -- NO es para simular con otro TC o costo, eso es lo que hacen los campos "TC (opcional)"/"Costo (opcional)" de arriba, que sí recalculan con la fórmula. La columna "Manual" se precarga sola con el precio que tengas puesto en el Excel de Matías ("ERP AYALA") para ese SKU+condición -- no hace nada hasta que tildes "Usar", y la podés editar igual si querés otro número.</div>
-  <button class="btn" id="ac-tildar-todas-btn" style="display:none;margin-bottom:6px" onclick="ayalaCoreTildarTodasUsar()">☑ Tildar todas ("Usar")</button>
+  <div id="ac-datos" class="ac-datos" style="display:none"></div>
+  <button type="button" class="btn" id="ac-tildar-todas-btn" style="display:none;margin-bottom:6px" onclick="ayalaCoreTildarTodasUsar()">Tildar todas («Usar»)</button>
   <div class="table-wrap" id="ac-tabla-wrap" style="display:none"></div>
 
-  <div style="margin-top:24px">
-    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🥊 Referencias de competencia</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Pegá el <b>ID de la ficha de producto</b> (no el MLA de un vendedor puntual -- es el que aparece después de <code>/p/</code> en la URL de la página "Opciones de compra" de ML) para un SKU. Trae el precio/condición de cada competidor real que vende ese producto -- elegís cuál usar como referencia, y se muestra al lado de la fila con esa misma condición en la tabla de abajo.</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <select id="ac-ref-sku" class="fi"></select>
-      <input type="text" id="ac-ref-producto" placeholder="ID de producto (ej. MLA68609606)..." class="fi" style="width:200px">
-      <select id="ac-ref-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select>
-      <button class="btn" onclick="ayalaCoreRefBuscar()">🔎 Buscar competencia</button>
-    </div>
-    <div id="ac-ref-candidatos" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);margin-bottom:8px"></div>
-    <div id="ac-ref-lista" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
+  <div class="ac-bloques-acc" role="group" aria-label="Mostrar u ocultar todos los bloques">
+    <button type="button" class="btn" onclick="acBloquesTodos(true)">Expandir todo</button>
+    <button type="button" class="btn" onclick="acBloquesTodos(false)">Minimizar todo</button>
   </div>
 
-  <div style="margin-top:24px">
-    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 Publicaciones de los SKU piloto — real vs. calculado</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Escanea TODAS las publicaciones activas de las dos cuentas (Group + Arg), se queda con las de los SKU tildados, y compara el precio actual en vivo contra el que el motor calcula para la condición de pago detectada. Tarda unos minutos (recorre el catálogo completo) -- no escribe nada a ML.</div>
-    <div id="ac-publicaciones-skus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn primary" onclick="ayalaCorePublicacionesRun()" id="btn-ac-publicaciones">🔄 Detectar publicaciones</button>
-      <span id="ac-publicaciones-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
-      <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace">Operador (para meter en oferta):
-        <select id="ac-operador" onchange="localStorage.setItem('ofm_operador',this.value)" class="fi" style="font-size:10px;padding:3px 6px">
-          <option value="">Elegir...</option>
-          <option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option>
-        </select>
-      </span>
+  <section class="card ac-bloque" id="ac-b-ref" data-bloque="ref">
+    <h2 class="ac-bloque-h"><button type="button" class="ac-bloque-btn" aria-expanded="true" aria-controls="ac-b-ref-cuerpo" onclick="acBloqueToggle('ref')"><span class="ac-chev" data-ico="chevron" aria-hidden="true"></span><span class="ac-bloque-tit"><span data-ico="trophy" aria-hidden="true"></span> Referencias de competencia</span><span class="ac-bloque-res" id="ac-b-ref-res"></span></button></h2>
+    <div class="ac-bloque-cuerpo" id="ac-b-ref-cuerpo">
+      <p class="ac-ayuda">Pegá el <b>ID de la ficha de producto</b> (el que aparece después de <code>/p/</code> en la URL de «Opciones de compra» de ML, no el MLA de un vendedor) para un SKU. Trae el precio y la condición de cada competidor real: elegís cuál usar como referencia y se muestra junto a la fila con esa misma condición.</p>
+      <div class="ac-fila">
+        <select id="ac-ref-sku" class="fi" aria-label="SKU de la referencia"></select>
+        <input type="text" id="ac-ref-producto" placeholder="ID de producto, ej. MLA68609606" class="fi ac-campo-largo" aria-label="ID de producto">
+        <select id="ac-ref-cuenta" class="fi" aria-label="Cuenta"><option value="IT">Group</option><option value="MT">Arg</option></select>
+        <button type="button" class="btn" onclick="ayalaCoreRefBuscar()"><span data-ico="search" aria-hidden="true"></span> Buscar competencia</button>
+      </div>
+      <div id="ac-ref-candidatos" class="ac-ayuda"></div>
+      <div id="ac-ref-lista" class="ac-ayuda"></div>
     </div>
-    <div id="ac-publicaciones-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
-    <div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:4px">Condición: <span style="color:var(--yellow)">borde amarillo</span> = la corregiste a mano, queda fija aunque vuelvas a correr el escaneo · borde normal = automática, se actualiza en cada corrida.</div>
-    <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
-      <table>
-        <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th><th style="text-align:right">Tachado actual</th><th style="text-align:right">Tachado a aplicar</th><th>Oferta</th></tr></thead>
-        <tbody id="ac-publicaciones-tbody"></tbody>
-      </table>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:8px" id="ac-aplicar-bar" hidden>
-      <button class="btn primary" onclick="ayalaCoreRevisarSeleccion()">✅ Aplicar tildadas</button>
-    </div>
-    <div id="ac-aplicar-confirmar" style="display:none;margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--yellow);border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"></div>
-    <div id="ac-aplicar-log" style="display:none;max-height:140px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:8px"></div>
-  </div>
+  </section>
 
-  <div style="margin-top:24px">
-    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 O comparar un solo MLA</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <input type="text" id="ac-mla" placeholder="MLA..." class="fi" style="width:140px">
-      <select id="ac-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select>
-      <button class="btn" onclick="ayalaCoreCompararMLA()">Comparar</button>
+  <section class="card ac-bloque" id="ac-b-pub" data-bloque="pub">
+    <h2 class="ac-bloque-h"><button type="button" class="ac-bloque-btn" aria-expanded="true" aria-controls="ac-b-pub-cuerpo" onclick="acBloqueToggle('pub')"><span class="ac-chev" data-ico="chevron" aria-hidden="true"></span><span class="ac-bloque-tit"><span data-ico="search" aria-hidden="true"></span> Publicaciones de los SKU elegidos: real vs. calculado</span><span class="ac-bloque-res" id="ac-b-pub-res"></span></button></h2>
+    <div class="ac-bloque-cuerpo" id="ac-b-pub-cuerpo">
+      <p class="ac-ayuda">Escanea todas las publicaciones activas de las dos cuentas (Group y Arg), se queda con las de los SKU elegidos arriba y compara el precio actual en vivo contra el que calcula el motor para la condición de pago detectada. Tarda unos minutos y no escribe nada en ML.</p>
+      <div id="ac-publicaciones-skus" class="ac-ayuda" role="status"></div>
+      <div class="ac-fila">
+        <button type="button" class="btn primary" onclick="ayalaCorePublicacionesRun()" id="btn-ac-publicaciones">Detectar publicaciones</button>
+        <span id="ac-publicaciones-status" class="ac-ayuda"></span>
+        <label class="ac-inline">Operador (para meter en oferta)
+          <select id="ac-operador" onchange="localStorage.setItem('ofm_operador',this.value)" class="fi">
+            <option value="">Elegir...</option>
+            <option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option>
+          </select>
+        </label>
+      </div>
+      <div id="ac-publicaciones-log" class="ac-log" style="display:none"></div>
+      <div class="table-wrap" id="ac-publicaciones-wrap" style="display:none">
+        <table>
+          <thead><tr><th></th><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Condición</th><th style="text-align:right">Envío usado</th><th style="text-align:right">Precio actual</th><th style="text-align:right">Precio calculado</th><th style="text-align:right">Diferencia</th><th>Competencia / Margen manual</th><th style="text-align:right">Precio a aplicar</th><th style="text-align:right">Tachado actual</th><th style="text-align:right">Tachado a aplicar</th><th>Oferta</th></tr></thead>
+          <tbody id="ac-publicaciones-tbody"></tbody>
+        </table>
+      </div>
+      <div class="ac-fila" id="ac-aplicar-bar" hidden>
+        <button type="button" class="btn primary" onclick="ayalaCoreRevisarSeleccion()">Aplicar tildadas</button>
+      </div>
+      <div id="ac-aplicar-confirmar" class="ac-confirmar" style="display:none"></div>
+      <div id="ac-aplicar-log" class="ac-log" style="display:none"></div>
     </div>
-    <div id="ac-mla-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)"></div>
-  </div>
+  </section>
+
+  <section class="card ac-bloque" id="ac-b-mla" data-bloque="mla">
+    <h2 class="ac-bloque-h"><button type="button" class="ac-bloque-btn" aria-expanded="true" aria-controls="ac-b-mla-cuerpo" onclick="acBloqueToggle('mla')"><span class="ac-chev" data-ico="chevron" aria-hidden="true"></span><span class="ac-bloque-tit"><span data-ico="search" aria-hidden="true"></span> Comparar un solo MLA</span><span class="ac-bloque-res" id="ac-b-mla-res"></span></button></h2>
+    <div class="ac-bloque-cuerpo" id="ac-b-mla-cuerpo">
+      <div class="ac-fila">
+        <input type="text" id="ac-mla" placeholder="MLA…" class="fi ac-campo-largo" aria-label="MLA a comparar">
+        <select id="ac-cuenta" class="fi" aria-label="Cuenta"><option value="IT">Group</option><option value="MT">Arg</option></select>
+        <button type="button" class="btn" onclick="ayalaCoreCompararMLA()">Comparar</button>
+      </div>
+      <p class="ac-ayuda">Se compara con el SKU elegido arriba (tiene que haber uno solo).</p>
+      <div id="ac-mla-resultado" class="ac-datos" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- Pedido de Maxx 2026-09-21: leer los precios que ya cargó a mano en «ERP AYALA» sin recalcular. 100% frontend (AC_PRECIOS_EXCEL, ya cacheado en ayalaCoreLoad). -->
+  <section class="card ac-bloque" id="ac-b-cargado" data-bloque="cargado">
+    <h2 class="ac-bloque-h"><button type="button" class="ac-bloque-btn" aria-expanded="true" aria-controls="ac-b-cargado-cuerpo" onclick="acBloqueToggle('cargado')"><span class="ac-chev" data-ico="chevron" aria-hidden="true"></span><span class="ac-bloque-tit"><span data-ico="list" aria-hidden="true"></span> Ver SKU cargado en «ERP AYALA»</span><span class="ac-bloque-res" id="ac-b-cargado-res"></span></button></h2>
+    <div class="ac-bloque-cuerpo" id="ac-b-cargado-cuerpo">
+      <p class="ac-ayuda">Muestra el precio que ya está cargado a mano en la planilla, sin motor y sin recalcular.</p>
+      <div class="ac-fila">
+        <input type="text" id="ac-sku-excel" placeholder="SKU…" class="fi ac-campo-largo" aria-label="SKU a ver" onkeydown="if(event.key==='Enter')ayalaCoreVerCargado()">
+        <button type="button" class="btn" onclick="ayalaCoreVerCargado()">Ver precio cargado</button>
+      </div>
+    </div>
+  </section>
 </div>
 <script src="proyeccion_dashboard.js"></script>
 <script>
@@ -1989,7 +2041,9 @@ const ICONOS={
  'menu':'<path d="M4 6h16M4 12h16M4 18h16"/>','x':'<path d="M6 6l12 12M18 6L6 18"/>','x-circle':'<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
  'refresh':'<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>','clock':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
  'alert':'<path d="M10.3 4.2L2.6 18a2 2 0 001.7 3h15.4a2 2 0 001.7-3L13.7 4.2a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
- 'crown':'<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>','external':'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>'
+ 'crown':'<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>','external':'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>',
+ 'calculator':'<rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 6.5h8M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h.01M12 18h.01M15.5 18h.01"/>',
+ 'chevron':'<path d="M6 9l6 6 6-6"/>','list':'<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>'
 };
 function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;vertical-align:-3px">${ICONOS[n]||''}</svg>`;}
 // ICONOS-FIN
@@ -2190,7 +2244,7 @@ function goPage(page,el){
   if(page==='full-ml')fullFotoCargar();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarTablasML().then(()=>{if(ofmResult)ofmRender();});}
-  if(page==='ayala-core'){if(!ayalaCoreLoaded)ayalaCoreLoad();ayalaCoreAutoRecalcularMontar();}
+  if(page==='ayala-core'){if(!ayalaCoreLoaded)ayalaCoreLoad();ayalaCoreAutoRecalcularMontar();ayalaCoreSkuMontar();acBloquesMontar();}
   if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
 }
 
@@ -5563,29 +5617,20 @@ async function ayalaCoreLoad(){
     const res=await fetch(`${url}/ayala-core/skus`);
     const d=await res.json();
     AC_SKUS=d.skus||[];
-    qs('ac-sku').innerHTML='<option value="">— Todos —</option>'+AC_SKUS.map(s=>`<option value="${s}">${s}</option>`).join('');
-    qs('ac-ref-sku').innerHTML=AC_SKUS.map(s=>`<option value="${s}">${s}</option>`).join('');
-    qs('ac-publicaciones-skus').innerHTML=AC_SKUS.map(s=>`<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" class="ac-pub-sku-chk" value="${s}" checked>${s}</label>`).join('');
+    AC_SEL=AC_SKUS.slice();
+    ayalaCoreSkuListaActualizar();
+    ayalaCoreSkuRender();
     const acOp=qs('ac-operador');if(acOp)acOp.value=localStorage.getItem('ofm_operador')||'';
     ayalaCoreLoaded=true;
   }catch(e){}
   try{
     const resP=await fetch(`${url}/ayala-core/precios-excel`);
     if(resP.ok){
-      AC_PRECIOS_EXCEL=(await resP.json()).precios||{};
-      // Pedido de Maxx 2026-09-21: con el túnel Táctica caído, SKU nuevos
-      // que todavía no están en SKUS_PILOTO (backend) pero SÍ tienen
-      // precio cargado a mano en "ERP AYALA" también tienen que poder
-      // tildarse en "Publicaciones de los SKU piloto" -- se agregan
-      // aparte, destildados por default (a diferencia de los piloto) y
-      // marcados "(Excel)", con data-excel="1" para que
-      // ayalaCorePublicacionesRun() los mande por el camino sin Táctica
-      // (descubrir_publicaciones_base + precio-vivo) en vez de
-      // /ayala-core/publicaciones/run (que rompe si el túnel está caído).
-      const nuevos=Object.keys(AC_PRECIOS_EXCEL).filter(s=>!AC_SKUS.includes(s));
-      if(nuevos.length){
-        qs('ac-publicaciones-skus').innerHTML+=nuevos.map(s=>`<label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Sin datos de Táctica -- precio fijo tomado de 'ERP AYALA', no recalcula fórmula"><input type="checkbox" class="ac-pub-sku-chk" value="${s}" data-excel="1">${s} <span style="color:var(--yellow);font-size:9px">(Excel)</span></label>`).join('');
-      }
+      const d2=await resP.json();
+      AC_PRECIOS_EXCEL=d2.precios||{};
+      AC_SKUS_EXCEL=(d2.skus||[]);
+      ayalaCoreSkuListaActualizar();
+      ayalaCoreSkuRender();
     }
   }catch(e){} // si falla, el campo "Manual" queda vacío como hasta ahora -- no bloquea el resto
 }
@@ -5631,6 +5676,7 @@ function ayalaCoreRenderRefLista(){
   qs('ac-ref-lista').innerHTML=filas.length?filas.map(r=>
     `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${r.sku} · ${ayalaCoreCondLabel(r.condicion_detectada)} · <a href="https://articulo.mercadolibre.com.ar/${r.item_id}" target="_blank" style="color:var(--accent)">${r.item_id}</a> (seller ${r.seller_id}) · Precio <b>${ayalaCoreFmt(r.precio)}</b>${r.precio_tachado?` (tachado ${ayalaCoreFmt(r.precio_tachado)})`:''} <button class="btn" style="padding:1px 6px;font-size:9px" onclick="ayalaCoreRefQuitar('${r.sku}','${r.condicion_detectada}')">quitar</button></div>`
   ).join(''):'<span style="color:var(--text3)">Sin referencias cargadas todavía.</span>';
+  acBloquesResumen();
 }
 // ── Recalculo de precio en el navegador -- mismos parámetros por
 // defecto que backend/ayala_core.py (COMISION_ML_DEFAULT/IIBB_PCT_DEFAULT),
@@ -5755,6 +5801,7 @@ function ayalaCoreVerCargado(){
   if(!sku){toast('Ingresá un SKU','error');return;}
   if(!AC_PRECIOS_EXCEL[sku]){toast(`"${sku}" no tiene precios cargados en "ERP AYALA"`,'error');return;}
   qs('ac-datos').style.display='block';
+  AC_CARGADO_ULT=sku+' cargado';acBloquesResumen();
   qs('ac-datos').innerHTML=`Precios cargados a mano en <b>"ERP AYALA"</b> para <b>${sku}</b> -- solo lectura, no se consultó Táctica ni se recalculó nada.`;
   qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio (Excel)</th><th style="text-align:right">Manual</th><th style="text-align:center">Usar</th></tr></thead><tbody>${
     AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(AC_PRECIOS_EXCEL[sku][c])}</td>${ayalaCorePrecioOverrideCellsHtml(sku,c)}</tr>`).join('')
@@ -5764,7 +5811,7 @@ function ayalaCoreVerCargado(){
   qs('ac-tildar-todas-btn').style.display='inline-block';
 }
 function ayalaCoreRenderMotor(d){
-  const sku=qs('ac-sku').value||d.sku||'';
+  const sku=d.sku||(AC_SEL.length===1?AC_SEL[0]:'');
   qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th><th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
     AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
   }</tbody></table>`;
@@ -5834,6 +5881,65 @@ function ayalaCoreRentaQueryParams(){
 }
 function ayalaCoreTcParam(){const v=qs('ac-tc-manual')?.value;return v?`&tc=${v}`:'';}
 function ayalaCoreCostoParam(){const v=qs('ac-costo-manual')?.value;return v?`&costo=${v}`:'';}
+// ══ Selector de SKU (Motor de Precios): TODOS los SKU de «ERP AYALA» + los piloto; búsqueda predictiva (cualquier parte del código, sin mayúsculas ni tildes), chips con ×, teclado ══
+let AC_SEL=[],AC_SKUS_EXCEL=[],AC_TODOS=[],AC_COMBO={sug:[],sel:-1};
+function ayalaCoreSkuListaActualizar(){
+  AC_TODOS=[...new Set([...(AC_SKUS||[]),...(AC_SKUS_EXCEL||[]),...Object.keys(AC_PRECIOS_EXCEL||{})])].sort((a,b)=>a.localeCompare(b,'es'));
+  const rs=qs('ac-ref-sku');if(rs){const cur=rs.value;rs.innerHTML=AC_TODOS.map(x=>`<option value="${acEsc(x)}"${x===cur?' selected':''}>${acEsc(x)}</option>`).join('');}
+}
+function ayalaCoreSkuBuscar(q){
+  const n=acNormTxt(q).trim();if(!n)return [];const out=[];
+  AC_TODOS.forEach(x=>{if(AC_SEL.includes(x))return;const i=acNormTxt(x).indexOf(n);if(i>=0)out.push({x,i,n:n.length});});
+  return out.sort((a,b)=>(a.i>0)-(b.i>0)||a.i-b.i||a.x.localeCompare(b.x,'es')).slice(0,12);
+}
+function ayalaCoreSkuSugerir(){
+  const inp=qs('ac-sku-buscar'),box=qs('ac-sku-lista');if(!inp||!box)return;
+  AC_COMBO.sug=ayalaCoreSkuBuscar(inp.value);AC_COMBO.sel=-1;
+  if(!AC_COMBO.sug.length){ayalaCoreSkuCerrar();if(inp.value.trim()){box.innerHTML='<div class="it" role="option" aria-disabled="true">Ningún SKU coincide</div>';box.style.display='block';inp.setAttribute('aria-expanded','true');}return;}
+  box.innerHTML=AC_COMBO.sug.map((m,k)=>`<div class="it" role="option" id="ac-sku-opt-${k}" aria-selected="false" onmousedown="event.preventDefault();ayalaCoreSkuAgregar(AC_COMBO.sug[${k}].x)">${acResaltar(m.x,m.i,m.n)}</div>`).join('');
+  box.style.display='block';inp.setAttribute('aria-expanded','true');inp.removeAttribute('aria-activedescendant');
+}
+function ayalaCoreSkuCerrar(){const box=qs('ac-sku-lista'),inp=qs('ac-sku-buscar');if(box){box.style.display='none';box.innerHTML='';}if(inp){inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');}AC_COMBO.sug=[];AC_COMBO.sel=-1;}
+function ayalaCoreSkuTecla(e){
+  const n=AC_COMBO.sug.length;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){if(!n)return;e.preventDefault();AC_COMBO.sel=(AC_COMBO.sel+(e.key==='ArrowDown'?1:-1)+n)%n;
+    document.querySelectorAll('#ac-sku-lista .it').forEach((el,k)=>{const on=k===AC_COMBO.sel;el.classList.toggle('on',on);el.setAttribute('aria-selected',on);if(on){qs('ac-sku-buscar').setAttribute('aria-activedescendant',el.id);el.scrollIntoView({block:'nearest'});}});}
+  else if(e.key==='Enter'){if(!n)return;e.preventDefault();ayalaCoreSkuAgregar(AC_COMBO.sug[AC_COMBO.sel>=0?AC_COMBO.sel:0].x);}
+  else if(e.key==='Escape'){ayalaCoreSkuCerrar();}
+  else if(e.key==='Backspace'&&!qs('ac-sku-buscar').value&&AC_SEL.length){ayalaCoreSkuQuitar(AC_SEL[AC_SEL.length-1],true);}
+}
+function ayalaCoreSkuAgregar(sku){if(!AC_SEL.includes(sku))AC_SEL.push(sku);const inp=qs('ac-sku-buscar');inp.value='';ayalaCoreSkuCerrar();ayalaCoreSkuRender();inp.focus();ayalaCoreAutoRecalcular();}
+function ayalaCoreSkuQuitar(sku,desdeTeclado){AC_SEL=AC_SEL.filter(x=>x!==sku);ayalaCoreSkuRender();if(!desdeTeclado)qs('ac-sku-buscar').focus();ayalaCoreAutoRecalcular();}
+function ayalaCoreSkuPilotos(){AC_SEL=(AC_SKUS||[]).slice();ayalaCoreSkuRender();ayalaCoreAutoRecalcular();}
+function ayalaCoreSkuNinguno(){AC_SEL=[];ayalaCoreSkuRender();}
+function ayalaCoreSkuRender(){
+  const ch=qs('ac-chips');if(!ch)return;
+  ch.innerHTML=AC_SEL.map(x=>`<span class="ac-chip-sku">${acEsc(x)}<button type="button" class="ac-chip-x" aria-label="Quitar ${acEsc(x)}" onclick="ayalaCoreSkuQuitar(this.dataset.sku)" data-sku="${acEsc(x)}">${ico('x',14)}</button></span>`).join('');
+  const c=qs('ac-sku-cuenta');if(c)c.textContent=`${AC_SEL.length} elegido${AC_SEL.length===1?'':'s'} de ${AC_TODOS.length}`;
+  const p=qs('ac-publicaciones-skus');if(p)p.textContent=AC_SEL.length?`Se buscarán las publicaciones de ${AC_SEL.length} SKU elegido${AC_SEL.length===1?'':'s'} en la calculadora de arriba.`:'Elegí al menos un SKU en la calculadora de arriba.';
+  acBloquesResumen();
+}
+function ayalaCoreSkuMontar(){
+  const inp=qs('ac-sku-buscar');if(!inp||inp.dataset.montado)return;inp.dataset.montado='1';
+  inp.addEventListener('input',ayalaCoreSkuSugerir);inp.addEventListener('keydown',ayalaCoreSkuTecla);inp.addEventListener('blur',()=>setTimeout(ayalaCoreSkuCerrar,120));inp.addEventListener('focus',()=>{if(inp.value)ayalaCoreSkuSugerir();});
+}
+// ══ Bloques minimizables (Referencias, Publicaciones, Comparar un MLA, Ver SKU cargado): resumen visible al minimizar; «Expandir todo» y «Minimizar todo»; se recuerda durante la sesión ══
+const AC_BLOQUES=['ref','pub','mla','cargado'];
+function acBloquesEstado(){try{return JSON.parse(sessionStorage.getItem('ac_bloques')||'{}');}catch(e){return {};}}
+function acBloqueAplicar(id,abierto){const b=qs('ac-b-'+id);if(!b)return;const btn=b.querySelector('.ac-bloque-btn'),cuerpo=qs('ac-b-'+id+'-cuerpo');btn.setAttribute('aria-expanded',abierto);cuerpo.hidden=!abierto;b.classList.toggle('ac-min',!abierto);}
+function acBloqueToggle(id){const btn=qs('ac-b-'+id).querySelector('.ac-bloque-btn'),abrir=btn.getAttribute('aria-expanded')!=='true';acBloqueAplicar(id,abrir);const e=acBloquesEstado();e[id]=abrir;try{sessionStorage.setItem('ac_bloques',JSON.stringify(e));}catch(x){}}
+function acBloquesTodos(abrir){const e={};AC_BLOQUES.forEach(id=>{acBloqueAplicar(id,abrir);e[id]=abrir;});try{sessionStorage.setItem('ac_bloques',JSON.stringify(e));}catch(x){}}
+function acBloquesMontar(){const e=acBloquesEstado();AC_BLOQUES.forEach(id=>acBloqueAplicar(id,e[id]!==false));acBloquesResumen();}
+function acBloquesResumen(){
+  const set=(id,t)=>{const el=qs('ac-b-'+id+'-res');if(el)el.textContent=t;};
+  const refs=Object.values(AC_REFERENCIAS||{}).reduce((n,a)=>n+(a||[]).length,0),skusRef=Object.keys(AC_REFERENCIAS||{}).filter(k=>(AC_REFERENCIAS[k]||[]).length).length;
+  set('ref',refs?`${refs} referencia${refs===1?'':'s'} en ${skusRef} SKU`:'sin referencias elegidas');
+  const n=(typeof AC_PUB_FILAS!=='undefined'?AC_PUB_FILAS.length:0)+(typeof AC_PUB_FILAS_ST!=='undefined'?AC_PUB_FILAS_ST.length:0);
+  set('pub',n?`${n} publicaciones encontradas de ${AC_SEL.length} SKU`:`${AC_SEL.length} SKU elegido${AC_SEL.length===1?'':'s'}, sin buscar todavía`);
+  set('mla',AC_MLA_ULT||'sin comparar');
+  set('cargado',AC_CARGADO_ULT||'nada cargado');
+}
+let AC_MLA_ULT='',AC_CARGADO_ULT='';
 let AC_CALC_SEQ=0,AC_CALC_TIMER=null,AC_AUTO_OK=false;
 // «Calculado con costos de hace X · IVA de … · TC …»: de qué fotos salió el cálculo (el backend no leyó nada en vivo).
 function ayalaCoreCalculadoConHtml(c,ms){
@@ -5846,22 +5952,23 @@ function ayalaCoreAutoRecalcular(){
   clearTimeout(AC_CALC_TIMER);AC_CALC_TIMER=setTimeout(()=>ayalaCoreCalcular(),300);
 }
 function ayalaCoreAutoRecalcularMontar(){
-  const ids=['ac-sku','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
+  const ids=['ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
   ids.forEach(id=>{const el=qs(id);if(el&&!el.dataset.autocalc){el.dataset.autocalc='1';el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',ayalaCoreAutoRecalcular);}});
 }
 async function ayalaCoreCalcular(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   AC_AUTO_OK=true;
-  const sku=qs('ac-sku').value;
+  if(!AC_SEL.length){qs('ac-datos').style.display='block';qs('ac-datos').innerHTML='<span class="ac-aviso-txt">Elegí al menos un SKU para calcular.</span>';return;}
+  const sku=AC_SEL.length===1?AC_SEL[0]:'';
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
   let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   try{
     if(!sku){
-      // "Todos" -- UN solo pedido por lote (misma cuenta que el pedido por SKU, con las fotos de costos/IVA/TC que ya están en el backend: no lee nada en vivo)
+      // Varios SKU -- UN solo pedido por lote (misma cuenta que el pedido por SKU, con las fotos de costos/IVA/TC que ya están en el backend: no lee nada en vivo)
       const seq=++AC_CALC_SEQ,t0=performance.now();
-      const res=await fetch(`${url}/ayala-core/motor-lote?${qparams}`);
+      const res=await fetch(`${url}/ayala-core/motor-lote?${qparams}&skus=${encodeURIComponent(AC_SEL.join(','))}`);
       if(seq!==AC_CALC_SEQ)return;   // llegó una respuesta más nueva: esta se descarta
       if(!res.ok){const e=await res.json().catch(()=>({}));qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${acEsc(e.detail||'Error')}</span>`;return;}
       const lote=await res.json();
@@ -5893,37 +6000,22 @@ async function ayalaCoreCalcular(){
 async function ayalaCorePublicacionesRun(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const btn=qs('btn-ac-publicaciones'),status=qs('ac-publicaciones-status'),logEl=qs('ac-publicaciones-log');
-  const chks=[...document.querySelectorAll('.ac-pub-sku-chk:checked')];
-  const skusMotor=chks.filter(c=>!c.dataset.excel).map(c=>c.value);
-  const skusExcel=chks.filter(c=>c.dataset.excel).map(c=>c.value);
-  if(!skusMotor.length&&!skusExcel.length){toast('Tildá al menos un SKU','error');return;}
-  btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
+  const skusMotor=AC_SEL.slice();
+  if(!skusMotor.length){toast('Elegí al menos un SKU','error');return;}
+  btn.disabled=true;btn.textContent='Buscando...';status.textContent='Iniciando...';logEl.style.display='block';logEl.innerHTML='';
   qs('ac-publicaciones-wrap').style.display='none';
   AC_PUB_FILAS_ST=[];
   try{
-    if(skusExcel.length){
-      status.textContent=`Buscando publicaciones de ${skusExcel.length} SKU sin Táctica (Excel)...`;
-      const base=await ayalaCoreDescubrirSinTacticaJob(url,skusExcel,logEl);
-      status.textContent='Trayendo precio en vivo de esas publicaciones...';
-      AC_PUB_FILAS_ST=await ayalaCoreEnriquecerSinTactica(url,base);
-      // Pinta ya lo encontrado -- si después el job de motor (Táctica)
-      // falla, pollFullJob NO llama a onDone en su rama de error, así que
-      // esto no debe quedar esperando un resultado que nunca llega.
-      ayalaCorePublicacionesOnResult(null);
-    }
+    // Un solo flujo para todos los SKU: el costo sale de Ecom y el IVA de la foto de Táctica o de Ecom, así que ya no hay un camino aparte «sin Táctica» (Excel).
     if(skusMotor.length){
       status.textContent='Iniciando motor (recorre el catálogo completo, puede tardar)...';
       const res=await fetch(`${url}/ayala-core/publicaciones/run?${ayalaCoreRentaQueryParams()}&skus=${skusMotor.join(',')}${ayalaCoreTcParam()}`,{method:'POST'});
       const{job_id}=await res.json();
       status.textContent='Job: '+job_id;
-      pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'🔄 Detectar publicaciones',ayalaCorePublicacionesOnResult);
+      pollFullJob(`${url}/ayala-core/publicaciones/status/${job_id}`,logEl,status,btn,'Detectar publicaciones',ayalaCorePublicacionesOnResult);
       return; // pollFullJob se encarga de reactivar el botón y de mergear AC_PUB_FILAS_ST via ayalaCorePublicacionesOnResult
     }
-    // Solo SKU "Excel" tildados -- no hay job de motor que correr (ya se
-    // pintó arriba, dentro del if(skusExcel.length)), solo cerrar el botón.
-    btn.disabled=false;btn.textContent='🔄 Detectar publicaciones';
-    status.innerHTML='<span style="color:var(--green)">✅ Listo</span> (solo Excel, sin Táctica)';
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Detectar publicaciones';}
+  }catch(e){status.textContent='No se pudo iniciar: '+e.message;btn.disabled=false;btn.textContent='Detectar publicaciones';}
 }
 // Descubrimiento SKU↔MLA Táctica-free -- mismo job que ya usa el Apps
 // Script del Excel de Matías (descubrir_publicaciones_base, sin costo/IVA
@@ -5990,8 +6082,9 @@ function ayalaCorePublicacionesOnResult(result){
   AC_PUB_FILAS=[...AC_PUB_FILAS_ST,...motorFilas];
   AC_PUB_FILAS.forEach(ayalaCoreAplicarOverrides);
   const inc=(result&&result.incidencias)||[];
-  if(inc.length)qs('ac-publicaciones-status').innerHTML+=` · <span style="color:var(--yellow)">${inc.length} sin costo/IVA en Táctica</span>`;
+  if(inc.length)qs('ac-publicaciones-status').innerHTML+=` · <span class="ac-aviso-txt">${inc.length} sin costo o IVA</span>`;
   ayalaCorePublicacionesRepintar();
+  acBloquesResumen();
 }
 // Aplica, sobre una fila recién traída de ML, la condición manual
 // pisada (si la hay -- ver AC_COND_MANUAL) y el precio manual tildado (si
@@ -6219,7 +6312,7 @@ function ayalaCorePubCondCellHtml(f,idx){
   return `<div style="display:flex;align-items:center;gap:3px">
     <select data-idx="${idx}" class="ac-pub-cond" onchange="ayalaCorePubCondicionCambio(this)" style="background:var(--surface);border:1px solid ${esManual?'var(--yellow)':'var(--border)'};border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px" title="${esManual?'Corregida a mano -- no se pisa con nuevas corridas de ML':'Automática -- se actualiza en cada corrida'}">
       ${AC_COND_ORDEN.map(c=>`<option value="${c}" ${String(c)===String(f.condicion_detectada)?'selected':''}>${ayalaCoreCondLabel(c)}</option>`).join('')}
-    </select>${esManual?`<button class="btn-xs" data-idx="${idx}" style="padding:1px 5px" onclick="ayalaCorePubCondRevertir(this)" title="Volver a automático">↺</button>`:''}
+    </select>${esManual?`<span class="ac-tag-mano">A mano</span><button class="btn-xs" data-idx="${idx}" style="padding:1px 5px" onclick="ayalaCorePubCondRevertir(this)" title="Volver a automático">↺</button>`:''}
   </div>`;
 }
 // Recalcula precio/diferencia/celdas dependientes de una fila para una
@@ -6322,7 +6415,8 @@ async function ayalaCoreConfirmarAplicar(){
 }
 async function ayalaCoreCompararMLA(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
-  const sku=qs('ac-sku').value;if(!sku){toast('Elegí un SKU primero','error');return;}
+  if(AC_SEL.length!==1){toast('Para comparar un MLA tiene que haber un solo SKU elegido arriba','error');return;}
+  const sku=AC_SEL[0];
   const itemId=(qs('ac-mla').value||'').trim().toUpperCase();if(!itemId){toast('Ingresá un MLA','error');return;}
   const cuenta=qs('ac-cuenta').value;
   const envioFull=qs('ac-envio-full').checked;
@@ -6334,7 +6428,7 @@ async function ayalaCoreCompararMLA(){
     const d=await res.json();
     const it=d.item;
     if(!it){cont.innerHTML='Sin datos de publicación';return;}
-    window._acMlaData=d;
+    window._acMlaData=d;AC_MLA_ULT=`${it.item_id} · SKU ${sku}`;acBloquesResumen();
     // Corrección manual de condición -- pedido de Maxx 2026-09-04: la
     // detección automática (tag propio + eliminación dentro de la
     // familia, ver resolver_condicion_pago) no siempre tiene con qué
