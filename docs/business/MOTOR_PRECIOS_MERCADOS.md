@@ -25,8 +25,8 @@ Costo por orden de Ecom **$149,12** (monto en pesos, entra como costo fijo de la
 La fórmula ganó **un solo término opcional**, `costo_orden` (default 0): con 0, el precio es exactamente el de antes (test de paridad). 
 
 ## Decisiones tomadas y puntos que necesitan tu OK
-1. **Mercado Libre no cambió.** Dos mensajes se contradicen con eso: «ML: lo que existe hoy, no lo cambies» y «la comisión base 15,5 % es general, ML incluido» (hoy el Motor usa 15,32 %). Cambiarlo movería los precios de ML, así que **quedó 15,32 %**, anotado en la nota de la fila de ML.
-2. **Costo por orden de $149,12 en ML: viene desactivado.** Pediste «activo por defecto en todos»; para ML eso suma $149,12 a cada precio de hoy. Está en los otros cuatro mercados y se activa con un clic en ML («Aplicar en este mercado»). Decime si querés que ML también lo lleve por defecto.
+1. **Resuelto (Maxx):** la comisión de ML en el Motor **queda en 15,32 %**, anotada en la pestaña «Mercados»; Frávega, OnCity y Megatone usan 15,5 %.
+2. **Resuelto (Maxx):** el costo por orden ($149,12) está **apagado en ML y activo en los otros cuatro**, como está. Cuando se decida cambiarlo será un solo cambio (`ACTIVOS_POR_DEFECTO` en `backend/mercados.py`). Para decidir con datos, al abrir «Descuentos comunes» en ML se muestra, junto al interruptor, **cuánto sube el precio de contado** al activarlo, con el SKU más barato y el más caro de los SKU piloto (dos cálculos por lote, no guarda nada).
 3. La comisión se trata, en todos los mercados, con la misma estructura de ML (la comisión se descuenta sobre 1,21 por el IVA del servicio). La columna «incluye IVA» de las tarifas **queda informativa y marcada «a confirmar»**: no altera la cuenta hasta que se confirme.
 4. Renta objetivo de 18 y 24 cuotas (solo Web): arrancan en el valor de 12 cuotas (24 %) y son editables.
 5. Lo que **no pude hacer**: las capturas de las webs de OnCity y Megatone (`referencia/oncity_web.png`, `referencia/megatone_web.png`) no llegaron al repositorio, y `full-logo.png` tampoco (es de otro PR). Los logos de Frávega (SVG y PNG), OnCity (color y blanco) y Megatone están en `docs/assets/logos/`.

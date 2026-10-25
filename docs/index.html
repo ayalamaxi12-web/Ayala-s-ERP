@@ -718,6 +718,8 @@ body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 .ac-config-av ul{margin:4px 0 8px 18px;padding:0}
 .ac-config-av li{margin:2px 0}
 .ac-comunes>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--celeste-700)}
+.ac-impacto{margin-top:var(--sp-2,8px);font-size:var(--fs-tabla)}
+.ac-impacto table{width:auto}
 .ac-comunes-res{font-weight:400;color:var(--texto-suave);font-size:var(--fs-tabla)}
 .ac-comun{display:flex;flex-direction:column;gap:2px}
 .ac-comun label:first-child{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
@@ -1890,7 +1892,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
       </div>
     </div>
     <div class="ac-config" id="ac-config" role="status" aria-live="polite"></div>
-    <details class="ac-comunes" id="ac-comunes">
+    <details class="ac-comunes" id="ac-comunes" ontoggle="ayalaCoreImpactoOrden()">
       <summary>Descuentos comunes <span class="ac-comunes-res" id="ac-comunes-res"></span></summary>
       <div class="ac-av-campos">
         <div class="ac-comun"><label>Costo por orden de Ecom $<input type="text" id="ac-costo-orden" class="ac-campo-largo" inputmode="decimal" oninput="ayalaCoreComunCambio()"></label><label class="ac-check"><input type="checkbox" id="ac-usa-orden" onchange="ayalaCoreUsaCambio()">Aplicar en este mercado</label></div>
@@ -1899,6 +1901,7 @@ igual que la rentabilidad real, que se muestra al lado. -->
         <div class="ac-comun" id="ac-recargo-box" hidden><label>Recargo sobre comisión de cuotas % <span class="ac-tag-conf">a confirmar</span><input type="text" id="ac-recargo" class="ac-campo-largo" inputmode="decimal" oninput="ayalaCoreComunCambio()"></label></div>
       </div>
       <p class="ac-ayuda" id="ac-comunes-ayuda"></p>
+      <div class="ac-impacto" id="ac-orden-impacto" role="status" aria-live="polite" hidden></div>
     </details>
     <div class="ac-fila-sku">
       <label for="ac-sku-buscar" class="ac-lbl">SKU</label>
@@ -6079,10 +6082,29 @@ function ayalaCoreMercadoAplicar(){
   const rb=qs('ac-recargo-box');if(rb)rb.hidden=m!=='web';
   const ay=qs('ac-comunes-ayuda');if(ay)ay.textContent=m==='ml'?'En Mercado Libre el costo por orden viene desactivado para no cambiar los precios de hoy: activalo solo si querés verlo.':'Los valores son los mismos para todos los mercados (se cargan en la pestaña «Mercados»); acá se activan o no para este mercado.';
   const r=qs('ac-comunes-res');if(r)r.textContent=`· ${AC_MK_NOMBRE[m]}: ${['orden','cheque','iibb'].filter(k=>u[k]).map(k=>({orden:'costo por orden',cheque:'cheque',iibb:'IIBB'}[k])).join(', ')||'ninguno'}`;
-  ayalaCoreConfigRender();
+  ayalaCoreConfigRender();ayalaCoreImpactoOrden();
+}
+// Cuánto cambia el precio de ML (contado) al activar el costo por orden: un SKU barato y uno caro, con la misma cuenta del motor (dos pedidos por lote, sin tocar nada).
+let AC_IMPACTO_SEQ=0;
+async function ayalaCoreImpactoOrden(){
+  const box=qs('ac-orden-impacto');if(!box)return;
+  const det=qs('ac-comunes');if(AC_MERCADO!=='ml'||!det||!det.open){box.hidden=true;return;}
+  const url=getBackendUrl();if(!url){box.hidden=true;return;}
+  const seq=++AC_IMPACTO_SEQ,x=(qs('ac-costo-orden')?.value||'').trim().replace(',','.'),co=x===''||isNaN(Number(x))?'':`&costo_orden=${Number(x)}`;
+  box.hidden=false;box.textContent='Calculando el efecto del costo por orden...';
+  try{
+    const q=`${ayalaCoreRentaQueryParams()}${ayalaCoreTcParam()}`;
+    const [a,b]=await Promise.all([fetch(`${url}/ayala-core/motor-lote?${q}&usar_costo_orden=false`),fetch(`${url}/ayala-core/motor-lote?${q}&usar_costo_orden=true${co}`)]);
+    if(!a.ok||!b.ok)throw new Error('sin datos');
+    const [sin,con]=[await a.json(),await b.json()];if(seq!==AC_IMPACTO_SEQ)return;
+    const con_=Object.fromEntries(con.resultados.filter(r=>!r.error).map(r=>[r.sku,r])),filas=sin.resultados.filter(r=>!r.error&&con_[r.sku]&&r.precios&&r.precios.contado>0).sort((p1,p2)=>p1.precios.contado-p2.precios.contado);
+    if(!filas.length){box.textContent='No hay SKU con datos para mostrar el efecto.';return;}
+    const f=(r,t)=>{const p0=r.precios.contado,p1=con_[r.sku].precios.contado,dif=p1-p0;return `<tr><td>${t}</td><td>${acEsc(r.sku)}</td><td style="text-align:right">${ayalaCoreFmt(p0)}</td><td style="text-align:right">${ayalaCoreFmt(p1)}</td><td style="text-align:right"><b>+${ayalaCoreFmt(dif)}</b> (${(dif/p0*100).toLocaleString('es-AR',{maximumFractionDigits:2})} %)</td></tr>`;};
+    box.innerHTML=`<div class="table-wrap"><table><caption>Precio de contado en Mercado Libre, sin y con costo por orden</caption><thead><tr><th>Ejemplo</th><th>SKU</th><th style="text-align:right">Sin</th><th style="text-align:right">Con</th><th style="text-align:right">Cambio</th></tr></thead><tbody>${f(filas[0],'Barato')}${f(filas[filas.length-1],'Caro')}</tbody></table></div>`;
+  }catch(e){if(seq===AC_IMPACTO_SEQ)box.textContent='No se pudo calcular el efecto (¿backend sin conexión?).';}
 }
 function ayalaCoreUsaCambio(){AC_MK_USA[AC_MERCADO]={orden:qs('ac-usa-orden').checked,cheque:qs('ac-usa-cheque').checked,iibb:qs('ac-usa-iibb').checked};ayalaCoreMercadoAplicar();ayalaCoreAutoRecalcular();}
-function ayalaCoreComunCambio(){['ac-costo-orden','ac-cheque','ac-iibb','ac-recargo'].forEach(id=>{AC_MK_TOCADO[id]=true;});ayalaCoreAutoRecalcular();}
+function ayalaCoreComunCambio(){clearTimeout(window._acImpT);window._acImpT=setTimeout(ayalaCoreImpactoOrden,500);['ac-costo-orden','ac-cheque','ac-iibb','ac-recargo'].forEach(id=>{AC_MK_TOCADO[id]=true;});ayalaCoreAutoRecalcular();}
 // Un solo lugar para los avisos de configuración: tarifas (hace X · Actualizar) + lo que falta, venció, está a confirmar o copiado, del mercado elegido.
 function ayalaCoreConfigRender(){
   const box=qs('ac-config');if(!box)return;

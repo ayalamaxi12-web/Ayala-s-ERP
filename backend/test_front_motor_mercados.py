@@ -87,3 +87,10 @@ def test_descuentos_comunes_y_avisos_en_un_solo_lugar():
 def test_las_tablas_de_otros_mercados_no_llevan_manual_usar_y_muestran_los_datos_que_faltan():
     f = _fn(html(), 'ayalaCoreTablaHtml')
     assert "ml?'<th style=\"text-align:right\">Manual</th>" in f and 'ayalaCoreFilaErrorHtml' in f and 'ayalaCoreComisionDetalleHtml' in f
+
+
+def test_impacto_costo_orden_en_ml_junto_al_interruptor():
+    """Junto a «Aplicar en este mercado» se muestra cuánto sube el contado de ML con el costo por orden (SKU barato y caro), sin cambiar el default."""
+    html = INDEX.read_text(encoding="utf-8") if hasattr(INDEX, "read_text") else open(INDEX, encoding="utf-8").read()
+    assert 'id="ac-orden-impacto"' in html and "async function ayalaCoreImpactoOrden" in html
+    assert "usar_costo_orden=false" in html and "usar_costo_orden=true" in html
