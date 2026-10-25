@@ -51,7 +51,9 @@ Cada tema define 3 variables que usan los componentes: `--mod-acento` (banda de 
 | `fravega` | `#440099` (violeta de marca) | `#FFFFFF` | `#440099` | **Definido** (logo `fravega.svg`, vectorial: usarlo siempre). Negro `#000000` y violeta `#440099` de marca; magenta `#D30098` solo acentos o gráficos (al límite de 4,5:1: texto de 14 px o más); violeta `#801DD9` enlaces y destacados; azul `#006AFD` enlaces comunes; verde `#208041` para «cuotas sin interés»; gris `#F1F1F1` barras. Tipografía: Roboto 400/500/700 (deducción visual de su web, a confirmar). El nombre va siempre como logo (SVG), nunca escrito con fuente |
 | `oncity` | `#064FD3` (azul, 6,8:1 sobre blanco) | `#FFFFFF` | `#064FD3` | **Definido** (logos `oncity.png` para fondos claros y `oncity-blanco.png` para fondos azules). Turquesa `#05F2D4` solo como detalle (1,4:1: nunca texto); chip claro `#CDFBF5` con texto `#064FD3`; botones azules con texto blanco. Tipografía: aproximación visual con Outfit (alternativa Urbanist); el nombre va siempre como imagen |
 | `megatone` | `#E53308` (naranja, solo fondo con texto blanco grande y en negrita: 4,4:1) | `#FFFFFF` | `#E31E25` (rojo del logo, 4,7:1 como texto) | **Definido** (logo `megatone.png`). Verde `#008A45` para botones con texto blanco grande, o `#00783C` para texto chico; gris `#E6E6E6` para paneles; texto `#2A2A28`. Tipografía: aproximación visual con Rubik (alternativa Montserrat); el nombre va siempre como imagen |
+| `web` | `--celeste-marca` `#24A2B9` | `#0B2733` | `#1B8195` | Identidad de Global (texto de tinta sobre el celeste: 5,1:1). Tipografía: Montserrat | Definido (vista «Todos» del Motor de Precios) |
 
+Notas: en `ml` el amarillo vivo va solo de fondo y el dorado `#7A5F00` es el color para texto; su tipografía usada hoy es Nunito Sans (aproximación a Proxima Nova). Las tipografías de OnCity, Megatone y Mercado Libre son aproximaciones visuales de sus sitios, no mediciones. La identidad de cada mercado vive solo en el selector de mercado y en las tarjetas de resultado del Motor de Precios.
 Cómo se completan: `python docs/assets/logos/muestrear_color.py docs/assets/logos/fravega.png` imprime el color dominante, el contraste con blanco y con la tinta y qué texto pasa 4,5:1; esa salida se pega en esta tabla y en un bloque `[data-modulo="…"]` del `:root` de `docs/index.html`.
 
 Variables de tema agregadas por la implementación (los mockups las necesitan; sin ellas habría hex sueltos): `--mod-barra`, `--mod-sobre-barra`, `--mod-barra-borde` (barra superior), `--mod-encabezado`, `--mod-encabezado-texto`, `--mod-encabezado-borde` (encabezado de tabla), `--mod-segmento-activo` (selector segmentado). Tokens agregados: `--tinta-activo`, `--encabezado-tabla`, `--segmentado`, `--pista`, `--ok-fondo`, `--ok-texto`, `--error-fondo`, `--error-texto`, `--fuente`, `--mk-ml*`.
@@ -112,7 +114,11 @@ Están en `docs/assets/logos/`:
 - `global-celeste.png`: celeste de marca `#24A2B9`, para fondos blancos.
 - `mercadolibre-isotipo.png`: isotipo oficial de Mercado Libre (el apretón de manos) con fondo transparente, que pasó Maxx. Es solo el emblema, sin la palabra. En la barra amarilla va **junto al texto "Mercado Libre"** en `#2D3277`, peso 700, con el emblema de 36 px de alto (la guía admite de 32 a 40 px). Sin TODO ni logo provisorio.
 Los logos de Global salieron de un PNG de 225 px: alcanzan para el menú y la barra superior, pero cuando exista el SVG oficial hay que reemplazarlos.
-Faltan los logos de Frávega, OnCity y Megatone. No hacen falta todavía, porque esos módulos no existen. Cuando existan, se muestrea el color del logo oficial (ver la sección 2) y se agrega acá.
+- `fravega.svg` (vector, el que se usa) y `fravega.png` (respaldo).
+- `oncity.png` (fondos claros) y `oncity-blanco.png` (fondos azules).
+- `megatone.png`.
+- `full-logo.png`: rayo y palabra FULL en verde `#00A650`, fondo transparente. Va **solo dentro del módulo Full ML**, a la izquierda del título «Conciliación y reposición» (28 a 32 px de alto). En la barra lateral no va el logo: el ítem de Full ML usa un ícono de rayo de trazo (zap), del mismo color que los demás íconos del menú.
+- Referencias visuales en `docs/assets/referencia/`: `oncity_web.png` y `megatone_web.png` (capturas de sus webs, de donde salen colores y tipografías aproximadas), además de `tienda_web_global.png`.
 **Ignorar el adorno de Halloween del logo** (la araña), si aparece: es de temporada, no forma parte de la marca.
 
 ## 9. Plan por fases (cada una en su rama, sin mergear, con capturas antes y después)
