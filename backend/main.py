@@ -2701,15 +2701,71 @@ async def ayala_core_skus():
 
 def _ayala_core_renta_dict(
     renta_contado: float, renta_reducida: float, renta_3: float, renta_6: float, renta_9: float, renta_12: float,
+    renta_18: float | None = None, renta_24: float | None = None,
 ) -> dict[str | int, Decimal]:
     """Arma el dict de renta por condición que pide `calcular_precios_
     todas_condiciones` a partir de los 6 query params planos (uno por
     condición, ver `ayala_core.RENTA_POR_CONDICION_DEFAULT` -- reemplaza
     la cascada Contado/diferencial, pedido de Maxx 2026-09-04)."""
-    return {
+    out = {
         "contado": Decimal(str(renta_contado)), "reducida": Decimal(str(renta_reducida)),
         3: Decimal(str(renta_3)), 6: Decimal(str(renta_6)), 9: Decimal(str(renta_9)), 12: Decimal(str(renta_12)),
     }
+    # 18 y 24 cuotas solo existen en la Web (Mercado Pago); sin valor propio, la renta de 12 cuotas. Mercado Libre ignora estas claves.
+    out[18] = Decimal(str(renta_18)) if renta_18 is not None else out[12]
+    out[24] = Decimal(str(renta_24)) if renta_24 is not None else out[12]
+    return out
+
+import mercados as mercados_mod
+_TARIFAS_CACHE: dict = {"en": 0.0, "payload": None, "info": None}
+
+
+def _tarifas_actuales() -> tuple[dict, dict]:
+    """Tarifas de la pestaña «Mercados» (foto guardada; sin foto, los valores iniciales del código). Memoria de 60 s para no ir a la base en cada cálculo."""
+    from rentabilidad import db as _db
+    if _TARIFAS_CACHE["payload"] is None or time.time() - _TARIFAS_CACHE["en"] > 60:
+        p, info = mercados_mod.foto_o_iniciales(_db.sesion)
+        _TARIFAS_CACHE.update(en=time.time(), payload=p, info=info)
+    return _TARIFAS_CACHE["payload"], _TARIFAS_CACHE["info"]
+
+
+def _preparar_mercado(mercado: str, usar_costo_orden=None, usar_cheque=None, usar_iibb=None, costo_orden=None, cheque_pct=None, iibb_pct=None, recargo_cuotas=None) -> dict | None:
+    """Parámetros del mercado pedido, o None si es Mercado Libre sin ningún cambio (entonces corre la cuenta de siempre, sin tocar nada)."""
+    if mercado not in mercados_mod.MERCADOS:
+        raise HTTPException(status_code=422, detail=f"Mercado desconocido: {mercado!r}.")
+    cambios = any(x is not None for x in (usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct))
+    if mercado == "ml" and not cambios:
+        return None
+    payload, info = _tarifas_actuales()
+    filas = payload["filas"]
+    com = mercados_mod.comunes(filas)
+    par = mercados_mod.parametros_mercado(mercado, filas, recargo_cuotas=Decimal(str(recargo_cuotas)) if recargo_cuotas is not None else None)
+    v = com["valores"]
+    act = mercados_mod.ACTIVOS_POR_DEFECTO[mercado]
+    usados = {
+        "orden": act["orden"] if usar_costo_orden is None else bool(usar_costo_orden), "cheque": act["cheque"] if usar_cheque is None else bool(usar_cheque),
+        "iibb": act["iibb"] if usar_iibb is None else bool(usar_iibb),
+        "costo_orden": Decimal(str(costo_orden)) if costo_orden is not None else v["costo_orden"],
+        "cheque_pct": Decimal(str(cheque_pct)) if cheque_pct is not None else v["cheque_pct"],
+        "iibb_pct": Decimal(str(iibb_pct)) if iibb_pct is not None else v["iibb_pct"],
+    }
+    return {"mercado": mercado, "par": par, "usados": usados, "avisos": par["avisos"] + com["avisos"], "tarifas": info}
+
+
+def _mercado_respuesta(m: dict, envio_manual) -> dict:
+    """Lo que la pantalla necesita para mostrar el mercado: condiciones, comisión desglosada (base + cuotas + recargo), descuentos usados y avisos."""
+    par, u = m["par"], m["usados"]
+    f = lambda x: None if x is None else float(x)
+    return {
+        "mercado": m["mercado"], "mercado_nombre": par["nombre"], "condiciones": par["condiciones"], "etiqueta_contado": par["etiqueta_contado"],
+        "envio_estimado_como_ml": envio_manual is None and m["mercado"] != "ml",
+        "parametros": {"comision_pct": f(par["comision_pct"]), "financiero": {k: f(v) for k, v in par["financiero"].items()}, "recargo_cuotas": f(par["recargo_cuotas"]),
+                       "desglose": {k: {kk: f(vv) for kk, vv in d.items()} for k, d in par["desglose"].items()},
+                       "costo_orden": f(u["costo_orden"]) if u["orden"] else 0, "cheque_pct": f(u["cheque_pct"]) if u["cheque"] else 0, "iibb_pct": f(u["iibb_pct"]) if u["iibb"] else 0,
+                       "usa": {"orden": u["orden"], "cheque": u["cheque"], "iibb": u["iibb"]}},
+        "avisos_mercado": [a["texto"] for a in m["avisos"]],
+    }
+
 
 def _cantidad_valida(cantidad) -> int:
     """Unidades por publicación (pack): entero de 1 a 999."""
@@ -2725,7 +2781,7 @@ def _ayala_core_motor_sync(
     sku: str, renta_por_condicion: dict[str | int, Decimal],
     envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
     tc_override: Decimal | None = None, costo_override: Decimal | None = None,
-    _proveedores=None, _tc: Decimal | None = None, cantidad: int = 1,
+    _proveedores=None, _tc: Decimal | None = None, cantidad: int = 1, _mercado: dict | None = None,
 ) -> dict:
     # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
     # pisar el costo sin IVA (USD) a mano para simular. Sin
@@ -2778,12 +2834,26 @@ def _ayala_core_motor_sync(
     if envio_usado is None:
         envio_usado = Decimal(0)
 
-    precios = ayala_core.calcular_precios_todas_condiciones(
-        costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
-        renta_por_condicion=renta_por_condicion, envio_full=envio_full,
-    )
+    errores_condicion: dict = {}
+    desglose_m: dict = {}
+    if _mercado is None:
+        precios = ayala_core.calcular_precios_todas_condiciones(
+            costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
+            renta_por_condicion=renta_por_condicion, envio_full=envio_full,
+        )
+    else:
+        u = _mercado["usados"]
+        precios, errores_condicion = mercados_mod.calcular_mercado(
+            _mercado["par"], costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
+            renta_por_condicion={str(k): v for k, v in renta_por_condicion.items()}, envio_full=envio_full,
+            costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
+            iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0))
+        desglose_m = {c: {k: float(v) for k, v in mercados_mod.desglose(
+            precios[c], costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado, comision_pct=_mercado["par"]["comision_pct"],
+            financiero_pct=_mercado["par"]["financiero"][c], iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
+            costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=envio_full).items()} for c in precios}
     if item_info is not None:
-        item_info["precio_calculado"] = precios[str(item_info["condicion_detectada"])]
+        item_info["precio_calculado"] = precios.get(str(item_info["condicion_detectada"]))
 
     iva_origen = "ECOM" if getattr(iva_p, "tactica_caida", False) else "TACTICA"
     return {
@@ -2794,7 +2864,63 @@ def _ayala_core_motor_sync(
         "precios": {k: float(v) for k, v in precios.items()},
         "precios_unitarios": {k: round(float(v) / cantidad, 2) for k, v in precios.items()},
         "item": item_info,
+        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"])}),
+        "errores_condicion": errores_condicion,
+        "desglose_mercado": desglose_m,
     }
+
+# ══════════════════════════════════════════════════════
+# MERCADOS — tarifas de la pestaña «Mercados» del Sheet del ERP (Bloque 2, PR 4). Solo lectura de ML/Ecom; lo único que se escribe es la creación de las
+# pestañas «Mercados» y «Envios» en el Sheet del ERP (permitido), y solo si no existen.
+# ══════════════════════════════════════════════════════
+
+def _info_mercados() -> dict:
+    return {k: {"nombre": v["nombre"], "condiciones": v["condiciones"], "etiqueta_contado": v["etiqueta_contado"], "usa_por_defecto": mercados_mod.ACTIVOS_POR_DEFECTO[k]}
+            for k, v in mercados_mod.MERCADOS.items()}
+
+def _estado_tarifas() -> dict:
+    payload, info = _tarifas_actuales()
+    filas = payload["filas"]
+    com = mercados_mod.comunes(filas)
+    avisos = []
+    if info["origen"] == "codigo":
+        avisos.append({"tipo": "falta", "texto": "La pestaña «Mercados» todavía no se leyó del Sheet: se usan los valores iniciales del código. Crear la pestaña (POST /mercados/init) y tocar «Actualizar»."})
+    if info.get("error_msg"):
+        avisos.append({"tipo": "error", "texto": f"Falló la última lectura de tarifas ({info['error_msg']}); se muestran las de {info.get('obtenido_en') or 'los valores iniciales'}."})
+    por_mercado = {}
+    for k in mercados_mod.MERCADOS:
+        par = mercados_mod.parametros_mercado(k, filas)
+        por_mercado[k] = [a["texto"] for a in par["avisos"]]
+    web = mercados_mod.parametros_mercado("web", filas)
+    return {"tarifas": info, "comunes": {**{k: float(v) for k, v in com["valores"].items()}, "recargo_cuotas": float(web["recargo_cuotas"] or 0)}, "avisos": avisos + com["avisos"], "avisos_por_mercado": por_mercado,
+            "mercados": _info_mercados(), "filas": len(filas)}
+
+@app.get("/mercados/tarifas")
+async def mercados_tarifas():
+    """«Tarifas: hace X · Actualizar»: la foto guardada de la pestaña «Mercados» (sin foto, los valores iniciales del código, con aviso)."""
+    return await run_in_threadpool(_estado_tarifas)
+
+def _actualizar_tarifas_sync() -> dict:
+    from rentabilidad import db as _db
+    try:
+        mercados_mod.actualizar_foto(_db.sesion, lambda: mercados_mod.leer_hoja(get_gs(), SPREADSHEET_ID))
+    except Exception as e:
+        _TARIFAS_CACHE.update(en=0.0)
+        raise HTTPException(status_code=502, detail=f"No se pudo leer la pestaña «Mercados»: {mercados_mod.ml_foto.mensaje_para_usuario(e)}")
+    _TARIFAS_CACHE.update(en=0.0)
+    return _estado_tarifas()
+
+@app.post("/mercados/tarifas/actualizar")
+async def mercados_tarifas_actualizar():
+    return await run_in_threadpool(_actualizar_tarifas_sync)
+
+@app.post("/mercados/init")
+async def mercados_init():
+    """Crea las pestañas «Mercados» (con los valores iniciales) y «Envios» (vacía, con encabezados) en el Sheet del ERP si no existen. No pisa nada."""
+    try:
+        return {"pestanas": await run_in_threadpool(lambda: mercados_mod.crear_pestanas(get_gs(), SPREADSHEET_ID))}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"No se pudieron crear las pestañas: {mercados_mod.ml_foto.mensaje_para_usuario(e)}")
 
 @app.get("/ayala-core/motor-lote")
 async def ayala_core_motor_lote(
@@ -2809,22 +2935,34 @@ async def ayala_core_motor_lote(
     envio_full: bool = False,
     tc: float | None = None,
     cantidad: int = 1,
+    mercado: str = "ml",
+    usar_costo_orden: bool | None = None,
+    usar_cheque: bool | None = None,
+    usar_iibb: bool | None = None,
+    costo_orden: float | None = None,
+    cheque_pct: float | None = None,
+    iibb_pct: float | None = None,
+    recargo_cuotas: float | None = None,
+    renta_18: float | None = None,
+    renta_24: float | None = None,
 ):
     """Los SKU pedidos (coma-separados; vacío = todos los piloto) en UNA sola respuesta, con la MISMA cuenta que `/ayala-core/sku/{sku}/motor`
     (`_ayala_core_motor_sync`, ningún cambio de fórmula). Los costos de Ecom, el IVA de Táctica y el TC salen de las fotos que ya están en memoria:
     este endpoint no lee Ecom, Táctica ni el BNA en vivo. Devuelve además con qué datos se calculó (edad de cada foto) y cuánto tardó cada parte."""
-    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
+    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12, renta_18, renta_24)
     lista = [x.strip() for x in skus.split(",") if x.strip()] or list(ayala_core.SKUS_PILOTO)
     return await run_in_threadpool(
         _ayala_core_motor_lote_sync, lista, renta_por_condicion,
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, Decimal(str(tc)) if tc is not None else None, cantidad,
+        (mercado, usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct, recargo_cuotas),
     )
 
 def _ayala_core_motor_lote_sync(
     skus: list[str], renta_por_condicion: dict[str | int, Decimal], envio_real: Decimal | None, envio_full: bool, tc_override: Decimal | None,
-    cantidad: int = 1,
+    cantidad: int = 1, mk: tuple | None = None,
 ) -> dict:
     cantidad = _cantidad_valida(cantidad)
+    m = _preparar_mercado(*mk) if mk else None
     t0 = time.perf_counter()
     prov = costos_ecom.proveedores_de_costo_e_iva()
     try:
@@ -2839,7 +2977,7 @@ def _ayala_core_motor_lote_sync(
     resultados = []
     for sku in skus:
         try:
-            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc, cantidad=cantidad))
+            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc, cantidad=cantidad, _mercado=m))
         except HTTPException as e:
             resultados.append({"sku": sku, "error": e.detail})
     t3 = time.perf_counter()
@@ -2852,6 +2990,7 @@ def _ayala_core_motor_lote_sync(
             "iva": "ECOM" if prov[1].tactica_caida else "TACTICA", "iva_tactica_antiguedad_seg": iva.get("antiguedad_seg"),
             "iva_tactica_error": iva.get("ultimo_error") if prov[1].tactica_caida else None,
             "tc": float(tc), "tc_origen": "manual" if tc_override is not None else info_tc["source"],
+            "mercado": (m or {}).get("mercado", "ml"), "tarifas": (m or {}).get("tarifas"), "avisos_mercado": [a["texto"] for a in (m or {}).get("avisos", [])],
         },
         "tiempos_ms": {"fotos": round((t1 - t0) * 1000, 1), "tc": round((t2 - t1) * 1000, 1), "calculo": round((t3 - t2) * 1000, 1), "total": round((t3 - t0) * 1000, 1)},
     }
@@ -2872,14 +3011,25 @@ async def ayala_core_sku_motor(
     tc: float | None = None,
     costo: float | None = None,
     cantidad: int = 1,
+    mercado: str = "ml",
+    usar_costo_orden: bool | None = None,
+    usar_cheque: bool | None = None,
+    usar_iibb: bool | None = None,
+    costo_orden: float | None = None,
+    cheque_pct: float | None = None,
+    iibb_pct: float | None = None,
+    recargo_cuotas: float | None = None,
+    renta_18: float | None = None,
+    renta_24: float | None = None,
 ):
-    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
+    renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12, renta_18, renta_24)
+    m = _preparar_mercado(mercado, usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct, recargo_cuotas)
     return await run_in_threadpool(
         _ayala_core_motor_sync, sku, renta_por_condicion,
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
         Decimal(str(tc)) if tc is not None else None,
         Decimal(str(costo)) if costo is not None else None,
-        None, None, cantidad,
+        None, None, cantidad, m,
     )
 
 

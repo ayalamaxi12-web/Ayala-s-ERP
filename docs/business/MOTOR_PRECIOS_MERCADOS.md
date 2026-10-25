@@ -1,0 +1,33 @@
+# Motor de Precios: mercados (Bloque 2, PR 4)
+
+El Motor calcula con la fórmula de siempre (`ayala_core.calcular_precio_condicion`, reverse-markup). Para cada mercado cambian **los números**, no la forma.
+
+## Mercados y condiciones de pago
+| Mercado | Condiciones | Comisión | Cuotas |
+|---|---|---|---|
+| Mercado Libre | Contado, Reducida, 3, 6, 9, 12 | 15,32 % (los parámetros de siempre, no se leen de la pestaña) | los de siempre |
+| Frávega | Simple, 3, 6, 9, 12 | 15,5 % base (a confirmar) | 3: 6,8 · 6: 10,6 · 9: 13,7 · 12: 16,6 (se suman a la base; a confirmar) |
+| OnCity | ídem Frávega | **copiado de Frávega, a confirmar** (filas propias) | ídem |
+| Megatone | ídem Frávega | **copiado de Frávega, a confirmar** (filas propias) | ídem |
+| Web (Mercado Pago) | Simple, 3, 6, 9, 12, 18, 24 | 6 % por cobro | 0 · 3,40 · 7,90 · 12,60 · 15,20 · 22,10 · 27,60, **× (1 + recargo 20 %, editable y a confirmar)** = 4,08 · 9,48 · 15,12 · 18,24 · 26,52 · 33,12 |
+
+«Reducida» existe solo en Mercado Libre. «Simple» es el Contado de los otros mercados (solo la comisión base). La pantalla muestra la **comisión total desglosada** (base + cuotas [+ recargo]) y la marca «a confirmar».
+
+## Pestaña «Mercados» del Sheet del ERP
+Columnas: `mercado`, `concepto`, `cuotas`, `porcentaje`, `incluye IVA` (SI / NO / a confirmar), `vigencia desde`, `vigencia hasta`, `fuente`, `nota`. Conceptos: `comision_base`, `cuotas` (columna `cuotas` = 3, 6, … o `simple`), `recargo_cuotas`, `reducida`, y las filas de `todos` (`costo_orden`, `impuesto_cheque`, `iibb`).
+- **Se lee con el patrón de foto**: «Tarifas: hace X · Actualizar» (`GET /mercados/tarifas`, `POST /mercados/tarifas/actualizar`). La foto se guarda en la base (`ml_foto`, módulo `mercados_tarifas`); si la lectura falla se conserva la anterior y se avisa. Sin foto, se usan los valores iniciales del código y la pantalla lo dice.
+- **Crear las pestañas**: botón «Crear pestañas Mercados y Envios» (o `POST /mercados/init`), con confirmación. Crea «Mercados» con los valores iniciales y «Envios» **vacía, solo con encabezados** (`mercado, peso desde, peso hasta, largo, ancho, alto, costo, vigencia`). **No pisa nada si ya existen.** Es lo único que escribe este PR, y solo en el Sheet del ERP.
+- **Avisos** (un solo lugar, debajo del selector): falta una fila («falta dato: tarifa de 12 cuotas de OnCity»: esa condición no se calcula), vigencia vencida o todavía no vigente, «a confirmar», datos copiados. Si falta un dato, el cálculo dice «falta dato: …» y no inventa la tarifa.
+
+## Descuentos comunes (panel compartido, activable por mercado)
+Costo por orden de Ecom **$149,12** (monto en pesos, entra como costo fijo de la orden), impuesto al cheque **1,2 %** (sobre el precio con IVA) e IIBB **5 %** (sobre el precio sin IVA): los mismos valores para todos los mercados (filas `todos` de la pestaña), editables en pantalla y con un interruptor por mercado. El envío se carga a mano; vacío = automático «con la misma regla que ML», marcado «estimado como ML» en los otros mercados.
+
+La fórmula ganó **un solo término opcional**, `costo_orden` (default 0): con 0, el precio es exactamente el de antes (test de paridad). 
+
+## Decisiones tomadas y puntos que necesitan tu OK
+1. **Resuelto (Maxx):** la comisión de ML en el Motor **queda en 15,32 %**, anotada en la pestaña «Mercados»; Frávega, OnCity y Megatone usan 15,5 %.
+2. **Resuelto (Maxx):** el costo por orden ($149,12) está **apagado en ML y activo en los otros cuatro**, como está. Cuando se decida cambiarlo será un solo cambio (`ACTIVOS_POR_DEFECTO` en `backend/mercados.py`). Para decidir con datos, al abrir «Descuentos comunes» en ML se muestra, junto al interruptor, **cuánto sube el precio de contado** al activarlo, con el SKU más barato y el más caro de los SKU piloto (dos cálculos por lote, no guarda nada).
+3. La comisión se trata, en todos los mercados, con la misma estructura de ML (la comisión se descuenta sobre 1,21 por el IVA del servicio). La columna «incluye IVA» de las tarifas **queda informativa y marcada «a confirmar»**: no altera la cuenta hasta que se confirme.
+4. Renta objetivo de 18 y 24 cuotas (solo Web): arrancan en el valor de 12 cuotas (24 %) y son editables.
+5. Lo que **no pude hacer**: las capturas de las webs de OnCity y Megatone (`referencia/oncity_web.png`, `referencia/megatone_web.png`) no llegaron al repositorio, y `full-logo.png` tampoco (es de otro PR). Los logos de Frávega (SVG y PNG), OnCity (color y blanco) y Megatone están en `docs/assets/logos/`.
+6. Las tarjetas de resultado con la identidad completa (logo, color y tipografía) llegan en el PR siguiente (vista «Todos»); acá la identidad aparece en los botones del selector.

@@ -103,6 +103,7 @@ def calcular_precio_condicion(
     imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
     envio_full: bool = False,
     envio_full_pct: Decimal = ENVIO_FULL_PCT_DEFAULT,
+    costo_orden: Decimal = Decimal("0"),
 ) -> Decimal:
     """Reverse-markup: resuelve el precio de venta (con IVA) tal que,
     descontando comisión ML, IIBB, el costo financiero de la condición
@@ -116,7 +117,8 @@ def calcular_precio_condicion(
     sin importar la alícuota del producto vendido); el IIBB se descuenta
     sobre la alícuota propia del producto (`iva_factor`, o sea sobre el
     neto) y el imp. cheque directo sobre el precio con IVA."""
-    numerador = costo_sin_iva + envio_real / _IVA_SERVICIOS_ML
+    # `costo_orden` (Bloque 2, PR 4): monto fijo en pesos por orden (ej. costo por orden de Ecom). Con 0 -- el valor por defecto, y el que usa Mercado Libre -- la cuenta es exactamente la de siempre.
+    numerador = costo_sin_iva + envio_real / _IVA_SERVICIOS_ML + costo_orden
     full = (envio_full_pct / 100) if envio_full else Decimal("0")
     denominador = (
         (1 / iva_factor)
