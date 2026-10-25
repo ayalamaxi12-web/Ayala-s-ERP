@@ -646,6 +646,8 @@ body[data-nuevo] #page-distribucion #distribucion-stats-wrap{margin-bottom:14px}
 body[data-nuevo] #page-config input.campo-num{max-width:22ch;text-align:left}
 body[data-nuevo] #page-intel-mix .card>textarea{width:100%}
 body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
+.ac-calc-con{margin-top:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-aviso-txt{color:var(--aviso-texto);font-weight:600}
 /* — Gráficos y comparaciones — */
 body[data-nuevo] .chart-card{padding:18px 20px}
 body[data-nuevo] .chart-card h3{font-size:16px;font-weight:700;color:var(--tinta);margin-bottom:2px}
@@ -2188,7 +2190,7 @@ function goPage(page,el){
   if(page==='full-ml')fullFotoCargar();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarTablasML().then(()=>{if(ofmResult)ofmRender();});}
-  if(page==='ayala-core'&&!ayalaCoreLoaded)ayalaCoreLoad();
+  if(page==='ayala-core'){if(!ayalaCoreLoaded)ayalaCoreLoad();ayalaCoreAutoRecalcularMontar();}
   if(page==='pricing'&&!PR.cargado)pricingSync().then(pricingLoad);
 }
 
@@ -3025,7 +3027,7 @@ function costosEcomUI(){
   const e=COSTOS_UI.estado||{},edad=e.obtenido_en?Math.max(0,Date.now()/1000-e.obtenido_en):null;
   const vieja=edad!=null&&edad>36*3600,color=e.ultimo_error||vieja?'var(--yellow)':'var(--text3)';
   const tit=`Costos de Ecom: se actualizan solos todos los días a la mañana y se guardan; todos los cálculos usan esa misma foto.${e.ultimo_error?' Último error: '+e.ultimo_error:''}${vieja?' ATENCIÓN: tiene más de 36 h.':''}`;
-  document.querySelectorAll('.js-costos-ecom').forEach(el=>{el.innerHTML=`<span style="color:${color}" title="${acEsc(tit)}">💲 Costos Ecom: ${e.en_curso?'actualizando… (~80 s)':costosEdadTxt(edad)}${e.ultimo_error?' ⚠':''}</span><button class="btn-xs" onclick="costosRefrescar()" ${e.en_curso?'disabled':''} title="Baja el catálogo de Ecom ahora (~80 s). Mientras tanto se siguen usando los costos actuales. Usalo si entró una importación nueva en el día.">⟳ Refrescar costos</button>`;});
+  document.querySelectorAll('.js-costos-ecom').forEach(el=>{el.innerHTML=`<span style="color:${color}" title="${acEsc(tit)}">💲 Costos Ecom: ${e.en_curso?'actualizando… (~80 s)':costosEdadTxt(edad)}${e.ultimo_error?' ⚠':''}</span>${(e.iva_tactica&&e.iva_tactica.hay_foto)?`<span style="color:var(--text3)" title="IVA por SKU leído de Táctica (una consulta por arranque o por «Refrescar costos»)"> · IVA Táctica: ${costosEdadTxt(e.iva_tactica.antiguedad_seg)}</span>`:`<span style="color:var(--yellow)" title="${acEsc((e.iva_tactica&&e.iva_tactica.ultimo_error)||'Todavía no se leyó Táctica')}"> · IVA Táctica: sin datos, se usa el de Ecom</span>`}<button class="btn-xs" onclick="costosRefrescar()" ${e.en_curso?'disabled':''} title="Baja el catálogo de Ecom ahora (~80 s). Mientras tanto se siguen usando los costos actuales. Usalo si entró una importación nueva en el día.">⟳ Refrescar costos</button>`;});
 }
 async function costosEstadoCargar(){const bu=getBackendUrl();if(!bu)return;try{const e=await(await fetch(`${bu}/rentabilidad/costos/ecom/estado`)).json();if(e&&typeof e==='object'&&!e.detail){COSTOS_UI.estado=e;costosEcomUI();}}catch(e){}}
 async function costosRefrescar(){
@@ -5748,6 +5750,7 @@ function ayalaCorePrecioOverrideCellsHtml(sku,c){
 // el mismo mecanismo de siempre (lo que tilde acá también vale para
 // "Detectar publicaciones"/"Comparar un MLA" si más tarde corre alguno).
 function ayalaCoreVerCargado(){
+  AC_AUTO_OK=false;
   const sku=(qs('ac-sku-excel').value||'').trim().toUpperCase();
   if(!sku){toast('Ingresá un SKU','error');return;}
   if(!AC_PRECIOS_EXCEL[sku]){toast(`"${sku}" no tiene precios cargados en "ERP AYALA"`,'error');return;}
@@ -5831,8 +5834,24 @@ function ayalaCoreRentaQueryParams(){
 }
 function ayalaCoreTcParam(){const v=qs('ac-tc-manual')?.value;return v?`&tc=${v}`:'';}
 function ayalaCoreCostoParam(){const v=qs('ac-costo-manual')?.value;return v?`&costo=${v}`:'';}
+let AC_CALC_SEQ=0,AC_CALC_TIMER=null,AC_AUTO_OK=false;
+// «Calculado con costos de hace X · IVA de … · TC …»: de qué fotos salió el cálculo (el backend no leyó nada en vivo).
+function ayalaCoreCalculadoConHtml(c,ms){
+  const iva=c.iva==='ECOM'?`<span class="ac-aviso-txt">IVA tomado de Ecom: Táctica no respondió${c.iva_tactica_error?': '+acEsc(c.iva_tactica_error):''}</span>`:`IVA de Táctica (${costosEdadTxt(c.iva_tactica_antiguedad_seg)})`;
+  return `Calculado con costos de ${costosEdadTxt(c.costos_antiguedad_seg)} · ${iva} · TC ${Number(c.tc).toLocaleString('es-AR')} (${acEsc(c.tc_origen)}) · ${ms} ms`;
+}
+// Cada cambio de % de renta, SKU, envío o TC recalcula solo (con una pausa corta para no pedir en cada tecla) si ya se calculó una vez.
+function ayalaCoreAutoRecalcular(){
+  const datos=qs('ac-datos');if(!AC_AUTO_OK||!datos||datos.style.display==='none'||!datos.innerHTML)return;
+  clearTimeout(AC_CALC_TIMER);AC_CALC_TIMER=setTimeout(()=>ayalaCoreCalcular(),300);
+}
+function ayalaCoreAutoRecalcularMontar(){
+  const ids=['ac-sku','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
+  ids.forEach(id=>{const el=qs(id);if(el&&!el.dataset.autocalc){el.dataset.autocalc='1';el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',ayalaCoreAutoRecalcular);}});
+}
 async function ayalaCoreCalcular(){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  AC_AUTO_OK=true;
   const sku=qs('ac-sku').value;
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
   let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}`;
@@ -5840,14 +5859,15 @@ async function ayalaCoreCalcular(){
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   try{
     if(!sku){
-      // "Todos" -- un pedido por SKU piloto, se muestran juntos
-      const resultados=[];
-      for(const s of AC_SKUS){
-        const res=await fetch(`${url}/ayala-core/sku/${s}/motor?${qparams}`);
-        if(!res.ok)continue;
-        resultados.push({sku:s,d:await res.json()});
-      }
-      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${AC_SKUS.length} SKU calculados (los que no tienen costo/IVA en Táctica se omiten).`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
+      // "Todos" -- UN solo pedido por lote (misma cuenta que el pedido por SKU, con las fotos de costos/IVA/TC que ya están en el backend: no lee nada en vivo)
+      const seq=++AC_CALC_SEQ,t0=performance.now();
+      const res=await fetch(`${url}/ayala-core/motor-lote?${qparams}`);
+      if(seq!==AC_CALC_SEQ)return;   // llegó una respuesta más nueva: esta se descarta
+      if(!res.ok){const e=await res.json().catch(()=>({}));qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${acEsc(e.detail||'Error')}</span>`;return;}
+      const lote=await res.json();
+      const resultados=lote.resultados.filter(r=>!r.error).map(r=>({sku:r.sku,d:r}));
+      const omitidos=lote.resultados.filter(r=>r.error);
+      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${omitidos.length?` (sin datos: ${omitidos.map(o=>acEsc(o.sku)).join(', ')})`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
       ayalaCoreRenderMotorMulti(resultados);
       return;
     }
