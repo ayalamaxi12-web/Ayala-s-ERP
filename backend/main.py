@@ -2711,11 +2711,21 @@ def _ayala_core_renta_dict(
         3: Decimal(str(renta_3)), 6: Decimal(str(renta_6)), 9: Decimal(str(renta_9)), 12: Decimal(str(renta_12)),
     }
 
+def _cantidad_valida(cantidad) -> int:
+    """Unidades por publicación (pack): entero de 1 a 999."""
+    try:
+        n = int(cantidad)
+    except (TypeError, ValueError):
+        n = 0
+    if n < 1 or n > 999 or n != cantidad:
+        raise HTTPException(status_code=422, detail="La cantidad por publicación tiene que ser un entero entre 1 y 999.")
+    return n
+
 def _ayala_core_motor_sync(
     sku: str, renta_por_condicion: dict[str | int, Decimal],
     envio_real: Decimal | None, envio_full: bool, item_id: str | None, cuenta: str | None,
     tc_override: Decimal | None = None, costo_override: Decimal | None = None,
-    _proveedores=None, _tc: Decimal | None = None,
+    _proveedores=None, _tc: Decimal | None = None, cantidad: int = 1,
 ) -> dict:
     # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
     # pisar el costo sin IVA (USD) a mano para simular. Sin
@@ -2737,7 +2747,9 @@ def _ayala_core_motor_sync(
     # simular con un valor propio -- sin `tc`, se sigue usando el TC en
     # vivo como siempre.
     tc = tc_override if tc_override is not None else (_tc if _tc is not None else tc_rapido_requerido())
-    costo_sin_iva = costo_usd * tc
+    # Pack (Bloque 2, PR 3): el costo de la publicación es el del SKU × la cantidad de unidades que trae. La cuenta de precios no cambia; con cantidad=1 todo da igual que antes.
+    cantidad = _cantidad_valida(cantidad)
+    costo_sin_iva = costo_usd * tc * cantidad
 
     item_info = None
     envio_usado = envio_real
@@ -2775,11 +2787,12 @@ def _ayala_core_motor_sync(
 
     iva_origen = "ECOM" if getattr(iva_p, "tactica_caida", False) else "TACTICA"
     return {
-        "sku": sku, "costo_sin_iva_usd": float(costo_usd), "iva_factor": float(iva_factor), "iva_origen": iva_origen,
+        "sku": sku, "cantidad": cantidad, "costo_sin_iva_usd": float(costo_usd), "iva_factor": float(iva_factor), "iva_origen": iva_origen,
         "tc": float(tc), "costo_sin_iva_ars": float(costo_sin_iva), "envio_real": float(envio_usado),
         "envio_full": envio_full,
         "renta_por_condicion": {str(k): float(v) for k, v in renta_por_condicion.items()},
         "precios": {k: float(v) for k, v in precios.items()},
+        "precios_unitarios": {k: round(float(v) / cantidad, 2) for k, v in precios.items()},
         "item": item_info,
     }
 
@@ -2795,6 +2808,7 @@ async def ayala_core_motor_lote(
     envio_real: float | None = None,
     envio_full: bool = False,
     tc: float | None = None,
+    cantidad: int = 1,
 ):
     """Los SKU pedidos (coma-separados; vacío = todos los piloto) en UNA sola respuesta, con la MISMA cuenta que `/ayala-core/sku/{sku}/motor`
     (`_ayala_core_motor_sync`, ningún cambio de fórmula). Los costos de Ecom, el IVA de Táctica y el TC salen de las fotos que ya están en memoria:
@@ -2803,12 +2817,14 @@ async def ayala_core_motor_lote(
     lista = [x.strip() for x in skus.split(",") if x.strip()] or list(ayala_core.SKUS_PILOTO)
     return await run_in_threadpool(
         _ayala_core_motor_lote_sync, lista, renta_por_condicion,
-        Decimal(str(envio_real)) if envio_real is not None else None, envio_full, Decimal(str(tc)) if tc is not None else None,
+        Decimal(str(envio_real)) if envio_real is not None else None, envio_full, Decimal(str(tc)) if tc is not None else None, cantidad,
     )
 
 def _ayala_core_motor_lote_sync(
     skus: list[str], renta_por_condicion: dict[str | int, Decimal], envio_real: Decimal | None, envio_full: bool, tc_override: Decimal | None,
+    cantidad: int = 1,
 ) -> dict:
+    cantidad = _cantidad_valida(cantidad)
     t0 = time.perf_counter()
     prov = costos_ecom.proveedores_de_costo_e_iva()
     try:
@@ -2823,7 +2839,7 @@ def _ayala_core_motor_lote_sync(
     resultados = []
     for sku in skus:
         try:
-            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc))
+            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc, cantidad=cantidad))
         except HTTPException as e:
             resultados.append({"sku": sku, "error": e.detail})
     t3 = time.perf_counter()
@@ -2855,6 +2871,7 @@ async def ayala_core_sku_motor(
     cuenta: str | None = None,
     tc: float | None = None,
     costo: float | None = None,
+    cantidad: int = 1,
 ):
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
     return await run_in_threadpool(
@@ -2862,6 +2879,7 @@ async def ayala_core_sku_motor(
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
         Decimal(str(tc)) if tc is not None else None,
         Decimal(str(costo)) if costo is not None else None,
+        None, None, cantidad,
     )
 
 

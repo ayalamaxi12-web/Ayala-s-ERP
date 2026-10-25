@@ -144,3 +144,35 @@ def test_la_pantalla_pide_un_lote_y_recalcula_sola_sin_pisar_el_ver_cargado():
     assert 'AC_AUTO_OK=false' in s[s.index('function ayalaCoreVerCargado'):][:120]
     assert "ayalaCoreAutoRecalcularMontar" in s and "setTimeout(()=>ayalaCoreCalcular(),300)" in s
     assert 'IVA tomado de Ecom: Táctica no respondió' in s and 'IVA Táctica: hace' in s.replace("IVA Táctica: ${costosEdadTxt", "IVA Táctica: hace")
+
+
+# ── Pack (Bloque 2, PR 3): el costo se multiplica por la cantidad; la cuenta de precios es la misma ──
+
+@pytest.mark.parametrize("cantidad", [1, 2, 3, 4, 5, 6, 12, 37])
+@pytest.mark.parametrize("renta,envio,full", [(RENTAS[0], None, False), (RENTAS[1], 8500, True), (RENTAS[2], 12345.67, False)])
+def test_pack_multiplica_el_costo_y_el_resto_de_la_cuenta_queda_igual(cliente, cantidad, renta, envio, full):
+    p = {**_qs(renta, envio, full), "cantidad": cantidad}
+    lote = {x["sku"]: x for x in cliente.get("/ayala-core/motor-lote", params=p).json()["resultados"]}
+    renta_dec = {("contado" if k == "contado" else "reducida" if k == "reducida" else int(k)): D(str(v)) for k, v in renta.items()}
+    for sku in ayala_core.SKUS_PILOTO:
+        esperado = ayala_core.calcular_precios_todas_condiciones(
+            costo_sin_iva=COSTOS[sku] * TC * cantidad, iva_factor=IVA[sku], envio_real=D(str(envio)) if envio is not None else D(0),
+            renta_por_condicion=renta_dec, envio_full=full)
+        assert lote[sku]["precios"] == {k: float(v) for k, v in esperado.items()}, sku
+        assert lote[sku]["cantidad"] == cantidad and lote[sku]["costo_sin_iva_ars"] == float(COSTOS[sku] * TC * cantidad)
+        assert lote[sku]["precios_unitarios"] == {k: round(float(v) / cantidad, 2) for k, v in esperado.items()}
+        uno = cliente.get(f"/ayala-core/sku/{sku}/motor", params=p).json()
+        assert uno["precios"] == lote[sku]["precios"]
+
+
+@pytest.mark.parametrize("renta,envio,full", list(product(RENTAS, [None, 8500], [False, True])))
+def test_con_cantidad_1_todo_da_igual_que_sin_pedirla(cliente, renta, envio, full):
+    sin = cliente.get("/ayala-core/motor-lote", params=_qs(renta, envio, full)).json()["resultados"]
+    con = cliente.get("/ayala-core/motor-lote", params={**_qs(renta, envio, full), "cantidad": 1}).json()["resultados"]
+    assert sin == con
+
+
+@pytest.mark.parametrize("malo", [0, -2, 1000, "x", 2.5])
+def test_cantidad_invalida_da_422(cliente, malo):
+    assert cliente.get("/ayala-core/motor-lote", params={"cantidad": malo}).status_code == 422
+    assert cliente.get(f"/ayala-core/sku/{ayala_core.SKUS_PILOTO[0]}/motor", params={"cantidad": malo}).status_code == 422

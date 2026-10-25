@@ -69,3 +69,12 @@ def test_la_condicion_a_mano_lleva_etiqueta_de_texto_y_la_pagina_no_tiene_emojis
     assert not emojis, emojis
     bloque = s[s.index('<style id="estetica-tienda-web">'):s.index('</style>', s.index('<style id="estetica-tienda-web">'))]
     assert not re.findall(r'#[0-9A-Fa-f]{3,8}\b', bloque)
+
+
+def test_pack_selector_x1_a_x6_y_otro_manda_la_cantidad_solo_si_es_mayor_a_1():
+    s = html()
+    for frag in ('<option value="1" selected>x1</option>', '<option value="6">x6</option>', '<option value="otro">Otro…</option>', 'id="ac-cantidad-otro"'):
+        assert frag in s, frag
+    assert "return n>1?`&cantidad=${n}`:'';" in _fn(s, 'ayalaCoreCantidadParam')
+    assert 'ayalaCoreCantidadParam()' in _fn(s, 'ayalaCoreCalcular') and 'ayalaCoreCantidadParam()' in _fn(s, 'ayalaCoreCompararMLA')
+    assert "'Precio por unidad'" in s and 'Precio de la publicación' in s and "'ac-cantidad','ac-cantidad-otro'" in s

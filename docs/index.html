@@ -691,6 +691,10 @@ body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 .ac-tag-mano{display:inline-block;padding:1px 8px;border-radius:var(--r-chip);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla);font-weight:700;white-space:nowrap}
 #page-ayala-core table input[type=text],#page-ayala-core table input[type=number]{min-width:15ch;box-sizing:border-box}
 #page-ayala-core .ac-precio-manual{width:16ch!important}
+.ac-pack{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.ac-pack label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-pack select,.ac-campo-corto{min-height:44px;width:12ch}
+.ac-pack label[hidden]{display:none}
 @media (max-width:900px){.ac-rentas{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:520px){.ac-rentas{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-bloque-btn{flex-wrap:wrap}.ac-bloque-res{margin-left:34px;flex-basis:100%}}
 /* — Gráficos y comparaciones — */
@@ -1866,10 +1870,19 @@ igual que la rentabilidad real, que se muestra al lado. -->
       <label>9 cuotas %<input type="text" id="ac-renta-9" value="26" inputmode="decimal"></label>
       <label>12 cuotas %<input type="text" id="ac-renta-12" value="24" inputmode="decimal"></label>
     </div>
+    <div class="ac-pack" role="group" aria-label="Cantidad por publicación">
+      <label for="ac-cantidad">Cantidad por publicación
+        <select id="ac-cantidad" class="fi" onchange="ayalaCoreCantidadCambio()">
+          <option value="1" selected>x1</option><option value="2">x2</option><option value="3">x3</option><option value="4">x4</option><option value="5">x5</option><option value="6">x6</option><option value="otro">Otro…</option>
+        </select>
+      </label>
+      <label id="ac-cantidad-otro-lbl" hidden>Unidades<input type="number" id="ac-cantidad-otro" min="1" max="999" step="1" class="fi ac-campo-corto" inputmode="numeric" placeholder="ej. 8"></label>
+      <span class="ac-ayuda">El costo se multiplica por la cantidad. El envío se carga a mano y es por publicación.</span>
+    </div>
     <details class="ac-avanzadas" id="ac-avanzadas">
       <summary>Opciones avanzadas</summary>
       <div class="ac-av-campos">
-        <label>Envío real $<input type="text" id="ac-envio-real" placeholder="automático" class="ac-campo-largo" inputmode="decimal"></label>
+        <label>Envío real $ (por publicación)<input type="text" id="ac-envio-real" placeholder="automático" class="ac-campo-largo" inputmode="decimal"></label>
         <label>TC<input type="text" id="ac-tc-manual" placeholder="automático (BNA)" class="ac-campo-largo" inputmode="decimal"></label>
         <label>Costo USD sin IVA<input type="text" id="ac-costo-manual" placeholder="automático (Ecom)" class="ac-campo-largo" inputmode="decimal"></label>
         <label class="ac-check"><input type="checkbox" id="ac-envio-full">Envío a Bodega (Full)</label>
@@ -5562,6 +5575,7 @@ let ayalaCoreLoaded=false;
 let AC_SKUS=[];
 const AC_COND_LABEL={contado:'Contado',reducida:'Reducida','3':'3 cuotas','6':'6 cuotas','9':'9 cuotas','12':'12 cuotas'};
 function ayalaCoreCondLabel(c){return AC_COND_LABEL[String(c)]||c;}
+function ayalaCoreFmt2(n){return n==null?'—':'$'+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function ayalaCoreFmt(n){return n==null?'—':'$'+Number(n).toLocaleString('es-AR',{maximumFractionDigits:0});}
 // Corrección manual de condición, por item_id -- pedido de Maxx
 // 2026-09-15: antes se perdía en cada corrida nueva de "Detectar
@@ -5812,8 +5826,8 @@ function ayalaCoreVerCargado(){
 }
 function ayalaCoreRenderMotor(d){
   const sku=d.sku||(AC_SEL.length===1?AC_SEL[0]:'');
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">Precio</th><th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
+  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>Condición</th><th style="text-align:right">${d.cantidad>1?'Precio de la publicación':'Precio'}</th>${d.cantidad>1?'<th style="text-align:right">Precio por unidad</th>':''}<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
+    AC_COND_ORDEN.map(c=>`<tr><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${d.cantidad>1?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
@@ -5821,8 +5835,9 @@ function ayalaCoreRenderMotor(d){
 }
 function ayalaCoreRenderMotorMulti(resultados){
   // resultados: [{sku,d}] -- una fila por SKU x condición (30 filas para los 5 piloto)
-  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">Precio</th><th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
-    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')).join('')
+  const pack=(resultados[0]&&resultados[0].d.cantidad)||1;
+  qs('ac-tabla-wrap').innerHTML=`<table><thead><tr><th>SKU</th><th>Condición</th><th style="text-align:right">${pack>1?'Precio de la publicación':'Precio'}</th>${pack>1?'<th style="text-align:right">Precio por unidad</th>':''}<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>${AC_DESGLOSE_HEAD}</tr></thead><tbody>${
+    resultados.map(({sku,d})=>AC_COND_ORDEN.map(c=>`<tr><td>${sku}</td><td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${pack>1?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ayalaCorePrecioOverrideCellsHtml(sku,c)}${ayalaCoreDesgloseFila(d,c)}</tr>`).join('')).join('')
   }</tbody></table>`;
   qs('ac-tabla-wrap').style.display='block';
   qs('ac-tabla-wrap').style.maxWidth='none';
@@ -5941,6 +5956,12 @@ function acBloquesResumen(){
 }
 let AC_MLA_ULT='',AC_CARGADO_ULT='';
 let AC_CALC_SEQ=0,AC_CALC_TIMER=null,AC_AUTO_OK=false;
+// Pack: unidades por publicación (x1 por defecto, x2…x6 y «Otro»). Con x1 no se manda nada: el pedido es idéntico al de siempre.
+function ayalaCoreCantidadValida(){const sel=qs('ac-cantidad');if(!sel||sel.value!=='otro')return true;const n=Number(qs('ac-cantidad-otro').value);return Number.isInteger(n)&&n>=1&&n<=999;}
+function ayalaCoreCantidad(){const sel=qs('ac-cantidad');if(!sel)return 1;const n=sel.value==='otro'?Number(qs('ac-cantidad-otro').value):Number(sel.value);return Number.isInteger(n)&&n>=1&&n<=999?n:1;}
+function ayalaCoreCantidadParam(){const n=ayalaCoreCantidad();return n>1?`&cantidad=${n}`:'';}
+function ayalaCoreCantidadCambio(){const o=qs('ac-cantidad').value==='otro';qs('ac-cantidad-otro-lbl').hidden=!o;if(o)qs('ac-cantidad-otro').focus();ayalaCoreAutoRecalcular();}
+function ayalaCorePackTxt(d){return d.cantidad>1?` · <b>Pack x${d.cantidad}</b>: costo de la publicación <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> (${d.cantidad} × ${ayalaCoreFmt(d.costo_sin_iva_ars/d.cantidad)})`:'';}
 // «Calculado con costos de hace X · IVA de … · TC …»: de qué fotos salió el cálculo (el backend no leyó nada en vivo).
 function ayalaCoreCalculadoConHtml(c,ms){
   const iva=c.iva==='ECOM'?`<span class="ac-aviso-txt">IVA tomado de Ecom: Táctica no respondió${c.iva_tactica_error?': '+acEsc(c.iva_tactica_error):''}</span>`:`IVA de Táctica (${costosEdadTxt(c.iva_tactica_antiguedad_seg)})`;
@@ -5952,7 +5973,7 @@ function ayalaCoreAutoRecalcular(){
   clearTimeout(AC_CALC_TIMER);AC_CALC_TIMER=setTimeout(()=>ayalaCoreCalcular(),300);
 }
 function ayalaCoreAutoRecalcularMontar(){
-  const ids=['ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
+  const ids=['ac-cantidad','ac-cantidad-otro','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
   ids.forEach(id=>{const el=qs(id);if(el&&!el.dataset.autocalc){el.dataset.autocalc='1';el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',ayalaCoreAutoRecalcular);}});
 }
 async function ayalaCoreCalcular(){
@@ -5961,7 +5982,8 @@ async function ayalaCoreCalcular(){
   if(!AC_SEL.length){qs('ac-datos').style.display='block';qs('ac-datos').innerHTML='<span class="ac-aviso-txt">Elegí al menos un SKU para calcular.</span>';return;}
   const sku=AC_SEL.length===1?AC_SEL[0]:'';
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
-  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}`;
+  if(!ayalaCoreCantidadValida()){qs('ac-datos').style.display='block';qs('ac-datos').innerHTML='<span class="ac-aviso-txt">La cantidad por publicación tiene que ser un entero entre 1 y 999.</span>';return;}
+  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}${ayalaCoreCantidadParam()}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   try{
@@ -5974,7 +5996,7 @@ async function ayalaCoreCalcular(){
       const lote=await res.json();
       const resultados=lote.resultados.filter(r=>!r.error).map(r=>({sku:r.sku,d:r}));
       const omitidos=lote.resultados.filter(r=>r.error);
-      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${omitidos.length?` (sin datos: ${omitidos.map(o=>acEsc(o.sku)).join(', ')})`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
+      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${(resultados[0]&&resultados[0].d.cantidad>1)?` · <b>Pack x${resultados[0].d.cantidad}</b> (costo × ${resultados[0].d.cantidad}; el envío es por publicación)`:''}${omitidos.length?` (sin datos: ${omitidos.map(o=>acEsc(o.sku)).join(', ')})`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
       ayalaCoreRenderMotorMulti(resultados);
       return;
     }
@@ -5984,7 +6006,7 @@ async function ayalaCoreCalcular(){
     const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${qparams}${ayalaCoreCostoParam()}`);
     if(!res.ok){const e=await res.json().catch(()=>({}));qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
     const d=await res.json();
-    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}`;
+    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}${ayalaCorePackTxt(d)}`;
     ayalaCoreRenderMotor(d);
   }catch(e){qs('ac-datos').innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
@@ -6423,7 +6445,7 @@ async function ayalaCoreCompararMLA(){
   const cont=qs('ac-mla-resultado');
   cont.style.display='block';cont.textContent='Buscando...';
   try{
-    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}${ayalaCoreTcParam()}${ayalaCoreCostoParam()}`);
+    const res=await fetch(`${url}/ayala-core/sku/${sku}/motor?${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}&item_id=${itemId}&cuenta=${cuenta}${ayalaCoreTcParam()}${ayalaCoreCostoParam()}${ayalaCoreCantidadParam()}`);
     if(!res.ok){const e=await res.json().catch(()=>({}));cont.innerHTML=`<span style="color:var(--red)">❌ ${e.detail||'Error'}</span>`;return;}
     const d=await res.json();
     const it=d.item;
@@ -6442,7 +6464,7 @@ async function ayalaCoreCompararMLA(){
     it.condicion_ml=it.condicion_detectada;
     qs('ac-envio-real').value=d.envio_real;
     qs('ac-datos').style.display='block';
-    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}`;
+    qs('ac-datos').innerHTML=`Costo sin IVA: <b>USD ${d.costo_sin_iva_usd}</b> · IVA factor: <b>${d.iva_factor}</b> · TC: <b>${d.tc}</b> · Costo sin IVA ARS: <b>${ayalaCoreFmt(d.costo_sin_iva_ars)}</b> · Envío usado: <b>${ayalaCoreFmt(d.envio_real)}</b>${d.envio_full?' <b>(Bodega Full)</b>':''}${ayalaCorePackTxt(d)}`;
     ayalaCoreRenderMotor(d);
     ayalaCoreMlaAplicarCondicion(AC_COND_MANUAL[it.item_id]!==undefined?AC_COND_MANUAL[it.item_id]:it.condicion_detectada, cont);
   }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}

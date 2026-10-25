@@ -9,3 +9,10 @@ Solo presentación y selección de SKU; no cambia ninguna fórmula ni el cálcul
 - Casillas y placeholders sin truncar (la columna «Manual» y los campos de las tablas tienen ancho mínimo de 15 caracteres); la condición corregida a mano lleva la etiqueta de texto **A mano** además del borde amarillo.
 - Emojis de la página reemplazados por íconos de trazo. Los que quedan dentro de textos generados por JS (⚠, ✅, ❌ en tablas y mensajes) siguen para la auditoría final.
 - «Comparar un solo MLA» usa el SKU elegido (tiene que haber uno solo).
+
+## Pack (Bloque 2, PR 3)
+- **Selector «Cantidad por publicación»**: x1 (por defecto), x2 a x6 y «Otro…» con un número entero de 1 a 999.
+- **Cuenta**: el costo del SKU se multiplica por la cantidad (`costo_sin_iva = costo_usd × TC × cantidad`) y **todo lo demás es la fórmula de siempre** (`calcular_precio_condicion`, sin cambios). Con x1 el pedido ni siquiera lleva `cantidad` y el resultado es idéntico al de antes (test de paridad). La comisión de ML del motor es un porcentaje fijo (15,32 %), así que no depende de un tramo de precio: lo que sí cambia con el pack, como hoy, es todo lo que depende del precio calculado (comisión, IIBB, financiero, cheque).
+- **Envío**: se carga a mano y es **por publicación** (el campo dice «Envío real $ (por publicación)»). No se multiplica por la cantidad.
+- **Se muestra**: «Precio de la publicación» y «Precio por unidad» (publicación ÷ cantidad, con 2 decimales) en las tablas, y «Pack xN: costo de la publicación …» en el resumen. Los endpoints `/ayala-core/motor-lote` y `/ayala-core/sku/{sku}/motor` aceptan `cantidad` (422 si no es un entero entre 1 y 999) y devuelven `cantidad` y `precios_unitarios`.
+- **No cambia**: el escaneo de «Publicaciones» sigue calculando por SKU (la cantidad de cada publicación real la resuelve Ecom en Full ML, no acá). La cantidad del selector sí se aplica a «Comparar un solo MLA».
