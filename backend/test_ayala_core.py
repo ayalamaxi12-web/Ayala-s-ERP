@@ -7,6 +7,7 @@ from ayala_core import (
     descubrir_publicaciones,
     descubrir_publicaciones_base,
     detectar_condicion_pago,
+    listar_skus_excel_matias,
     parsear_precios_excel_matias,
     precio_vivo_mlas,
     resolver_competencia_por_producto,
@@ -767,3 +768,16 @@ def test_el_precio_cumple_la_cuenta_con_los_impuestos_separados():
     sobrante = (p / _IVA_FACTOR - p * Decimal("0.1532") / iva21 - p / _IVA_FACTOR * Decimal("0.05")
                 - p * Decimal("0.012") - _ENVIO / iva21 - _COSTO)
     assert abs(sobrante - p * Decimal("0.32")) < Decimal("1")
+
+
+def test_listar_skus_excel_incluye_los_que_no_tienen_precios_sin_repetir_y_en_orden():
+    filas = [
+        ["-", "SKU", "Precio Web"],
+        _fila_sku_excel("FAN-MIST-STAND-16I", "", "", "", "", "", "", ""),
+        ["Publicaciones", "MT"],
+        _fila_sku_excel("PLANCHA-SUB-GORRA", "208615", "229476", "256187", "268044", "285425", "304372", "320320"),
+        ["SKU", "  "],
+        _fila_sku_excel("FAN-MIST-STAND-16I", "", "", "", "", "", "", ""),
+    ]
+    assert listar_skus_excel_matias(filas) == ["FAN-MIST-STAND-16I", "PLANCHA-SUB-GORRA"]
+    assert "FAN-MIST-STAND-16I" not in parsear_precios_excel_matias(filas)   # sin precios: no está en `precios`, pero sí en la lista

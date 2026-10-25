@@ -639,3 +639,13 @@ def parsear_precios_excel_matias(filas: list[list[str]]) -> dict[str, dict[str, 
         if precios_sku:
             precios[sku] = precios_sku
     return precios
+
+
+def listar_skus_excel_matias(filas: list[list[str]]) -> list[str]:
+    """TODOS los SKU de la pestaña "ERP AYALA" (en el orden en que aparecen, sin repetir), tengan o no precios cargados. `parsear_precios_excel_matias`
+    se queda solo con los que tienen algún precio; el selector de SKU del Motor de Precios necesita la lista completa."""
+    vistos: dict[str, None] = {}
+    for fila in filas:
+        if len(fila) >= 2 and fila[0].strip() == "SKU" and fila[1].strip():
+            vistos.setdefault(fila[1].strip(), None)
+    return list(vistos)
