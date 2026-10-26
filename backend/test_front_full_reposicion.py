@@ -80,3 +80,10 @@ def test_minimizar_buscar_y_trazabilidad():
 def test_periodo_visible_y_ver_detalle():
     for t in ("Período leído de Mercado Libre: del", "fullRepoDetalle(this,", "/ml-full/foto/detalle/", "no disponible"):
         assert t in SRC, t
+
+
+def test_layout_kpi_titulo_con_logo_actualizar_arriba_y_scroll_en_caja():
+    assert "kpi-card::after{content:'';grid-row:1/span 3;grid-column:1;justify-self:center;align-self:center" in SRC      # el glifo ya no depende del alto de toda la tarjeta
+    assert ".section-hdr:has(>img,>svg,>[data-ico]){display:flex;align-items:center;gap:14px" in SRC
+    assert SRC.index('id="full-reposicion-pie"') < SRC.index('id="full-reposicion-tbody"') and SRC.index('id="full-conciliar-pie"') < SRC.index('id="full-conciliar-tbody"')
+    assert "#full-reposicion-wrap)>.table-wrap{max-height:calc(100vh - 9rem);overflow:auto}" in SRC
