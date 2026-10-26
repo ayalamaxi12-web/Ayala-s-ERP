@@ -44,19 +44,20 @@ def serializar_conciliacion(r: ResultadoConciliacion) -> dict:
     return {"filas": [{"sku": f.sku, "stock_ml": f.stock_ml, "stock_ecom": f.stock_ecom, "diferencia": f.diferencia, "publicaciones": f.publicaciones,
                        "parent_sku": f.parent_sku} for f in r.filas],
             "incidencias_sku": r.incidencias_sku, "incidencias_sin_vincular": r.incidencias_sin_vincular, "skus_no_en_ecom": r.skus_no_en_ecom,
-            "skus_incompletos": r.skus_incompletos}
+            "skus_incompletos": r.skus_incompletos, "publicaciones_activas": r.publicaciones_activas}
 
 
 def resultado_desde_payload(p: dict) -> ResultadoConciliacion:
     filas = [FilaConciliacion(sku=f["sku"], stock_ml=f["stock_ml"], stock_ecom=f["stock_ecom"], diferencia=f["diferencia"],
                               publicaciones=f.get("publicaciones", []), parent_sku=f.get("parent_sku")) for f in p["filas"]]
     return ResultadoConciliacion(filas=filas, incidencias_sku=p.get("incidencias_sku", []), incidencias_sin_vincular=p.get("incidencias_sin_vincular", []),
-                                 skus_no_en_ecom=p.get("skus_no_en_ecom", []), skus_incompletos=p.get("skus_incompletos", []))
+                                 skus_no_en_ecom=p.get("skus_no_en_ecom", []), skus_incompletos=p.get("skus_incompletos", []),
+                                 publicaciones_activas=p.get("publicaciones_activas", []))
 
 
 def serializar_reposicion(r, params: dict) -> dict:
     return {"filas": [f.__dict__ for f in r.filas], "incidencias_sku": r.incidencias_sku, "incidencias_sin_vincular": r.incidencias_sin_vincular,
-            "skus_no_en_ecom": r.skus_no_en_ecom, "skus_incompletos": r.skus_incompletos, "params": params}
+            "skus_no_en_ecom": r.skus_no_en_ecom, "skus_incompletos": r.skus_incompletos, "ordenes_dias_sin_leer": getattr(r, "ordenes_dias_sin_leer", []), "params": params}
 
 
 def alertas_conciliacion(p: dict) -> list[dict]:
@@ -90,6 +91,11 @@ def _log(job_id: str, txt: str) -> None:
     _jobs[job_id]["log"].append(txt)
 
 
+def _params_repo(dias_ventas, semanas_objetivo, contar_deposito: bool) -> str:
+    """Con el interruptor activado la clave es la de siempre + `deposito=1`; apagado, es exactamente la clave de antes (las fotos viejas siguen sirviendo)."""
+    return ml_foto.clave_params(dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo, **({"deposito": 1} if contar_deposito else {}))
+
+
 def _foto_previa(modulo: str, params: str | None, sesion_fn) -> dict | None:
     with sesion_fn() as db:
         f = ml_foto.leer(db, modulo, CUENTA, params)
@@ -116,7 +122,7 @@ def _guardar_conciliacion(sesion_fn, res: ResultadoConciliacion, previo: dict | 
     return estado, len(sin_leer)
 
 
-def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo: float = 3, fecha_llegada: date | None = None, *,
+def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo: float = 3, fecha_llegada: date | None = None, contar_deposito: bool = True, *,
                sesion_fn=None, ml_fn=None, ecom_fn=None, tactica_fn=None) -> None:
     """Corre una actualización completa y la deja guardada. Siempre termina el job (éxito o error): el botón del front nunca queda esperando. Las fábricas
     `*_fn` son para los tests."""
@@ -125,7 +131,7 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
     ecom_fn = ecom_fn or (lambda: EcomFullAdapter(EcomApiClient()))
     tactica_fn = tactica_fn or TacticaStockSheetAdapter
     mod = MODULOS[modulo]
-    params = ml_foto.clave_params(dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo) if modulo == "reposicion" else ""
+    params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito) if modulo == "reposicion" else ""
     _log(job_id, "Esperando que termine otra actualización de Full ML..." if _turno.locked() else "Iniciando actualización...")
     with _turno:
         _jobs[job_id].update(status="running", progress=None)
@@ -139,6 +145,8 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
             previo_conc = _foto_previa(MOD_CONC, "", sesion_fn)
             if modulo == "reposicion":
                 res_conc = _conciliacion_reutilizable(sesion_fn, ahora)
+                if res_conc is not None and contar_deposito and not res_conc.publicaciones_activas:
+                    res_conc = None     # conciliación guardada antes de sumar las publicaciones activas: se vuelve a leer
                 if res_conc is None:
                     _log(job_id, "Leyendo stock de Full y vinculaciones...")
                     res_conc = conciliar(ml, ecom, progreso_cb=_progreso)
@@ -148,12 +156,12 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
                 previo = _foto_previa(MOD_REPO, params, sesion_fn)
                 _log(job_id, "Leyendo ventas y envíos de Full...")
                 res = calcular_reposicion_mla(ml, ecom, tactica_fn(), dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo, fecha_llegada=fecha_llegada,
-                                              progreso_cb=_progreso, resultado_conciliacion=res_conc)
-                payload = serializar_reposicion(res, {"dias_ventas": dias_ventas, "semanas_objetivo": semanas_objetivo,
+                                              progreso_cb=_progreso, resultado_conciliacion=res_conc, contar_deposito=contar_deposito)
+                payload = serializar_reposicion(res, {"dias_ventas": dias_ventas, "semanas_objetivo": semanas_objetivo, "contar_deposito": contar_deposito,
                                                       "fecha_llegada": (fecha_llegada or date.today()).isoformat()})
                 sin_leer = _fusionar_filas(payload, previo, "item_id", lambda f: f.get("datos_incompletos"))
                 n_inc = len(set(res.skus_incompletos))
-                estado = "parcial" if n_inc or sin_leer else "completa"
+                estado = "parcial" if n_inc or sin_leer or res.ordenes_dias_sin_leer else "completa"
                 with sesion_fn() as db:
                     ml_foto.guardar_exito(db, mod, CUENTA, params, payload, estado, n_inc, round(time.monotonic() - t0, 1), alertas_reposicion(payload),
                                           no_tocar=sin_leer)
@@ -197,9 +205,9 @@ def estado_endpoint(job_id: str):
 
 
 @router.get("/{modulo}")
-def foto(modulo: str, dias_ventas: int | None = None, semanas_objetivo: float | None = None):
+def foto(modulo: str, dias_ventas: int | None = None, semanas_objetivo: float | None = None, contar_deposito: bool = True):
     mod = _modulo(modulo)
-    params = ml_foto.clave_params(dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo) if (modulo == "reposicion" and dias_ventas is not None and semanas_objetivo is not None) else ("" if modulo == "conciliacion" else None)
+    params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito) if (modulo == "reposicion" and dias_ventas is not None and semanas_objetivo is not None) else ("" if modulo == "conciliacion" else None)
     with _db.sesion() as db:
         out = ml_foto.vista_foto(ml_foto.leer(db, mod, CUENTA, params))
         out["alertas"] = ml_foto.listar_alertas(db, mod)
@@ -208,7 +216,8 @@ def foto(modulo: str, dias_ventas: int | None = None, semanas_objetivo: float | 
 
 
 @router.post("/{modulo}/actualizar")
-def actualizar_endpoint(modulo: str, background_tasks: BackgroundTasks, fecha_llegada: date | None = None, dias_ventas: int = 30, semanas_objetivo: float = 3):
+def actualizar_endpoint(modulo: str, background_tasks: BackgroundTasks, fecha_llegada: date | None = None, dias_ventas: int = 30, semanas_objetivo: float = 3,
+                        contar_deposito: bool = True):
     mod = _modulo(modulo)
     if modulo == "reposicion" and fecha_llegada is None:
         raise HTTPException(status_code=422, detail="Falta la fecha estimada de llegada.")
@@ -218,7 +227,7 @@ def actualizar_endpoint(modulo: str, background_tasks: BackgroundTasks, fecha_ll
         job_id = f"mlfoto_{modulo}_{uuid.uuid4().hex[:8]}"
         _jobs[job_id] = {"status": "queued", "log": [], "progress": None, "modulo": mod}
         _activo[mod] = job_id
-    background_tasks.add_task(actualizar, job_id, modulo, min(max(dias_ventas, 1), 60), semanas_objetivo, fecha_llegada)
+    background_tasks.add_task(actualizar, job_id, modulo, min(max(dias_ventas, 1), 60), semanas_objetivo, fecha_llegada, contar_deposito)
     return {"job_id": job_id, "status": "started"}
 
 

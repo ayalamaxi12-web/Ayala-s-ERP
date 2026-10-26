@@ -220,6 +220,7 @@ class _FakeML:
         return {"available_quantity": 10}
     def ventas_full_por_inventory(self, c, ids, d, h): return {"INV1": {"unidades": 6, "primera": "2026-10-01", "ultima": "2026-10-20"}}
     def envios_pendientes_por_inventory(self, c, ids, d, h): return {}
+    def ventas_pagadas_por_item(self, c, d, h): return {}, []
 
 
 class _FakeEcom:
@@ -280,7 +281,7 @@ def test_reposicion_comparte_la_conciliacion_y_marca_datos_incompletos(sesion_fn
     monkeypatch.setattr(ml_full, "SELLERS", {"IT": 1, "MT": 2})
     import ml_reposicion; monkeypatch.setattr(ml_reposicion, "SELLERS", {"IT": 1, "MT": 2})
     ml = _FakeML(lotes_fallidos=[{"cuenta": "IT", "tipo": "SALE_CONFIRMATION", "inventory_ids": ["INV2"]}])
-    job = _correr(sesion_fn, "reposicion", ml, fecha_llegada=ml_foto.ahora().date() + timedelta(days=10))
+    job = _correr(sesion_fn, "reposicion", ml, fecha_llegada=ml_foto.ahora().date() + timedelta(days=10), contar_deposito=False)
     assert job["status"] == "done"
     with sesion_fn() as db:
         conc = ml_foto.leer(db, mff.MOD_CONC, "todas", "")
@@ -290,7 +291,7 @@ def test_reposicion_comparte_la_conciliacion_y_marca_datos_incompletos(sesion_fn
     inc = [f for f in rep.payload["filas"] if f.get("datos_incompletos")]
     assert [f["inventory_id"] for f in inc] == ["INV2"] and rep.payload["params"]["dias_ventas"] == 30
     llamadas = ml.llamadas
-    job2 = _correr(sesion_fn, "reposicion", ml, job="j2", fecha_llegada=ml_foto.ahora().date() + timedelta(days=10))
+    job2 = _correr(sesion_fn, "reposicion", ml, job="j2", fecha_llegada=ml_foto.ahora().date() + timedelta(days=10), contar_deposito=False)
     assert job2["status"] == "done" and ml.llamadas == llamadas     # reutilizó la conciliación guardada: no volvió a leer el stock
 
 

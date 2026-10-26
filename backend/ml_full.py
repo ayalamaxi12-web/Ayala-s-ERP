@@ -46,7 +46,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
 import requests
@@ -295,6 +295,46 @@ class MLFullClient:
                     entrada["ultima"] = fecha
         return acumulado
 
+    def ventas_pagadas_por_item(self, cuenta: str, desde: str, hasta: str) -> tuple[dict[tuple, int], list[str]]:
+        """Ventas PAGADAS de TODAS las publicaciones de la cuenta (salgan de Full o de mi depósito, normal o Flex), por (item_id, variation_id), en unidades de
+        publicación (paquetes). Lee `orders/search` día por día (así no se choca con el tope de paginado de la API). Devuelve (acumulado, días que no se pudieron leer).
+        Es solo lectura. Para no contar dos veces lo de Full, el llamador resta `ventas_full_por_inventory` (SALE_CONFIRMATION): las ventas de Full también son
+        órdenes pagadas, así que el total pagado ya las incluye."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        seller_id = SELLERS[cuenta]
+        d0, d1 = date.fromisoformat(desde), date.fromisoformat(hasta)
+        acumulado: dict[tuple, int] = {}
+        fallidos: list[str] = []
+        dia = d0
+        while dia <= d1:
+            clave = f"{cuenta}|ORDERS|{dia.isoformat()}"
+            lineas = self._cache.get(clave) if self._cache is not None else None
+            if lineas is None:
+                lineas, offset = [], 0
+                try:
+                    while True:
+                        d = self._get("https://api.mercadolibre.com/orders/search", {
+                            "seller": seller_id, "order.status": "paid", "limit": 50, "offset": offset, "sort": "date_asc",
+                            "order.date_created.from": f"{dia.isoformat()}T00:00:00.000-03:00", "order.date_created.to": f"{dia.isoformat()}T23:59:59.999-03:00"}, headers)
+                        for o in d.get("results", []):
+                            for oi in o.get("order_items") or []:
+                                it = oi.get("item") or {}
+                                if it.get("id"):
+                                    lineas.append([it["id"], it.get("variation_id"), oi.get("quantity") or 0])
+                        offset += 50
+                        if offset >= ((d.get("paging") or {}).get("total") or 0) or not d.get("results"):
+                            break
+                except MLCuotaAgotada:
+                    fallidos.append(dia.isoformat())
+                    lineas = None
+                if lineas is not None and self._cache is not None:
+                    self._cache.put(clave, lineas)
+            for item_id, variation_id, cant in lineas or []:
+                k = (item_id, str(variation_id) if variation_id else None)
+                acumulado[k] = acumulado.get(k, 0) + cant
+            dia += timedelta(days=1)
+        return acumulado, fallidos
+
     def envios_pendientes_por_inventory(
         self, cuenta: str, inventory_ids: list[str], desde: str, hasta: str,
     ) -> dict[str, dict]:
@@ -374,6 +414,29 @@ def _sku_de_item(item: dict) -> str | None:
         if attr.get("id") == "SELLER_SKU" and attr.get("value_name"):
             return attr["value_name"]
     return None
+
+
+def extraer_publicaciones_activas(items: list[dict], cuenta: str) -> list[dict]:
+    """Una entrada por publicación (o por variación) ACTIVA, sea o no de Full: solo los campos que necesita el simulador de reposición. No filtra nada."""
+    out: list[dict] = []
+    for item in items:
+        lt = (item.get("shipping") or {}).get("logistic_type")
+        titulo = item.get("title", "")
+        variaciones = item.get("variations") or []
+        if variaciones:
+            for var in variaciones:
+                sku = var.get("seller_custom_field")
+                for attr in var.get("attributes") or []:
+                    if attr.get("id") == "SELLER_SKU" and attr.get("value_name"):
+                        sku = sku or attr["value_name"]
+                sku = sku or _sku_de_item(item)
+                attrs = {a["name"]: a["value_name"] for a in (var.get("attribute_combinations") or []) if a.get("name") and a.get("value_name")} or None
+                out.append({"item_id": item.get("id"), "cuenta": cuenta, "variation_id": var.get("id"), "sku": sku, "inventory_id": var.get("inventory_id"),
+                            "titulo": titulo, "logistic_type": lt, "variacion_attrs": attrs})
+        else:
+            out.append({"item_id": item.get("id"), "cuenta": cuenta, "variation_id": None, "sku": _sku_de_item(item), "inventory_id": item.get("inventory_id"),
+                        "titulo": titulo, "logistic_type": lt, "variacion_attrs": None})
+    return out
 
 
 def extraer_items_full(items: list[dict], cuenta: str) -> tuple[list[ItemFullML], list[dict]]:
@@ -702,6 +765,8 @@ class ResultadoConciliacion:
     incidencias_sin_vincular: list[dict]  # items ML sin vinculación en Ecom -- factor 1 asumido, no confirmado
     skus_no_en_ecom: list[str]
     skus_incompletos: list[str] = field(default_factory=list)  # SKU cuyo stock de ML no se pudo leer (cuota agotada): NO están en `filas`
+    # TODAS las publicaciones activas de las cuentas (Full o no), compactas: las usa el simulador de reposición para sumar las ventas del depósito propio.
+    publicaciones_activas: list[dict] = field(default_factory=list)
 
 
 def conciliar(
@@ -728,9 +793,11 @@ def conciliar(
 
     filas_ml: list[ItemFullML] = []
     incidencias_sku: list[dict] = []
+    publicaciones_activas: list[dict] = []
     for cuenta in cuentas:
         ids = ml.items_activos(cuenta)
         items = ml.detalle_items(ids, cuenta)
+        publicaciones_activas.extend(extraer_publicaciones_activas(items, cuenta))
         filas, incid = extraer_items_full(items, cuenta)
         filas_ml.extend(filas)
         incidencias_sku.extend(incid)
@@ -821,7 +888,7 @@ def conciliar(
     return ResultadoConciliacion(
         filas=filas_resultado, incidencias_sku=incidencias_sku,
         incidencias_sin_vincular=incidencias_sin_vincular, skus_no_en_ecom=skus_no_en_ecom,
-        skus_incompletos=sorted(skus_incompletos),
+        skus_incompletos=sorted(skus_incompletos), publicaciones_activas=publicaciones_activas,
     )
 
 

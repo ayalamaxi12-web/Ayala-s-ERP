@@ -777,6 +777,29 @@ body[data-nuevo] .compare-col h4{font-size:12px;font-weight:600;color:var(--text
 body[data-nuevo] .compare-col .cs{font-size:12px;color:var(--texto-suave)}
 body[data-nuevo] .page .section-hdr{display:block;margin:6px 0 0;font-size:16px;font-weight:700;color:var(--tinta)}
 body[data-nuevo] .page .section-hdr::after{display:none}
+
+/* Full ML (celular y botones): el radio de píldora solo para una línea; los botones que pueden envolver llevan 14 px (--r-recuadro). */
+body[data-nuevo] #page-full-ml .btn{border-radius:var(--r-recuadro);white-space:normal;text-align:left}
+body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id^=full-repo-tab-btn]{border-radius:var(--r-boton);white-space:nowrap}
+.full-titulo{display:flex;align-items:center;gap:12px}
+.full-logo{height:30px;width:auto}
+.fr-chip{display:inline-flex;gap:6px;align-items:baseline;padding:4px 12px;border-radius:var(--r-chip);background:var(--mod-sec-hover,var(--superficie));color:var(--tinta-2);font-size:var(--fs-tabla)}
+#full-reposicion-resumen{display:flex;flex-wrap:wrap;gap:8px}
+.fr-cta{display:inline-block;margin-left:6px;padding:0 8px;border-radius:var(--r-chip);background:var(--divisor);color:var(--tinta-2);font-size:var(--fs-tabla)}
+.fr-vermas{display:none}
+@media (max-width:768px){
+  .fr-barra{flex-wrap:wrap;gap:8px}
+  #page-full-ml .table-wrap:has(#full-reposicion-tbody){overflow:visible}
+  #page-full-ml table:has(#full-reposicion-tbody) thead{display:none}
+  #page-full-ml table:has(#full-reposicion-tbody),#full-reposicion-tbody{display:block;width:100%}
+  #full-reposicion-tbody .fr-fila{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0 0 12px;padding:12px;border-radius:var(--r-tarjeta);background:var(--superficie);box-shadow:var(--sombra-tarjeta)}
+  #full-reposicion-tbody .fr-fila td{display:block;padding:0;border:0;text-align:left!important;white-space:normal}
+  #full-reposicion-tbody .fr-fila td[data-l]:not([data-l=""])::before{content:attr(data-l);display:block;font-size:var(--fs-tabla);color:var(--texto-suave)}
+  #full-reposicion-tbody .fr-fila .fr-sel,#full-reposicion-tbody .fr-fila .fr-sku,#full-reposicion-tbody .fr-fila .fr-mla,#full-reposicion-tbody .fr-fila .fr-motivo,#full-reposicion-tbody .fr-fila .fr-vermas{grid-column:1/-1}
+  #full-reposicion-tbody .fr-fila .fr-mas{display:none}
+  #full-reposicion-tbody .fr-fila.fr-abierta .fr-mas{display:block}
+  #full-reposicion-tbody .fr-fila .fr-vermas{display:block}
+}
 </style>
 </head>
 <body>
@@ -822,7 +845,7 @@ body[data-nuevo] .page .section-hdr::after{display:none}
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
     <a href="#" class="sidebar-item" data-page="verificar-ml" data-mod="ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
-    <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Full ML</a>
+    <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="zap" aria-hidden="true"></span>Full ML</a>
     <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Ofertas ML</a>
     <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
     <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
@@ -1634,11 +1657,11 @@ body[data-nuevo] .page .section-hdr::after{display:none}
 
 <!-- FULL ML -->
 <div id="page-full-ml" class="page">
-  <div class="section-hdr">🏭 Full ML — Conciliación y Reposición</div>
+  <div class="section-hdr full-titulo"><img src="assets/logos/full-logo.png" alt="Full" class="full-logo"><span>Conciliación y reposición</span></div>
   <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:12px">Solo lectura — no escribe en Mercado Libre ni en Ecom. Reemplaza la conciliación manual de FULL_TABLA_OPERATIVA.xlsx.</div>
 
   <div class="card" style="margin-bottom:14px">
-    <div class="card-title">🔎 Conciliación de stock (ML vs Ecom)</div>
+    <div class="card-title"><span data-ico="search" data-size="16" aria-hidden="true"></span> Conciliación de stock (ML vs Ecom)</div>
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (Group/Arg), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
     <div id="full-conciliar-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-conciliar-wrap" style="display:none;margin-top:12px">
@@ -1654,28 +1677,29 @@ body[data-nuevo] .page .section-hdr::after{display:none}
   </div>
 
   <div class="card">
-    <div class="card-title">📤 Simulador de reposición por publicación (MLA)</div>
+    <div class="card-title"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Simulador de reposición por publicación (MLA)</div>
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Calcula cuánto conviene enviarle a CADA publicación (no al SKU agregado) según su propia venta, su propio stock, y la fecha en que va a llegar el envío. Cuando el disponible combinado de Ecom+Táctica no alcanza para todas las publicaciones de un mismo SKU, prioriza a la que más vende. Detecta venta censurada. No crea el envío real.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Fecha estimada de llegada<input type="date" id="full-repo-fecha-llegada" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px"></label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Días de ventas<input type="number" id="full-repo-dias" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--text2)" title="Suma a la demanda las ventas pagadas que salen de mi depósito (normal y Flex), no solo las de Full. Apagado, el cálculo es el de siempre."><input type="checkbox" id="full-repo-deposito" checked> Contar ventas de mi depósito</label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Semanas objetivo<input type="number" step="0.5" id="full-repo-semanas" value="3" style="width:48px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
     </div>
     <div id="full-reposicion-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-reposicion-wrap" style="display:none;margin-top:12px">
       <div id="full-reposicion-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
-      <div style="display:flex;align-items:center;gap:0">
+      <div class="fr-barra" style="display:flex;align-items:center;gap:0">
         <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
         <button class="btn" id="full-repo-tab-btn-MT" onclick="goFullRepoTab('MT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Arg</button>
         <input type="file" id="full-repo-pdf-input" accept="application/pdf" style="display:none" onchange="fullRepoSubirPDF(this.files[0])">
-        <button class="btn" style="margin-left:auto" title="PDF &quot;Instrucciones de preparación&quot; de un envío Full en preparación -- completa Envíos pendientes (paq.) con lo que ya vas a mandar en ese envío" onclick="qs('full-repo-pdf-input').click()">📄 Cargar PDF de envío pendiente</button>
+        <button class="btn" style="margin-left:auto" title="PDF &quot;Instrucciones de preparación&quot; de un envío Full en preparación -- completa Envíos pendientes (paq.) con lo que ya vas a mandar en ese envío" onclick="qs('full-repo-pdf-input').click()"><span data-ico="file-text" data-size="16" aria-hidden="true"></span> Cargar PDF de envío pendiente</button>
         <span id="full-repo-pdf-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></span>
-        <button class="btn primary" onclick="exportFullReposicionParaML()">⬆ Exportar para subir a ML</button>
-        <button class="btn" onclick="exportFullReposicion()">⬇ Exportar CSV</button>
+        <button class="btn primary" onclick="exportFullReposicionParaML()"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Exportar para subir a ML</button>
+        <button class="btn" onclick="exportFullReposicion()"><span data-ico="download" data-size="16" aria-hidden="true"></span> Exportar CSV</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>Stock Full</th><th>Ventas 30d</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th></tr></thead>
+          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>En Full</th><th title="Ventas pagadas de los últimos días que salieron de Full">Ventas Full 30d</th><th title="Ventas pagadas que salieron de mi depósito (normal y Flex): total pagado menos lo de Full">Ventas mi depósito 30d</th><th title="Lo que se usa para calcular: Full + mi depósito (si el interruptor está activado)">Demanda usada</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th><th>Por qué</th></tr></thead>
           <tbody id="full-reposicion-tbody"></tbody>
         </table>
       </div>
@@ -2130,7 +2154,7 @@ let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;let proyLo
 function qs(id){return document.getElementById(id);}
 // ── ÍCONOS SVG en línea (estilo Lucide, trazo 1,8): reemplazan a los emojis. Fuente única: ICONOS. <span data-ico="nombre" data-size="18"> se hidrata al cargar. ──
 // ICONOS-INICIO
-const ICONOS={
+const ICONOS={  'upload':'<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 20h16"/>','download':'<path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>','file-text':'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>','zap':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
  'home':'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>','line-chart':'<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
  'wallet':'<path d="M3 7h16a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l2-3h12v3"/><circle cx="16" cy="14" r="1.2"/>',
  'globe':'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
@@ -4519,7 +4543,7 @@ async function fullFotoCargar(){
       const res=await fetch(`${url}/ml-full/foto/${FULL_FOTO[k].mod}`);if(!res.ok)throw new Error(res.status);
       const d=await res.json();fullFotoDatos[k]=d;
       if(d.existe){
-        if(k==='reposicion'&&d.payload.params){const p=d.payload.params;if(qs('full-repo-fecha-llegada'))qs('full-repo-fecha-llegada').value=p.fecha_llegada||'';qs('full-repo-dias').value=p.dias_ventas;qs('full-repo-semanas').value=p.semanas_objetivo;}
+        if(k==='reposicion'&&d.payload.params){const p=d.payload.params;if(qs('full-repo-fecha-llegada'))qs('full-repo-fecha-llegada').value=p.fecha_llegada||'';qs('full-repo-dias').value=p.dias_ventas;qs('full-repo-semanas').value=p.semanas_objetivo;if(qs('full-repo-deposito'))qs('full-repo-deposito').checked=p.contar_deposito===true;}
         FULL_FOTO[k].pintar(d.payload);
       }
       fullPieRender(k);
@@ -4540,7 +4564,7 @@ function fullPieRender(k){
     h+=`<details class="full-alertas"><summary>Alertas: ${n('activa')} activas · ${n('ya_no_aparece')} ya no aparecen · ${n('vista')} vistas</summary><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>SKU o publicación</th><th>Estado</th><th>Primera vez</th><th>Última vez vista</th><th></th></tr></thead><tbody>${al.map(a=>`<tr><td>${acEsc(FULL_TIPOS[a.tipo]||a.tipo)}</td><td>${acEsc(a.clave)}</td><td>${acEsc(FULL_ESTADOS[a.estado]||a.estado)}</td><td>${acEsc(fullFecha(a.primera_vez))}</td><td>${acEsc(fullFecha(a.ultima_vez))}</td><td>${a.estado==='vista'?'':`<button class="btn" onclick="fullAlertaVista('${a.id}','${k}')">Marcar vista</button>`}</td></tr>`).join('')}</tbody></table></div></details>`;
   }
   const edad=d.existe?`Última actualización: ${fullHace(d.obtenido_en)}`:'Todavía no hay una lectura guardada';
-  h+=`<div class="full-pie-linea"><span id="${c.st}" class="full-pie-txt" role="status">${edad}</span><button class="btn primary" id="${c.btn}" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>${ocupado?'Actualizando...':'Actualizar'}</button></div>`;
+  h+=`<div class="full-pie-linea"><span id="${c.st}" class="full-pie-txt" role="status">${edad}</span><button class="btn btn-linea primary" id="${c.btn}" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>${ocupado?'Actualizando...':'Actualizar'}</button></div>`;
   pie.innerHTML=h;
 }
 async function fullAlertaVista(id,k){
@@ -4562,7 +4586,7 @@ async function fullActualizar(k){
   if(k==='reposicion'){
     const fecha=qs('full-repo-fecha-llegada').value;
     if(!fecha){alert('Ingresá la fecha estimada de llegada del envío');return;}
-    q=`?fecha_llegada=${fecha}&dias_ventas=${qs('full-repo-dias').value||30}&semanas_objetivo=${qs('full-repo-semanas').value||3}`;
+    q=`?fecha_llegada=${fecha}&dias_ventas=${qs('full-repo-dias').value||30}&semanas_objetivo=${qs('full-repo-semanas').value||3}&contar_deposito=${qs('full-repo-deposito')?qs('full-repo-deposito').checked:true}`;
     fullRepoEnviosPend={};fullRepoSeleccion={};
   }
   fullActualizando[k]='iniciando';fullPieRender(k);
@@ -4641,8 +4665,12 @@ function renderFullReposicion(result){
   fullRepoResult=result;
   // Arranca marcado lo que el sistema sugiere (sugerido>0) -- vos decidís
   // qué se manda de verdad destildando lo que no, nunca al revés.
+  // Se calcula primero con los envíos pendientes: lo marcado es lo que tiene cantidad a enviar DESPUÉS de restarlos (antes se marcaba por el sugerido del
+  // servidor y quedaban tildadas filas que terminaban en 0: de ahí «98 seleccionadas» contra «94 con envío sugerido»).
+  result.filas.forEach(f=>{fullRepoEnviosPend[f.item_id]=f.envio_pendiente||0;});
+  _fullRepoRecalcular();
   result.filas.forEach(f=>{
-    fullRepoSeleccion[f.item_id]=f.sugerido>0;
+    fullRepoSeleccion[f.item_id]=f._sugerido>0;
     // "Envíos pendientes" (paq.) -- pedido de Maxx 2026-09-01: arranca
     // con el dato real de ML (backend, envio_pendiente), no en 0. Sigue
     // editable por si el dato de ML todavía no reflejó un despacho
@@ -4660,7 +4688,8 @@ function _fullRepoResumen(){
   const totalSugerido=r.filas.reduce((s,f)=>s+(f._sugerido||0),0);
   const seleccionadas=r.filas.filter(f=>fullRepoSeleccion[f.item_id]);
   const totalSeleccionado=seleccionadas.reduce((s,f)=>s+(f._sugerido||0),0);
-  qs('full-reposicion-resumen').textContent=`${r.filas.length} publicaciones · ${r.filas.filter(f=>f._sugerido>0).length} con envío sugerido · ${totalSugerido} paquetes sugeridos en total · ${seleccionadas.length} seleccionadas para enviar (${totalSeleccionado} paquetes) · ${r.filas.filter(f=>f.censurado).length} venta censurada · ${r.incidencias_sin_vincular.length} sin vincular · ${r.skus_no_en_ecom.length} SKU sin match en Ecom`;
+  const chips=[[r.filas.length,'publicaciones'],[r.filas.filter(f=>f._sugerido>0).length,'con envío sugerido'],[totalSugerido,'paquetes sugeridos'],[seleccionadas.length,`seleccionadas (${seleccionadas.filter(f=>f.inventory_id&&f._sugerido>0).length} para exportar · ${totalSeleccionado} paq.)`],[r.filas.filter(f=>f.censurado).length,'venta censurada'],[r.incidencias_sin_vincular.length,'sin vincular'],[r.skus_no_en_ecom.length,'SKU sin match en Ecom']];
+  qs('full-reposicion-resumen').innerHTML=chips.map(([n,t])=>`<span class="fr-chip"><b>${n}</b> ${t}</span>`).join('');
 }
 // Replica en el navegador el reparto de `ml_reposicion._repartir_sugerido`
 // + `_convertir_a_paquetes` -- se recalcula acá cuando la persona carga
@@ -4684,14 +4713,37 @@ function _fullRepoRecalcular(){
     (porSku[f.sku]=porSku[f.sku]||[]).push(f);
   });
   Object.values(porSku).forEach(grupo=>{
-    let disponible=(grupo[0].stock_ecom||0)+(grupo[0].stock_tactica||0);
+    // Ecom negativo cuenta como 0 y Táctica sin dato también (se marca en la fila): nunca restan disponible.
+    let disponible=Math.max(0,grupo[0].stock_ecom||0)+Math.max(0,grupo[0].stock_tactica||0);
+    const dispInicial=disponible;
     [...grupo].sort((a,b)=>b.ventas_diarias-a.ventas_diarias).forEach(f=>{
+      f._disp=dispInicial;
       const asignadoReal=Math.max(0,Math.min(f._necesarioReal,disponible));
       disponible-=asignadoReal;
       f._cantidadEnviar=Math.ceil(f._necesarioReal/f.factor);
       f._sugerido=Math.ceil(asignadoReal/f.factor);
     });
   });
+  fullRepoResult.filas.forEach(f=>{f._porQue=fullRepoPorQue(f);});
+}
+// «Por qué» de cada fila, en texto: lo fijo (flags del backend) + lo que resulta del cálculo con los envíos pendientes que haya cargados.
+function fullRepoPorQue(f){
+  const fl=f.flags||[],m=[];
+  if(fl.includes('sin_sku'))m.push('sin SKU');
+  if(fl.includes('sin_vincular'))m.push('sin vincular en Ecom (factor 1 asumido)');
+  if(fl.includes('sin_ecom'))m.push('sin match en Ecom');
+  if(fl.includes('no_full'))m.push('hay que habilitarla en Mercado Libre');
+  const pend=fullRepoEnviosPend[f.item_id]||0;
+  if(!(f.ventas_diarias>0))m.push('sin ventas en el período');
+  else if(f._necesarioReal<=0)m.push(pend>0&&(f.stock_objetivo-f.stock_a_llegada)>0?'el envío pendiente cubre':'Full ya cubre el objetivo');
+  else if(f._sugerido===0)m.push(f._disp<=0?'sin disponible en Pitec ni Táctica':'el disponible se asignó a otra publicación del mismo SKU');
+  else if(f._sugerido<f._cantidadEnviar)m.push('el disponible alcanza solo en parte');
+  return m.join(' · ');
+}
+function fullRepoVerMas(b){const tr=b.closest('tr'),a=tr.classList.toggle('fr-abierta');b.setAttribute('aria-expanded',a);b.textContent=a?'Ver menos':'Ver más';}
+function fullRepoCalculoTxt(f){
+  const n=x=>Number(x).toLocaleString('es-AR',{maximumFractionDigits:2});
+  return `Demanda ${f.dias_periodo} d: ${f.ventas_full??f.ventas_periodo} de Full + ${f.ventas_deposito||0} de mi depósito = ${f.ventas_periodo} u. → ${n(f.ventas_diarias)}/día × ${f.ventas_diarias>0?Math.round(f.stock_objetivo/f.ventas_diarias):0} d = objetivo ${n(f.stock_objetivo)}; en Full ${f.stock_full}, a la llegada ${n(f.stock_a_llegada)}; disponible Pitec ${f.stock_ecom==null?'—':Math.max(0,f.stock_ecom)} + Táctica ${f.stock_tactica==null?'sin dato':Math.max(0,f.stock_tactica)}; sugerido ${f._sugerido} paq.`;
 }
 function renderFullReposicionTabla(){
   if(!fullRepoResult) return;
@@ -4701,34 +4753,38 @@ function renderFullReposicionTabla(){
   qs('full-reposicion-tbody').innerHTML=filas.map(f=>{
     const pendiente=fullRepoEnviosPend[f.item_id]||0;
     const marcado=fullRepoSeleccion[f.item_id]?'checked':'';
-    return `<tr>
-      <td style="text-align:center"><input type="checkbox" ${marcado} onchange="fullRepoSeleccion['${f.item_id}']=this.checked;_fullRepoResumen();"></td>
-      <td>${f.item_id}</td>
-      <td style="font-size:9px;color:var(--text3)">${f.inventory_id||'—'}</td>
-      <td>${f.sku}${f.dato_anterior||f.datos_incompletos?` <span class="full-tag" title="${f.datos_incompletos?'Ventas y envíos sin leer: el cálculo no es confiable':'No se pudo leer en la última actualización: se muestra la lectura anterior'}">${f.datos_incompletos?'datos incompletos':'dato anterior'}</span>`:''}</td>
-      <td style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
-      <td style="text-align:right">${f.factor>1?'×'+f.factor:'—'}</td>
-      <td style="text-align:right">${f.stock_full}</td>
-      <td style="text-align:right">${f.ventas_periodo}${f.censurado?' <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">⚡</span>':''}</td>
-      <td style="text-align:right">${f.ventas_diarias}</td>
-      <td style="text-align:right">${f.stock_objetivo}</td>
-      <td style="text-align:right">${f.stock_a_llegada}</td>
-      <td style="text-align:right;font-weight:600" title="En paquetes (lo que se prepara para esta publicación), no en unidades reales del SKU">${f._cantidadEnviar}</td>
-      <td style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}" title="En paquetes">${f._sugerido}</td>
-      <td style="text-align:right">
+    return `<tr class="fr-fila">
+      <td class="fr-sel" data-l="" style="text-align:center"><input type="checkbox" ${marcado} onchange="fullRepoSeleccion['${f.item_id}']=this.checked;_fullRepoResumen();"></td>
+      <td class="fr-mla" data-l="MLA">${f.item_id} <span class="fr-cta">${etiquetaCuenta(f.cuenta)}</span></td>
+      <td class="fr-mas" data-l="MLID" style="font-size:9px;color:var(--text3)">${f.inventory_id||'—'}</td>
+      <td class="fr-sku" data-l="SKU">${f.sku}${f.dato_anterior||f.datos_incompletos?` <span class="full-tag" title="${f.datos_incompletos?'Ventas y envíos sin leer: el cálculo no es confiable':'No se pudo leer en la última actualización: se muestra la lectura anterior'}">${f.datos_incompletos?'datos incompletos':'dato anterior'}</span>`:''}</td>
+      <td class="fr-mas" data-l="SKU ML" style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
+      <td class="fr-mas" data-l="Factor" style="text-align:right">${f.factor>1?'×'+f.factor:'—'}</td>
+      <td class="fr-k" data-l="Stock Full" style="text-align:right">${f.stock_full}</td>
+      <td class="fr-mas" data-l="Ventas Full 30d" style="text-align:right">${f.ventas_full??f.ventas_periodo}</td>
+      <td class="fr-mas" data-l="Ventas mi depósito 30d" style="text-align:right">${f.ventas_deposito||0}</td>
+      <td class="fr-k" data-l="Ventas 30d" style="text-align:right" title="${acEsc(fullRepoCalculoTxt(f))}">${f.ventas_periodo}${f.censurado?` <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">${ico('zap',12)}</span>`:''}</td>
+      <td class="fr-mas" data-l="Ventas/día" style="text-align:right">${f.ventas_diarias}</td>
+      <td class="fr-mas" data-l="Stock objetivo" style="text-align:right">${f.stock_objetivo}</td>
+      <td class="fr-mas" data-l="Stock a llegada" style="text-align:right">${f.stock_a_llegada}</td>
+      <td class="fr-k" data-l="A enviar" style="text-align:right;font-weight:600" title="En paquetes (lo que se prepara para esta publicación), no en unidades reales del SKU">${f._cantidadEnviar}</td>
+      <td class="fr-k" data-l="Sugerido" style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}" title="En paquetes">${f._sugerido}</td>
+      <td class="fr-mas" data-l="Envíos pendientes" style="text-align:right">
         <input type="number" min="0" value="${pendiente}" title="En paquetes -- sugerido por ML, editable" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();">
         ${f.envio_pendiente_ids&&f.envio_pendiente_ids.length?`<div style="font-size:8px;color:var(--text3)" title="Número${f.envio_pendiente_ids.length>1?'s':''} de envío real -- verificalo en el panel de Full de ML">#${f.envio_pendiente_ids.join(', #')}</div>`:''}
       </td>
-      <td style="text-align:right">${f.stock_ecom===null?'—':f.stock_ecom}</td>
-      <td style="text-align:right">${f.stock_tactica===null?'—':f.stock_tactica}</td>
+      <td class="fr-mas" data-l="Stock Ecom" style="text-align:right">${f.stock_ecom===null?'—':Math.max(0,f.stock_ecom)}${(f.flags||[]).includes('ecom_negativo')?' <span class="full-tag" title="Stock negativo en Ecom: se usa 0">negativo en Ecom</span>':''}</td>
+      <td class="fr-mas" data-l="Stock Táctica" style="text-align:right">${f.stock_tactica===null?'<span class="full-tag" title="Táctica no tiene dato de este SKU: no se suma 0 en silencio">sin dato de Táctica</span>':f.stock_tactica}</td>
+      <td class="fr-vermas"><button type="button" class="btn" aria-expanded="false" onclick="fullRepoVerMas(this)">Ver más</button></td>
+      <td class="fr-mas fr-motivo" data-l="Por qué" style="font-size:10px;white-space:normal;min-width:160px">${acEsc(f._porQue||'')}</td>
     </tr>`;
   }).join('');
 }
 function exportFullReposicion(){
   if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
   _fullRepoRecalcular();
-  const h='Cuenta,MLA,MLID,SKU,SKU_ML,Factor,Stock_Full,Ventas_30d,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar_Paquetes,Sugerido_Paquetes,Envios_Pendientes_Paquetes,Stock_Ecom,Stock_Tactica';
-  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,f.stock_full,f.ventas_periodo,f.ventas_diarias,f.stock_objetivo,f.stock_a_llegada,f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom??'',f.stock_tactica??''].join(','));
+  const h='Cuenta,MLA,MLID,SKU,SKU_ML,Factor,En Full,Ventas Full 30d,Ventas mi deposito 30d,Demanda usada,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar_Paquetes,Sugerido_Paquetes,Envios_Pendientes_Paquetes,Stock_Ecom,Stock_Tactica,Por que';
+  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,f.stock_full,f.ventas_full??f.ventas_periodo,f.ventas_deposito||0,f.ventas_periodo,f.ventas_diarias,f.stock_objetivo,f.stock_a_llegada,f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom==null?'':Math.max(0,f.stock_ecom),f.stock_tactica==null?'sin dato de Tactica':f.stock_tactica,'"'+(f._porQue||'').replace(/"/g,'""')+'"'].join(','));
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${new Date().toISOString().slice(0,10)}.csv`;a.click();
   toast('Exportado');
@@ -4750,13 +4806,14 @@ function exportFullReposicion(){
 function exportFullReposicionParaML(){
   if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
   _fullRepoRecalcular();
-  const seleccion=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab && fullRepoSeleccion[f.item_id] && f.inventory_id && f._sugerido>0);
+  const tildadas=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab && fullRepoSeleccion[f.item_id]);
+  const seleccion=tildadas.filter(f=>f.inventory_id && f._sugerido>0);   // nunca líneas con cantidad 0 ni sin código ML
   if(!seleccion.length){toast('No hay publicaciones seleccionadas con cantidad a enviar en esta pestaña','error');return;}
   const h='SKU,Codigo universal,Codigo ML,Numero de publicacion,Numero de producto,Cantidad de unidades';
   const lines=seleccion.map(f=>['','',f.inventory_id,'','',f._sugerido].join(','));
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-carga-ml-${fullRepoTab}-${new Date().toISOString().slice(0,10)}.csv`;a.click();
-  toast(`Exportado (${seleccion.length} publicaciones, cuenta ${fullRepoTab})`);
+  const fuera=tildadas.length-seleccion.length;toast(`Exportado (${seleccion.length} publicaciones, cuenta ${fullRepoTab})${fuera?` · ${fuera} tildada${fuera===1?'':'s'} quedaron afuera: cantidad 0 o sin código ML (hay que habilitarla en Mercado Libre)`:''}`);
 }
 
 // ──────────────────────
