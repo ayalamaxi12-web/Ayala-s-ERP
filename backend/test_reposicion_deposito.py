@@ -166,3 +166,15 @@ def test_con_stock_o_ventas_en_full_nunca_se_suma_el_deposito_y_el_quiebre_corri
     f = {x.item_id: x for x in rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True).filas}["MLA1"]
     assert f.censurado and f.deposito_usado == 0 and f.ventas_deposito == 197 and f.ventas_periodo == 50
     assert f.ventas_diarias == 4.55                                     # 50 ventas en 11 días (01/10 al 11/10, ambos extremos): la venta diaria real, sin sumar el depósito
+
+
+def test_si_las_ventas_de_full_no_se_pudieron_leer_no_se_estima_con_el_deposito():
+    ml, ecom, tac = armar()
+    ml._items["IT"].append(_item("MLA6", "SKUINC", "INVX"))
+    ml._full["IT"]["INVX"] = {"unidades": 13, "primera": "2026-10-01", "ultima": "2026-10-18"}
+    ml._pagado["IT"][("MLA6", None)] = 39
+    ecom.links["MLA6"] = ("SKUINC", 1)
+    ecom.pitec["SKUINC"] = 100
+    ml.lotes_fallidos = [{"cuenta": "IT", "tipo": "SALE_CONFIRMATION", "inventory_ids": ["INVX"]}]
+    f = {x.item_id: x for x in rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True).filas}.get("MLA6")
+    assert f is not None and f.datos_incompletos and f.deposito_usado == 0
