@@ -67,6 +67,9 @@ def _armar_ml(items_por_cuenta: dict, stock_por_inventory: dict, ventas_por_cuen
         def envios_pendientes_por_inventory(self, cuenta, inventory_ids, desde, hasta):
             return {k: v for k, v in envios_pendientes_por_cuenta.get(cuenta, {}).items() if k in inventory_ids}
 
+        def serie_full_por_inventory(self, cuenta, inventory_ids, desde, hasta):
+            return {}      # estos tests usan la ventana entre la primera y la última venta; la serie día por día se prueba en test_reposicion_deposito.py
+
     return _MLConCuentaActual(get_fn=get_fn, token_fn=_FAKE_TOKEN_FN)
 
 
