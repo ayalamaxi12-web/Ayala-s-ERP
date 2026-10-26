@@ -178,3 +178,28 @@ def test_si_las_ventas_de_full_no_se_pudieron_leer_no_se_estima_con_el_deposito(
     ml.lotes_fallidos = [{"cuenta": "IT", "tipo": "SALE_CONFIRMATION", "inventory_ids": ["INVX"]}]
     f = {x.item_id: x for x in rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True).filas}.get("MLA6")
     assert f is not None and f.datos_incompletos and f.deposito_usado == 0
+
+
+@pytest.fixture(autouse=True)
+def _sin_cache_de_vinculacion():
+    rep._cache_vinculacion.clear()
+    yield
+    rep._cache_vinculacion.clear()
+
+
+def test_vinculaciones_en_paralelo_con_cache_y_una_falla_no_tira_la_corrida():
+    llamadas = []
+
+    class E(FakeEcom):
+        def factor_pack(self, item_id):
+            llamadas.append(item_id)
+            if item_id == "MLA3":
+                raise RuntimeError("Ecom no responde")
+            return super().factor_pack(item_id)
+    ml, _, tac = armar()
+    ecom = E({"MLA1": ("SKUFULL", 1), "MLA2": ("W1105ACOMP", 1)}, {"SKUFULL": 100, "W1105ACOMP": 40})
+    r = rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True)
+    por = {f.item_id: f for f in r.filas}
+    assert por["MLA2"].sugerido == 19 and any("vinculación" in a for a in por["MLA3"].avisos)     # la falla de MLA3 se informa, el resto sigue
+    rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True)
+    assert llamadas.count("MLA2") == 1 and llamadas.count("MLA3") == 2    # MLA2 salió de la caché; solo se reintentó la que había fallado (MLA3)

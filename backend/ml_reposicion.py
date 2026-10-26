@@ -111,6 +111,8 @@ huecos reales sin dato para llenarlos):
 from __future__ import annotations
 
 import math
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Callable
@@ -211,6 +213,60 @@ def _convertir_a_paquetes(filas: list[FilaReposicionMLA]) -> None:
         f.sugerido = math.ceil(f.sugerido / f.factor)
 
 
+# Lecturas de Ecom (vinculación de cada publicación y stock de cada SKU): una consulta por elemento, y son miles. Se hacen en paralelo (pocos hilos, para no saturar a
+# Ecom) y la vinculación se recuerda entre corridas (casi nunca cambia).
+HILOS_ECOM = 6
+VIDA_VINCULACION_SEG = 12 * 3600
+_cache_vinculacion: dict[str, tuple[float, object]] = {}
+
+
+def _en_paralelo(fn, claves: list, progreso=None, hilos: int = HILOS_ECOM) -> dict:
+    """{clave: resultado} -- si una consulta falla, esa clave queda en `ERROR` (la corrida no se cae por una publicación)."""
+    out: dict = {}
+    if not claves:
+        return out
+    hechos = 0
+
+    def uno(k):
+        try:
+            return k, fn(k)
+        except Exception as e:  # noqa: BLE001
+            return k, _Error(str(e))
+
+    with ThreadPoolExecutor(max_workers=min(hilos, len(claves))) as pool:
+        for k, v in pool.map(uno, claves):
+            out[k] = v
+            hechos += 1
+            if progreso and hechos % 25 == 0:
+                progreso(hechos, len(claves))
+    if progreso:
+        progreso(len(claves), len(claves))
+    return out
+
+
+class _Error:
+    def __init__(self, msg: str):
+        self.msg = msg
+
+
+def _vinculaciones(ecom, item_ids: list[str], progreso=None) -> dict:
+    ahora = time.monotonic()
+    out, faltan = {}, []
+    for i in item_ids:
+        hit = _cache_vinculacion.get(i)
+        if hit and ahora - hit[0] < VIDA_VINCULACION_SEG:
+            out[i] = hit[1]
+        else:
+            faltan.append(i)
+    if faltan:
+        res = _en_paralelo(ecom.factor_pack, faltan, progreso)
+        for i, v in res.items():
+            out[i] = v
+            if not isinstance(v, _Error):
+                _cache_vinculacion[i] = (ahora, v)
+    return out
+
+
 def _grupo_pub(pub: dict) -> tuple:
     """Dos publicaciones con el mismo `inventory_id` comparten inventario: son UN grupo de ventas. Sin inventario, cada publicación (o variación) es su grupo."""
     if pub.get("inventory_id"):
@@ -245,32 +301,39 @@ def _filas_solo_deposito(ml, ecom, tactica, res_conc, pubs_activas, total_pagado
     """Publicaciones activas con ventas pagadas que NO tienen fila en la conciliación (no están en Full, o no tienen inventario): sin stock en Full. Stock Full 0 y a la
     llegada 0, y se sugiere el objetivo completo (el reparto contra Pitec y Táctica lo hace el llamador, igual que para el resto)."""
     filas: list[FilaReposicionMLA] = []
-    vistos: set[tuple] = set()
-    factor_por_item: dict[str, object] = {}
-    cache_stock: dict[str, tuple] = {}
-    candidatos = [p for p in pubs_activas if _grupo_pub(p) not in grupos_con_fila and total_pagado_grupo.get(_grupo_pub(p), 0) > 0]
-    for i, pub in enumerate(candidatos):
-        g = _grupo_pub(pub)
-        if g in vistos:
+    candidatos, vistos = [], set()
+    for p in pubs_activas:
+        g = _grupo_pub(p)
+        if g in grupos_con_fila or g in vistos or total_pagado_grupo.get(g, 0) <= 0:
             continue
         vistos.add(g)
-        if progreso_cb:
-            progreso_cb(i, len(candidatos), "Resolviendo publicaciones con ventas de mi depósito")
-        if pub["item_id"] not in factor_por_item:
-            factor_por_item[pub["item_id"]] = ecom.factor_pack(pub["item_id"])
+        candidatos.append(p)
+    pc = (lambda h, t: progreso_cb(h, t, "Resolviendo vinculaciones con Ecom de publicaciones con ventas de mi depósito")) if progreso_cb else None
+    factor_por_item = _vinculaciones(ecom, sorted({p["item_id"] for p in candidatos}), pc)
+    resueltas = []
+    for pub in candidatos:
+        f = factor_por_item.get(pub["item_id"])
         fila_ml = ItemFullML(item_id=pub["item_id"], cuenta=pub["cuenta"], sku=pub.get("sku"), inventory_id=pub.get("inventory_id"), titulo=pub.get("titulo", ""),
                              variacion_attrs=pub.get("variacion_attrs"))
-        pares, vinculado, _incidencia = _resolver_vinculacion(fila_ml, factor_por_item[pub["item_id"]])
-        pagado = total_pagado_grupo[g]
-        if not pares:
-            pares = [("", 1, None)]
+        error_ecom = isinstance(f, _Error)
+        pares, vinculado, _incidencia = _resolver_vinculacion(fila_ml, None if error_ecom else f)
+        resueltas.append((pub, pares or [("", 1, None)], vinculado, error_ecom))
+    skus = sorted({(sku, parent) for _, pares, _, _ in resueltas for sku, _, parent in pares if sku})
+    ps = (lambda h, t: progreso_cb(h, t, "Leyendo stock de Ecom y Táctica de esos SKU")) if progreso_cb else None
+    stock_por_sku = _en_paralelo(lambda sp: _stocks(ecom, tactica, sp[0], sp[1]), skus, ps)
+    for pub, pares, vinculado, error_ecom in resueltas:
+        pagado = total_pagado_grupo[_grupo_pub(pub)]
         for sku, factor, parent in pares:
             if sku:
-                if sku not in cache_stock:
-                    cache_stock[sku] = _stocks(ecom, tactica, sku, parent)
-                stock_ecom, stock_tactica, flags_stock, avisos_stock = cache_stock[sku]
+                st = stock_por_sku.get((sku, parent))
+                if isinstance(st, _Error) or st is None:
+                    stock_ecom, stock_tactica, flags_stock, avisos_stock = None, None, ["sin_ecom"], ["No se pudo leer el stock de Ecom: actualizá de nuevo."]
+                else:
+                    stock_ecom, stock_tactica, flags_stock, avisos_stock = st
             else:
                 stock_ecom, stock_tactica, flags_stock, avisos_stock = None, None, ["sin_sku"], []
+            if error_ecom:
+                avisos_stock = list(avisos_stock) + ["No se pudo leer la vinculación con Ecom: actualizá de nuevo."]
             deposito = pagado * factor
             usado = round(deposito * fraccion_deposito)      # no está en Full: se manda una parte de lo que vende desde mi depósito
             diarias = usado / dias_ventas
