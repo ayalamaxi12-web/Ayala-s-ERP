@@ -55,7 +55,7 @@ def test_el_espejo_js_da_el_mismo_precio_que_el_backend():
     from decimal import Decimal as D
     import ayala_core as ac
     src = open(INDEX, encoding='utf-8').read()
-    js = ("const AC_COMISION_PCT=15.5, AC_COSTO_ORDEN=149.12, AC_COSTO_FIJO_TRAMOS=[[15000,1330],[24000,2740],[33000,3320],[null,0]], AC_IIBB_PCT=5, AC_IMPCH_PCT=1.2, AC_IVA_SERVICIOS_ML=1.21;\n"
+    js = ("const AC_COMISION_PCT=15.5, AC_COSTO_ORDEN=149.12, AC_COSTO_FIJO_TRAMOS=[[15000,1330],[24000,2740],[33000,3320],[null,0]], AC_IIBB_PCT=5, AC_IMPCH_PCT=1.2, AC_IVA_SERVICIOS_ML=1.21; let AC_RENTA_BASE='con_iva';\n"
           + _fn(src, "ayalaCoreCostoFijo") + _fn(src, "ayalaCoreCalcularPrecioJS")
           + "console.log(JSON.stringify([2000,9000,15000,21000,30000,60000].map(c=>ayalaCoreCalcularPrecioJS(c,1.21,0,0,30))));")
     out = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
@@ -69,3 +69,19 @@ def test_full_exporta_solo_la_cuenta_de_la_pestana():
     assert "filas.filter(f=>f.cuenta===fullRepoTab).map(f=>[f.cuenta" in src       # el CSV no mezcla cuentas
     assert "full-carga-ml-${fullRepoNombreCuenta(fullRepoTab)}" in src               # el de ML va por cuenta y lo dice en el nombre
     assert 'id="full-repo-exp-cuenta-ml"' in src
+
+
+def test_el_espejo_js_sin_iva_con_costo_fijo_da_lo_mismo_que_el_backend():
+    from test_front_analisis import _fn, INDEX
+    import json, subprocess
+    from decimal import Decimal as D
+    import ayala_core as ac
+    src = open(INDEX, encoding='utf-8').read()
+    costos = (2000, 9000, 15000, 21000, 30000, 60000)
+    js = ("const AC_COMISION_PCT=15.5, AC_COSTO_ORDEN=149.12, AC_COSTO_FIJO_TRAMOS=[[15000,1330],[24000,2740],[33000,3320],[null,0]], AC_IIBB_PCT=5, AC_IMPCH_PCT=1.2, AC_IVA_SERVICIOS_ML=1.21; let AC_RENTA_BASE='sin_iva';\n"
+          + _fn(src, "ayalaCoreCostoFijo") + _fn(src, "ayalaCoreCalcularPrecioJS")
+          + "console.log(JSON.stringify([2000,9000,15000,21000,30000,60000].map(c=>ayalaCoreCalcularPrecioJS(c,1.105,0,5,25))));")
+    out = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+    esperado = [int(ac.calcular_precio_condicion(costo_sin_iva=D(c), iva_factor=D("1.105"), envio_real=D(0), financiero_pct=D(5), renta_pct=D(25), renta_base="sin_iva",
+                                                 costo_orden=ac.COSTO_ORDEN_ECOM_DEFAULT, costo_fijo_tramos=ac.COSTO_FIJO_ML_TRAMOS)) for c in costos]
+    assert out == esperado
