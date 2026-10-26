@@ -83,6 +83,10 @@ RENTA_POR_CONDICION_DEFAULT: dict[str | int, Decimal] = {
 
 CONDICIONES: tuple[str | int, ...] = ("contado", "reducida", 3, 6, 9, 12)
 
+# Base del % de renta. «con_iva» es la de siempre (el motor original de la planilla ya restaba `renta_objetivo_pct` junto al `1/(1+iva)`, o sea X % del precio CON IVA);
+# «sin_iva» (opcional, Bloque 2) hace que la renta sea X % del precio SIN IVA: el término del denominador pasa a ser X % / iva_factor.
+RENTA_BASES: tuple[str, ...] = ("con_iva", "sin_iva")
+
 _IVA_SERVICIOS_ML = Decimal("1.21")  # IVA del servicio/comisión de ML -- SIEMPRE 21%,
 # sin importar la alícuota del producto (confirmado en la fórmula real).
 
@@ -112,6 +116,7 @@ def calcular_precio_condicion(
     envio_full_pct: Decimal = ENVIO_FULL_PCT_DEFAULT,
     costo_orden: Decimal = Decimal("0"),
     costo_fijo_tramos=None,
+    renta_base: str = "con_iva",
 ) -> Decimal:
     """Reverse-markup: resuelve el precio de venta (con IVA) tal que,
     descontando comisión ML, IIBB, el costo financiero de la condición
@@ -128,25 +133,28 @@ def calcular_precio_condicion(
     # `costo_orden` (Bloque 2, PR 4): monto fijo en pesos por orden (ej. costo por orden de Ecom). Con 0 -- el valor por defecto, y el que usa Mercado Libre -- la cuenta es exactamente la de siempre.
     numerador = costo_sin_iva + envio_real / _IVA_SERVICIOS_ML + costo_orden
     full = (envio_full_pct / 100) if envio_full else Decimal("0")
+    if renta_base not in RENTA_BASES:
+        raise ValueError(f"base de renta no soportada: {renta_base!r}")
+    renta_term = (renta_pct / 100) if renta_base == "con_iva" else (renta_pct / 100) / iva_factor
     if costo_fijo_tramos:
-        return _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_cheque_pct, financiero_pct, renta_pct, full, costo_fijo_tramos)
+        return _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_cheque_pct, financiero_pct, renta_term, full, costo_fijo_tramos)
     denominador = (
         (1 / iva_factor)
         - (comision_pct / 100) / _IVA_SERVICIOS_ML
         - (iibb_pct / 100) / iva_factor  # IIBB: sobre el precio SIN IVA
         - (imp_cheque_pct / 100)  # imp. cheque: sobre el precio CON IVA
         - (financiero_pct / 100)
-        - (renta_pct / 100)
+        - renta_term
         - full
     )
     return (numerador / denominador).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_cheque_pct, financiero_pct, renta_pct, full, tramos) -> Decimal:
+def _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_cheque_pct, financiero_pct, renta_term, full, tramos) -> Decimal:
     """Con un costo fijo que depende del PRECIO (tramos de Mercado Libre) el precio sale de probar cada tramo: para el tramo i se resuelve con su monto y vale si el precio
     resultante cae dentro del tramo. Como los montos crecen con el tramo, el primer tramo que cumple es el precio mínimo que alcanza la renta."""
     denominador = (
-        (1 / iva_factor) - (comision_pct / 100) / _IVA_SERVICIOS_ML - (iibb_pct / 100) / iva_factor - (imp_cheque_pct / 100) - (financiero_pct / 100) - (renta_pct / 100) - full
+        (1 / iva_factor) - (comision_pct / 100) / _IVA_SERVICIOS_ML - (iibb_pct / 100) / iva_factor - (imp_cheque_pct / 100) - (financiero_pct / 100) - renta_term - full
     )
     piso = Decimal(0)           # el precio mínimo del tramo actual (el techo del anterior)
     ultimo = None
@@ -181,6 +189,7 @@ def calcular_precios_todas_condiciones(
     imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
     costo_orden: Decimal = COSTO_ORDEN_ECOM_DEFAULT,
     costo_fijo_tramos=COSTO_FIJO_ML_TRAMOS,
+    renta_base: str = "con_iva",
 ) -> dict[str, Decimal]:
     """El motor completo, las 6 condiciones de una (A.8 punto 2 de
     AYALA_CORE.md: "tabla ... precio calculado por el motor para cada
@@ -204,6 +213,7 @@ def calcular_precios_todas_condiciones(
             envio_full=envio_full,
             costo_orden=costo_orden,
             costo_fijo_tramos=costo_fijo_tramos,
+            renta_base=renta_base,
         )
         for condicion in CONDICIONES
     }
@@ -339,6 +349,7 @@ def descubrir_publicaciones(
     renta_por_condicion: dict[str | int, Decimal] | None = None,
     progreso_cb: Callable[[int, int, str], None] | None = None,
     skus_filtro: list[str] | None = None,
+    renta_base: str = "con_iva",
 ) -> tuple[list[dict], list[dict]]:
     """Pedido de Maxx 2026-09-02: "que detecte los SKU solos de las dos
     cuentas" -- escanea TODAS las publicaciones activas de las cuentas
@@ -416,7 +427,7 @@ def descubrir_publicaciones(
             envio_real = Decimal(str(envio_info["costo_envio_real"])) if envio_info else Decimal(0)
             precios = calcular_precios_todas_condiciones(
                 costo_sin_iva=costo_ars, iva_factor=iva_factor, envio_real=envio_real,
-                renta_por_condicion=renta_por_condicion,
+                renta_por_condicion=renta_por_condicion, renta_base=renta_base,
             )
             precio_calculado = precios[str(condicion)]
             # Corregido 2026-09-15: NO tomar `d['price']` directo -- si hay
@@ -554,6 +565,7 @@ def iniciar_job_publicaciones(
     job_id: str, cuentas: list[str] | None = None, tc: float = 0,
     renta_por_condicion: dict[str | int, float] | None = None,
     skus: list[str] | None = None,
+    renta_base: str = "con_iva",
 ) -> None:
     _jobs[job_id] = {"status": "running", "log": ["Escaneando publicaciones activas..."], "result": None, "progress": None}
     try:
@@ -575,7 +587,7 @@ def iniciar_job_publicaciones(
         filas, incidencias = descubrir_publicaciones(
             ml, costo_provider, iva_provider, cuentas or list(SELLERS.keys()), tc_decimal,
             renta_por_condicion=renta_decimal,
-            progreso_cb=_progreso, skus_filtro=skus,
+            progreso_cb=_progreso, skus_filtro=skus, renta_base=renta_base,
         )
         _jobs[job_id]["progress"] = None
         _jobs[job_id]["result"] = {

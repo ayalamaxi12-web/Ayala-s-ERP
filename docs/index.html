@@ -720,8 +720,17 @@ body[data-nuevo] #page-intel-mix .card{margin-bottom:14px}
 .ac-config-av ul{margin:4px 0 8px 18px;padding:0}
 .ac-config-av li{margin:2px 0}
 .ac-comunes>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--celeste-700)}
-.ac-impacto{margin-top:var(--sp-2,8px);font-size:var(--fs-tabla)}
+.ac-impacto{margin-top:8px;font-size:var(--fs-tabla)}
 .ac-impacto table{width:auto}
+.ac-renta-base{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.ac-renta-base .ac-mk{min-height:44px}
+.ac-aviso-renta{margin:8px 0;padding:8px 12px;border-radius:var(--r-recuadro);background:var(--aviso-fondo);color:var(--aviso-texto);border:1px solid var(--aviso-borde);font-size:var(--fs-tabla)}
+.ac-cuenta{position:sticky;left:12px}
+.ac-cuenta table{width:100%}
+.ac-vercuenta{white-space:nowrap}
+.ac-cuenta .ac-cuenta-total td{font-weight:700}
+.ac-th-nota{display:block;font-weight:400;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.ac-renta-eq{display:block;font-size:var(--fs-tabla);color:var(--texto-suave);white-space:nowrap}
 .ac-comunes-res{font-weight:400;color:var(--texto-suave);font-size:var(--fs-tabla)}
 .ac-comun{display:flex;flex-direction:column;gap:2px}
 .ac-comun label:first-child{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-tabla);color:var(--texto-suave)}
@@ -2038,6 +2047,13 @@ igual que la rentabilidad real, que se muestra al lado. -->
       <label data-cond="18" hidden>18 cuotas %<input type="text" id="ac-renta-18" value="24" inputmode="decimal"></label>
       <label data-cond="24" hidden>24 cuotas %<input type="text" id="ac-renta-24" value="24" inputmode="decimal"></label>
     </div>
+    <div class="ac-renta-base" role="radiogroup" aria-label="Base del porcentaje de renta">
+      <span class="ac-lbl" id="ac-renta-base-lbl">Renta sobre:</span>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" class="ac-mk ac-rb" data-rb="con_iva" onclick="ayalaCoreRentaBase('con_iva')">Precio con IVA</button>
+      <button type="button" role="radio" aria-checked="true" class="ac-mk ac-rb" data-rb="sin_iva" onclick="ayalaCoreRentaBase('sin_iva')">Precio sin IVA</button>
+      <span class="ac-ayuda" id="ac-renta-base-ayuda">El % de renta es el margen dividido el precio sin IVA (como lo calcula la planilla de rentabilidad).</span>
+    </div>
+    <div class="ac-aviso-renta" id="ac-renta-aviso" role="status" aria-live="polite" hidden></div>
     <div class="ac-pack" role="group" aria-label="Cantidad por publicación">
       <label for="ac-cantidad">Cantidad por publicación
         <select id="ac-cantidad" class="fi" onchange="ayalaCoreCantidadCambio()">
@@ -6016,9 +6032,11 @@ function ayalaCoreFinancieroPct(condicion){
 }
 // Decidido por Maxi (27/10): comisión 15,5 %, costo por orden de Ecom en ML y costo fijo por unidad de ML (< $33.000) como parte de la renta (espejo de ayala_core._precio_con_costo_fijo).
 function ayalaCoreCostoFijo(precio){for(const [t,m] of AC_COSTO_FIJO_TRAMOS)if(t===null||precio<t)return m;return 0;}
-function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct){
+// Base del % de renta: «con_iva» (la de siempre: X % del precio con IVA) o «sin_iva» (X % del precio sin IVA, el término pasa a X/100 ÷ IVA).
+let AC_RENTA_BASE='sin_iva';
+function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,base){
   const num=costoSinIvaArs+envioReal/AC_IVA_SERVICIOS_ML+AC_COSTO_ORDEN;
-  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(AC_IMPCH_PCT/100)-(financieroPct/100)-(rentaPct/100);
+  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(AC_IMPCH_PCT/100)-(financieroPct/100)-(rentaPct/100)/((base||AC_RENTA_BASE)==='sin_iva'?ivaFactor:1);
   let piso=0,p=0;
   for(const [t,m] of AC_COSTO_FIJO_TRAMOS){p=Math.round((num+m)/den);if(t===null||p<t)return Math.max(p,piso);piso=t;}
   return p;
@@ -6051,8 +6069,8 @@ function ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,finan
   const rentaMonto=ventaSinIva+costoSinIvaTotal;
   return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,impCheque:-impCheque,envioFull:-envioFullMonto,costoFijo:-costoFijo,costoOrden:-costoOrden,renta:rentaMonto};
 }
-function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull){
-  const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct);
+function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull,base){
+  const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,base);
   return ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,financieroPct,envioFull);
 }
 // Margen simulado con el motor REAL de Ayala Core (comisión/financiero
@@ -6085,12 +6103,19 @@ const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
 // input (`ac-renta-<condicion>`, ver AC_COND_ORDEN/el HTML) -- sin
 // fórmula, se lee directo.
 function ayalaCoreRentaPct(condicion){return Number(qs('ac-renta-'+condicion)?.value||0);}
-const AC_DESGLOSE_HEAD='<th style="text-align:right">Comisión</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío</th><th style="text-align:right">IIBB</th><th style="text-align:right">Imp. cheque</th><th style="text-align:right">Renta $</th>';
+const AC_NOTA_IVA='<span class="ac-th-nota">(con IVA; en la cuenta se resta sin IVA)</span>';
+const AC_DESGLOSE_HEAD=`<th style="text-align:right">Comisión${AC_NOTA_IVA}</th><th style="text-align:right">Financiero</th><th style="text-align:right">Envío${AC_NOTA_IVA}</th><th style="text-align:right">IIBB</th><th style="text-align:right">Imp. cheque</th><th style="text-align:right">Renta $</th>`;
+// Renta en pesos y, al lado, el equivalente en las dos bases (el % que se carga es de una u otra según «Renta sobre»).
+function ayalaCoreRentaCelda(d,c,renta){
+  const cu=(d.cuentas||{})[c],f=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:2});
+  const eq=cu?`<span class="ac-renta-eq">${f(cu.renta_pct_con_iva)} % del precio con IVA · ${f(cu.renta_pct_sin_iva)} % sin IVA</span>`:'';
+  return `<td style="text-align:right">${ayalaCoreFmt(renta)}${eq}</td>`;
+}
 function ayalaCoreDesgloseFila(d,c){
   if(!ayalaCoreEsML(d)){
     const g=(d.desglose_mercado||{})[c];if(!g)return '<td colspan="6">—</td>';
     const o=d.parametros&&d.parametros.costo_orden>0;
-    return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.imp_cheque)}</td>${o?`<td style="text-align:right">${ayalaCoreFmt2(g.costo_orden)}</td>`:''}<td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
+    return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.imp_cheque)}</td>${o?`<td style="text-align:right">${ayalaCoreFmt2(g.costo_orden)}</td>`:''}${ayalaCoreRentaCelda(d,c,g.renta)}`;
   }
   // `d.renta_por_condicion` viene del backend -- es la renta que ESE
   // resultado usó de verdad, no necesariamente lo que muestran los
@@ -6098,8 +6123,8 @@ function ayalaCoreDesgloseFila(d,c){
   // último "Calcular").
   const rentaPct=d.renta_por_condicion[c];
   const fin=ayalaCoreFinancieroPct(c);
-  const g=ayalaCoreDesglose(d.costo_sin_iva_ars,d.iva_factor,d.envio_real,fin,rentaPct,d.envio_full);
-  return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.impCheque)}</td><td style="text-align:right">${ayalaCoreFmt(g.renta)}</td>`;
+  const g=ayalaCoreDesglose(d.costo_sin_iva_ars,d.iva_factor,d.envio_real,fin,rentaPct,d.envio_full,d.renta_base);
+  return `<td style="text-align:right">${ayalaCoreFmt(g.comision)}</td><td style="text-align:right">${ayalaCoreFmt(g.financiero)}</td><td style="text-align:right">${ayalaCoreFmt(g.envio)}</td><td style="text-align:right">${ayalaCoreFmt(g.iibb)}</td><td style="text-align:right">${ayalaCoreFmt(g.impCheque)}</td>${ayalaCoreRentaCelda(d,c,g.renta)}`;
 }
 // Celdas "Precio manual"/"Usar" compartidas por las dos tablas de abajo --
 // pedido de Maxx 2026-09-15: al lado de cada precio calculado, poder poner
@@ -6149,12 +6174,12 @@ function ayalaCoreTablaHtml(items){
   const multi=items.length>1||items.some(x=>x.mostrarSku),d0=items[0].d,ml=ayalaCoreEsML(d0),pack=d0.cantidad>1;
   const cols=(pack?1:0)+6+((!ayalaCoreEsML(d0)&&d0.parametros&&d0.parametros.costo_orden>0)?1:0);
   const cabSku=multi?'<th>SKU</th>':'';
-  let h=`<table><thead><tr>${cabSku}<th>Condición</th><th style="text-align:right">${pack?'Precio de la publicación':'Precio'}</th>${pack?'<th style="text-align:right">Precio por unidad</th>':''}${ml?'<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>':''}${ayalaCoreDesgloseHead(d0)}</tr></thead><tbody>`;
+  let h=`<table><thead><tr>${cabSku}<th>Condición</th><th style="text-align:right">${pack?'Precio de la publicación':'Precio'}</th>${pack?'<th style="text-align:right">Precio por unidad</th>':''}${ml?'<th style="text-align:right">Manual</th><th style="text-align:center">Usar</th>':''}${ayalaCoreDesgloseHead(d0)}<th>Cuenta</th></tr></thead><tbody>`;
   items.forEach(({sku,d})=>{
     const pre=multi?`<td>${acEsc(sku)}</td>`:'';
     ayalaCoreConds(d).forEach(c=>{
-      if(d.precios[c]===undefined){h+=ayalaCoreFilaErrorHtml(d,c,pre,cols);return;}
-      h+=`<tr>${pre}<td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${pack?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ml?ayalaCorePrecioOverrideCellsHtml(sku,c):''}${ayalaCoreDesgloseFila(d,c)}</tr>`;
+      if(d.precios[c]===undefined){h+=ayalaCoreFilaErrorHtml(d,c,pre,cols+1);return;}
+      h+=`<tr>${pre}<td>${ayalaCoreCondLabel(c)}</td><td style="text-align:right">${ayalaCoreFmt(d.precios[c])}</td>${pack?`<td style="text-align:right">${ayalaCoreFmt2(d.precios_unitarios[c])}</td>`:''}${ml?ayalaCorePrecioOverrideCellsHtml(sku,c):''}${ayalaCoreDesgloseFila(d,c)}<td>${ayalaCoreVerCuentaBtn(sku,d,c)}</td></tr>`;
     });
   });
   return h+'</tbody></table>'+ayalaCoreComisionDetalleHtml(d0);
@@ -6222,7 +6247,7 @@ function ayalaCorePropagarOverride(sku,condicion){
 // endpoints que lo piden (Calcular, Detectar publicaciones, Comparar
 // MLA), un solo lugar para no repetir la lectura de los 6 inputs.
 function ayalaCoreRentaQueryParams(){
-  return AC_COND_ORDEN.map(c=>`renta_${c}=${qs('ac-renta-'+c)?.value||0}`).join('&');
+  return AC_COND_ORDEN.map(c=>`renta_${c}=${qs('ac-renta-'+c)?.value||0}`).join('&')+`&renta_base=${AC_RENTA_BASE}`;
 }
 function ayalaCoreTcParam(){const v=qs('ac-tc-manual')?.value;return v?`&tc=${v}`:'';}
 function ayalaCoreIvaParam(){const v=qs('ac-iva-manual')?.value;return v?`&iva=${v}`:'';}
@@ -6357,7 +6382,7 @@ function ayalaCoreMercadoAplicar(){
   const rb=qs('ac-recargo-box');if(rb)rb.hidden=!(m==='web'||m==='todos');
   const ay=qs('ac-comunes-ayuda');if(ay)ay.textContent=m==='todos'?'Con «Todos» cada mercado usa sus propios interruptores (Mercado Libre sin el costo por orden, el resto con todo activado); elegí un mercado para cambiarlos.':m==='ml'?'En Mercado Libre el costo por orden viene desactivado para no cambiar los precios de hoy: activalo solo si querés verlo.':'Los valores son los mismos para todos los mercados (se cargan en la pestaña «Mercados»); acá se activan o no para este mercado.';
   const r=qs('ac-comunes-res');if(r)r.textContent=m==='todos'?'· cada mercado con sus interruptores':`· ${AC_MK_NOMBRE[m]}: ${['orden','cheque','iibb'].filter(k=>u[k]).map(k=>({orden:'costo por orden',cheque:'cheque',iibb:'IIBB'}[k])).join(', ')||'ninguno'}`;
-  ayalaCoreConfigRender();ayalaCoreImpactoOrden();
+  ayalaCoreConfigRender();ayalaCoreImpactoOrden();ayalaCoreRentaAviso();
 }
 // Cuánto cambia el precio de ML (contado) al activar el costo por orden: un SKU barato y uno caro, con la misma cuenta del motor (dos pedidos por lote, sin tocar nada).
 let AC_IMPACTO_SEQ=0;
@@ -6424,6 +6449,61 @@ function ayalaCoreMercadoTxt(d){
 function ayalaCoreConds(d){return (d.condiciones||AC_COND_ORDEN).map(String);}
 function ayalaCoreEsML(d){return !d.mercado||d.mercado==='ml';}
 function ayalaCoreDesgloseHead(d){const o=!ayalaCoreEsML(d)&&d.parametros&&d.parametros.costo_orden>0;return o?AC_DESGLOSE_HEAD.replace('<th style="text-align:right">Renta $</th>','<th style="text-align:right">Costo por orden</th><th style="text-align:right">Renta $</th>'):AC_DESGLOSE_HEAD;}
+// «Ver cuenta»: el paso a paso de una condición (precio, precio sin IVA, costo, comisión, financiero, envío, IIBB, cheque, costo por orden y renta), con el IVA de cada línea.
+let AC_CUENTAS={};
+function ayalaCoreVerCuentaBtn(sku,d,c){
+  if(!d.cuentas||!d.cuentas[c])return '';
+  const k=`${sku}|${c}|${d.mercado||'ml'}`;AC_CUENTAS[k]={cu:d.cuentas[c],iva:d.iva_factor,base:d.renta_base||'con_iva',cant:d.cantidad||1};
+  return `<button type="button" class="btn ac-vercuenta" aria-expanded="false" data-k="${acEsc(k)}" onclick="ayalaCoreVerCuenta(this)">Ver cuenta</button>`;
+}
+function ayalaCoreCuentaHtml(x){
+  const f=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:2}),m=n=>'$ '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}),ivaPct=f((x.iva-1)*100);
+  const T={precio:'Precio de venta',precio_sin_iva:'Precio sin IVA',costo:'Costo del producto',comision:'Comisión',financiero:'Costo financiero',envio:'Envío',iibb:'IIBB',cheque:'Impuesto al cheque',envio_full:'Envío a Bodega Full',costo_orden:'Costo por orden',renta:'Renta'};
+  const filas=x.cu.lineas.map(l=>{
+    let calc='',conIva='',sinIva='';
+    if(l.clave==='precio'){conIva=m(l.monto);calc='El precio que da la cuenta';}
+    else if(l.clave==='precio_sin_iva'){sinIva=m(l.monto);calc=`precio ÷ ${Number(l.iva_factor).toLocaleString('es-AR',{maximumFractionDigits:3})} (IVA ${ivaPct} %)`;}
+    else if(l.clave==='costo'){sinIva=m(l.monto);calc=`costo en USD × TC${x.cant>1?` × ${x.cant}`:''}`;}
+    else if(l.clave==='envio'){conIva=m(l.con_iva);sinIva=m(l.monto);calc='envío ÷ 1,21';}
+    else if(l.clave==='costo_orden'){sinIva=m(l.monto);calc='monto fijo por orden';}
+    else if(l.clave==='renta'){sinIva=m(l.monto);calc=`${f(x.cu.renta_pct_con_iva)} % del precio con IVA · ${f(x.cu.renta_pct_sin_iva)} % del precio sin IVA`;}
+    else{if(l.con_iva!==undefined)conIva=m(l.con_iva);sinIva=m(l.monto);calc=`${f(l.pct)} % × ${l.sobre}${l.clave==='comision'?' ÷ 1,21':''}`;}
+    const signo=l.signo<0?'− ':(l.clave==='renta'?'= ':'');
+    return `<tr${l.clave==='renta'?' class="ac-cuenta-total"':''}><td>${signo}${T[l.clave]}</td><td>${acEsc(calc)}</td><td style="text-align:right">${conIva}</td><td style="text-align:right">${sinIva}</td><td>${acEsc(l.iva)}</td></tr>`;
+  }).join('');
+  const base=x.base==='sin_iva'?'sin IVA':'con IVA';
+  return `<div class="ac-cuenta"><table><caption>Cuenta paso a paso (la renta cargada es sobre el precio ${base})</caption><thead><tr><th>Concepto</th><th>Cómo se calcula</th><th style="text-align:right">Con IVA</th><th style="text-align:right">Sin IVA (lo que entra en la cuenta)</th><th>IVA</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+function ayalaCoreVerCuenta(btn){
+  const tr=btn.closest('tr'),abierto=btn.getAttribute('aria-expanded')==='true',sig=tr.nextElementSibling;
+  if(abierto){if(sig&&sig.classList.contains('ac-cuenta-fila'))sig.remove();btn.setAttribute('aria-expanded','false');btn.textContent='Ver cuenta';return;}
+  const x=AC_CUENTAS[btn.dataset.k];if(!x)return;
+  const fila=document.createElement('tr');fila.className='ac-cuenta-fila';const td=document.createElement('td');td.colSpan=tr.cells.length;td.innerHTML=ayalaCoreCuentaHtml(x);fila.appendChild(td);tr.after(fila);const w=qs('ac-tabla-wrap'),box=td.firstElementChild;if(w&&box)box.style.width=Math.max(280,w.clientWidth-24)+'px';
+  btn.setAttribute('aria-expanded','true');btn.textContent='Ocultar cuenta';
+}
+function ayalaCoreRentaBase(b){
+  AC_RENTA_BASE=b;
+  document.querySelectorAll('.ac-rb').forEach(x=>{const on=x.dataset.rb===b;x.setAttribute('aria-checked',on);x.tabIndex=on?0:-1;});
+  const ay=qs('ac-renta-base-ayuda');if(ay)ay.textContent=b==='sin_iva'?'El % de renta se calcula sobre el precio sin IVA: el precio sube para que la renta sea ese % del neto. En la tabla ves el equivalente sobre el precio con IVA.':'El % de renta se calcula sobre el precio de venta con IVA (como siempre).';
+  ayalaCoreAutoRecalcular();
+}
+document.addEventListener('keydown',e=>{const b=e.target&&e.target.closest&&e.target.closest('.ac-rb');if(!b||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const o=b.dataset.rb==='con_iva'?'sin_iva':'con_iva';ayalaCoreRentaBase(o);const n=document.querySelector(`.ac-rb[data-rb="${o}"]`);if(n)n.focus();});
+// Aviso cuando un % de renta se aparta mucho de los demás (típico error de tipeo, p. ej. 32,279 entre valores de 10): mediana de las condiciones visibles; más de 10 puntos de distancia, o fuera de 0–100, se marca.
+const AC_RENTA_DESVIO_PP=10;
+function ayalaCoreRentaAvisoCalc(vals){
+  const v=vals.filter(x=>x.n!==null),ord=v.map(x=>x.n).sort((a,b)=>a-b);if(!ord.length)return [];
+  const med=ord.length%2?ord[(ord.length-1)/2]:(ord[ord.length/2-1]+ord[ord.length/2])/2;
+  return v.filter(x=>x.n<0||x.n>=100||(v.length>2&&Math.abs(x.n-med)>AC_RENTA_DESVIO_PP)).map(x=>({...x,med}));
+}
+function ayalaCoreRentaAviso(){
+  const box=qs('ac-renta-aviso');if(!box)return;
+  const vals=[...document.querySelectorAll('.ac-rentas label[data-cond]')].filter(l=>!l.hidden).map(l=>{const i=l.querySelector('input'),t=(i.value||'').trim().replace(',','.');return {id:i.id,nombre:l.textContent.replace('%','').trim(),n:t===''||isNaN(Number(t))?null:Number(t),txt:i.value.trim()};});
+  const raros=ayalaCoreRentaAvisoCalc(vals);
+  vals.forEach(x=>{const i=qs(x.id);if(i){if(raros.some(r=>r.id===x.id))i.setAttribute('aria-invalid','true');else i.removeAttribute('aria-invalid');}});
+  if(!raros.length){box.hidden=true;box.textContent='';return;}
+  const f=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:3});
+  box.hidden=false;box.textContent='Revisá la renta: '+raros.map(r=>`${r.nombre} (${r.txt} %) se aparta mucho de las demás (mediana ${f(r.med)} %)`).join('; ')+'. Si es correcta, ignorá este aviso.';
+}
 function ayalaCoreFilaErrorHtml(d,c,prefijo,n){return `<tr class="ac-fila-err">${prefijo}<td>${ayalaCoreCondLabel(c)}</td><td colspan="${n}"><span class="ac-aviso-txt">${acEsc((d.errores_condicion||{})[c]||'falta dato')}</span></td></tr>`;}
 // ══ Vista «Todos» (Bloque 2, PR 5): una tarjeta por mercado con todos los precios finales por condición de pago. La identidad de cada mercado (logo, color y tipografía) vive SOLO acá y en el selector ══
 let AC_FUENTES_OK=false;
@@ -6498,6 +6578,7 @@ function ayalaCoreAutoRecalcular(){
 }
 function ayalaCoreAutoRecalcularMontar(){
   const ids=['ac-renta-18','ac-renta-24','ac-iva-manual','ac-cantidad','ac-cantidad-otro','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
+  ids.forEach(id=>{const el=qs(id);if(el&&/^ac-renta-/.test(id)&&!el.dataset.avisoRenta){el.dataset.avisoRenta='1';el.addEventListener('input',ayalaCoreRentaAviso);}});ayalaCoreRentaAviso();
   ids.forEach(id=>{const el=qs(id);if(el&&!el.dataset.autocalc){el.dataset.autocalc='1';el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',ayalaCoreAutoRecalcular);}});
 }
 async function ayalaCoreCalcular(){
