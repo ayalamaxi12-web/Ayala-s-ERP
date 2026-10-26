@@ -8,11 +8,18 @@ SRC = open(INDEX, encoding="utf-8").read()
 
 
 def _porque(fila, pend=0):
-    js = "let fullRepoEnviosPend={};" + _fn(SRC, "fullRepoPorQue") + f"\nconst f={json.dumps(fila)};fullRepoEnviosPend[f.item_id]={pend};console.log(fullRepoPorQue(f));"
+    js = "let fullRepoEnviosPend={};" + _fn(SRC, "fullFechaCorta") + _fn(SRC, "fullRepoPorQue") + f"\nconst f={json.dumps(fila)};fullRepoEnviosPend[f.item_id]={pend};console.log(fullRepoPorQue(f));"
     return subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout.strip()
 
 
 BASE = {"item_id": "M1", "flags": [], "ventas_diarias": 2, "stock_objetivo": 42, "stock_a_llegada": 0, "_necesarioReal": 42, "_sugerido": 42, "_cantidadEnviar": 42, "_disp": 100}
+
+
+def test_motivos_de_quiebre_y_de_deposito_parcial():
+    q = _porque({**BASE, "censurado": True, "ventas_full": 50, "primera_venta": "2026-10-01", "ultima_venta": "2026-10-11", "ventas_diarias": 5, "dias_periodo": 30})
+    assert "quebró stock en Full: 50 ventas entre 01/10/2026 y 11/10/2026" in q and "5/día (no 1.7)" in q
+    d = _porque({**BASE, "deposito_usado": 27, "ventas_deposito": 90})
+    assert "30 % de lo que vende desde mi depósito (90 u.)" in d
 
 
 def test_motivos_en_texto():
@@ -29,7 +36,7 @@ def test_motivos_en_texto():
 
 
 def test_pantalla_columnas_interruptor_y_exportacion():
-    for t in ("Ventas Full 30d", "Ventas mi depósito 30d", "Demanda usada", "<th>En Full</th>", "<th>Por qué</th>", 'id="full-repo-deposito" checked', "Contar ventas de mi depósito"):
+    for t in ("Ventas Full 30d", "Ventas mi depósito 30d", "Demanda usada", "<th>En Full</th>", "<th>Por qué</th>", 'id="full-repo-deposito" checked', "Usar ventas de mi depósito como referencia", "full-repo-frac"):
         assert t in SRC, t
     assert "contar_deposito=${qs('full-repo-deposito')" in SRC
     assert "Ventas Full 30d,Ventas mi deposito 30d,Demanda usada" in SRC and ",Por que'" in SRC
