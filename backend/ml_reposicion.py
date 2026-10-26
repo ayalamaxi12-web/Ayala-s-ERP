@@ -154,6 +154,7 @@ class FilaReposicionMLA:
     # Motivos fijos de la fila: no_full (hay que habilitarla en ML), sin_sku, sin_vincular, sin_ecom (el SKU no existe en Ecom), ecom_negativo, sin_tactica.
     flags: list[str] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)
+    ventas_diarias_exacta: float = 0.0  # sin redondear: la pantalla recalcula objetivo y stock a la llegada al cambiar semanas o fecha, sin volver a leer Mercado Libre
 
 
 @dataclass
@@ -344,7 +345,7 @@ def _filas_solo_deposito(ml, ecom, tactica, res_conc, pubs_activas, total_pagado
             filas.append(FilaReposicionMLA(
                 item_id=pub["item_id"], inventory_id=pub.get("inventory_id"), cuenta=pub["cuenta"], sku=sku, sku_ml=pub.get("sku"), titulo=pub.get("titulo", ""),
                 stock_full=0, ventas_periodo=usado, dias_periodo=dias_ventas, primera_venta=None, ultima_venta=None, censurado=False,
-                ventas_diarias=round(diarias, 2), stock_objetivo=round(objetivo, 1), stock_a_llegada=0.0, factor=factor,
+                ventas_diarias=round(diarias, 2), ventas_diarias_exacta=diarias, stock_objetivo=round(objetivo, 1), stock_a_llegada=0.0, factor=factor,
                 cantidad_enviar=max(0, round(objetivo)), sugerido=0, stock_ecom=stock_ecom, stock_tactica=stock_tactica,
                 ventas_full=0, ventas_deposito=deposito, deposito_usado=usado, flags=flags, avisos=list(avisos_stock)))
     return filas
@@ -510,7 +511,7 @@ def calcular_reposicion_mla(
                 sku=fila_sku.sku, sku_ml=pub.get("sku_ml"), titulo=pub.get("titulo", ""),
                 stock_full=stock_full_mla, ventas_periodo=ventas_total + deposito_usado, dias_periodo=dias_ventas,
                 primera_venta=primera, ultima_venta=ultima, censurado=censurado,
-                ventas_diarias=round(ventas_diarias, 2), stock_objetivo=round(stock_objetivo, 1),
+                ventas_diarias=round(ventas_diarias, 2), ventas_diarias_exacta=ventas_diarias, stock_objetivo=round(stock_objetivo, 1),
                 stock_a_llegada=round(stock_a_llegada, 1), factor=pub["factor"],
                 cantidad_enviar=cantidad_enviar, sugerido=0,
                 stock_ecom=stock_ecom, stock_tactica=stock_tactica,
