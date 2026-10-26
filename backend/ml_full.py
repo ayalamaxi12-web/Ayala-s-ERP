@@ -389,6 +389,8 @@ class MLFullClient:
                 pendiente = resumen.get("not_available_quantity")
                 if pendiente is None:
                     pendiente = max(0, (resumen.get("total") or 0) - (resumen.get("available_quantity") or 0))
+                else:
+                    pendiente = _pendiente_vigente(resumen, fecha, hasta, pendiente)
                 mapa_inv = ultimo_por_inbound.setdefault(inv, {})
                 previo = mapa_inv.get(inbound_id)
                 if previo is None or fecha > previo[0]:
@@ -421,6 +423,29 @@ def detalle_operaciones(ml: MLFullClient, cuenta: str, inventory_id: str, desde:
     ev.sort(key=lambda x: x["fecha"] or "")
     return {"inventory_id": inventory_id, "cuenta": cuenta, "desde": desde, "hasta": hasta, "ventas": sal, "total_ventas": sum(x["cantidad"] for x in sal),
             "envios": ev}
+
+
+VIGENCIA_PROCESO_INTERNO_DIAS = 2
+
+
+def _pendiente_vigente(resumen: dict, fecha_evento: str, hasta: str, no_disponible: int) -> int:
+    """Unidades «no disponibles» de un envío que SIGUEN pendientes. Las que están en `internal_process` (Full las está procesando) son transitorias: si el último evento del
+    envío tiene más de `VIGENCIA_PROCESO_INTERNO_DIAS` días, es una foto vieja (el envío ya terminó de procesarse, aunque ML no emita un evento final) y no cuentan. Caso real
+    (ABCB37443, envío 78587761): último evento del 16/10 con 2 u. en `internal_process`; el panel de ML mostraba 0 «en camino». Los demás estados se cuentan siempre."""
+    detalle = resumen.get("not_available_detail")
+    if not isinstance(detalle, list) or not detalle:
+        return no_disponible
+    try:
+        edad = (date.fromisoformat(hasta[:10]) - date.fromisoformat(fecha_evento[:10])).days
+    except ValueError:
+        return no_disponible
+    vigente = 0
+    for d in detalle:
+        cant = d.get("quantity") or 0
+        if d.get("status") == "internal_process" and edad > VIGENCIA_PROCESO_INTERNO_DIAS:
+            continue
+        vigente += cant
+    return vigente
 
 
 def _sku_de_item(item: dict) -> str | None:

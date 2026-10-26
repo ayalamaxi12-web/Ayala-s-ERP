@@ -877,3 +877,13 @@ def test_registrar_historial_reusa_filas_existentes_y_agrega_nuevos_skus_al_fina
     assert col_a["values"] == [["SKU"], ["SKU-A"], ["SKU-B"], ["SKU-C"]]
     col_c = next(u for u in existente.updates if u["range_name"].startswith("C1:C"))
     assert [v[0] for v in col_c["values"][1:]] == [7, "", 1]
+
+
+def test_unidades_en_proceso_interno_de_un_evento_viejo_no_son_pendientes():
+    from ml_full import _pendiente_vigente
+    r = {"total": 50, "available_quantity": 48, "not_available_quantity": 2, "not_available_detail": [{"status": "internal_process", "quantity": 2}]}
+    assert _pendiente_vigente(r, "2026-10-16T05:43:00Z", "2026-10-26", 2) == 0       # foto vieja: el envío ya terminó (panel: 0 en camino)
+    assert _pendiente_vigente(r, "2026-10-25T05:43:00Z", "2026-10-26", 2) == 2       # procesándose hoy: sí cuenta
+    otro = {"not_available_detail": [{"status": "waiting", "quantity": 5}]}
+    assert _pendiente_vigente(otro, "2026-10-01T00:00:00Z", "2026-10-26", 5) == 5    # otros estados se cuentan siempre
+    assert _pendiente_vigente({}, "2026-10-01T00:00:00Z", "2026-10-26", 3) == 3      # sin detalle: como antes
