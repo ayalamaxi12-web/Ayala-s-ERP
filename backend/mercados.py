@@ -29,6 +29,9 @@ HEADERS = ["mercado", "concepto", "cuotas", "porcentaje", "incluye IVA", "vigenc
 HEADERS_ENVIOS = ["mercado", "peso desde", "peso hasta", "largo", "ancho", "alto", "costo", "vigencia"]
 MODULO_FOTO, CUENTA_FOTO = "mercados_tarifas", "todas"
 A_CONFIRMAR = "a confirmar"
+# Lo que Maxx ya decidió (2026-10-25): no se marca «a confirmar» aunque la columna «incluye IVA» de la pestaña esté vacía. Siguen a confirmar solo las cuotas de la Web.
+DECIDIDOS = {("todos", "costo_orden"), ("web", "comision_base"), ("web", "recargo_cuotas"),
+             *{(m, c) for m in ("fravega", "oncity", "megatone") for c in ("comision_base", "cuotas")}}
 
 # Por defecto, ¿qué descuentos comunes aplica cada mercado? Mercado Libre NO lleva el costo por orden hasta que se decida: sumarlo cambiaría sus precios de hoy.
 ACTIVOS_POR_DEFECTO = {
@@ -47,28 +50,28 @@ def _cuotas_ml():
 
 
 def _bloque_fravega(mercado: str, copiado: bool) -> list[list[str]]:
-    nota = "copiado de Frávega, a confirmar" if copiado else "a confirmar: no se sabe si la comisión base ya incluye la financiación (acá se suman)"
+    nota = "copiado de Frávega" if copiado else "comisión base más cuotas (decidido por Maxi)"
     f = "copiado de Frávega" if copiado else "Maxi 2026-10-24"
     cuotas = [("3", "6.8", "21/10/2024", "ID 1034 v6"), ("6", "10.6", "21/02/2024", "ID 1033 v6"), ("9", "13.7", "21/10/2024", "ID 1032 v5"), ("12", "16.6", "21/10/2024", "ID 1031 v5")]
-    out = [_f(mercado, "comision_base", "", "15.5", A_CONFIRMAR, fuente=f, nota=nota)]
+    out = [_f(mercado, "comision_base", "", "15.5", "", fuente=f, nota=nota)]
     for n, p, desde, idv in cuotas:
-        out.append(_f(mercado, "cuotas", n, p, A_CONFIRMAR, desde, "31/05/2027", idv if not copiado else f"copiado de Frávega ({idv})",
-                      "cuotas sin interés, origen Todos, banco emisor vacío" + ("; copiado de Frávega, a confirmar" if copiado else "")))
+        out.append(_f(mercado, "cuotas", n, p, "", desde, "31/05/2027", idv if not copiado else f"copiado de Frávega ({idv})",
+                      "cuotas sin interés, origen Todos, banco emisor vacío" + ("; copiado de Frávega" if copiado else "")))
     return out
 
 
 FILAS_INICIALES: list[list[str]] = [
-    _f("todos", "costo_orden", "", "149.12", A_CONFIRMAR, fuente="Maxi 2026-10-24", nota="MONTO EN PESOS por orden de Ecom (no es un %). Vale para todos los mercados; activable por mercado. A confirmar si incluye IVA."),
+    _f("todos", "costo_orden", "", "149.12", "", fuente="Maxi 2026-10-24", nota="MONTO EN PESOS por orden de Ecom (no es un %). Vale para todos los mercados; activable por mercado."),
     _f("todos", "impuesto_cheque", "", str(IMP_CHEQUE_PCT_DEFAULT), "", fuente="CRITERIOS_MARGEN §2", nota="sobre el precio con IVA"),
     _f("todos", "iibb", "", str(IIBB_PCT_DEFAULT), "", fuente="CRITERIOS_MARGEN §2", nota="sobre el precio sin IVA"),
     _f("ml", "comision_base", "", str(ayala_core.COMISION_ML_DEFAULT), "SI", fuente="panel de parámetros de ML (referencia, no se lee)",
-       nota="CONTRADICCIÓN pendiente: el Motor usa 15,32 %; el mensaje del 24/10 dice «15,5 % general en ML». No se cambió (cambiaría los precios de ML)."),
+       nota="Decidido por Maxi (25/10): en el Motor la comisión de ML queda en 15,32 %."),
     _f("ml", "reducida", "", str(ayala_core.REDUCIDA_PCT_DEFAULT), "SI", fuente="panel de parámetros de ML (referencia, no se lee)", nota="solo existe en Mercado Libre"),
     *_cuotas_ml(),
-    _f("web", "comision_base", "", "6", A_CONFIRMAR, fuente="Mercado Pago (Maxi 2026-10-24)", nota="6 % por cobro, cualquier medio de pago"),
+    _f("web", "comision_base", "", "6", "", fuente="Mercado Pago (Maxi 2026-10-24)", nota="6 % por cobro, cualquier medio de pago"),
     _f("web", "cuotas", "simple", "0.00", A_CONFIRMAR, fuente="Mercado Pago"),
     *[_f("web", "cuotas", n, p, A_CONFIRMAR, fuente="Mercado Pago") for n, p in (("3", "3.40"), ("6", "7.90"), ("9", "12.60"), ("12", "15.20"), ("18", "22.10"), ("24", "27.60"))],
-    _f("web", "recargo_cuotas", "", "20", A_CONFIRMAR, fuente="planilla actual de Maxi", nota="Recargo sobre la comisión de cuotas (4,08; 9,48; 15,12; 18,24; 26,52; 33,12 = cuota × 1,20). Sin motivo claro (¿IVA?). Editable."),
+    _f("web", "recargo_cuotas", "", "20", "", fuente="regla de Maxi", nota="Recargo de 20 % sobre la comisión de cuotas (4,08; 9,48; 15,12; 18,24; 26,52; 33,12 = cuota × 1,20). Editable."),
     *_bloque_fravega("fravega", False), *_bloque_fravega("oncity", True), *_bloque_fravega("megatone", True),
 ]
 
@@ -145,19 +148,20 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
     meta = MERCADOS[mercado]
     nombre = meta["nombre"]
     avisos: list[dict] = []
+    notas: list[dict] = []     # información, no cuenta como aviso (p. ej. «copiado de Frávega»)
     if mercado == "ml":
         fin = {"contado": Decimal("0"), "reducida": ayala_core.REDUCIDA_PCT_DEFAULT, **{str(k): v for k, v in CUOTAS_PCT_DEFAULT.items()}}
         return {"mercado": mercado, "nombre": nombre, "condiciones": list(meta["condiciones"]), "etiqueta_contado": meta["etiqueta_contado"],
-                "comision_pct": ayala_core.COMISION_ML_DEFAULT, "financiero": fin, "recargo_cuotas": None, "faltantes": {}, "avisos": avisos,
+                "comision_pct": ayala_core.COMISION_ML_DEFAULT, "financiero": fin, "recargo_cuotas": None, "faltantes": {}, "avisos": avisos, "notas": notas,
                 "desglose": {c: {"base": ayala_core.COMISION_ML_DEFAULT, "cuotas": fin[c], "recargo": Decimal("0"), "total": ayala_core.COMISION_ML_DEFAULT + fin[c]} for c in fin}}
     def revisar(f, que):
         if not f:
             return
-        if f["incluye_iva"] in ("", A_CONFIRMAR):
+        if f["incluye_iva"] in ("", A_CONFIRMAR) and (f["mercado"], f["concepto"]) not in DECIDIDOS:
             if (A_CONFIRMAR, que) not in {(a["tipo"], a["que"]) for a in avisos}:
-                avisos.append({"tipo": A_CONFIRMAR, "que": que, "texto": f"{que}: a confirmar" + (f" ({f['nota']})" if "confirmar" in f["nota"].lower() or "copiado" in f["nota"].lower() else "")})
-        if "copiado" in (f["nota"] + f["fuente"]).lower():
-            avisos.append({"tipo": "copiado", "que": que, "texto": f"{que}: copiado de Frávega, a confirmar"})
+                avisos.append({"tipo": A_CONFIRMAR, "que": que, "texto": f"{que}: a confirmar"})
+        if "copiado" in (f["nota"] + f["fuente"]).lower() and not any(n["que"] == "copiado" for n in notas):
+            notas.append({"que": "copiado", "texto": f"Las cifras de {nombre} están copiadas de Frávega."})
         h, d = _fecha(f["hasta"]), _fecha(f["desde"])
         if h and h < hoy:
             avisos.append({"tipo": "vencida", "que": que, "texto": f"{que}: vigencia vencida el {h.strftime('%d/%m/%Y')}"})
@@ -185,7 +189,7 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
             f = _buscar(filas, mercado, "cuotas", "simple")
             p = _num(f["porcentaje"]) if f else Decimal("0")        # Simple: solo la base (la Web trae su propia fila con 0,00)
             if f:
-                revisar(f, f"Simple de {nombre}")
+                revisar(f, f"Cuotas de {nombre}")
         else:
             f = _buscar(filas, mercado, "cuotas", c)
             p = _num(f["porcentaje"]) if f else None
@@ -193,12 +197,12 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
                 faltantes.setdefault(c, f"falta dato: tarifa de {c} cuotas de {nombre}")
                 avisos.append({"tipo": "falta", "que": f"{c} cuotas", "texto": f"falta dato: tarifa de {c} cuotas de {nombre}"})
                 continue
-            revisar(f, f"{c} cuotas de {nombre}")
+            revisar(f, f"Cuotas de {nombre}")
         r = (p * recargo / 100) if c != "contado" else Decimal("0")
         fin[c] = p + r
         desglose[c] = {"base": base, "cuotas": p, "recargo": r, "total": (base + p + r) if base is not None else None}
     return {"mercado": mercado, "nombre": nombre, "condiciones": list(meta["condiciones"]), "etiqueta_contado": meta["etiqueta_contado"], "comision_pct": base,
-            "financiero": fin, "recargo_cuotas": recargo if mercado == "web" else None, "faltantes": faltantes, "avisos": avisos, "desglose": desglose}
+            "financiero": fin, "recargo_cuotas": recargo if mercado == "web" else None, "faltantes": faltantes, "avisos": avisos, "notas": notas, "desglose": desglose}
 
 
 def calcular_mercado(par: dict, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, renta_por_condicion: dict[str, Decimal],

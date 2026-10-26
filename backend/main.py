@@ -2763,7 +2763,7 @@ def _mercado_respuesta(m: dict, envio_manual) -> dict:
                        "desglose": {k: {kk: f(vv) for kk, vv in d.items()} for k, d in par["desglose"].items()},
                        "costo_orden": f(u["costo_orden"]) if u["orden"] else 0, "cheque_pct": f(u["cheque_pct"]) if u["cheque"] else 0, "iibb_pct": f(u["iibb_pct"]) if u["iibb"] else 0,
                        "usa": {"orden": u["orden"], "cheque": u["cheque"], "iibb": u["iibb"]}},
-        "avisos_mercado": [a["texto"] for a in m["avisos"]],
+        "avisos_mercado": [a["texto"] for a in m["avisos"]], "notas_mercado": [n["texto"] for n in m["par"]["notas"]],
     }
 
 
@@ -2864,7 +2864,7 @@ def _ayala_core_motor_sync(
         "precios": {k: float(v) for k, v in precios.items()},
         "precios_unitarios": {k: round(float(v) / cantidad, 2) for k, v in precios.items()},
         "item": item_info,
-        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"])}),
+        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"]), "comision_pct": float(ayala_core.COMISION_ML_DEFAULT)}),
         "errores_condicion": errores_condicion,
         "desglose_mercado": desglose_m,
     }
@@ -2883,16 +2883,17 @@ def _estado_tarifas() -> dict:
     filas = payload["filas"]
     com = mercados_mod.comunes(filas)
     avisos = []
-    if info["origen"] == "codigo":
-        avisos.append({"tipo": "falta", "texto": "La pestaña «Mercados» todavía no se leyó del Sheet: se usan los valores iniciales del código. Crear la pestaña (POST /mercados/init) y tocar «Actualizar»."})
+    # Sin leer del Sheet es información (se usan los valores iniciales del código), no un aviso de configuración.
+    informacion = ["Usando los valores iniciales del código (la pestaña «Mercados» todavía no se leyó del Sheet)."] if info["origen"] == "codigo" else []
     if info.get("error_msg"):
         avisos.append({"tipo": "error", "texto": f"Falló la última lectura de tarifas ({info['error_msg']}); se muestran las de {info.get('obtenido_en') or 'los valores iniciales'}."})
-    por_mercado = {}
+    por_mercado, notas_por_mercado = {}, {}
     for k in mercados_mod.MERCADOS:
         par = mercados_mod.parametros_mercado(k, filas)
         por_mercado[k] = [a["texto"] for a in par["avisos"]]
+        notas_por_mercado[k] = [n["texto"] for n in par["notas"]]
     web = mercados_mod.parametros_mercado("web", filas)
-    return {"tarifas": info, "comunes": {**{k: float(v) for k, v in com["valores"].items()}, "recargo_cuotas": float(web["recargo_cuotas"] or 0)}, "avisos": avisos + com["avisos"], "avisos_por_mercado": por_mercado,
+    return {"tarifas": info, "comunes": {**{k: float(v) for k, v in com["valores"].items()}, "recargo_cuotas": float(web["recargo_cuotas"] or 0)}, "avisos": avisos + com["avisos"], "informacion": informacion, "notas_por_mercado": notas_por_mercado, "avisos_por_mercado": por_mercado,
             "mercados": _info_mercados(), "filas": len(filas)}
 
 @app.get("/mercados/tarifas")
@@ -2991,6 +2992,7 @@ def _ayala_core_motor_lote_sync(
             "iva_tactica_error": iva.get("ultimo_error") if prov[1].tactica_caida else None,
             "tc": float(tc), "tc_origen": "manual" if tc_override is not None else info_tc["source"],
             "mercado": (m or {}).get("mercado", "ml"), "tarifas": (m or {}).get("tarifas"), "avisos_mercado": [a["texto"] for a in (m or {}).get("avisos", [])],
+            "notas_mercado": [n["texto"] for n in ((m or {}).get("par") or {}).get("notas", [])],
         },
         "tiempos_ms": {"fotos": round((t1 - t0) * 1000, 1), "tc": round((t2 - t1) * 1000, 1), "calculo": round((t3 - t2) * 1000, 1), "total": round((t3 - t0) * 1000, 1)},
     }

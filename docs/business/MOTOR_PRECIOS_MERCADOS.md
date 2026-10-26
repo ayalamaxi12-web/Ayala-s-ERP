@@ -46,3 +46,10 @@ Con «Todos» elegido, «Calcular» pide un lote por mercado (5 pedidos en paral
 
 Las tipografías de los otros cuatro mercados **se cargan solo al elegir «Todos»** (un `<link>` a Google Fonts agregado en ese momento); el resto del ERP no paga ese costo. Los colores nunca son la única señal (logo y nombre siempre) y todos los textos cumplen 4,5:1 (verificado con datos simulados).
 Detalle técnico: las tarjetas no usan `<header>`/`<footer>` porque esas etiquetas heredan los estilos de la barra de la app.
+
+## Ajustes de presentación (25/10)
+- **Avisos de configuración**: una sola línea resumen («N a confirmar», y «N avisos de configuración» si falta un dato o venció una vigencia), con el detalle plegado por defecto y cada concepto una sola vez. Ya decididos y sin «a confirmar»: comisión base 15,5 % y cuotas de Frávega, OnCity y Megatone; comisión de ML 15,32 %; costo por orden $149,12; Web con base 6 % más recargo de 20 % en las cuotas (`mercados.DECIDIDOS`). Sigue «a confirmar» solo las cuotas de Mercado Pago de la Web (un aviso).
+- **«Copiado de Frávega»** (OnCity y Megatone) es una nota gris chica, no un aviso. **Tarifas sin leer del Sheet** es información («usando los valores iniciales del código»), no un aviso.
+- La tarjeta de Mercado Libre en «Todos» muestra su comisión real (15,32 %); antes decía «—» porque ML sin cambios no devolvía parámetros.
+- **Vista «Todos»**: dos tarjetas por fila en escritorio (una en 1024 y 390), ancho máximo de 48 rem, tabla del ancho de su contenido (la columna de precios pegada a la de condiciones) y, con muchos SKU, scroll horizontal con la columna de condiciones fija. Corrige que el contenedor se mostraba como bloque (una tarjeta debajo de otra a todo el ancho).
+- **Dónde escribe «Crear pestañas Mercados y Envios»**: en el Sheet fijo `SPREADSHEET_ID` de `backend/main.py` (`15b9kMzQFHdBOE5_7vWgriiiulHI6Yc9upJBUBBiXepY`, el mismo «ERP AYALA» que usan el tracker de ML Competencia y las pestañas `V - …`). Crea «Mercados» y «Envios» solo si no existen y no pisa nada. **No se ejecutó nunca contra el Sheet real** y no se ejecuta hasta que se confirme el destino.
