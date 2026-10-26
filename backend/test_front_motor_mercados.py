@@ -102,3 +102,11 @@ def test_crear_pestanas_se_oculta_sin_la_variable_y_la_confirmacion_dice_el_shee
     assert "sh.configurado?`<button" in cfg and "Crear pestañas Mercados y Envios" in cfg and "falta configurar" in cfg
     ini = _fn(src, "ayalaCoreMercadosInit")
     assert "Esto crea en el Sheet «${sh.nombre" in ini and "if(!sh.configurado)" in ini
+
+
+def test_selector_con_todo_el_catalogo_etiquetas_y_iva_manual():
+    src = open(INDEX, encoding="utf-8").read() if isinstance(INDEX, str) else INDEX.read_text(encoding="utf-8")
+    for t in ("/ayala-core/catalogo-skus", "AC_CAT[k]=[e,i]", "ERP AYALA", ">Piloto<", "sin costo en Ecom", "IVA del SKU (10,5% o 21%)", 'id="ac-iva-manual"',
+              "ayalaCoreIvaParam()", "Descargar SKU que no calculan (CSV)", "/ayala-core/catalogo-skus/diagnostico", "<b>sin calcular:</b>"):
+        assert t in src, t
+    assert "${AC_SEL.length} elegido${AC_SEL.length===1?'':'s'} de ${AC_TODOS.length}" in src       # el total es el real (todo el catálogo)
