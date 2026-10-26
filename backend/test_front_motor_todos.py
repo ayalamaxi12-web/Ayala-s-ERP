@@ -32,7 +32,7 @@ def test_hay_una_tarjeta_por_mercado_con_su_logo_y_el_nombre_de_frabega_como_ima
     ml = tarjeta('ml', {"resultados": [res("A", ["contado", "reducida"], {"contado": 1, "reducida": 2}, etiqueta="Contado")], "calculado_con": {}})
     assert '<h3>Mercado Libre</h3>' in ml and 'mercadolibre-isotipo.png' in ml and 'a confirmar' not in ml and 'Reducida' in ml
     on = tarjeta('oncity', {"resultados": [res("A", ["contado"], {"contado": 1})], "calculado_con": {}})
-    assert 'oncity-blanco.png' in on and 'a confirmar' in on
+    assert 'oncity-blanco.png' in on and 'a confirmar' not in on      # lo pendiente va en el resumen de configuración, no en cada tarjeta
 
 
 def test_frabega_marca_las_cuotas_sin_interes_y_los_otros_mercados_no():
@@ -82,3 +82,17 @@ def test_el_selector_tiene_todos_y_pide_un_lote_por_mercado():
     f = _fn(s, 'ayalaCoreCalcularTodos')
     assert 'Promise.all(AC_MK_REALES.map' in f and 'ayalaCoreMercadoParams(m)' in f and 'ayalaCoreCargarFuentes()' in f
     assert "return '';" in _fn(s, 'ayalaCoreMercadoParams')[:200]
+
+
+def test_comision_de_ml_en_la_tarjeta_es_la_real_y_las_tablas_no_se_estiran():
+    ml = tarjeta('ml', {"resultados": [dict(res("A", ["contado"], {"contado": 1}, etiqueta="Contado"), parametros=None, comision_pct=15.32)], "calculado_con": {}})
+    assert re.search(r"Comisión base 15[.,]32 %", ml)
+    src = open(INDEX, encoding="utf-8").read()
+    assert ".ac-tk table{width:auto" in src and ".ac-tk th:first-child{position:sticky;left:0" in src
+    assert "tw.style.display=AC_MERCADO==='todos'?'grid':'none'" in src      # con «block» las tarjetas quedaban una debajo de otra
+
+
+def test_avisos_de_configuracion_un_resumen_plegado_y_lo_informativo_aparte():
+    f = _fn(html(), 'ayalaCoreConfigRender')
+    assert '<details class="ac-config-av"><summary>' in f and "open" not in f.split("<details")[1].split(">")[0]
+    assert "usando los valores iniciales del código" in f and 'class="ac-config-nota"' in f      # información y notas, fuera del conteo de avisos

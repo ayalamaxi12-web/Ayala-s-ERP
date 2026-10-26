@@ -32,7 +32,8 @@ def test_web_aplica_el_recargo_de_20_por_ciento_sobre_las_cuotas_y_es_editable()
     assert par["comision_pct"] == D("6") and par["recargo_cuotas"] == D("20") and par["condiciones"] == ["contado", "3", "6", "9", "12", "18", "24"]
     sin_recargo = mk.parametros_mercado("web", FILAS, HOY, recargo_cuotas=D("0"))
     assert sin_recargo["financiero"]["24"] == D("27.60")
-    assert any("a confirmar" in a["texto"] and "Recargo" in a["texto"] for a in par["avisos"])
+    # lo que Maxi ya decidió (base 6 % y recargo 20 %) no se marca «a confirmar»; solo las cuotas de Mercado Pago, en UN aviso
+    assert [a["texto"] for a in par["avisos"]] == ["Cuotas de Web (Mercado Pago): a confirmar"]
 
 
 def test_fravega_suma_base_y_cuotas_con_desglose_y_simple_es_solo_la_base():
@@ -40,7 +41,7 @@ def test_fravega_suma_base_y_cuotas_con_desglose_y_simple_es_solo_la_base():
     assert par["comision_pct"] == D("15.5") and "reducida" not in par["condiciones"] and par["etiqueta_contado"] == "Simple"
     assert par["financiero"] == {"contado": D("0"), "3": D("6.8"), "6": D("10.6"), "9": D("13.7"), "12": D("16.6")}
     assert par["desglose"]["3"]["total"] == D("22.3") and par["desglose"]["contado"]["total"] == D("15.5")
-    assert any("a confirmar" in a["texto"] for a in par["avisos"]) and not any(a["tipo"] == "vencida" for a in par["avisos"])
+    assert par["avisos"] == []     # comisión base y cuotas ya decididas: nada «a confirmar»
 
 
 def test_oncity_y_megatone_usan_los_mismos_numeros_pero_con_sus_propias_filas_y_marcados_copiados():
@@ -48,7 +49,7 @@ def test_oncity_y_megatone_usan_los_mismos_numeros_pero_con_sus_propias_filas_y_
     for m in ("oncity", "megatone"):
         p = mk.parametros_mercado(m, FILAS, HOY)
         assert p["comision_pct"] == f["comision_pct"] and p["financiero"] == f["financiero"]
-        assert any(a["tipo"] == "copiado" and "copiado de Frávega, a confirmar" in a["texto"] for a in p["avisos"])
+        assert p["avisos"] == [] and [n["texto"] for n in p["notas"]] == [f"Las cifras de {p['nombre']} están copiadas de Frávega."]   # nota gris, no aviso
         assert sum(1 for x in FILAS if x["mercado"] == m) == sum(1 for x in FILAS if x["mercado"] == "fravega")      # cada uno con sus filas
     chico = [dict(x, porcentaje="9.9") if (x["mercado"] == "oncity" and x["concepto"] == "comision_base") else x for x in FILAS]
     assert mk.parametros_mercado("megatone", chico, HOY)["comision_pct"] == D("15.5")                          # cambiar uno no toca a los otros
@@ -70,7 +71,7 @@ def test_si_falta_una_fila_no_se_inventa_la_tarifa_y_se_dice_cual():
 
 def test_vigencia_vencida_o_futura_avisa():
     vencida = [dict(x, hasta="31/05/2026") if (x["mercado"] == "fravega" and x["cuotas"] == "6") else x for x in FILAS]
-    assert any(a["tipo"] == "vencida" and "6 cuotas de Frávega" in a["texto"] for a in mk.parametros_mercado("fravega", vencida, HOY)["avisos"])
+    assert any(a["tipo"] == "vencida" and "Cuotas de Frávega" in a["texto"] for a in mk.parametros_mercado("fravega", vencida, HOY)["avisos"])
     futura = [dict(x, desde="01/01/2027") if (x["mercado"] == "fravega" and x["cuotas"] == "9") else x for x in FILAS]
     assert any(a["tipo"] == "no_vigente" for a in mk.parametros_mercado("fravega", futura, HOY)["avisos"])
 
@@ -149,7 +150,7 @@ def test_lote_por_mercado_solo_trae_las_condiciones_de_ese_mercado(cliente):
     fr = cliente.get("/ayala-core/motor-lote", params={"mercado": "fravega", "skus": sku, "envio_real": 8500}).json()["resultados"][0]
     assert "reducida" not in fr["precios"] and fr["envio_estimado_como_ml"] is False and fr["parametros"]["desglose"]["6"]["total"] == 26.1
     r = cliente.get("/ayala-core/motor-lote", params={"mercado": "oncity", "skus": sku}).json()
-    assert any("copiado de Frávega" in a for a in r["calculado_con"]["avisos_mercado"]) and r["calculado_con"]["tarifas"]["origen"] == "codigo"
+    assert r["calculado_con"]["avisos_mercado"] == [] and any("copiadas de Frávega" in n for n in r["calculado_con"]["notas_mercado"]) and r["calculado_con"]["tarifas"]["origen"] == "codigo"
 
 
 def test_precio_de_otro_mercado_coincide_con_la_cuenta_hecha_a_mano(cliente):
@@ -175,7 +176,7 @@ def test_mercado_desconocido_da_422(cliente):
 
 def test_foto_de_tarifas_primero_valores_iniciales_y_despues_la_hoja(cliente, monkeypatch):
     e = cliente.get("/mercados/tarifas").json()
-    assert e["tarifas"]["origen"] == "codigo" and any("todavía no se leyó" in a["texto"] for a in e["avisos"]) and e["comunes"]["costo_orden"] == 149.12
+    assert e["tarifas"]["origen"] == "codigo" and e["avisos"] == [] and any("valores iniciales del código" in x for x in e["informacion"]) and e["comunes"]["costo_orden"] == 149.12
     hoja = [mk.HEADERS] + [list(f) for f in mk.FILAS_INICIALES]
     hoja = [([*f[:3], "16.5", *f[4:]] if (f[0] == "fravega" and f[1] == "comision_base") else f) for f in hoja]
     monkeypatch.setattr(main, "get_gs", lambda: object())
@@ -236,3 +237,8 @@ def test_el_desglose_cierra_con_la_renta_pedida(cliente):
             g = r["desglose_mercado"][c]
             assert abs(g["renta"] / p - 0.30) < 0.0005, (mercado, c, g["renta"] / p)
             assert g["costo_orden"] == 149.12
+
+
+def test_ml_trae_su_comision_real_en_el_lote_sin_cambiar_precios(cliente):
+    r = cliente.get("/ayala-core/motor-lote", params={"skus": ayala_core.SKUS_PILOTO[0]}).json()["resultados"][0]
+    assert r["comision_pct"] == 15.32 and r["mercado"] == "ml"
