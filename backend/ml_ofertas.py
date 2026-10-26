@@ -186,11 +186,15 @@ CUOTAS_PCT_DEFAULT: dict[int, Decimal] = {
 # con esas dos líneas -- se trata como error de transcripción, no como
 # regla real: valores de $33.000-$49.999 y $50.000+ se mantienen tal cual
 # estaban (7000/7470), el techo de <33.000 pasa a valer 0.
+# Unificado con Análisis de Competencia (decisión de Maxi, 27/10): $0 por debajo de $33.000 y $8.500 desde $33.000 (CRITERIOS_MARGEN §6); si se conoce el envío REAL de la
+# publicación, el llamador lo usa en lugar de esta regla (`envio_real`). Antes: 7.000 hasta $50.000 y 7.470 desde ahí.
 ENVIO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
     (Decimal(33000), Decimal(0)),
-    (Decimal(50000), Decimal(7000)),
-    (None, Decimal(7470)),
+    (None, Decimal(8500)),
 ]
+
+# Costo por orden de Ecom: todo lo que se vende por Ecom lo descuenta (decisión de Maxi, 27/10). Mismo valor que `ayala_core.COSTO_ORDEN_ECOM_DEFAULT`.
+COSTO_ORDEN_DEFAULT = Decimal("149.12")
 
 IMP_CHEQUE_PCT_DEFAULT = Decimal("1.2")
 IIBB_PCT_DEFAULT = Decimal("5")
@@ -217,12 +221,14 @@ class ParametrosMargen:
     envio_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(ENVIO_TRAMOS_DEFAULT))
     imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT
     iibb_pct: Decimal = IIBB_PCT_DEFAULT
+    costo_orden: Decimal = COSTO_ORDEN_DEFAULT
     usar_comision: bool = True
     usar_costo_fijo: bool = True
     usar_cuotas: bool = True
     usar_envio: bool = True
     usar_imp_cheque: bool = True
     usar_iibb: bool = True
+    usar_costo_orden: bool = True
 
 
 @dataclass
@@ -237,11 +243,12 @@ class ResultadoMargenOferta:
     costo_producto: Decimal
     margen: Decimal
     margen_pct: Decimal | None  # None si base_sin_iva es 0 -- no hay sobre qué medir
+    costo_orden: Decimal = Decimal(0)
 
 
 def calcular_margen_oferta(
     precio_oferta: Decimal, iva_factor: Decimal, costo_producto_ars: Decimal,
-    domain_id: str | None, cuotas_ofrecidas: int | None, params: ParametrosMargen,
+    domain_id: str | None, cuotas_ofrecidas: int | None, params: ParametrosMargen, envio_real: Decimal | None = None,
 ) -> ResultadoMargenOferta:
     """Fórmula canónica REQ §2.0, literal -- ver docstring del módulo para
     el porqué de cada base imponible. `iva_factor` y `costo_producto_ars`
@@ -258,7 +265,9 @@ def calcular_margen_oferta(
     cuotas_pct = params.cuotas_pct.get(cuotas_ofrecidas, Decimal(0)) if cuotas_ofrecidas else Decimal(0)
     cuotas = (precio_oferta * cuotas_pct / 100) if params.usar_cuotas else Decimal(0)
 
-    envio = _por_tramo(precio_oferta, params.envio_tramos) if params.usar_envio else Decimal(0)
+    # Envío: el REAL de la publicación si se conoce; si no, la regla única ($0 bajo $33.000, $8.500 desde ahí).
+    envio = (envio_real if envio_real is not None else _por_tramo(precio_oferta, params.envio_tramos)) if params.usar_envio else Decimal(0)
+    costo_orden = params.costo_orden if params.usar_costo_orden else Decimal(0)
 
     # Corregido 2026-08-27 (Maxx, en vivo): Imp. Cheque va sobre el precio
     # CON IVA (precio_oferta, bruto) -- IIBB va sobre el precio SIN IVA
@@ -267,13 +276,13 @@ def calcular_margen_oferta(
     imp_cheque = (precio_oferta * params.imp_cheque_pct / 100) if params.usar_imp_cheque else Decimal(0)
     iibb = (base_sin_iva * params.iibb_pct / 100) if params.usar_iibb else Decimal(0)
 
-    margen = base_sin_iva - comision - costo_fijo - cuotas - envio - imp_cheque - iibb - costo_producto_ars
+    margen = base_sin_iva - comision - costo_fijo - cuotas - envio - imp_cheque - iibb - costo_orden - costo_producto_ars
     margen_pct = (margen / base_sin_iva) if base_sin_iva else None
 
     return ResultadoMargenOferta(
         base_sin_iva=base_sin_iva, comision=comision, costo_fijo=costo_fijo, cuotas=cuotas,
         envio=envio, imp_cheque=imp_cheque, iibb=iibb, costo_producto=costo_producto_ars,
-        margen=margen, margen_pct=margen_pct,
+        margen=margen, margen_pct=margen_pct, costo_orden=costo_orden,
     )
 
 
@@ -1670,7 +1679,7 @@ def _fila_a_dict(f: FilaOferta) -> dict:
             "base_sin_iva": _num(m.base_sin_iva), "comision": _num(m.comision),
             "costo_fijo": _num(m.costo_fijo), "cuotas": _num(m.cuotas),
             "envio": _num(m.envio), "imp_cheque": _num(m.imp_cheque),
-            "iibb": _num(m.iibb), "costo_producto": _num(m.costo_producto),
+            "iibb": _num(m.iibb), "costo_orden": _num(m.costo_orden), "costo_producto": _num(m.costo_producto),
             "margen": _num(m.margen), "margen_pct": _num(m.margen_pct),
         },
     }
@@ -1725,6 +1734,7 @@ def iniciar_job(job_id: str, cuentas: list = None, incluir_propias: bool = False
                 "envio_tramos": [[float(t) if t is not None else None, float(m)] for t, m in params.envio_tramos],
                 "imp_cheque_pct": float(params.imp_cheque_pct),
                 "iibb_pct": float(params.iibb_pct),
+                "costo_orden": float(params.costo_orden),
             },
         }
         _jobs[job_id]["status"] = "done"

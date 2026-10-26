@@ -121,3 +121,13 @@
 7. Fórmulas JS del frontend — que lean del motor, no constantes copiadas.
 
 *(Confirmar la lista exacta con la auditoría — §3/§5.5 de AUDITORIA_ERP.md.)*
+
+## Actualización 27/10 — margen único de Mercado Libre (Ofertas ML y Análisis de Competencia)
+Decisiones de Maxi, ya aplicadas en `mlMargenUnico` (front) y `ml_ofertas.calcular_margen_oferta` (backend, mismo resultado, con test de paridad):
+- **Envío:** el **real** de la publicación si se conoce; si no, **$0 por debajo de $33.000 y $8.500 desde $33.000**. Desaparecen los $7.000 / $7.470 de Ofertas ML.
+- **Costo del producto:** catálogo de **Ecom** (Ofertas ML ya lo lee de ahí desde el backend; Táctica solo cruza).
+- **Costo por orden de Ecom ($149,12):** se descuenta en el margen de los dos módulos (apagable con su casilla). Se suma una vez por orden.
+- Comisión 15,5 %, costo fijo por tramo (1330 / 2740 / 3320, techos 15k / 24k / 33k) y cuotas de la ayuda de ML, como en el Motor de Precios.
+- Sigue igual: margen sobre el precio **sin IVA**; IIBB sobre el sin IVA; cheque sobre el precio con IVA.
+- **No cambia ningún precio publicado ni escribe nada:** solo el margen que se **muestra** (baja un poco: suma el costo por orden y, bajo $33.000, ya no hay envío).
+- El motor `motor_precios` de Precios & Márgenes todavía no tiene costo por orden; su paridad con Análisis se verifica con la casilla apagada.
