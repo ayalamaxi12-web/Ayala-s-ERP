@@ -147,7 +147,8 @@ class FilaReposicionMLA:
     datos_incompletos: bool = False     # las ventas/envíos de esta publicación no se pudieron leer de ML (cuota): el cálculo NO es confiable
     # Demanda (unidades REALES del SKU, ya con el factor de pack). `ventas_periodo` es la demanda USADA: ventas de Full + (si el interruptor está activado) mi depósito.
     ventas_full: int = 0
-    ventas_deposito: int = 0
+    ventas_deposito: int = 0            # REFERENCIA: lo vendido de la publicación desde mi depósito en el período (lo pagado menos lo de Full)
+    deposito_usado: int = 0             # la PARTE de esas ventas que entra en la demanda: solo si no tuvo ventas en Full ni stock en Full
     # Motivos fijos de la fila: no_full (hay que habilitarla en ML), sin_sku, sin_vincular, sin_ecom (el SKU no existe en Ecom), ecom_negativo, sin_tactica.
     flags: list[str] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)
@@ -240,7 +241,7 @@ def _stocks(ecom, tactica, sku: str, parent_sku: str | None) -> tuple[int | None
 
 
 def _filas_solo_deposito(ml, ecom, tactica, res_conc, pubs_activas, total_pagado_grupo, grupos_con_fila, dias_ventas, semanas_objetivo, dias_hasta_llegada,
-                         progreso_cb) -> list[FilaReposicionMLA]:
+                         progreso_cb, fraccion_deposito) -> list[FilaReposicionMLA]:
     """Publicaciones activas con ventas pagadas que NO tienen fila en la conciliación (no están en Full, o no tienen inventario): sin stock en Full. Stock Full 0 y a la
     llegada 0, y se sugiere el objetivo completo (el reparto contra Pitec y Táctica lo hace el llamador, igual que para el resto)."""
     filas: list[FilaReposicionMLA] = []
@@ -271,15 +272,16 @@ def _filas_solo_deposito(ml, ecom, tactica, res_conc, pubs_activas, total_pagado
             else:
                 stock_ecom, stock_tactica, flags_stock, avisos_stock = None, None, ["sin_sku"], []
             deposito = pagado * factor
-            diarias = deposito / dias_ventas
+            usado = round(deposito * fraccion_deposito)      # no está en Full: se manda una parte de lo que vende desde mi depósito
+            diarias = usado / dias_ventas
             objetivo = diarias * semanas_objetivo * 7
             flags = list(flags_stock) + (["no_full"] if (pub.get("logistic_type") != "fulfillment" or not pub.get("inventory_id")) else []) + (["sin_vincular"] if (sku and not vinculado) else [])
             filas.append(FilaReposicionMLA(
                 item_id=pub["item_id"], inventory_id=pub.get("inventory_id"), cuenta=pub["cuenta"], sku=sku, sku_ml=pub.get("sku"), titulo=pub.get("titulo", ""),
-                stock_full=0, ventas_periodo=deposito, dias_periodo=dias_ventas, primera_venta=None, ultima_venta=None, censurado=False,
+                stock_full=0, ventas_periodo=usado, dias_periodo=dias_ventas, primera_venta=None, ultima_venta=None, censurado=False,
                 ventas_diarias=round(diarias, 2), stock_objetivo=round(objetivo, 1), stock_a_llegada=0.0, factor=factor,
                 cantidad_enviar=max(0, round(objetivo)), sugerido=0, stock_ecom=stock_ecom, stock_tactica=stock_tactica,
-                ventas_full=0, ventas_deposito=deposito, flags=flags, avisos=list(avisos_stock)))
+                ventas_full=0, ventas_deposito=deposito, deposito_usado=usado, flags=flags, avisos=list(avisos_stock)))
     return filas
 
 
@@ -289,7 +291,7 @@ def calcular_reposicion_mla(
     fecha_llegada: date | None = None, hoy: date | None = None,
     progreso_cb: Callable[[int, int, str], None] | None = None,
     resultado_conciliacion=None,
-    contar_deposito: bool = False,
+    contar_deposito: bool = False, fraccion_deposito: float = 0.3,
 ) -> ResultadoReposicionMLA:
     """Orquesta el simulador por publicación: reutiliza `conciliar()` para
     el stock/factor de pack ya resuelto de las dos cuentas (sin volver a
@@ -391,10 +393,16 @@ def calcular_reposicion_mla(
             # Mi depósito (normal y Flex): lo pagado de la publicación menos lo que salió de Full (que ya es parte de lo pagado: no se cuenta dos veces). Esa parte
             # no se censura (mi depósito no se queda sin stock de Full) y se reparte parejo en el período. Apagado, vale 0 y el resultado es el de siempre.
             ventas_deposito = 0
+            deposito_usado = 0
             if contar_deposito:
                 venta_full_pub = venta_inv["unidades"] if venta_inv else 0
                 ventas_deposito = max(0, total_pagado_grupo.get(_grupo_pub(pub), 0) - venta_full_pub) * pub["factor"]
-                ventas_diarias += ventas_deposito / dias_ventas
+                # Solo si la publicación NO tuvo ventas en Full y NO tiene stock en Full: lo que vende desde mi depósito es una referencia de lo que podría vender
+                # en Full, y se manda una PARTE (`fraccion_deposito`), no todo (vender por los dos depósitos no duplica la venta). Si ya opera en Full, manda
+                # su venta de Full (corregida por quiebre) y las ventas de mi depósito quedan solo como dato.
+                if ventas_total == 0 and stock_full_mla == 0:
+                    deposito_usado = round(ventas_deposito * fraccion_deposito)
+                    ventas_diarias += deposito_usado / dias_ventas
 
             stock_objetivo = ventas_diarias * semanas_objetivo * 7
             # max(0, ...) -- confirmado con Maxx (2026-08-26) sobre un caso
@@ -413,7 +421,7 @@ def calcular_reposicion_mla(
             filas.append(FilaReposicionMLA(
                 item_id=pub["item_id"], inventory_id=pub["inventory_id"], cuenta=pub["cuenta"],
                 sku=fila_sku.sku, sku_ml=pub.get("sku_ml"), titulo=pub.get("titulo", ""),
-                stock_full=stock_full_mla, ventas_periodo=ventas_total + ventas_deposito, dias_periodo=dias_ventas,
+                stock_full=stock_full_mla, ventas_periodo=ventas_total + deposito_usado, dias_periodo=dias_ventas,
                 primera_venta=primera, ultima_venta=ultima, censurado=censurado,
                 ventas_diarias=round(ventas_diarias, 2), stock_objetivo=round(stock_objetivo, 1),
                 stock_a_llegada=round(stock_a_llegada, 1), factor=pub["factor"],
@@ -422,13 +430,13 @@ def calcular_reposicion_mla(
                 envio_pendiente=envio_pend["unidades"] if envio_pend else 0,
                 envio_pendiente_ids=envio_pend["inbound_ids"] if envio_pend else [],
                 datos_incompletos=bool(pub.get("inventory_id") in inventarios_sin_leer),
-                ventas_full=ventas_total, ventas_deposito=ventas_deposito,
+                ventas_full=ventas_total, ventas_deposito=ventas_deposito, deposito_usado=deposito_usado,
                 flags=flags_stock + (["sin_vincular"] if not pub.get("vinculado", True) else []), avisos=list(avisos_stock),
             ))
 
     if contar_deposito:
         filas.extend(_filas_solo_deposito(ml, ecom, tactica, resultado_conciliacion, pubs_activas, total_pagado_grupo, grupos_con_fila, dias_ventas, semanas_objetivo,
-                                          dias_hasta_llegada, progreso_cb))
+                                          dias_hasta_llegada, progreso_cb, fraccion_deposito))
         if ordenes_dias_sin_leer:
             for f in filas:
                 f.avisos.append(f"Ventas de mi depósito incompletas: no se pudieron leer {len(ordenes_dias_sin_leer)} día(s) de órdenes.")

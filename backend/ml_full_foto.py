@@ -93,9 +93,9 @@ def _log(job_id: str, txt: str) -> None:
     _jobs[job_id]["log"].append(txt)
 
 
-def _params_repo(dias_ventas, semanas_objetivo, contar_deposito: bool) -> str:
+def _params_repo(dias_ventas, semanas_objetivo, contar_deposito: bool, fraccion_deposito: float = 0.3) -> str:
     """Con el interruptor activado la clave es la de siempre + `deposito=1`; apagado, es exactamente la clave de antes (las fotos viejas siguen sirviendo)."""
-    return ml_foto.clave_params(dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo, **({"deposito": 1} if contar_deposito else {}))
+    return ml_foto.clave_params(dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo, **({"deposito": round(fraccion_deposito * 100)} if contar_deposito else {}))
 
 
 def _foto_previa(modulo: str, params: str | None, sesion_fn) -> dict | None:
@@ -124,7 +124,7 @@ def _guardar_conciliacion(sesion_fn, res: ResultadoConciliacion, previo: dict | 
     return estado, len(sin_leer)
 
 
-def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo: float = 3, fecha_llegada: date | None = None, contar_deposito: bool = True, *,
+def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo: float = 3, fecha_llegada: date | None = None, contar_deposito: bool = True, fraccion_deposito: float = 0.3, *,
                sesion_fn=None, ml_fn=None, ecom_fn=None, tactica_fn=None) -> None:
     """Corre una actualización completa y la deja guardada. Siempre termina el job (éxito o error): el botón del front nunca queda esperando. Las fábricas
     `*_fn` son para los tests."""
@@ -133,7 +133,7 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
     ecom_fn = ecom_fn or (lambda: EcomFullAdapter(EcomApiClient()))
     tactica_fn = tactica_fn or TacticaStockSheetAdapter
     mod = MODULOS[modulo]
-    params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito) if modulo == "reposicion" else ""
+    params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito, fraccion_deposito) if modulo == "reposicion" else ""
     _log(job_id, "Esperando que termine otra actualización de Full ML..." if _turno.locked() else "Iniciando actualización...")
     with _turno:
         _jobs[job_id].update(status="running", progress=None)
@@ -158,8 +158,8 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
                 previo = _foto_previa(MOD_REPO, params, sesion_fn)
                 _log(job_id, "Leyendo ventas y envíos de Full...")
                 res = calcular_reposicion_mla(ml, ecom, tactica_fn(), dias_ventas=dias_ventas, semanas_objetivo=semanas_objetivo, fecha_llegada=fecha_llegada,
-                                              progreso_cb=_progreso, resultado_conciliacion=res_conc, contar_deposito=contar_deposito)
-                payload = serializar_reposicion(res, {"dias_ventas": dias_ventas, "semanas_objetivo": semanas_objetivo, "contar_deposito": contar_deposito,
+                                              progreso_cb=_progreso, resultado_conciliacion=res_conc, contar_deposito=contar_deposito, fraccion_deposito=fraccion_deposito)
+                payload = serializar_reposicion(res, {"dias_ventas": dias_ventas, "semanas_objetivo": semanas_objetivo, "contar_deposito": contar_deposito, "fraccion_deposito": fraccion_deposito,
                                                       "fecha_llegada": (fecha_llegada or date.today()).isoformat()})
                 sin_leer = _fusionar_filas(payload, previo, "item_id", lambda f: f.get("datos_incompletos"))
                 n_inc = len(set(res.skus_incompletos))
@@ -221,9 +221,9 @@ def detalle_inventario(inventory_id: str, cuenta: str, dias: int = 30, desde: da
 
 
 @router.get("/{modulo}")
-def foto(modulo: str, dias_ventas: int | None = None, semanas_objetivo: float | None = None, contar_deposito: bool = True):
+def foto(modulo: str, dias_ventas: int | None = None, semanas_objetivo: float | None = None, contar_deposito: bool = True, fraccion_deposito: float = 0.3):
     mod = _modulo(modulo)
-    params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito) if (modulo == "reposicion" and dias_ventas is not None and semanas_objetivo is not None) else ("" if modulo == "conciliacion" else None)
+    params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito, fraccion_deposito) if (modulo == "reposicion" and dias_ventas is not None and semanas_objetivo is not None) else ("" if modulo == "conciliacion" else None)
     with _db.sesion() as db:
         out = ml_foto.vista_foto(ml_foto.leer(db, mod, CUENTA, params))
         out["alertas"] = ml_foto.listar_alertas(db, mod)
@@ -233,7 +233,7 @@ def foto(modulo: str, dias_ventas: int | None = None, semanas_objetivo: float | 
 
 @router.post("/{modulo}/actualizar")
 def actualizar_endpoint(modulo: str, background_tasks: BackgroundTasks, fecha_llegada: date | None = None, dias_ventas: int = 30, semanas_objetivo: float = 3,
-                        contar_deposito: bool = True):
+                        contar_deposito: bool = True, fraccion_deposito: float = 0.3):
     mod = _modulo(modulo)
     if modulo == "reposicion" and fecha_llegada is None:
         raise HTTPException(status_code=422, detail="Falta la fecha estimada de llegada.")
@@ -243,7 +243,7 @@ def actualizar_endpoint(modulo: str, background_tasks: BackgroundTasks, fecha_ll
         job_id = f"mlfoto_{modulo}_{uuid.uuid4().hex[:8]}"
         _jobs[job_id] = {"status": "queued", "log": [], "progress": None, "modulo": mod}
         _activo[mod] = job_id
-    background_tasks.add_task(actualizar, job_id, modulo, min(max(dias_ventas, 1), 60), semanas_objetivo, fecha_llegada, contar_deposito)
+    background_tasks.add_task(actualizar, job_id, modulo, min(max(dias_ventas, 1), 60), semanas_objetivo, fecha_llegada, contar_deposito, min(max(fraccion_deposito, 0.0), 1.0))
     return {"job_id": job_id, "status": "started"}
 
 

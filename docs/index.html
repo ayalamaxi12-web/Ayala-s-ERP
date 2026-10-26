@@ -1694,7 +1694,8 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Fecha estimada de llegada<input type="date" id="full-repo-fecha-llegada" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px"></label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Días de ventas<input type="number" id="full-repo-dias" value="30" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
-      <label style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--text2)" title="Suma a la demanda las ventas pagadas que salen de mi depósito (normal y Flex), no solo las de Full. Apagado, el cálculo es el de siempre."><input type="checkbox" id="full-repo-deposito" checked> Contar ventas de mi depósito</label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--text2)" title="Para las publicaciones que NO tuvieron ventas en Full ni tienen stock en Full, usa una parte de lo que venden desde mi depósito (normal y Flex) como referencia de demanda. Las que ya operan en Full usan solo su venta de Full. Apagado, el cálculo es el de siempre."><input type="checkbox" id="full-repo-deposito" checked> Usar ventas de mi depósito como referencia</label>
+      <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)" title="Solo para publicaciones que NO tuvieron ventas en Full ni tienen stock en Full: se manda este % de lo que venden desde mi depósito (no todo)">Enviar el <input type="number" min="0" max="100" step="5" id="full-repo-frac" value="30" style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"> % de esas ventas</label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Semanas objetivo<input type="number" step="0.5" id="full-repo-semanas" value="3" style="width:48px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center"></label>
     </div>
     <div id="full-repo-periodo" class="fr-busq-res" role="status"></div>
@@ -1714,7 +1715,7 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>En Full</th><th title="Ventas pagadas de los últimos días que salieron de Full">Ventas Full 30d</th><th title="Ventas pagadas que salieron de mi depósito (normal y Flex): total pagado menos lo de Full">Ventas mi depósito 30d</th><th title="Lo que se usa para calcular: Full + mi depósito (si el interruptor está activado)">Demanda usada</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th><th>Por qué</th></tr></thead>
+          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>En Full</th><th title="Ventas pagadas de los últimos días que salieron de Full">Ventas Full 30d</th><th title="Referencia: lo que esa publicación vendió desde mi depósito (normal y Flex) en el período: total pagado de la publicación menos lo de Full. Solo cuenta para la demanda si no tuvo ventas en Full ni stock en Full, y entonces se usa el % elegido.">Ventas mi depósito 30d</th><th title="Lo que se usa para calcular: las ventas de Full (corregidas si quebró el stock) o, si la publicación no vende en Full ni tiene stock allí, el % elegido de lo que vende desde mi depósito">Demanda usada</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th><th>Por qué</th></tr></thead>
           <tbody id="full-reposicion-tbody"></tbody>
         </table>
       </div>
@@ -4560,7 +4561,7 @@ async function fullFotoCargar(){
       const res=await fetch(`${url}/ml-full/foto/${FULL_FOTO[k].mod}`);if(!res.ok)throw new Error(res.status);
       const d=await res.json();fullFotoDatos[k]=d;
       if(d.existe){
-        if(k==='reposicion'&&d.payload.params){const p=d.payload.params;if(qs('full-repo-fecha-llegada'))qs('full-repo-fecha-llegada').value=p.fecha_llegada||'';qs('full-repo-dias').value=p.dias_ventas;qs('full-repo-semanas').value=p.semanas_objetivo;if(qs('full-repo-deposito'))qs('full-repo-deposito').checked=p.contar_deposito===true;}
+        if(k==='reposicion'&&d.payload.params){const p=d.payload.params;if(qs('full-repo-fecha-llegada'))qs('full-repo-fecha-llegada').value=p.fecha_llegada||'';qs('full-repo-dias').value=p.dias_ventas;qs('full-repo-semanas').value=p.semanas_objetivo;if(qs('full-repo-deposito'))qs('full-repo-deposito').checked=p.contar_deposito===true;if(qs('full-repo-frac')&&p.fraccion_deposito!=null)qs('full-repo-frac').value=Math.round(p.fraccion_deposito*100);}
         FULL_FOTO[k].pintar(d.payload);
       }
       fullPieRender(k);
@@ -4603,7 +4604,7 @@ async function fullActualizar(k){
   if(k==='reposicion'){
     const fecha=qs('full-repo-fecha-llegada').value;
     if(!fecha){alert('Ingresá la fecha estimada de llegada del envío');return;}
-    q=`?fecha_llegada=${fecha}&dias_ventas=${qs('full-repo-dias').value||30}&semanas_objetivo=${qs('full-repo-semanas').value||3}&contar_deposito=${qs('full-repo-deposito')?qs('full-repo-deposito').checked:true}`;
+    q=`?fecha_llegada=${fecha}&dias_ventas=${qs('full-repo-dias').value||30}&semanas_objetivo=${qs('full-repo-semanas').value||3}&contar_deposito=${qs('full-repo-deposito')?qs('full-repo-deposito').checked:true}&fraccion_deposito=${((parseFloat(qs('full-repo-frac')?qs('full-repo-frac').value:30)||0)/100)}`;
     fullRepoEnviosPend={};fullRepoSeleccion={};
   }
   fullActualizando[k]='iniciando';fullPieRender(k);
@@ -4763,6 +4764,8 @@ function fullRepoPorQue(f){
   else if(f._necesarioReal<=0)m.push(pend>0&&(f.stock_objetivo-f.stock_a_llegada)>0?'el envío pendiente cubre':'Full ya cubre el objetivo');
   else if(f._sugerido===0)m.push(f._disp<=0?'sin disponible en Pitec ni Táctica':'el disponible se asignó a otra publicación del mismo SKU');
   else if(f._sugerido<f._cantidadEnviar)m.push('el disponible alcanza solo en parte');
+  if(f.censurado)m.push(`quebró stock en Full: ${f.ventas_full} ventas entre ${fullFechaCorta(f.primera_venta)} y ${fullFechaCorta(f.ultima_venta)}; la venta diaria se corrigió a ${f.ventas_diarias}/día (no ${(f.ventas_full/(f.dias_periodo||30)).toFixed(1)})`);
+  if(f.deposito_usado>0)m.push(`no vende en Full ni tiene stock allí: demanda estimada con ${Math.round(100*f.deposito_usado/Math.max(1,f.ventas_deposito))} % de lo que vende desde mi depósito (${f.ventas_deposito} u.)`);
   return m.join(' · ');
 }
 // Minimizar / expandir cada bloque del módulo (se recuerda en la sesión); minimizado queda un resumen en el encabezado.
@@ -4799,7 +4802,7 @@ async function fullRepoDetalle(btn,inv,cuenta){
 function fullRepoVerMas(b){const tr=b.closest('tr'),a=tr.classList.toggle('fr-abierta');b.setAttribute('aria-expanded',a);b.textContent=a?'Ver menos':'Ver más';}
 function fullRepoCalculoTxt(f){
   const n=x=>Number(x).toLocaleString('es-AR',{maximumFractionDigits:2});
-  return `Demanda ${f.dias_periodo} d: ${f.ventas_full??f.ventas_periodo} de Full + ${f.ventas_deposito||0} de mi depósito = ${f.ventas_periodo} u. → ${n(f.ventas_diarias)}/día × ${f.ventas_diarias>0?Math.round(f.stock_objetivo/f.ventas_diarias):0} d = objetivo ${n(f.stock_objetivo)}; en Full ${f.stock_full}, a la llegada ${n(f.stock_a_llegada)}; disponible Pitec ${f.stock_ecom==null?'—':Math.max(0,f.stock_ecom)} + Táctica ${f.stock_tactica==null?'sin dato':Math.max(0,f.stock_tactica)}; sugerido ${f._sugerido} paq.`;
+  return `Demanda ${f.dias_periodo} d: ${f.ventas_full??f.ventas_periodo} de Full + ${f.deposito_usado||0} de mi depósito (de ${f.ventas_deposito||0} que vendió; solo se usa una parte si no vende en Full ni tiene stock allí) = ${f.ventas_periodo} u. → ${n(f.ventas_diarias)}/día × ${f.ventas_diarias>0?Math.round(f.stock_objetivo/f.ventas_diarias):0} d = objetivo ${n(f.stock_objetivo)}; en Full ${f.stock_full}, a la llegada ${n(f.stock_a_llegada)}; disponible Pitec ${f.stock_ecom==null?'—':Math.max(0,f.stock_ecom)} + Táctica ${f.stock_tactica==null?'sin dato':Math.max(0,f.stock_tactica)}; sugerido ${f._sugerido} paq.`;
 }
 function renderFullReposicionTabla(){
   if(!fullRepoResult) return;

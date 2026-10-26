@@ -64,17 +64,18 @@ def test_w1105acomp_aparece_con_sus_ventas_y_su_sugerido():
     r = correr(True)
     por = {f.item_id: f for f in r.filas}
     w = por["MLA2"]
-    assert (w.sku, w.ventas_full, w.ventas_deposito, w.ventas_periodo) == ("W1105ACOMP", 0, 90, 90) and "no_full" in w.flags
-    assert (w.stock_full, w.stock_a_llegada, w.ventas_diarias) == (0, 0.0, 3.0)
-    assert w.stock_objetivo == 63.0 and w.cantidad_enviar == 63         # 3/día × 21 días
-    assert w.sugerido == 55 and w.stock_ecom == 40 and w.stock_tactica == 15
+    # no tuvo ventas en Full ni stock en Full: vende 90 desde mi depósito (referencia) y se manda UNA PARTE (30 %), no todo
+    assert (w.sku, w.ventas_full, w.ventas_deposito, w.deposito_usado, w.ventas_periodo) == ("W1105ACOMP", 0, 90, 27, 27) and "no_full" in w.flags
+    assert (w.stock_full, w.stock_a_llegada, w.ventas_diarias) == (0, 0.0, 0.9)
+    assert w.stock_objetivo == 18.9 and w.cantidad_enviar == 19 and w.sugerido == 19        # 0,9/día × 21 días
+    assert w.stock_ecom == 40 and w.stock_tactica == 15
 
 
 def test_no_cuenta_dos_veces_lo_de_full():
     por = {f.item_id: f for f in correr(True).filas}
     f = por["MLA1"]
-    # pagado 50 en total, 30 salieron de Full: mi depósito es 20 (no 50)
-    assert (f.ventas_full, f.ventas_deposito, f.ventas_periodo) == (30, 20, 50)
+    # pagado 50 en total, 30 salieron de Full: mi depósito es 20 (no 50). Ya opera en Full: la demanda es SOLO la de Full; lo de mi depósito queda como dato
+    assert (f.ventas_full, f.ventas_deposito, f.deposito_usado, f.ventas_periodo) == (30, 20, 0, 30)
 
 
 def test_publicacion_sin_vincular_y_sin_sku_se_ven_como_fila_con_su_motivo():
@@ -90,7 +91,7 @@ def test_reparto_del_mismo_sku_a_la_que_mas_vende():
     ecom.links["MLA4"] = ("W1105ACOMP", 1)
     r = rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True)
     por = {f.item_id: f for f in r.filas}
-    assert por["MLA2"].sugerido == 55 and por["MLA4"].sugerido == 0     # todo a la que más vende, nunca proporcional
+    assert por["MLA2"].sugerido == 19 and por["MLA4"].sugerido == 2     # el disponible (55) alcanza para las dos: cada una lo suyo
 
 
 def test_stock_negativo_de_ecom_es_0_con_aviso_y_tactica_sin_dato_se_marca():
@@ -154,3 +155,14 @@ def test_detalle_de_operaciones_crudas_para_verificar_a_mano():
     assert d["total_ventas"] == 5 and [v["fecha"][:10] for v in d["ventas"]] == ["2026-10-01", "2026-10-03"]
     e = d["envios"][0]
     assert (e["inbound_id"], e["total"], e["disponible"], e["no_disponible"]) == ("71384203", 10, 8, 2) and e["resultado_crudo"]["total"] == 10 and e["referencias"][0]["value"] == "71384203"
+
+
+def test_con_stock_o_ventas_en_full_nunca_se_suma_el_deposito_y_el_quiebre_corrige_la_venta_diaria():
+    ml, ecom, tac = armar()
+    # quebró: 0 en Full, 50 ventas de Full entre el 01/10 y el 11/10, y vende mucho desde mi depósito
+    ml._full = {"IT": {"INV1": {"unidades": 50, "primera": "2026-10-01", "ultima": "2026-10-11"}}}
+    ml._stock = {"INV1": 0}
+    ml._pagado = {"IT": {("MLA1", None): 247}}
+    f = {x.item_id: x for x in rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True).filas}["MLA1"]
+    assert f.censurado and f.deposito_usado == 0 and f.ventas_deposito == 197 and f.ventas_periodo == 50
+    assert f.ventas_diarias == 5.0                                      # 50 ventas en 10 días (no 50 en 30): la venta diaria real, sin sumar el depósito
