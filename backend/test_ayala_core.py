@@ -16,6 +16,20 @@ from ayala_core import (
 )
 
 
+# La planilla de referencia (02/09/2026) tiene comisión 15,32 %, sin costo fijo de ML ni costo por orden: las cuentas congeladas se prueban con ESOS parámetros. Los
+# valores vigentes (15,5 %, costo fijo por tramo y costo por orden en ML) se prueban en test_ml_costo_fijo.py.
+_HIST = dict(comision_pct=Decimal("15.32"))
+_HIST_TODAS = dict(comision_pct=Decimal("15.32"), costo_orden=Decimal(0), costo_fijo_tramos=None)
+
+
+def _pc(**kw):
+    return calcular_precio_condicion(**{**_HIST, **kw})
+
+
+def _pt(**kw):
+    return calcular_precios_todas_condiciones(**{**_HIST_TODAS, **kw})
+
+
 class _CostoProviderFalso:
     def __init__(self, costos: dict):
         self._costos = costos
@@ -87,7 +101,7 @@ _ENVIO = Decimal("29410")
 
 
 def test_congelado_contado():
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("0"), renta_pct=Decimal("32"),
     )
@@ -95,7 +109,7 @@ def test_congelado_contado():
 
 
 def test_congelado_reducida():
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("5"), renta_pct=Decimal("32"),
     )
@@ -103,7 +117,7 @@ def test_congelado_reducida():
 
 
 def test_congelado_3_cuotas_tasa_vieja():
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("8.4"), renta_pct=Decimal("30"),
     )
@@ -111,7 +125,7 @@ def test_congelado_3_cuotas_tasa_vieja():
 
 
 def test_congelado_6_cuotas_tasa_vieja():
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("12.3"), renta_pct=Decimal("28"),
     )
@@ -119,7 +133,7 @@ def test_congelado_6_cuotas_tasa_vieja():
 
 
 def test_congelado_9_cuotas_tasa_vieja():
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("15.7"), renta_pct=Decimal("26"),
     )
@@ -127,7 +141,7 @@ def test_congelado_9_cuotas_tasa_vieja():
 
 
 def test_congelado_12_cuotas_tasa_vieja():
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("19.2"), renta_pct=Decimal("24"),
     )
@@ -139,7 +153,7 @@ def test_congelado_las_6_condiciones_juntas_con_tasas_vigentes():
     # ACTUALES de CUOTAS_PCT_DEFAULT (8,9/13,4/17,8/21,6%) -- no debe dar
     # lo mismo que el ejemplo congelado en las 4 columnas de cuotas
     # (la Reducida y el Contado sí, porque no dependen de esa tabla).
-    precios = calcular_precios_todas_condiciones(
+    precios = _pt(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
     )
     assert precios["contado"] == Decimal("200467")
@@ -157,12 +171,12 @@ def test_renta_por_condicion_es_independiente_no_hay_escalada():
     # probar que cada condición usa SU PROPIO % sin derivarlo de otra.
     renta = {"contado": Decimal("50"), "reducida": Decimal("10"), 3: Decimal("40"),
              6: Decimal("5"), 9: Decimal("45"), 12: Decimal("15")}
-    precios = calcular_precios_todas_condiciones(
+    precios = _pt(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         renta_por_condicion=renta,
     )
     for cond in ayala_core.CONDICIONES:
-        esperado = calcular_precio_condicion(
+        esperado = _pc(
             costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
             financiero_pct=ayala_core._financiero_pct(cond), renta_pct=renta[cond],
         )
@@ -181,11 +195,11 @@ def test_renta_por_condicion_default_reproduce_la_vieja_cascada_congelada():
 
 
 def test_envio_full_suma_un_medio_pct_solo_si_se_pide():
-    sin_full = calcular_precio_condicion(
+    sin_full = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("0"), renta_pct=Decimal("32"), envio_full=False,
     )
-    con_full = calcular_precio_condicion(
+    con_full = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("0"), renta_pct=Decimal("32"), envio_full=True,
     )
@@ -195,7 +209,7 @@ def test_envio_full_suma_un_medio_pct_solo_si_se_pide():
 def test_financiero_pct_condicion_no_soportada_explota():
     import pytest
     with pytest.raises(ValueError):
-        calcular_precio_condicion(
+        _pc(
             costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
             financiero_pct=ayala_core._financiero_pct(18), renta_pct=Decimal("32"),
         )
@@ -432,7 +446,7 @@ def test_descubrir_publicaciones_detecta_condicion_y_calcula_diferencia(monkeypa
     filas, _ = descubrir_publicaciones(ml, costo, iva, ["IT"], Decimal(1000))
 
     assert filas[0]["condicion_detectada"] == 6
-    esperado = calcular_precios_todas_condiciones(costo_sin_iva=Decimal(50000), iva_factor=Decimal("1.21"), envio_real=Decimal(0))["6"]
+    esperado = calcular_precios_todas_condiciones(costo_sin_iva=Decimal(50000), iva_factor=Decimal("1.21"), envio_real=Decimal(0))["6"]   # con los valores vigentes: es lo que usa el escaneo
     assert filas[0]["precio_calculado"] == esperado
     assert filas[0]["diferencia"] == Decimal(100000) - esperado
 
@@ -750,17 +764,17 @@ def test_impuestos_separados_iibb_5_sobre_neto_y_cheque_1_2_sobre_bruto():
     assert IMP_CHEQUE_PCT_DEFAULT == Decimal("1.2")
     kw = dict(costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
               financiero_pct=Decimal("0"), renta_pct=Decimal("32"))
-    base = calcular_precio_condicion(**kw)
+    base = _pc(**kw)
     # el imp. cheque ENTRA siempre: sin él el precio baja
-    assert calcular_precio_condicion(**kw, imp_cheque_pct=Decimal("0")) < base
+    assert _pc(**kw, imp_cheque_pct=Decimal("0")) < base
     # y no es el viejo 6,5% de un solo lado
-    assert calcular_precio_condicion(**kw, iibb_pct=Decimal("6.5"), imp_cheque_pct=Decimal("0")) != base
+    assert _pc(**kw, iibb_pct=Decimal("6.5"), imp_cheque_pct=Decimal("0")) != base
 
 
 def test_el_precio_cumple_la_cuenta_con_los_impuestos_separados():
     # Reverse-markup: con el precio resultante, lo que sobra tras descontar
     # comisión, IIBB (s/ neto), cheque (s/ bruto), envío y costo es la renta pedida.
-    p = calcular_precio_condicion(
+    p = _pc(
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("0"), renta_pct=Decimal("32"),
     )

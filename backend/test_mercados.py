@@ -57,7 +57,7 @@ def test_oncity_y_megatone_usan_los_mismos_numeros_pero_con_sus_propias_filas_y_
 
 def test_ml_conserva_sus_parametros_de_siempre():
     par = mk.parametros_mercado("ml", FILAS, HOY)
-    assert par["comision_pct"] == ayala_core.COMISION_ML_DEFAULT == D("15.32") and par["financiero"]["reducida"] == D("5.00") and par["financiero"]["12"] == D("21.60")
+    assert par["comision_pct"] == ayala_core.COMISION_ML_DEFAULT == D("15.5") and par["financiero"]["reducida"] == D("5.00") and par["financiero"]["12"] == D("21.60")
     assert par["condiciones"] == ["contado", "reducida", "3", "6", "9", "12"]
 
 
@@ -81,7 +81,7 @@ def test_la_cuenta_es_la_de_siempre_con_los_numeros_del_mercado():
     par = mk.parametros_mercado("ml", FILAS, HOY)
     renta = {"contado": D("32"), "reducida": D("32"), "3": D("30"), "6": D("28"), "9": D("26"), "12": D("24")}
     for costo, iva, envio, full in ((D("250000"), D("1.21"), D("8500"), False), (D("43210.55"), D("1.105"), D(0), True)):
-        propio, err = mk.calcular_mercado(par, costo_sin_iva=costo, iva_factor=iva, envio_real=envio, renta_por_condicion=renta, envio_full=full)
+        propio, err = mk.calcular_mercado(par, costo_sin_iva=costo, iva_factor=iva, envio_real=envio, renta_por_condicion=renta, envio_full=full, costo_orden=ayala_core.COSTO_ORDEN_ECOM_DEFAULT)
         base = ayala_core.calcular_precios_todas_condiciones(
             costo_sin_iva=costo, iva_factor=iva, envio_real=envio, envio_full=full,
             renta_por_condicion={"contado": D("32"), "reducida": D("32"), 3: D("30"), 6: D("28"), 9: D("26"), 12: D("24")})
@@ -163,13 +163,13 @@ def test_precio_de_otro_mercado_coincide_con_la_cuenta_hecha_a_mano(cliente):
     assert r["precios"]["3"] == float(esperado)
 
 
-def test_ml_sin_cambios_no_toca_nada_y_con_costo_por_orden_activado_sube(cliente):
+def test_ml_sin_cambios_lleva_el_costo_por_orden_y_apagarlo_baja_el_precio(cliente):
     sku = ayala_core.SKUS_PILOTO[0]
     a = cliente.get("/ayala-core/motor-lote", params={"skus": sku}).json()["resultados"][0]
     b = cliente.get("/ayala-core/motor-lote", params={"skus": sku, "mercado": "ml"}).json()["resultados"][0]
     assert a["precios"] == b["precios"] and a["mercado"] == "ml"
-    c = cliente.get("/ayala-core/motor-lote", params={"skus": sku, "mercado": "ml", "usar_costo_orden": True}).json()["resultados"][0]
-    assert all(c["precios"][k] > a["precios"][k] for k in a["precios"])
+    c = cliente.get("/ayala-core/motor-lote", params={"skus": sku, "mercado": "ml", "usar_costo_orden": False}).json()["resultados"][0]
+    assert all(c["precios"][k] < a["precios"][k] for k in a["precios"])      # decidido por Maxx (27/10): el costo por orden se descuenta en TODAS las ventas por Ecom, ML incluido
 
 
 def test_mercado_desconocido_da_422(cliente):
@@ -243,7 +243,7 @@ def test_el_desglose_cierra_con_la_renta_pedida(cliente):
 
 def test_ml_trae_su_comision_real_en_el_lote_sin_cambiar_precios(cliente):
     r = cliente.get("/ayala-core/motor-lote", params={"skus": ayala_core.SKUS_PILOTO[0]}).json()["resultados"][0]
-    assert r["comision_pct"] == 15.32 and r["mercado"] == "ml"
+    assert r["comision_pct"] == 15.5 and r["mercado"] == "ml"
 
 
 def test_sin_la_variable_no_se_lee_ni_se_escribe_ningun_sheet_y_la_pantalla_lo_sabe(cliente, monkeypatch):

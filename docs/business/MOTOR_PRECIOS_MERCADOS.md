@@ -56,3 +56,11 @@ Detalle técnico: las tarjetas no usan `<header>`/`<footer>` porque esas etiquet
 
 ## Sheet de configuración (variable `MERCADOS_SHEET_ID`)
 Las pestañas «Mercados» y «Envios» viven en el Sheet que indica la variable de entorno **`MERCADOS_SHEET_ID`** (el ID de la URL: lo que está entre `/d/` y `/edit`). Va en el **servicio del backend** (Ayala-s-ERP, el que corre `uvicorn`); la tarea diaria (`scripts/ecom_diario.py`) no usa mercados. La cuenta de servicio de Google tiene que ser **Editora** del Sheet. Sin la variable no se lee ni se escribe ningún Sheet: las tarifas salen de los valores iniciales del código y la pantalla oculta «Actualizar» y «Crear pestañas». La confirmación de «Crear pestañas» muestra el nombre del Sheet. Ya no se usa el Sheet fijo `SPREADSHEET_ID` para esto.
+
+
+## Decisiones de Maxi sobre Mercado Libre (27/10)
+- **Comisión 15,5 %** para Mercado Libre y para todos los mercados (antes ML usaba 15,32 %).
+- **Costo fijo por unidad de ML** forma parte de la renta: el precio se resuelve con el costo fijo del tramo en que cae (≤ $14.999: $1.330 · $15.000–23.999: $2.740 · $24.000–32.999: $3.320 · desde $33.000: sin costo fijo). Tabla de Flex/acuerdo/retiro; Full/correo/colecta dependen de tamaño y peso y **no** están modelados. En el borde de un tramo el precio nunca queda por debajo del escalón.
+- **Costo por orden de Ecom ($149,12)** se descuenta también en ML (todo lo que se vende por Ecom lo lleva).
+- No se tocó la tabla de cuotas (8,90 / 13,40 / 17,80 / 21,60, verificada en el simulador de ML el 2/9): la ayuda de ML pegada dice 8,50 / 12,90 / 17,30 / 20,80 y queda **pendiente de confirmar**. Tampoco los tramos de Ofertas ML (1255/2500/3030), que difieren de la ayuda.
+- Con estas reglas los precios de ML **cambian a propósito**; los demás mercados no.

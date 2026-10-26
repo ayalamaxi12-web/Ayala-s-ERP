@@ -6005,16 +6005,20 @@ function ayalaCoreRenderRefLista(){
 // jugar", pedido 2026-09-03) sin ida y vuelta al backend por cada tecla. ──
 // Impuestos SEPARADOS (CRITERIOS_MARGEN §2/§4): IIBB 5% s/ sin IVA, imp. cheque 1,2% s/ con IVA
 // (antes un 6,50% unificado). Mismos valores que ml_ofertas.IIBB/IMP_CHEQUE_PCT_DEFAULT.
-const AC_COMISION_PCT=15.32, AC_IIBB_PCT=5, AC_IMPCH_PCT=1.2, AC_IVA_SERVICIOS_ML=1.21;
+const AC_COMISION_PCT=15.5, AC_COSTO_ORDEN=149.12, AC_COSTO_FIJO_TRAMOS=[[15000,1330],[24000,2740],[33000,3320],[null,0]], AC_IIBB_PCT=5, AC_IMPCH_PCT=1.2, AC_IVA_SERVICIOS_ML=1.21;
 function ayalaCoreFinancieroPct(condicion){
   if(condicion==='contado')return 0;
   if(condicion==='reducida')return 5;
   return CUOTAS_PCT_ML[condicion]||0;
 }
+// Decidido por Maxi (27/10): comisión 15,5 %, costo por orden de Ecom en ML y costo fijo por unidad de ML (< $33.000) como parte de la renta (espejo de ayala_core._precio_con_costo_fijo).
+function ayalaCoreCostoFijo(precio){for(const [t,m] of AC_COSTO_FIJO_TRAMOS)if(t===null||precio<t)return m;return 0;}
 function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct){
-  const num=costoSinIvaArs+envioReal/AC_IVA_SERVICIOS_ML;
+  const num=costoSinIvaArs+envioReal/AC_IVA_SERVICIOS_ML+AC_COSTO_ORDEN;
   const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(AC_IMPCH_PCT/100)-(financieroPct/100)-(rentaPct/100);
-  return Math.round(num/den);
+  let piso=0,p=0;
+  for(const [t,m] of AC_COSTO_FIJO_TRAMOS){p=Math.round((num+m)/den);if(t===null||p<t)return Math.max(p,piso);piso=t;}
+  return p;
 }
 // Desglose de qué se descuenta para llegar al precio -- pedido 2026-09-03
 // ("todos los impuestos que se descontaron para llegar al precio"),
@@ -6038,10 +6042,11 @@ function ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,finan
   const envioFullMonto=envioFull?-(0.5/100)*precio:0;
   const ivaComision=comision/AC_IVA_SERVICIOS_ML-comision;
   const ivaEnvio=envioFijo/AC_IVA_SERVICIOS_ML-envioFijo;
+  const costoFijo=-ayalaCoreCostoFijo(precio),costoOrden=-AC_COSTO_ORDEN;
   const ventaSinIva=precio/ivaFactor;
-  const costoSinIvaTotal=-costoSinIvaArs+comision+financiero+envioFijo+iibb+impCheque+envioFullMonto+ivaComision+ivaEnvio;
+  const costoSinIvaTotal=-costoSinIvaArs+costoFijo+costoOrden+comision+financiero+envioFijo+iibb+impCheque+envioFullMonto+ivaComision+ivaEnvio;
   const rentaMonto=ventaSinIva+costoSinIvaTotal;
-  return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,impCheque:-impCheque,envioFull:-envioFullMonto,renta:rentaMonto};
+  return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,impCheque:-impCheque,envioFull:-envioFullMonto,costoFijo:-costoFijo,costoOrden:-costoOrden,renta:rentaMonto};
 }
 function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,envioFull){
   const precio=ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct);
@@ -6060,7 +6065,7 @@ function ayalaCoreDesglose(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rent
 function ayalaCoreMargenAt(precio,f){
   const financieroPct=ayalaCoreFinancieroPct(f._condicionAyalaCore);
   const g=ayalaCoreDesgloseDesdeP(precio,f._costoSinIvaArs,f._ivaFactor,f._envioReal,financieroPct,false);
-  return{baseSinIva:precio/f._ivaFactor,comision:g.comision,costoFijo:0,cuotas:g.financiero,envio:g.envio,impCheque:g.impCheque,iibb:g.iibb,margen:g.renta,margenPct:precio?g.renta/precio:null};
+  return{baseSinIva:precio/f._ivaFactor,comision:g.comision,costoFijo:g.costoFijo+g.costoOrden,cuotas:g.financiero,envio:g.envio,impCheque:g.impCheque,iibb:g.iibb,margen:g.renta,margenPct:precio?g.renta/precio:null};
 }
 // Único punto de despacho: si la fila viene de Ayala Core usa su motor
 // real (que no necesita `costoARS`/`domainId`/`cuotasOfrecidas` -- ya
