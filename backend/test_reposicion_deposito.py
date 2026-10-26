@@ -203,3 +203,21 @@ def test_vinculaciones_en_paralelo_con_cache_y_una_falla_no_tira_la_corrida():
     assert por["MLA2"].sugerido == 19 and any("vinculación" in a for a in por["MLA3"].avisos)     # la falla de MLA3 se informa, el resto sigue
     rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True)
     assert llamadas.count("MLA2") == 1 and llamadas.count("MLA3") == 2    # MLA2 salió de la caché; solo se reintentó la que había fallado (MLA3)
+
+
+def test_los_lotes_fallidos_se_reintentan_en_la_misma_corrida(monkeypatch):
+    monkeypatch.setattr(rep, "REINTENTOS_LOTES", 2)
+    ml, ecom, tac = armar()
+    estado = {"n": 0}
+    original = ml.ventas_full_por_inventory
+
+    def ventas(c, ids, d, h):
+        estado["n"] += 1
+        if estado["n"] == 1:                                   # la primera lectura falla (límite de consultas) y queda en lotes_fallidos
+            ml.lotes_fallidos = [{"cuenta": "IT", "tipo": "SALE_CONFIRMATION", "inventory_ids": ["INV1"]}]
+            return {}
+        return original(c, ids, d, h)
+    ml.ventas_full_por_inventory = ventas
+    r = rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True, espera_reintento_seg=0)
+    f = {x.item_id: x for x in r.filas}["MLA1"]
+    assert estado["n"] == 2 and f.ventas_full == 30 and not f.datos_incompletos        # el reintento trajo las ventas: ya no está incompleta
