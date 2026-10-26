@@ -31,3 +31,18 @@ La fórmula ganó **un solo término opcional**, `costo_orden` (default 0): con 
 4. Renta objetivo de 18 y 24 cuotas (solo Web): arrancan en el valor de 12 cuotas (24 %) y son editables.
 5. Lo que **no pude hacer**: las capturas de las webs de OnCity y Megatone (`referencia/oncity_web.png`, `referencia/megatone_web.png`) no llegaron al repositorio, y `full-logo.png` tampoco (es de otro PR). Los logos de Frávega (SVG y PNG), OnCity (color y blanco) y Megatone están en `docs/assets/logos/`.
 6. Las tarjetas de resultado con la identidad completa (logo, color y tipografía) llegan en el PR siguiente (vista «Todos»); acá la identidad aparece en los botones del selector.
+
+## Vista «Todos» (Bloque 2, PR 5)
+Con «Todos» elegido, «Calcular» pide un lote por mercado (5 pedidos en paralelo, mismos parámetros y los interruptores de cada mercado) y muestra **una tarjeta por mercado** con todos los precios finales por condición de pago, una columna por SKU y, si hay pack, el precio de la publicación y el **por unidad**. Cada tarjeta tiene un botón «Ver en …» que pasa a ese mercado. Falta un dato → la celda dice «falta dato: …». Los avisos de todos los mercados aparecen juntos en el panel de configuración.
+
+**Identidad (solo dentro de las tarjetas y del selector; el resto del módulo sigue con el estilo Global):**
+| Mercado | Encabezado | Logo | Color en la tabla | Tipografía |
+|---|---|---|---|---|
+| Mercado Libre | amarillo `--mk-ml` con texto azul `--mk-ml-tinta` | isotipo oficial + el texto «Mercado Libre» | encabezado de tabla amarillo suave | **Nunito Sans** (la más cercana disponible en Google Fonts a la que usa ML, Proxima Nova) |
+| Frávega | blanco con línea violeta | `fravega.svg` (el nombre va como logo) | cuotas «sin interés» en verde `--mk-fravega-verde`; gris para el encabezado; botón violeta | **Roboto** 400/500/700 (deducción visual de su web, a confirmar) |
+| OnCity | azul `--mk-oncity-azul` | `oncity-blanco.png` | chip claro con texto azul; botón azul | **Outfit** (aproximación visual; alternativa Urbanist) |
+| Megatone | gris | `megatone.png` | precios en rojo del logo; botón verde `--mk-megatone-verde-texto` con texto blanco | **Rubik** (aproximación visual; alternativa Montserrat) |
+| Web | celeste de marca `--celeste-marca` con texto en tinta | `global-blanco.png` + «Web (Mercado Pago)» | encabezado celeste claro | **Montserrat** (la del ERP) |
+
+Las tipografías de los otros cuatro mercados **se cargan solo al elegir «Todos»** (un `<link>` a Google Fonts agregado en ese momento); el resto del ERP no paga ese costo. Los colores nunca son la única señal (logo y nombre siempre) y todos los textos cumplen 4,5:1 (verificado con datos simulados).
+Detalle técnico: las tarjetas no usan `<header>`/`<footer>` porque esas etiquetas heredan los estilos de la barra de la app.
