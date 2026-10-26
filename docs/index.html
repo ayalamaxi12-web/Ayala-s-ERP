@@ -585,7 +585,7 @@ body[data-nuevo] .dash-filters .ms-trigger::after{color:var(--texto-suave)}
 body[data-nuevo] .kpi-row{grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
 body[data-nuevo] .kpi-card{display:grid;grid-template-columns:44px 1fr;column-gap:12px;align-items:center;padding:16px;overflow:visible;border:0!important}
 body[data-nuevo] .kpi-card::before{content:'';position:static;grid-row:1/span 3;grid-column:1;width:44px;height:44px;border-radius:14px;background:var(--kpi-teal-fondo);height:44px}
-body[data-nuevo] .kpi-card::after{content:'';position:absolute;left:27px;top:50%;width:22px;height:22px;margin-top:-11px;background:var(--kpi-teal-texto);-webkit-mask:var(--kpi-glifo) center/contain no-repeat;mask:var(--kpi-glifo) center/contain no-repeat}
+body[data-nuevo] .kpi-card::after{content:'';grid-row:1/span 3;grid-column:1;justify-self:center;align-self:center;width:22px;height:22px;background:var(--kpi-teal-texto);-webkit-mask:var(--kpi-glifo) center/contain no-repeat;mask:var(--kpi-glifo) center/contain no-repeat}
 body[data-nuevo] .kpi-card>*{grid-column:2}
 body[data-nuevo] .kpi-label{margin:0;font-size:12px;font-weight:400;color:var(--texto-suave)}
 body[data-nuevo] .kpi-value{font-size:20px;font-weight:700;line-height:1.25;word-break:normal;overflow-wrap:normal;color:var(--tinta)}
@@ -777,6 +777,9 @@ body[data-nuevo] .compare-col h4{font-size:12px;font-weight:600;color:var(--text
 body[data-nuevo] .compare-col .cs{font-size:12px;color:var(--texto-suave)}
 body[data-nuevo] .page .section-hdr{display:block;margin:6px 0 0;font-size:16px;font-weight:700;color:var(--tinta)}
 body[data-nuevo] .page .section-hdr::after{display:none}
+/* Títulos con ícono o logo (Full ML, etc.): separados y centrados; la regla de arriba los dejaba en bloque y el logo quedaba pegado al texto. */
+body[data-nuevo] .page .section-hdr:has(>img,>svg,>[data-ico]){display:flex;align-items:center;gap:14px;flex-wrap:nowrap}
+body[data-nuevo] .page .section-hdr>img{flex:none}
 
 /* Full ML (celular y botones): el radio de píldora solo para una línea; los botones que pueden envolver llevan 14 px (--r-recuadro). */
 body[data-nuevo] #page-full-ml .btn{border-radius:var(--r-recuadro);white-space:normal;text-align:left}
@@ -789,7 +792,7 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
 .fr-vermas{display:none}
 @media (max-width:768px){
   .fr-barra{flex-wrap:wrap;gap:8px}
-  #page-full-ml .table-wrap:has(#full-reposicion-tbody){overflow:visible}
+  #page-full-ml .table-wrap:has(#full-reposicion-tbody){overflow:visible;max-height:none!important}
   #page-full-ml table:has(#full-reposicion-tbody) thead{display:none}
   #page-full-ml table:has(#full-reposicion-tbody),#full-reposicion-tbody{display:block;width:100%}
   #full-reposicion-tbody .fr-fila{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0 0 12px;padding:12px;border-radius:var(--r-tarjeta);background:var(--superficie);box-shadow:var(--sombra-tarjeta)}
@@ -808,6 +811,12 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
 .fr-det-caja{padding:8px 0;font-size:var(--fs-tabla)}
 .fr-det-caja table{width:auto;min-width:50%;margin-bottom:8px}
 #full-reposicion-tbody .fr-detalle td{padding:8px 16px}
+body[data-nuevo] .section-hdr.full-titulo{flex-wrap:nowrap;align-items:center;gap:14px;margin-top:4px}
+.full-logo{flex:none}
+.full-pie-arriba{margin:0 0 12px}
+/* Las tablas anchas de Full ML scrollean DENTRO de su caja (alto de la ventana): la barra de desplazamiento lateral y el encabezado quedan siempre a la vista. */
+body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.table-wrap{max-height:calc(100vh - 9rem);overflow:auto}
+body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.table-wrap thead th{position:sticky;top:0;z-index:2}
 </style>
 </head>
 <body>
@@ -1671,6 +1680,7 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
   <div class="card" style="margin-bottom:14px">
     <div class="card-title fr-cab"><span data-ico="search" data-size="16" aria-hidden="true"></span> Conciliación de stock (ML vs Ecom)<span class="fr-cab-res" id="full-res-conc"></span><button type="button" class="btn btn-linea fr-min" id="full-min-conc" aria-expanded="true" aria-controls="full-cuerpo-conc" onclick="fullToggle('conc')">Minimizar</button></div>
     <div id="full-cuerpo-conc">
+    <div id="full-conciliar-pie" class="full-pie full-pie-arriba"></div>
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (Group/Arg), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
     <div id="full-conciliar-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-conciliar-wrap" style="display:none;margin-top:12px">
@@ -1683,13 +1693,13 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
         </table>
       </div>
     </div>
-    <div id="full-conciliar-pie" class="full-pie"></div>
     </div>
   </div>
 
   <div class="card">
     <div class="card-title fr-cab"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Simulador de reposición por publicación (MLA)<span class="fr-cab-res" id="full-res-repo"></span><button type="button" class="btn btn-linea fr-min" id="full-min-repo" aria-expanded="true" aria-controls="full-cuerpo-repo" onclick="fullToggle('repo')">Minimizar</button></div>
     <div id="full-cuerpo-repo">
+    <div id="full-reposicion-pie" class="full-pie full-pie-arriba"></div>
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Calcula cuánto conviene enviarle a CADA publicación (no al SKU agregado) según su propia venta, su propio stock, y la fecha en que va a llegar el envío. Cuando el disponible combinado de Ecom+Táctica no alcanza para todas las publicaciones de un mismo SKU, prioriza a la que más vende. Detecta venta censurada. No crea el envío real.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Fecha estimada de llegada<input type="date" id="full-repo-fecha-llegada" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px"></label>
@@ -1720,7 +1730,6 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
         </table>
       </div>
     </div>
-    <div id="full-reposicion-pie" class="full-pie"></div>
     </div>
   </div>
 </div>
@@ -4573,6 +4582,8 @@ function fullPieRender(k){
   const c=FULL_FOTO[k],d=fullFotoDatos[k]||{},pie=qs(c.pie);if(!pie)return;
   const ocupado=!!fullActualizando[k];
   let h='';
+  const edad=d.existe?`Última actualización: ${fullHace(d.obtenido_en)}`:'Todavía no hay una lectura guardada';
+  h+=`<div class="full-pie-linea"><span id="${c.st}" class="full-pie-txt" role="status">${edad}</span><button class="btn btn-linea primary" id="${c.btn}" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>${ocupado?'Actualizando...':'Actualizar'}</button></div>`;
   if(d.error_msg&&d.existe)h+=`<div class="full-aviso" role="alert">Falló la última actualización, mostrando datos de ${acEsc(fullFecha(d.obtenido_en))} <span class="full-aviso-det">${acEsc(d.error_msg)}</span> <button class="btn" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>Reintentar</button></div>`;
   else if(d.error_msg)h+=`<div class="full-aviso" role="alert">No se pudo leer Mercado Libre. <span class="full-aviso-det">${acEsc(d.error_msg)}</span> <button class="btn" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>Reintentar</button></div>`;
   if(d.existe&&d.estado==='parcial')h+=`<div class="full-aviso" role="status">Datos incompletos para ${d.incompletos} SKU: se muestran con la marca "dato anterior" o "datos incompletos". Volvé a actualizar para completarlos.</div>`;
@@ -4581,8 +4592,6 @@ function fullPieRender(k){
     const n=e=>al.filter(a=>a.estado===e).length;
     h+=`<details class="full-alertas"><summary>Alertas: ${n('activa')} activas · ${n('ya_no_aparece')} ya no aparecen · ${n('vista')} vistas</summary><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>SKU o publicación</th><th>Estado</th><th>Primera vez</th><th>Última vez vista</th><th></th></tr></thead><tbody>${al.map(a=>`<tr><td>${acEsc(FULL_TIPOS[a.tipo]||a.tipo)}</td><td>${acEsc(a.clave)}</td><td>${acEsc(FULL_ESTADOS[a.estado]||a.estado)}</td><td>${acEsc(fullFecha(a.primera_vez))}</td><td>${acEsc(fullFecha(a.ultima_vez))}</td><td>${a.estado==='vista'?'':`<button class="btn" onclick="fullAlertaVista('${a.id}','${k}')">Marcar vista</button>`}</td></tr>`).join('')}</tbody></table></div></details>`;
   }
-  const edad=d.existe?`Última actualización: ${fullHace(d.obtenido_en)}`:'Todavía no hay una lectura guardada';
-  h+=`<div class="full-pie-linea"><span id="${c.st}" class="full-pie-txt" role="status">${edad}</span><button class="btn btn-linea primary" id="${c.btn}" onclick="fullActualizar('${k}')"${ocupado?' disabled':''}>${ocupado?'Actualizando...':'Actualizar'}</button></div>`;
   pie.innerHTML=h;
 }
 async function fullAlertaVista(id,k){
