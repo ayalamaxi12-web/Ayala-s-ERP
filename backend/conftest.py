@@ -1,5 +1,9 @@
 """Los tests no esperan el ritmo real de lectura de ML (ver `ml_full.PAUSA_OPS_SEG`) ni las esperas de reintento."""
+import os
+
 import pytest
+
+os.environ["OFERTAS_AUTO"] = "0"      # los tests no arrancan la lectura automática de las mañanas
 
 
 @pytest.fixture(autouse=True)
