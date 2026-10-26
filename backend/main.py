@@ -2878,7 +2878,8 @@ def _ayala_core_motor_sync(
         desglose_m = {c: {k: float(v) for k, v in mercados_mod.desglose(
             precios[c], costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado, comision_pct=_mercado["par"]["comision_pct"],
             financiero_pct=_mercado["par"]["financiero"][c], iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
-            costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=envio_full).items()} for c in precios}
+            costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=envio_full,
+            costo_fijo_tramos=_mercado["par"].get("costo_fijo_tramos")).items()} for c in precios}
     if item_info is not None:
         item_info["precio_calculado"] = precios.get(str(item_info["condicion_detectada"]))
 

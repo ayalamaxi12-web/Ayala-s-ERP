@@ -35,7 +35,7 @@ DECIDIDOS = {("todos", "costo_orden"), ("web", "comision_base"), ("web", "recarg
 
 # Por defecto, ¿qué descuentos comunes aplica cada mercado? Mercado Libre NO lleva el costo por orden hasta que se decida: sumarlo cambiaría sus precios de hoy.
 ACTIVOS_POR_DEFECTO = {
-    "ml": {"orden": False, "cheque": True, "iibb": True},
+    "ml": {"orden": True, "cheque": True, "iibb": True},
     "fravega": {"orden": True, "cheque": True, "iibb": True}, "oncity": {"orden": True, "cheque": True, "iibb": True},
     "megatone": {"orden": True, "cheque": True, "iibb": True}, "web": {"orden": True, "cheque": True, "iibb": True},
 }
@@ -65,7 +65,7 @@ FILAS_INICIALES: list[list[str]] = [
     _f("todos", "impuesto_cheque", "", str(IMP_CHEQUE_PCT_DEFAULT), "", fuente="CRITERIOS_MARGEN §2", nota="sobre el precio con IVA"),
     _f("todos", "iibb", "", str(IIBB_PCT_DEFAULT), "", fuente="CRITERIOS_MARGEN §2", nota="sobre el precio sin IVA"),
     _f("ml", "comision_base", "", str(ayala_core.COMISION_ML_DEFAULT), "SI", fuente="panel de parámetros de ML (referencia, no se lee)",
-       nota="Decidido por Maxi (25/10): en el Motor la comisión de ML queda en 15,32 %."),
+       nota="Decidido por Maxi (27/10): 15,5 % para Mercado Libre y para todos los mercados. El costo fijo por unidad vendida (< $33.000) se suma en la cuenta."),
     _f("ml", "reducida", "", str(ayala_core.REDUCIDA_PCT_DEFAULT), "SI", fuente="panel de parámetros de ML (referencia, no se lee)", nota="solo existe en Mercado Libre"),
     *_cuotas_ml(),
     _f("web", "comision_base", "", "6", "", fuente="Mercado Pago (Maxi 2026-10-24)", nota="6 % por cobro, cualquier medio de pago"),
@@ -153,6 +153,7 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
         fin = {"contado": Decimal("0"), "reducida": ayala_core.REDUCIDA_PCT_DEFAULT, **{str(k): v for k, v in CUOTAS_PCT_DEFAULT.items()}}
         return {"mercado": mercado, "nombre": nombre, "condiciones": list(meta["condiciones"]), "etiqueta_contado": meta["etiqueta_contado"],
                 "comision_pct": ayala_core.COMISION_ML_DEFAULT, "financiero": fin, "recargo_cuotas": None, "faltantes": {}, "avisos": avisos, "notas": notas,
+                "costo_fijo_tramos": ayala_core.COSTO_FIJO_ML_TRAMOS,
                 "desglose": {c: {"base": ayala_core.COMISION_ML_DEFAULT, "cuotas": fin[c], "recargo": Decimal("0"), "total": ayala_core.COMISION_ML_DEFAULT + fin[c]} for c in fin}}
     def revisar(f, que):
         if not f:
@@ -221,12 +222,14 @@ def calcular_mercado(par: dict, *, costo_sin_iva: Decimal, iva_factor: Decimal, 
             continue
         precios[c] = ayala_core.calcular_precio_condicion(
             costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_real, financiero_pct=par["financiero"][c], renta_pct=renta,
-            comision_pct=par["comision_pct"], iibb_pct=iibb_pct, imp_cheque_pct=cheque_pct, envio_full=envio_full, costo_orden=costo_orden)
+            comision_pct=par["comision_pct"], iibb_pct=iibb_pct, imp_cheque_pct=cheque_pct, envio_full=envio_full, costo_orden=costo_orden,
+            costo_fijo_tramos=par.get("costo_fijo_tramos"))
     return precios, errores
 
 
 def desglose(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, comision_pct: Decimal, financiero_pct: Decimal,
-             iibb_pct: Decimal, cheque_pct: Decimal, costo_orden: Decimal = Decimal("0"), envio_full: bool = False) -> dict[str, Decimal]:
+             iibb_pct: Decimal, cheque_pct: Decimal, costo_orden: Decimal = Decimal("0"), envio_full: bool = False,
+             costo_fijo_tramos=None) -> dict[str, Decimal]:
     """De qué se compone el precio (los mismos conceptos y signos que el desglose de Mercado Libre de la pantalla, `ayalaCoreDesgloseDesdeP`): lo que se
     descuenta de la venta y lo que queda de renta en pesos. Solo para mostrar; el precio sale de `ayala_core.calcular_precio_condicion`."""
     iva_serv = Decimal("1.21")
@@ -238,8 +241,9 @@ def desglose(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, en
     full = -(ayala_core.ENVIO_FULL_PCT_DEFAULT / 100) * precio if envio_full else Decimal("0")
     iva_comision = comision / iva_serv - comision
     iva_envio = envio / iva_serv - envio
-    renta = precio / iva_factor + (-costo_sin_iva + comision + financiero + envio + iibb + cheque + full + iva_comision + iva_envio - costo_orden)
-    return {"comision": -comision, "financiero": -financiero, "envio": -envio, "iibb": -iibb, "imp_cheque": -cheque, "envio_full": -full, "costo_orden": costo_orden, "renta": renta}
+    costo_fijo = ayala_core.costo_fijo_para_precio(precio, costo_fijo_tramos) if costo_fijo_tramos else Decimal(0)
+    renta = precio / iva_factor + (-costo_sin_iva + comision + financiero + envio + iibb + cheque + full + iva_comision + iva_envio - costo_orden - costo_fijo)
+    return {"costo_fijo": costo_fijo, "comision": -comision, "financiero": -financiero, "envio": -envio, "iibb": -iibb, "imp_cheque": -cheque, "envio_full": -full, "costo_orden": costo_orden, "renta": renta}
 
 
 # ── foto guardada de las tarifas («Tarifas: hace X · Actualizar») ──

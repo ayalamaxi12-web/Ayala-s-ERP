@@ -41,7 +41,14 @@ SKUS_PILOTO: list[str] = [
 # alícuotas hoy, 10,5% y 21%). Se mantienen a mano por Maxx (no vienen de
 # la API de ML por dominio, a diferencia de Ofertas ML -- ver AYALA_CORE.md
 # A.2/A.3, decisión explícita de Maxx de replicar la planilla tal cual).
-COMISION_ML_DEFAULT = Decimal("15.32")
+COMISION_ML_DEFAULT = Decimal("15.5")   # decidido por Maxx (2026-10-27): 15,5 % para Mercado Libre y para todos los mercados (antes 15,32 %)
+# Costo por unidad vendida de Mercado Libre (solo publicaciones < $33.000), según la página de ayuda de ML (2026-10): logística Flex / acuerdo / retiro, por precio.
+# (techo del tramo -- el precio tiene que ser MENOR --, monto). Es parte de la cuenta: en un ticket bajo cambia mucho el precio. Para Full/correo/colecta ML lo calcula
+# por medidas y peso (no por precio): acá se usa la misma tabla por precio.
+COSTO_FIJO_ML_TRAMOS: tuple[tuple[Decimal | None, Decimal], ...] = (
+    (Decimal(15000), Decimal(1330)), (Decimal(24000), Decimal(2740)), (Decimal(33000), Decimal(3320)), (None, Decimal(0)),
+)
+COSTO_ORDEN_ECOM_DEFAULT = Decimal("149.12")   # costo por orden de Ecom: se descuenta en TODAS las ventas por Ecom, Mercado Libre incluido
 # Impuestos: criterio de margen (docs/business/CRITERIOS_MARGEN.md §2/§4),
 # 2026-10. ANTES había un 6,50% unificado (IIBB + imp. cheque descontados
 # juntos de un solo lado) -- eliminado. Ahora van SEPARADOS, cada uno sobre su
@@ -104,6 +111,7 @@ def calcular_precio_condicion(
     envio_full: bool = False,
     envio_full_pct: Decimal = ENVIO_FULL_PCT_DEFAULT,
     costo_orden: Decimal = Decimal("0"),
+    costo_fijo_tramos=None,
 ) -> Decimal:
     """Reverse-markup: resuelve el precio de venta (con IVA) tal que,
     descontando comisión ML, IIBB, el costo financiero de la condición
@@ -120,6 +128,8 @@ def calcular_precio_condicion(
     # `costo_orden` (Bloque 2, PR 4): monto fijo en pesos por orden (ej. costo por orden de Ecom). Con 0 -- el valor por defecto, y el que usa Mercado Libre -- la cuenta es exactamente la de siempre.
     numerador = costo_sin_iva + envio_real / _IVA_SERVICIOS_ML + costo_orden
     full = (envio_full_pct / 100) if envio_full else Decimal("0")
+    if costo_fijo_tramos:
+        return _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_cheque_pct, financiero_pct, renta_pct, full, costo_fijo_tramos)
     denominador = (
         (1 / iva_factor)
         - (comision_pct / 100) / _IVA_SERVICIOS_ML
@@ -132,6 +142,33 @@ def calcular_precio_condicion(
     return (numerador / denominador).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
+def _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_cheque_pct, financiero_pct, renta_pct, full, tramos) -> Decimal:
+    """Con un costo fijo que depende del PRECIO (tramos de Mercado Libre) el precio sale de probar cada tramo: para el tramo i se resuelve con su monto y vale si el precio
+    resultante cae dentro del tramo. Como los montos crecen con el tramo, el primer tramo que cumple es el precio mínimo que alcanza la renta."""
+    denominador = (
+        (1 / iva_factor) - (comision_pct / 100) / _IVA_SERVICIOS_ML - (iibb_pct / 100) / iva_factor - (imp_cheque_pct / 100) - (financiero_pct / 100) - (renta_pct / 100) - full
+    )
+    piso = Decimal(0)           # el precio mínimo del tramo actual (el techo del anterior)
+    ultimo = None
+    for techo, monto in tramos:
+        p = ((numerador + monto) / denominador).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        ultimo = p
+        if techo is None or p < techo:
+            # Si con el costo de este tramo el precio queda POR DEBAJO de su piso, el tramo de abajo se pasó de su techo: el precio mínimo que alcanza la renta es el piso (justo
+            # donde el costo fijo baja de escalón).
+            return max(p, piso)
+        piso = techo
+    return ultimo
+
+
+def costo_fijo_para_precio(precio: Decimal, tramos=COSTO_FIJO_ML_TRAMOS) -> Decimal:
+    """El costo fijo que corresponde a un precio (con IVA) final."""
+    for techo, monto in tramos:
+        if techo is None or precio < techo:
+            return monto
+    return Decimal(0)
+
+
 def calcular_precios_todas_condiciones(
     *,
     costo_sin_iva: Decimal,
@@ -142,6 +179,8 @@ def calcular_precios_todas_condiciones(
     comision_pct: Decimal = COMISION_ML_DEFAULT,
     iibb_pct: Decimal = IIBB_PCT_DEFAULT,
     imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
+    costo_orden: Decimal = COSTO_ORDEN_ECOM_DEFAULT,
+    costo_fijo_tramos=COSTO_FIJO_ML_TRAMOS,
 ) -> dict[str, Decimal]:
     """El motor completo, las 6 condiciones de una (A.8 punto 2 de
     AYALA_CORE.md: "tabla ... precio calculado por el motor para cada
@@ -163,6 +202,8 @@ def calcular_precios_todas_condiciones(
             iibb_pct=iibb_pct,
             imp_cheque_pct=imp_cheque_pct,
             envio_full=envio_full,
+            costo_orden=costo_orden,
+            costo_fijo_tramos=costo_fijo_tramos,
         )
         for condicion in CONDICIONES
     }
