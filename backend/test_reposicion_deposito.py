@@ -165,4 +165,4 @@ def test_con_stock_o_ventas_en_full_nunca_se_suma_el_deposito_y_el_quiebre_corri
     ml._pagado = {"IT": {("MLA1", None): 247}}
     f = {x.item_id: x for x in rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True).filas}["MLA1"]
     assert f.censurado and f.deposito_usado == 0 and f.ventas_deposito == 197 and f.ventas_periodo == 50
-    assert f.ventas_diarias == 5.0                                      # 50 ventas en 10 días (no 50 en 30): la venta diaria real, sin sumar el depósito
+    assert f.ventas_diarias == 4.55                                     # 50 ventas en 11 días (01/10 al 11/10, ambos extremos): la venta diaria real, sin sumar el depósito

@@ -386,7 +386,7 @@ def calcular_reposicion_mla(
             dias_sin_vender = (hoy - date.fromisoformat(ultima)).days if ultima else dias_ventas
             censurado = stock_full_mla == 0 and ventas_total >= 5 and dias_sin_vender >= 3
             if censurado and primera and ultima:
-                ventana = max((date.fromisoformat(ultima) - date.fromisoformat(primera)).days, 1)
+                ventana = (date.fromisoformat(ultima) - date.fromisoformat(primera)).days + 1   # días de venta contando los dos extremos (16 al 21 = 6 días)
                 ventas_diarias = ventas_total / ventana
             else:
                 ventas_diarias = ventas_total / dias_ventas
