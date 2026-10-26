@@ -37,3 +37,25 @@ def test_pantalla_columnas_interruptor_y_exportacion():
     assert "f.inventory_id && f._sugerido>0" in exp                       # nunca líneas con cantidad 0
     assert "Math.max(0,grupo[0].stock_ecom||0)" in SRC                     # Ecom negativo = 0
     assert "sin dato de Táctica" in SRC
+
+
+def test_el_script_principal_no_tiene_errores_de_sintaxis():
+    """Un error de sintaxis deja la página muerta (nada de goPage): los tests de funciones sueltas no lo ven."""
+    import re
+    import tempfile
+    big = max(re.findall(r"<script>(.*?)</script>", SRC, re.S), key=len)
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+        f.write(big)
+    r = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr[:400]
+
+
+def test_presentacion_celular_botones_tarjetas_y_sin_emojis():
+    for t in ("--r-recuadro);white-space:normal", "@media (max-width:768px)", ".fr-fila{display:grid", 'class="fr-chip"', "Ver más", 'class="full-logo"', 'data-ico="zap"'):
+        assert t in SRC, t
+    a = SRC.index('id="page-full-ml"')
+    bloque = SRC[a:SRC.index('id="page-', a + 20)]
+    assert not re.search(r"[\U0001F300-\U0001FAFF⬆⬇]", bloque)      # sin emojis en el módulo
+
+
+import re  # noqa: E402
