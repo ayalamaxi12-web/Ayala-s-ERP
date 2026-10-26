@@ -160,6 +160,7 @@ class ResultadoReposicionMLA:
     incidencias_sin_vincular: list[dict]
     skus_no_en_ecom: list[str]
     skus_incompletos: list[str] = field(default_factory=list)  # SKU con datos de ML sin leer (de la conciliación o de las ventas/envíos)
+    periodo: dict = field(default_factory=dict)  # {"desde","hasta","dias"}: el rango EXACTO de fechas que se leyó de Mercado Libre
     ordenes_dias_sin_leer: list[str] = field(default_factory=list)  # días de `orders/search` que no se pudieron leer (las ventas de mi depósito quedan incompletas)
 
 
@@ -439,7 +440,7 @@ def calcular_reposicion_mla(
     _convertir_a_paquetes(filas)
 
     return ResultadoReposicionMLA(
-        ordenes_dias_sin_leer=ordenes_dias_sin_leer,
+        periodo={"desde": desde, "hasta": hasta, "dias": dias_ventas}, ordenes_dias_sin_leer=ordenes_dias_sin_leer,
         filas=filas, incidencias_sku=resultado_conciliacion.incidencias_sku,
         incidencias_sin_vincular=resultado_conciliacion.incidencias_sin_vincular,
         skus_no_en_ecom=resultado_conciliacion.skus_no_en_ecom,

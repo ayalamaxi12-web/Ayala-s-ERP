@@ -401,6 +401,28 @@ class MLFullClient:
         return acumulado
 
 
+def detalle_operaciones(ml: MLFullClient, cuenta: str, inventory_id: str, desde: str, hasta: str) -> dict:
+    """Las operaciones CRUDAS de un `inventory_id` en el rango pedido, para verificarlas a mano contra el panel de Full: las salidas (`SALE_CONFIRMATION`) con fecha y cantidad, y
+    cada evento de los envíos (`INBOUND_RECEPTION`) con el total, lo disponible y lo NO disponible que informa Mercado Libre. Solo lectura, sin caché."""
+    headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
+    ventas = ml._operaciones_lote(cuenta, headers, [inventory_id], desde, hasta, "SALE_CONFIRMATION")
+    envios = ml._operaciones_lote(cuenta, headers, [inventory_id], desde, hasta, "INBOUND_RECEPTION")
+    if ventas is None or envios is None:
+        raise RuntimeError("Mercado Libre respondió 429 (demasiadas consultas seguidas): probá de nuevo en un minuto")
+    sal = [{"fecha": o.get("date_created"), "cantidad": abs((o.get("detail") or {}).get("available_quantity") or 0)} for o in ventas]
+    sal.sort(key=lambda x: x["fecha"] or "")
+    ev = []
+    for o in envios:
+        refs = o.get("external_references") or []
+        r = o.get("result") or {}
+        ev.append({"fecha": o.get("date_created"), "inbound_id": next((x.get("value") for x in refs if x.get("type") == "inbound_id"), None),
+                   "cantidad_evento": (o.get("detail") or {}).get("available_quantity"), "total": r.get("total"), "disponible": r.get("available_quantity"),
+                   "no_disponible": r.get("not_available_quantity")})
+    ev.sort(key=lambda x: x["fecha"] or "")
+    return {"inventory_id": inventory_id, "cuenta": cuenta, "desde": desde, "hasta": hasta, "ventas": sal, "total_ventas": sum(x["cantidad"] for x in sal),
+            "envios": ev}
+
+
 def _sku_de_item(item: dict) -> str | None:
     """El SKU propio puede vivir en `seller_custom_field` o en el atributo
     `SELLER_SKU` (pregunta abierta #1 de `02_MCP.md`, sin resolver

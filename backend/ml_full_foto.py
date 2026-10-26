@@ -20,7 +20,9 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 import ml_foto
+from ml_auth import SELLERS
 from ml_full import (EcomFullAdapter, FilaConciliacion, MLFullClient, ResultadoConciliacion, TacticaStockSheetAdapter, conciliar)
+from ml_full import detalle_operaciones as ml_full_detalle
 from ml_reposicion import calcular_reposicion_mla
 from rentabilidad import db as _db
 from rentabilidad.ingesta_ecom_api import EcomApiClient
@@ -57,7 +59,7 @@ def resultado_desde_payload(p: dict) -> ResultadoConciliacion:
 
 def serializar_reposicion(r, params: dict) -> dict:
     return {"filas": [f.__dict__ for f in r.filas], "incidencias_sku": r.incidencias_sku, "incidencias_sin_vincular": r.incidencias_sin_vincular,
-            "skus_no_en_ecom": r.skus_no_en_ecom, "skus_incompletos": r.skus_incompletos, "ordenes_dias_sin_leer": getattr(r, "ordenes_dias_sin_leer", []), "params": params}
+            "skus_no_en_ecom": r.skus_no_en_ecom, "skus_incompletos": r.skus_incompletos, "ordenes_dias_sin_leer": getattr(r, "ordenes_dias_sin_leer", []), "params": {**params, **getattr(r, "periodo", {})}}
 
 
 def alertas_conciliacion(p: dict) -> list[dict]:
@@ -202,6 +204,20 @@ def _modulo(nombre: str) -> str:
 @router.get("/estado/{job_id}")
 def estado_endpoint(job_id: str):
     return estado_job(job_id) or {"status": "not_found"}
+
+
+@router.get("/detalle/{inventory_id}")
+def detalle_inventario(inventory_id: str, cuenta: str, dias: int = 30, desde: date | None = None, hasta: date | None = None):
+    """Para verificar a mano: las operaciones CRUDAS que lee el simulador para UN `inventory_id`, en el mismo rango de fechas. Solo lectura, en vivo y sin caché."""
+    hoy = date.today()
+    hasta = hasta or hoy
+    desde = desde or (hasta - timedelta(days=min(max(dias, 1), 60)))
+    if cuenta not in SELLERS:
+        raise HTTPException(status_code=422, detail="Cuenta desconocida (IT o MT).")
+    try:
+        return ml_full_detalle(MLFullClient(), cuenta, inventory_id, desde.isoformat(), hasta.isoformat())
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=ml_foto.mensaje_para_usuario(e))
 
 
 @router.get("/{modulo}")

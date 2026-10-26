@@ -59,3 +59,17 @@ def test_presentacion_celular_botones_tarjetas_y_sin_emojis():
 
 
 import re  # noqa: E402
+
+
+def test_minimizar_buscar_y_trazabilidad():
+    for t in ('id="full-min-conc"', 'id="full-min-repo"', 'aria-controls="full-cuerpo-repo"', 'id="full-repo-busq"', 'id="full-conc-busq"', "SALE_CONFIRMATION", "not_available_quantity"):
+        assert t in SRC, t
+    js = _fn(SRC, "fullCoincide")
+    prueba = "const acNormTxt=t=>String(t||'').split('').map(c=>c.normalize('NFD').charAt(0).toLowerCase()).join('');" + js + \
+        "console.log(JSON.stringify([fullCoincide('w1105 acomp',['MLA1','W1105ACOMP']),fullCoincide('abcb',['ABCB37443']),fullCoincide('zzz',['ABC']),fullCoincide('',['x'])]));"
+    assert json.loads(subprocess.run(["node", "-e", prueba], capture_output=True, text=True, check=True).stdout) == [True, True, False, True]
+
+
+def test_periodo_visible_y_ver_detalle():
+    for t in ("Período leído de Mercado Libre: del", "fullRepoDetalle(this,", "/ml-full/foto/detalle/", "no disponible"):
+        assert t in SRC, t
