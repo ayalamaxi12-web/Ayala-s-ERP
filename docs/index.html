@@ -826,6 +826,9 @@ body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.
 .fr-herr-tit{font-size:var(--fs-tabla);color:var(--texto-suave)}
 .fr-filtros{display:flex;flex-wrap:wrap;gap:8px}
 body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--mod-btn-fondo);border-color:var(--mod-btn-borde);color:var(--mod-btn-texto);font-weight:700}
+.ac-tag-sku{display:inline-block;margin-left:6px;padding:0 8px;border-radius:var(--r-chip);background:var(--divisor);color:var(--tinta-2);font-size:var(--fs-tabla);white-space:nowrap}
+.ac-tag-piloto{background:var(--celeste-100);color:var(--celeste-700)}
+.ac-tag-falta{background:var(--aviso-fondo);color:var(--aviso-texto)}
 </style>
 </head>
 <body>
@@ -2050,8 +2053,11 @@ igual que la rentabilidad real, que se muestra al lado. -->
         <label>Envío real $ (por publicación)<input type="text" id="ac-envio-real" placeholder="automático" class="ac-campo-largo" inputmode="decimal"></label>
         <label>TC<input type="text" id="ac-tc-manual" placeholder="automático (BNA)" class="ac-campo-largo" inputmode="decimal"></label>
         <label>Costo USD sin IVA<input type="text" id="ac-costo-manual" placeholder="automático (Ecom)" class="ac-campo-largo" inputmode="decimal"></label>
+        <label>IVA del SKU (10,5% o 21%)<select id="ac-iva-manual" class="fi ac-campo-largo" aria-describedby="ac-iva-ayuda"><option value="">automático (Táctica / Ecom)</option><option value="21">21 %</option><option value="10.5">10,5 %</option></select></label>
         <label class="ac-check"><input type="checkbox" id="ac-envio-full">Envío a Bodega (Full)</label>
       </div>
+      <p class="ac-ayuda" id="ac-iva-ayuda">El IVA manual pisa el de Ecom/Táctica cuando hay un único SKU elegido; en varios SKU solo completa los que no tienen IVA en ninguna fuente (los demás no cambian).</p>
+      <div class="ac-av-campos"><button type="button" class="btn btn-linea" onclick="ayalaCoreDiagnosticoCatalogo()" title="Lee la foto de costos de Ecom y lista los SKU que hoy no calculan y por qué. No toca ningún SKU."><span data-ico="download" aria-hidden="true"></span> Descargar SKU que no calculan (CSV)</button><span class="ac-ayuda" id="ac-diag-res" role="status"></span></div>
       <p class="ac-ayuda">Vacío = automático. El envío real, si lo dejás vacío, sale de la publicación cuando comparás un MLA. El costo manual solo aplica cuando hay un único SKU elegido.</p>
     </details>
     <div class="ac-acc"><button type="button" class="btn primary" onclick="ayalaCoreCalcular()"><span data-ico="calculator" aria-hidden="true"></span> Calcular</button></div>
@@ -5910,6 +5916,16 @@ function ayalaCorePrecioEfectivo(sku,condicion,calculado){
   const o=AC_PRECIO_OVERRIDE[ayalaCorePrecioOverrideKey(sku,condicion)];
   return (o&&o.usar&&o.valor!=null&&!isNaN(o.valor))?o.valor:calculado;
 }
+async function ayalaCoreDiagnosticoCatalogo(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const r=qs('ac-diag-res');if(r)r.textContent='Leyendo el catálogo...';
+  try{
+    const res=await fetch(`${url}/ayala-core/catalogo-skus/diagnostico`);const d=await res.json().catch(()=>({}));if(!res.ok)throw new Error(d.detail||('HTTP '+res.status));
+    const csv='SKU,Motivo,Detalle\n'+d.filas.map(f=>[f.sku,f.motivo,'"'+String(f.detalle).replace(/"/g,'""')+'"'].join(',')).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));a.download=`sku-que-no-calculan-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+    if(r)r.textContent=`${d.no_calculan} de ${d.total_catalogo} SKU no calculan (${Object.entries(d.resumen).map(([k,v])=>v+' '+k.replace('_',' ')).join(', ')})${d.tactica_caida?' · sin lectura de Táctica: el IVA se miró solo en Ecom':''}`;
+  }catch(e){if(r)r.textContent='No se pudo leer: '+e.message;}
+}
 async function ayalaCoreLoad(){
   const url=getBackendUrl();if(!url)return;
   try{
@@ -5922,6 +5938,7 @@ async function ayalaCoreLoad(){
     const acOp=qs('ac-operador');if(acOp)acOp.value=localStorage.getItem('ofm_operador')||'';
     ayalaCoreLoaded=true;
   }catch(e){}
+  ayalaCoreCatalogoCargar();
   try{
     const resP=await fetch(`${url}/ayala-core/precios-excel`);
     if(resP.ok){
@@ -6195,23 +6212,37 @@ function ayalaCoreRentaQueryParams(){
   return AC_COND_ORDEN.map(c=>`renta_${c}=${qs('ac-renta-'+c)?.value||0}`).join('&');
 }
 function ayalaCoreTcParam(){const v=qs('ac-tc-manual')?.value;return v?`&tc=${v}`:'';}
+function ayalaCoreIvaParam(){const v=qs('ac-iva-manual')?.value;return v?`&iva=${v}`:'';}
 function ayalaCoreCostoParam(){const v=qs('ac-costo-manual')?.value;return v?`&costo=${v}`:'';}
 // ══ Selector de SKU (Motor de Precios): TODOS los SKU de «ERP AYALA» + los piloto; búsqueda predictiva (cualquier parte del código, sin mayúsculas ni tildes), chips con ×, teclado ══
 let AC_SEL=[],AC_SKUS_EXCEL=[],AC_TODOS=[],AC_COMBO={sug:[],sel:-1};
+// Catálogo COMPLETO de costos de Ecom (miles de SKU): se baja una vez de la foto que ya existe y se busca acá, en el navegador. AC_CAT[sku]=[estado_costo,tiene_iva_en_ecom].
+let AC_CAT={},AC_CAT_CARGADO=false,AC_TODOS_N=[];
+async function ayalaCoreCatalogoCargar(){
+  if(AC_CAT_CARGADO)return;const url=getBackendUrl();if(!url)return;
+  try{const res=await fetch(`${url}/ayala-core/catalogo-skus`);if(!res.ok)return;const d=await res.json();AC_CAT={};(d.skus||[]).forEach(([k,e,i])=>{AC_CAT[k]=[e,i];});AC_CAT_CARGADO=true;ayalaCoreSkuListaActualizar();ayalaCoreSkuRender();}catch(e){}
+}
+function ayalaCoreSkuEtiquetas(x){
+  const t=[];if((AC_SKUS||[]).includes(x))t.push('<span class="ac-tag-sku ac-tag-piloto">Piloto</span>');
+  if((AC_SKUS_EXCEL||[]).includes(x)||(AC_PRECIOS_EXCEL||{})[x])t.push('<span class="ac-tag-sku">ERP AYALA</span>');
+  const c=AC_CAT[x];if(c){if(c[0]==='sin_costo')t.push('<span class="ac-tag-sku ac-tag-falta">sin costo en Ecom</span>');else if(c[0]==='ambiguo')t.push('<span class="ac-tag-sku ac-tag-falta">costos distintos por variante</span>');if(!c[1])t.push('<span class="ac-tag-sku ac-tag-falta">IVA no cargado en Ecom</span>');}
+  return t.join(' ');
+}
 function ayalaCoreSkuListaActualizar(){
-  AC_TODOS=[...new Set([...(AC_SKUS||[]),...(AC_SKUS_EXCEL||[]),...Object.keys(AC_PRECIOS_EXCEL||{})])].sort((a,b)=>a.localeCompare(b,'es'));
+  AC_TODOS=[...new Set([...(AC_SKUS||[]),...(AC_SKUS_EXCEL||[]),...Object.keys(AC_PRECIOS_EXCEL||{}),...Object.keys(AC_CAT||{})])].sort((a,b)=>a.localeCompare(b,'es'));
+  AC_TODOS_N=AC_TODOS.map(x=>acNormTxt(x));
   const rs=qs('ac-ref-sku');if(rs){const cur=rs.value;rs.innerHTML=AC_TODOS.map(x=>`<option value="${acEsc(x)}"${x===cur?' selected':''}>${acEsc(x)}</option>`).join('');}
 }
 function ayalaCoreSkuBuscar(q){
   const n=acNormTxt(q).trim();if(!n)return [];const out=[];
-  AC_TODOS.forEach(x=>{if(AC_SEL.includes(x))return;const i=acNormTxt(x).indexOf(n);if(i>=0)out.push({x,i,n:n.length});});
-  return out.sort((a,b)=>(a.i>0)-(b.i>0)||a.i-b.i||a.x.localeCompare(b.x,'es')).slice(0,12);
+  for(let k=0;k<AC_TODOS.length;k++){const x=AC_TODOS[k];if(AC_SEL.includes(x))continue;const i=(AC_TODOS_N[k]||acNormTxt(x)).indexOf(n);if(i>=0)out.push({x,i,n:n.length});}
+  return out.sort((a,b)=>(a.i>0)-(b.i>0)||a.i-b.i||a.x.localeCompare(b.x,'es')).slice(0,15);
 }
 function ayalaCoreSkuSugerir(){
   const inp=qs('ac-sku-buscar'),box=qs('ac-sku-lista');if(!inp||!box)return;
   AC_COMBO.sug=ayalaCoreSkuBuscar(inp.value);AC_COMBO.sel=-1;
   if(!AC_COMBO.sug.length){ayalaCoreSkuCerrar();if(inp.value.trim()){box.innerHTML='<div class="it" role="option" aria-disabled="true">Ningún SKU coincide</div>';box.style.display='block';inp.setAttribute('aria-expanded','true');}return;}
-  box.innerHTML=AC_COMBO.sug.map((m,k)=>`<div class="it" role="option" id="ac-sku-opt-${k}" aria-selected="false" onmousedown="event.preventDefault();ayalaCoreSkuAgregar(AC_COMBO.sug[${k}].x)">${acResaltar(m.x,m.i,m.n)}</div>`).join('');
+  box.innerHTML=AC_COMBO.sug.map((m,k)=>`<div class="it" role="option" id="ac-sku-opt-${k}" aria-selected="false" onmousedown="event.preventDefault();ayalaCoreSkuAgregar(AC_COMBO.sug[${k}].x)">${acResaltar(m.x,m.i,m.n)} ${ayalaCoreSkuEtiquetas(m.x)}</div>`).join('');
   box.style.display='block';inp.setAttribute('aria-expanded','true');inp.removeAttribute('aria-activedescendant');
 }
 function ayalaCoreSkuCerrar(){const box=qs('ac-sku-lista'),inp=qs('ac-sku-buscar');if(box){box.style.display='none';box.innerHTML='';}if(inp){inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');}AC_COMBO.sug=[];AC_COMBO.sel=-1;}
@@ -6453,7 +6484,7 @@ function ayalaCoreAutoRecalcular(){
   clearTimeout(AC_CALC_TIMER);AC_CALC_TIMER=setTimeout(()=>ayalaCoreCalcular(),300);
 }
 function ayalaCoreAutoRecalcularMontar(){
-  const ids=['ac-renta-18','ac-renta-24','ac-cantidad','ac-cantidad-otro','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
+  const ids=['ac-renta-18','ac-renta-24','ac-iva-manual','ac-cantidad','ac-cantidad-otro','ac-envio-real','ac-envio-full','ac-tc-manual','ac-costo-manual',...AC_COND_ORDEN.map(c=>'ac-renta-'+c)];
   ids.forEach(id=>{const el=qs(id);if(el&&!el.dataset.autocalc){el.dataset.autocalc='1';el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',ayalaCoreAutoRecalcular);}});
 }
 async function ayalaCoreCalcular(){
@@ -6463,7 +6494,7 @@ async function ayalaCoreCalcular(){
   const sku=AC_SEL.length===1?AC_SEL[0]:'';
   const envioReal=qs('ac-envio-real').value, envioFull=qs('ac-envio-full').checked;
   if(!ayalaCoreCantidadValida()){qs('ac-datos').style.display='block';qs('ac-datos').innerHTML='<span class="ac-aviso-txt">La cantidad por publicación tiene que ser un entero entre 1 y 999.</span>';return;}
-  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}${ayalaCoreCantidadParam()}${ayalaCoreMercadoParams()}`;
+  let qparams=`${ayalaCoreRentaQueryParams()}&envio_full=${envioFull}${ayalaCoreTcParam()}${ayalaCoreIvaParam()}${ayalaCoreCantidadParam()}${ayalaCoreMercadoParams()}`;
   if(envioReal)qparams+=`&envio_real=${envioReal}`;
   qs('ac-datos').style.display='block';qs('ac-datos').textContent='Calculando...';
   const tw=qs('ac-todos-wrap');if(tw)tw.style.display=AC_MERCADO==='todos'?'grid':'none';
@@ -6478,7 +6509,7 @@ async function ayalaCoreCalcular(){
       const lote=await res.json();
       const resultados=lote.resultados.filter(r=>!r.error).map(r=>({sku:r.sku,d:r}));
       const omitidos=lote.resultados.filter(r=>r.error);
-      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${resultados[0]?ayalaCoreMercadoTxt(resultados[0].d):''}${(resultados[0]&&resultados[0].d.cantidad>1)?` · <b>Pack x${resultados[0].d.cantidad}</b> (costo × ${resultados[0].d.cantidad}; el envío es por publicación)`:''}${omitidos.length?` (sin datos: ${omitidos.map(o=>acEsc(o.sku)).join(', ')})`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
+      qs('ac-datos').innerHTML=resultados.length?`${resultados.length} de ${lote.resultados.length} SKU calculados${resultados[0]?ayalaCoreMercadoTxt(resultados[0].d):''}${(resultados[0]&&resultados[0].d.cantidad>1)?` · <b>Pack x${resultados[0].d.cantidad}</b> (costo × ${resultados[0].d.cantidad}; el envío es por publicación)`:''}${omitidos.length?` · <b>sin calcular:</b> ${omitidos.map(o=>`${acEsc(o.sku)} (${acEsc(String(o.error||'').replace(/^SIN_(COSTO|IVA) para SKU '[^']*': ?/,''))})`).join('; ')}`:''}.<div class="ac-calc-con">${ayalaCoreCalculadoConHtml(lote.calculado_con,Math.round(performance.now()-t0))}</div>`:`<span style="color:var(--red)">❌ Ningún SKU pudo calcularse</span>`;
       ayalaCoreRenderMotorMulti(resultados);
       return;
     }

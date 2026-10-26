@@ -63,6 +63,30 @@ class CatalogoCostos:
     def factor_iva(self, sku: str) -> Decimal | None:
         return self.iva.get((sku or "").strip())
 
+    def estado_costo(self, sku: str) -> str:
+        """`ok`, `ambiguo` (variantes con costos distintos), `sin_costo` (está en Ecom con costo 0) o `no_existe` (no figura en la foto)."""
+        s = (sku or "").strip()
+        if s in self.costos:
+            return "ok"
+        if s in self.ambiguos:
+            return "ambiguo"
+        if s in self.sin_costo:
+            return "sin_costo"
+        return "no_existe"
+
+    def motivo_sin_costo(self, sku: str) -> str:
+        e = self.estado_costo(sku)
+        if e == "sin_costo":
+            return "está en Ecom pero sin costo cargado (costo 0): cargalo en Ecom"
+        if e == "ambiguo":
+            return "sus variantes tienen costos distintos (USD " + ", ".join(str(x) for x in self.ambiguos[(sku or "").strip()]) + "): no se elige uno al azar; usá el SKU de la variante"
+        return "no figura en el catálogo de costos de Ecom (si es un artículo con variantes, elegí una variante; si se creó hace poco, falta el próximo refresco de la foto)"
+
+    def todos_los_skus(self) -> list[tuple[str, str, bool]]:
+        """[(sku, estado_costo, tiene_iva_en_ecom)] de todo el catálogo, ordenado."""
+        todos = set(self.costos) | set(self.ambiguos) | self.sin_costo
+        return [(s, self.estado_costo(s), s in self.iva) for s in sorted(todos)]
+
 
 def _dec(v) -> Decimal:
     try:
@@ -88,6 +112,7 @@ def armar_catalogo(productos: list[dict]) -> CatalogoCostos:
     for p in productos:
         sku = (p.get("sku") or "").strip()
         variantes = p.get("variants") or []
+        factor = _factor_iva_de_tax(p.get("tax"))
         propias = []
         sin_sku_propio = []
         for v in variantes:
@@ -101,9 +126,11 @@ def armar_catalogo(productos: list[dict]) -> CatalogoCostos:
                 cat.costos[vsku] = costo
             else:
                 cat.sin_costo.add(vsku)
+            # La variante con SKU propio no tiene IVA propio: es el del artículo (antes solo quedaba cargado el del SKU del artículo y la variante daba SIN_IVA).
+            if factor is not None:
+                cat.iva[vsku] = factor
         if not sku:
             continue
-        factor = _factor_iva_de_tax(p.get("tax"))
         if factor is not None:
             cat.iva[sku] = factor
         if not sin_sku_propio and propias:
@@ -312,10 +339,30 @@ def obtener_catalogo(ahora: Callable[[], float] = time.time, db_factory: Callabl
     return cat
 
 
+# Un SKU que falta en la foto (o sin costo / sin IVA) puede ser de un artículo tocado después de la última foto: se refresca UNA vez, y no más de una cada 10 minutos.
+ESPERA_REFRESCO_FALTANTE_SEG = 600
+_ultimo_refresco_faltante = 0.0
+
+
+def refrescar_por_faltante(ahora: Callable[[], float] = time.time, **kw) -> bool:
+    """Baja la foto de nuevo (síncrono, ~80 s) si pasaron 10 minutos desde la última vez que se hizo por este motivo. True si refrescó."""
+    global _ultimo_refresco_faltante
+    with _lock:
+        if ahora() - _ultimo_refresco_faltante < ESPERA_REFRESCO_FALTANTE_SEG:
+            return False
+        _ultimo_refresco_faltante = ahora()
+    try:
+        r = refrescar("faltante", ahora=ahora, **kw)
+        return not r.get("ya_en_curso")
+    except Exception:
+        return False
+
+
 def limpiar_cache() -> None:
-    global _cache, _meta, _leido_en
+    global _cache, _meta, _leido_en, _ultimo_refresco_faltante
     with _lock:
         _cache, _meta, _leido_en = None, {}, 0.0
+        _ultimo_refresco_faltante = 0.0
         _estado.update(en_curso=False, ultimo_error=None, ultimo_intento=None)
 
 
