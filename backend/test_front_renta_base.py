@@ -36,6 +36,8 @@ def test_la_pantalla_tiene_el_interruptor_la_columna_cuenta_y_los_encabezados():
     assert 'role="radiogroup" aria-label="Base del porcentaje de renta"' in SRC
     assert SRC.count("(con IVA; en la cuenta se resta sin IVA)") == 1 and "AC_NOTA_IVA" in SRC
     assert "Comisión${AC_NOTA_IVA}" in SRC and "Envío${AC_NOTA_IVA}" in SRC
-    assert "aria-expanded" in _fn(SRC, "ayalaCoreVerCuentaBtn") and "renta_base=sin_iva" in _fn(SRC, "ayalaCoreRentaQueryParams")
+    assert "aria-expanded" in _fn(SRC, "ayalaCoreVerCuentaBtn") and "renta_base=${AC_RENTA_BASE}" in _fn(SRC, "ayalaCoreRentaQueryParams")
     # con «con IVA» no se manda nada: el pedido es idéntico al de antes
-    assert "AC_RENTA_BASE==='sin_iva'?'&renta_base=sin_iva':''" in _fn(SRC, "ayalaCoreRentaQueryParams")
+    assert "&renta_base=${AC_RENTA_BASE}" in _fn(SRC, "ayalaCoreRentaQueryParams")      # siempre se manda explícita
+    assert "let AC_RENTA_BASE='sin_iva'" in SRC                                          # Maxi (27/10): renta = margen ÷ precio sin IVA por defecto
+    assert 'aria-checked="true" class="ac-mk ac-rb" data-rb="sin_iva"' in SRC

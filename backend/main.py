@@ -2808,7 +2808,7 @@ def _ayala_core_motor_sync(
     tc_override: Decimal | None = None, costo_override: Decimal | None = None,
     _proveedores=None, _tc: Decimal | None = None, cantidad: int = 1, _mercado: dict | None = None,
     iva_manual: Decimal | None = None, iva_solo_si_falta: bool = False,
-    renta_base: str = "sin_iva",
+    renta_base: str = "con_iva",
 ) -> dict:
     # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
     # pisar el costo sin IVA (USD) a mano para simular. Sin
@@ -3074,7 +3074,7 @@ async def ayala_core_motor_lote(
     renta_18: float | None = None,
     renta_24: float | None = None,
     iva: float | None = None,
-    renta_base: str = "sin_iva",
+    renta_base: str = "con_iva",
 ):
     """Los SKU pedidos (coma-separados; vacío = todos los piloto) en UNA sola respuesta, con la MISMA cuenta que `/ayala-core/sku/{sku}/motor`
     (`_ayala_core_motor_sync`, ningún cambio de fórmula). Los costos de Ecom, el IVA de Táctica y el TC salen de las fotos que ya están en memoria:
@@ -3089,7 +3089,7 @@ async def ayala_core_motor_lote(
 
 def _ayala_core_motor_lote_sync(
     skus: list[str], renta_por_condicion: dict[str | int, Decimal], envio_real: Decimal | None, envio_full: bool, tc_override: Decimal | None,
-    cantidad: int = 1, mk: tuple | None = None, iva_manual: Decimal | None = None, renta_base: str = "sin_iva",
+    cantidad: int = 1, mk: tuple | None = None, iva_manual: Decimal | None = None, renta_base: str = "con_iva",
 ) -> dict:
     cantidad = _cantidad_valida(cantidad)
     m = _preparar_mercado(*mk) if mk else None
@@ -3153,7 +3153,7 @@ async def ayala_core_sku_motor(
     renta_18: float | None = None,
     renta_24: float | None = None,
     iva: float | None = None,
-    renta_base: str = "sin_iva",
+    renta_base: str = "con_iva",
 ):
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12, renta_18, renta_24)
     m = _preparar_mercado(mercado, usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct, recargo_cuotas)
@@ -3162,7 +3162,7 @@ async def ayala_core_sku_motor(
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
         Decimal(str(tc)) if tc is not None else None,
         Decimal(str(costo)) if costo is not None else None,
-        None, None, cantidad, m, _iva_manual(iva), _renta_base_valida(renta_base),
+        None, None, cantidad, m, _iva_manual(iva), renta_base=_renta_base_valida(renta_base),
     )
 
 
@@ -3176,7 +3176,7 @@ async def ayala_core_publicaciones_run(
     renta_9: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[9]),
     renta_12: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[12]),
     tc: float | None = None,
-    renta_base: str = "sin_iva",
+    renta_base: str = "con_iva",
 ):
     """Escaneo caro (recorre TODO el catálogo activo de las cuentas
     pedidas) -- por eso corre en background, mismo patrón que
