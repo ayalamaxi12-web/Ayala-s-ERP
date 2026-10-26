@@ -1877,11 +1877,12 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
           <option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option>
         </select>
       </span>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace" title="Suma el descuento propio por publicación (PRICE_DISCOUNT) -- no tiene listado masivo en la API de ML, escanea publicación por publicación de las ~6.200 activas"><input type="checkbox" id="ofm-incluir-propias">Incluir ofertas propias (lento)</label>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace" title="Suma el descuento propio por publicación (PRICE_DISCOUNT) -- no tiene listado masivo en la API de ML, escanea publicación por publicación de las ~6.200 activas"><input type="checkbox" id="ofm-incluir-propias" checked>Incluir ofertas propias (lento)</label>
       <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
-      <button class="btn primary" onclick="ofmRun()" id="btn-ofm-run">🔄 Cargar ofertas activas</button>
+      <button class="btn primary" onclick="ofmRun()" id="btn-ofm-run">🔄 Actualizar ahora</button>
     </div>
   </div>
+  <div id="ofm-foto-info" role="status" aria-live="polite" style="font-size:11px;color:var(--text2);margin-bottom:4px"></div>
   <div id="ofm-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px"></div>
   <div id="ofm-log" style="display:none;max-height:110px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
 
@@ -5134,12 +5135,39 @@ function ofmGuardarJobActivo(jobId,incluirPropias){
 }
 function ofmLimpiarJobActivo(){try{localStorage.removeItem(OFM_JOB_KEY);}catch(e){}}
 function ofmGuardarUltimoResultado(result){try{localStorage.setItem(OFM_RESULT_KEY,JSON.stringify({result,ts:Date.now()}));}catch(e){}}
+// ── Foto guardada de las ofertas (compartida): se lee sola todas las mañanas y queda en el backend; al abrir el módulo se muestra de inmediato, con fecha y hora ──
+let OFM_FOTO_TS=null;
+function ofmFotoInfo(v){
+  const e=qs('ofm-foto-info');if(!e)return;
+  const cuando=v&&v.obtenido_en?new Date(v.obtenido_en).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'America/Argentina/Buenos_Aires'}):'';
+  const auto=v&&v.auto&&v.auto.activa?` · se actualiza sola todos los días a las ${v.auto.hora}`:'';
+  const falla=v&&v.error_msg?` · <span style="color:var(--yellow)">falló la última actualización${v.error_en?' ('+new Date(v.error_en).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'America/Argentina/Buenos_Aires'})+')':''}; se muestran los datos anteriores</span>`:'';
+  e.innerHTML=v&&v.existe?`<b>Última actualización: ${cuando}</b> (${fullHace(v.obtenido_en)})${auto}${falla}`:`Todavía no hay una lectura guardada${auto}${falla}`;
+}
+async function ofmFotoCargar(){
+  const url=getBackendUrl();if(!url)return false;
+  try{
+    const m=await (await fetch(`${url}/ml-ofertas/foto?meta=true`)).json();
+    ofmFotoInfo(m);
+    if(m.job_id&&!ofmJobIdOfertas){
+      ofmJobIdOfertas=m.job_id;const btn=qs('btn-ofm-run'),status=qs('ofm-status'),logEl=qs('ofm-log');
+      btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Hay una actualización en curso (la lanzó otra persona o la automática)';logEl.style.display='block';
+      pollFullJob(`${url}/ml-ofertas/status/${m.job_id}`,logEl,status,btn,'🔄 Actualizar ahora',(result)=>{ofmJobIdOfertas=null;ofmOnResult(result);ofmFotoCargar();});
+    }
+    if(m.existe&&m.obtenido_en!==OFM_FOTO_TS){
+      const v=await (await fetch(`${url}/ml-ofertas/foto`)).json();
+      if(v.existe&&v.payload){OFM_FOTO_TS=v.obtenido_en;ofmOnResult(v.payload);ofmFotoInfo(v);return true;}
+    }
+    return !!(m.existe&&ofmResult);
+  }catch(e){return false;}
+}
 async function ofmReconectarJobActivo(){
   let guardado=null;
   try{guardado=JSON.parse(localStorage.getItem(OFM_JOB_KEY)||'null');}catch(e){}
   if(guardado&&ofmJobIdOfertas===guardado.jobId)return;// ya nos reconectamos a este en esta misma carga de página
   if(!guardado){
-    // Sin job corriendo -- restaurar el último resultado ya cargado, si hay.
+    // Sin job propio corriendo: lo último guardado en el servidor (foto compartida, con fecha y hora); si no hay, lo último de este navegador.
+    if(await ofmFotoCargar())return;
     try{
       const cache=JSON.parse(localStorage.getItem(OFM_RESULT_KEY)||'null');
       if(cache&&cache.result&&!ofmResult)ofmOnResult(cache.result);
@@ -5162,7 +5190,7 @@ async function ofmReconectarJobActivo(){
     toast('🔄 Reconectado a un proceso que ya estaba corriendo...');
     btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Reconectado: '+guardado.jobId;logEl.style.display='block';
     qs('ofm-incluir-propias').checked=!!guardado.incluirPropias;
-    pollFullJob(guardado.statusUrl,logEl,status,btn,'🔄 Cargar ofertas activas',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
+    pollFullJob(guardado.statusUrl,logEl,status,btn,'🔄 Actualizar ahora',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
   }catch(e){/* backend no disponible ahora -- no limpiar, reintentar en la próxima visita a la página */}
 }
 async function ofmRun(){
@@ -5176,8 +5204,8 @@ async function ofmRun(){
     const{job_id}=await res.json();
     ofmJobIdOfertas=job_id;status.textContent='Job: '+job_id;
     ofmGuardarJobActivo(job_id,incluirPropias);
-    pollFullJob(`${url}/ml-ofertas/status/${job_id}`,logEl,status,btn,'🔄 Cargar ofertas activas',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Cargar ofertas activas';}
+    pollFullJob(`${url}/ml-ofertas/status/${job_id}`,logEl,status,btn,'🔄 Actualizar ahora',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);if(incluirPropias)ofmFotoCargar();});
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Actualizar ahora';}
 }
 function ofmOnResult(result){
   ofmResult=result;

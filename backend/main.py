@@ -24,6 +24,7 @@ from rentabilidad import costos_ecom
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 from proyeccion_snapshot import router as proyeccion_router
+import ml_ofertas_foto
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
 
@@ -40,6 +41,7 @@ app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["
 app.include_router(rentabilidad_router)
 app.include_router(proyeccion_router)
 app.include_router(ml_full_foto_router)
+app.include_router(ml_ofertas_foto.router)
 app.include_router(transito_router)
 
 
@@ -59,6 +61,12 @@ async def _configuracion_faltante_handler(request: Request, exc: ConfiguracionFa
 async def _error_no_manejado_handler(request: Request, exc: Exception):
     print(f"Error no manejado en {request.url.path}: {exc!r}")
     return JSONResponse(status_code=500, content={"detail": f"Error interno: {exc}"})
+
+
+@app.on_event("startup")
+def _ofertas_foto_diaria_startup():
+    """Lectura automática de las ofertas (ver `ml_ofertas_foto`): se apaga con OFERTAS_AUTO=0. Solo lectura."""
+    ml_ofertas_foto.iniciar_programador(tc_bna_requerido)
 
 
 @app.on_event("startup")
@@ -2489,10 +2497,18 @@ async def competencia_revertir_lote(request: Request):
 
 @app.post("/ml-ofertas/run")
 async def ml_ofertas_run(background_tasks: BackgroundTasks, incluir_propias: bool = False):
-    job_id = f"mlofertas_{int(time.time())}"
     tc = float(tc_bna_requerido())
+    if incluir_propias:
+        # La lectura completa se guarda para todos (foto de «Precios y ofertas ML») y no se repite si ya hay una corriendo.
+        return ml_ofertas_foto.lanzar(background_tasks.add_task, tc, "manual")
+    job_id = f"mlofertas_{int(time.time())}"
     background_tasks.add_task(ml_ofertas.iniciar_job, job_id, None, incluir_propias, tc)
     return {"job_id": job_id, "status": "started"}
+
+@app.post("/ml-ofertas/foto/actualizar")
+async def ml_ofertas_foto_actualizar(background_tasks: BackgroundTasks):
+    """«Actualizar ahora»: la lectura completa de las ofertas, guardada para todos. Solo lectura; una sola a la vez."""
+    return ml_ofertas_foto.lanzar(background_tasks.add_task, float(tc_bna_requerido()), "manual")
 
 @app.get("/ml-ofertas/status/{job_id}")
 async def ml_ofertas_status(job_id: str):
