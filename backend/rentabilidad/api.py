@@ -17,6 +17,7 @@ arquitectura pedido por Maxx, 2026-08-10):
   hechos; queda registrado en `cierre_rentabilidad` con cuándo se guardó.
 """
 import tempfile
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -49,6 +50,7 @@ from .liquidacion_fravega import LiquidacionFravegaAdapter, LiquidacionFravegaIn
 from .models import CierreRentabilidad, Regimen, VentaEcom, VentaTactica
 from .importar_historico import guardar_historico, importar
 from .reporte_diario import reporte_diario
+from . import ventas_hoy as _ventas_hoy
 from .persistencia import (
     aplicar_liquidacion_fravega,
     construir_filas_ecom,
@@ -509,6 +511,36 @@ def consultar_ecom_periodo(payload: ConsultarEcomIn) -> ConsultarEcomOut:
         incidencias_costo=len(resultado_ingesta.incidencias_costo),
         config_faltante=resultado.config_faltante,
     )
+
+
+_VENTAS_HOY_TTL_SEG = 60       # varios usuarios mirando no repiten la consulta a Ecom
+_VENTAS_HOY_MIN_FORZAR_SEG = 15  # «Actualizar ahora» no puede martillar la API de Ecom
+_ventas_hoy_cache: dict = {"ts": 0.0, "dia": None, "payload": None}
+_ventas_hoy_lock = threading.Lock()
+
+
+@router.get("/ventas-hoy")
+def ventas_hoy(forzar: bool = False) -> dict:
+    """Lo cobrado HOY (desde las 00:00, hora Argentina) por canal: ventas con y sin IVA, rentabilidad $ y %, y los 5 SKU que más facturaron. En vivo, solo lectura: lee Ecom
+    directo (como `/ecom/periodo`) y no guarda nada. Resultado en memoria 60 s."""
+    dia = _ventas_hoy.hoy_en_argentina()
+    with _ventas_hoy_lock:
+        edad = time.time() - _ventas_hoy_cache["ts"]
+        vigente = _ventas_hoy_cache["payload"] is not None and _ventas_hoy_cache["dia"] == dia
+        if vigente and edad < (_VENTAS_HOY_MIN_FORZAR_SEG if forzar else _VENTAS_HOY_TTL_SEG):
+            return {**_ventas_hoy_cache["payload"], "cache_seg": round(edad)}
+        tc = _resolver_tc(None)
+        resultado_ingesta = EcomApiAdapter().periodo(dia, dia, tc)
+        fetch = _fetch_fn_con_cache()
+        iva_provider = IvaProvider(consultar=_consultar_catalogo_tactica_con_cache())
+        with sesion() as db:
+            resultado = construir_filas_ecom(db, resultado_ingesta, iva_provider, **_providers_ecom(fetch))
+        payload = _ventas_hoy.armar_ventas_hoy(resultado.filas, dia)
+        payload["actualizado"] = datetime.now(timezone.utc).isoformat()
+        payload["excluidas_por_estado_pago"] = len(resultado_ingesta.excluidas_por_estado_pago)
+        payload["incidencias_costo"] = len(resultado_ingesta.incidencias_costo)
+        _ventas_hoy_cache.update(ts=time.time(), dia=dia, payload=payload)
+        return {**payload, "cache_seg": 0}
 
 
 # ══════════════════════════════════════════════════════════════════════════
