@@ -216,6 +216,8 @@ def _convertir_a_paquetes(filas: list[FilaReposicionMLA]) -> None:
 # Lecturas de Ecom (vinculación de cada publicación y stock de cada SKU): una consulta por elemento, y son miles. Se hacen en paralelo (pocos hilos, para no saturar a
 # Ecom) y la vinculación se recuerda entre corridas (casi nunca cambia).
 HILOS_ECOM = 6
+REINTENTOS_LOTES = 2          # veces que se reintentan, en la misma corrida, los lotes de Full que Mercado Libre no devolvió
+ESPERA_REINTENTO_SEG = 45.0   # espera entre intentos (deja que se libere el límite de consultas)
 VIDA_VINCULACION_SEG = 12 * 3600
 _cache_vinculacion: dict[str, tuple[float, object]] = {}
 
@@ -355,6 +357,7 @@ def calcular_reposicion_mla(
     progreso_cb: Callable[[int, int, str], None] | None = None,
     resultado_conciliacion=None,
     contar_deposito: bool = False, fraccion_deposito: float = 0.3,
+    reintentos_lotes: int | None = None, espera_reintento_seg: float | None = None,
 ) -> ResultadoReposicionMLA:
     """Orquesta el simulador por publicación: reutiliza `conciliar()` para
     el stock/factor de pack ya resuelto de las dos cuentas (sin volver a
@@ -405,6 +408,26 @@ def calcular_reposicion_mla(
             envios_pendientes_por_inventory.update(
                 ml.envios_pendientes_por_inventory(cuenta, inventory_ids, desde, hasta)
             )
+
+    # Lotes que Mercado Libre no devolvió (límite de consultas): se reintentan acá mismo, esperando un rato entre intentos, para no dejar filas con «datos incompletos»
+    # si alcanza con esperar. Los lotes ya leídos están en la caché y no se piden de nuevo.
+    reintentos_lotes = REINTENTOS_LOTES if reintentos_lotes is None else reintentos_lotes
+    espera_reintento_seg = ESPERA_REINTENTO_SEG if espera_reintento_seg is None else espera_reintento_seg
+    for intento in range(reintentos_lotes):
+        fallidos = list(getattr(ml, "lotes_fallidos", []))
+        if not fallidos:
+            break
+        if progreso_cb:
+            progreso_cb(intento, reintentos_lotes, f"Reintentando {len(fallidos)} lotes que Mercado Libre no devolvió (espera {int(espera_reintento_seg)} s)")
+        time.sleep(espera_reintento_seg)
+        ml.lotes_fallidos = []
+        por_cuenta: dict[str, set[str]] = {}
+        for lote in fallidos:
+            por_cuenta.setdefault(lote["cuenta"], set()).update(lote["inventory_ids"])
+        for cuenta, ids in por_cuenta.items():
+            ids = sorted(ids)
+            ventas_por_inventory.update(ml.ventas_full_por_inventory(cuenta, ids, desde, hasta))
+            envios_pendientes_por_inventory.update(ml.envios_pendientes_por_inventory(cuenta, ids, desde, hasta))
 
     # Mi depósito: todas las publicaciones activas y sus ventas pagadas (solo si el interruptor está activado).
     pubs_activas: list[dict] = []
