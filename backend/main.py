@@ -2699,6 +2699,12 @@ async def ml_ofertas_item_activar_campana(item_id: str, request: Request, backgr
 async def ayala_core_skus():
     return {"skus": ayala_core.SKUS_PILOTO}
 
+def _renta_base_valida(renta_base: str) -> str:
+    if renta_base not in ayala_core.RENTA_BASES:
+        raise HTTPException(status_code=422, detail=f"renta_base debe ser uno de {', '.join(ayala_core.RENTA_BASES)} (vino {renta_base!r}).")
+    return renta_base
+
+
 def _ayala_core_renta_dict(
     renta_contado: float, renta_reducida: float, renta_3: float, renta_6: float, renta_9: float, renta_12: float,
     renta_18: float | None = None, renta_24: float | None = None,
@@ -2802,6 +2808,7 @@ def _ayala_core_motor_sync(
     tc_override: Decimal | None = None, costo_override: Decimal | None = None,
     _proveedores=None, _tc: Decimal | None = None, cantidad: int = 1, _mercado: dict | None = None,
     iva_manual: Decimal | None = None, iva_solo_si_falta: bool = False,
+    renta_base: str = "sin_iva",
 ) -> dict:
     # Pedido de Maxx 2026-09-16: mismo criterio que el TC manual -- poder
     # pisar el costo sin IVA (USD) a mano para simular. Sin
@@ -2866,7 +2873,7 @@ def _ayala_core_motor_sync(
     if _mercado is None:
         precios = ayala_core.calcular_precios_todas_condiciones(
             costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
-            renta_por_condicion=renta_por_condicion, envio_full=envio_full,
+            renta_por_condicion=renta_por_condicion, envio_full=envio_full, renta_base=renta_base,
         )
     else:
         u = _mercado["usados"]
@@ -2874,12 +2881,27 @@ def _ayala_core_motor_sync(
             _mercado["par"], costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado,
             renta_por_condicion={str(k): v for k, v in renta_por_condicion.items()}, envio_full=envio_full,
             costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
-            iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0))
+            iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0), renta_base=renta_base)
         desglose_m = {c: {k: float(v) for k, v in mercados_mod.desglose(
             precios[c], costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado, comision_pct=_mercado["par"]["comision_pct"],
             financiero_pct=_mercado["par"]["financiero"][c], iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
             costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=envio_full,
             costo_fijo_tramos=_mercado["par"].get("costo_fijo_tramos")).items()} for c in precios}
+    # «Ver cuenta»: la cuenta línea por línea de cada condición (solo mostrar). Mercado Libre sin cambios usa los parámetros de siempre.
+    if _mercado is None:
+        cp = {"comision": ayala_core.COMISION_ML_DEFAULT, "iibb": ayala_core.IIBB_PCT_DEFAULT, "cheque": ayala_core.IMP_CHEQUE_PCT_DEFAULT, "orden": ayala_core.COSTO_ORDEN_ECOM_DEFAULT, "tramos": ayala_core.COSTO_FIJO_ML_TRAMOS}
+        fin = lambda c: ayala_core._financiero_pct(int(c) if c.isdigit() else c)
+    else:
+        u = _mercado["usados"]
+        cp = {"comision": _mercado["par"]["comision_pct"], "iibb": u["iibb_pct"] if u["iibb"] else Decimal(0), "cheque": u["cheque_pct"] if u["cheque"] else Decimal(0),
+              "orden": u["costo_orden"] if u["orden"] else Decimal(0), "tramos": _mercado["par"].get("costo_fijo_tramos")}
+        fin = lambda c: _mercado["par"]["financiero"][c]
+    cuentas_m = {}
+    for c, pr in precios.items():
+        cu = mercados_mod.cuenta_paso_a_paso(pr, costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado, comision_pct=cp["comision"], financiero_pct=fin(c),
+                                             iibb_pct=cp["iibb"], cheque_pct=cp["cheque"], costo_orden=cp["orden"], envio_full=envio_full, costo_fijo_tramos=cp["tramos"])
+        cuentas_m[c] = {"lineas": [{k: (float(v) if isinstance(v, Decimal) else v) for k, v in ln.items()} for ln in cu["lineas"]], "renta": float(cu["renta"]),
+                        "renta_pct_con_iva": float(cu["renta_pct_con_iva"]), "renta_pct_sin_iva": float(cu["renta_pct_sin_iva"])}
     if item_info is not None:
         item_info["precio_calculado"] = precios.get(str(item_info["condicion_detectada"]))
 
@@ -2895,6 +2917,8 @@ def _ayala_core_motor_sync(
         **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"]), "comision_pct": float(ayala_core.COMISION_ML_DEFAULT)}),
         "errores_condicion": errores_condicion,
         "desglose_mercado": desglose_m,
+        "renta_base": renta_base,
+        "cuentas": cuentas_m,
     }
 
 # ══════════════════════════════════════════════════════
@@ -3050,6 +3074,7 @@ async def ayala_core_motor_lote(
     renta_18: float | None = None,
     renta_24: float | None = None,
     iva: float | None = None,
+    renta_base: str = "sin_iva",
 ):
     """Los SKU pedidos (coma-separados; vacío = todos los piloto) en UNA sola respuesta, con la MISMA cuenta que `/ayala-core/sku/{sku}/motor`
     (`_ayala_core_motor_sync`, ningún cambio de fórmula). Los costos de Ecom, el IVA de Táctica y el TC salen de las fotos que ya están en memoria:
@@ -3059,12 +3084,12 @@ async def ayala_core_motor_lote(
     return await run_in_threadpool(
         _ayala_core_motor_lote_sync, lista, renta_por_condicion,
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, Decimal(str(tc)) if tc is not None else None, cantidad,
-        (mercado, usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct, recargo_cuotas), _iva_manual(iva),
+        (mercado, usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct, recargo_cuotas), _iva_manual(iva), _renta_base_valida(renta_base),
     )
 
 def _ayala_core_motor_lote_sync(
     skus: list[str], renta_por_condicion: dict[str | int, Decimal], envio_real: Decimal | None, envio_full: bool, tc_override: Decimal | None,
-    cantidad: int = 1, mk: tuple | None = None, iva_manual: Decimal | None = None,
+    cantidad: int = 1, mk: tuple | None = None, iva_manual: Decimal | None = None, renta_base: str = "sin_iva",
 ) -> dict:
     cantidad = _cantidad_valida(cantidad)
     m = _preparar_mercado(*mk) if mk else None
@@ -3082,7 +3107,7 @@ def _ayala_core_motor_lote_sync(
     resultados = []
     for sku in skus:
         try:
-            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc, cantidad=cantidad, _mercado=m, iva_manual=iva_manual, iva_solo_si_falta=True))
+            resultados.append(_ayala_core_motor_sync(sku, renta_por_condicion, envio_real, envio_full, None, None, tc_override=None, _proveedores=prov, _tc=tc, cantidad=cantidad, _mercado=m, iva_manual=iva_manual, iva_solo_si_falta=True, renta_base=renta_base))
         except HTTPException as e:
             resultados.append({"sku": sku, "error": e.detail})
     t3 = time.perf_counter()
@@ -3128,6 +3153,7 @@ async def ayala_core_sku_motor(
     renta_18: float | None = None,
     renta_24: float | None = None,
     iva: float | None = None,
+    renta_base: str = "sin_iva",
 ):
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12, renta_18, renta_24)
     m = _preparar_mercado(mercado, usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct, recargo_cuotas)
@@ -3136,7 +3162,7 @@ async def ayala_core_sku_motor(
         Decimal(str(envio_real)) if envio_real is not None else None, envio_full, item_id, cuenta,
         Decimal(str(tc)) if tc is not None else None,
         Decimal(str(costo)) if costo is not None else None,
-        None, None, cantidad, m, _iva_manual(iva),
+        None, None, cantidad, m, _iva_manual(iva), _renta_base_valida(renta_base),
     )
 
 
@@ -3150,6 +3176,7 @@ async def ayala_core_publicaciones_run(
     renta_9: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[9]),
     renta_12: float = float(ayala_core.RENTA_POR_CONDICION_DEFAULT[12]),
     tc: float | None = None,
+    renta_base: str = "sin_iva",
 ):
     """Escaneo caro (recorre TODO el catálogo activo de las cuentas
     pedidas) -- por eso corre en background, mismo patrón que
@@ -3163,7 +3190,7 @@ async def ayala_core_publicaciones_run(
     lista_skus = [s for s in skus.split(",") if s] or None
     renta_por_condicion = _ayala_core_renta_dict(renta_contado, renta_reducida, renta_3, renta_6, renta_9, renta_12)
     background_tasks.add_task(
-        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_por_condicion, lista_skus,
+        ayala_core.iniciar_job_publicaciones, job_id, lista_cuentas, tc, renta_por_condicion, lista_skus, _renta_base_valida(renta_base),
     )
     return {"job_id": job_id, "status": "started"}
 

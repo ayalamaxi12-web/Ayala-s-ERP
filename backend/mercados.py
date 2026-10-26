@@ -208,7 +208,7 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
 
 def calcular_mercado(par: dict, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, renta_por_condicion: dict[str, Decimal],
                      envio_full: bool = False, costo_orden: Decimal = Decimal("0"), cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
-                     iibb_pct: Decimal = IIBB_PCT_DEFAULT) -> tuple[dict[str, Decimal], dict[str, str]]:
+                     iibb_pct: Decimal = IIBB_PCT_DEFAULT, renta_base: str = "con_iva") -> tuple[dict[str, Decimal], dict[str, str]]:
     """Precio de cada condición de pago del mercado con la fórmula de siempre. Devuelve (precios, errores): una condición con un dato que falta no se
     calcula y queda en `errores` como «falta dato: …» (nunca se inventa una tarifa)."""
     precios, errores = {}, {}
@@ -222,7 +222,7 @@ def calcular_mercado(par: dict, *, costo_sin_iva: Decimal, iva_factor: Decimal, 
             continue
         precios[c] = ayala_core.calcular_precio_condicion(
             costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_real, financiero_pct=par["financiero"][c], renta_pct=renta,
-            comision_pct=par["comision_pct"], iibb_pct=iibb_pct, imp_cheque_pct=cheque_pct, envio_full=envio_full, costo_orden=costo_orden,
+            comision_pct=par["comision_pct"], iibb_pct=iibb_pct, imp_cheque_pct=cheque_pct, envio_full=envio_full, costo_orden=costo_orden, renta_base=renta_base,
             costo_fijo_tramos=par.get("costo_fijo_tramos"))
     return precios, errores
 
@@ -244,6 +244,40 @@ def desglose(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, en
     costo_fijo = ayala_core.costo_fijo_para_precio(precio, costo_fijo_tramos) if costo_fijo_tramos else Decimal(0)
     renta = precio / iva_factor + (-costo_sin_iva + comision + financiero + envio + iibb + cheque + full + iva_comision + iva_envio - costo_orden - costo_fijo)
     return {"costo_fijo": costo_fijo, "comision": -comision, "financiero": -financiero, "envio": -envio, "iibb": -iibb, "imp_cheque": -cheque, "envio_full": -full, "costo_orden": costo_orden, "renta": renta}
+
+
+def cuenta_paso_a_paso(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, comision_pct: Decimal, financiero_pct: Decimal,
+                       iibb_pct: Decimal, cheque_pct: Decimal, costo_orden: Decimal = Decimal("0"), envio_full: bool = False, costo_fijo_tramos=None) -> dict:
+    """La cuenta de una condición, línea por línea y en el orden en que se resta (para «Ver cuenta»). Solo para mostrar: el precio sale de
+    `ayala_core.calcular_precio_condicion`. Cada línea dice sobre qué base se calcula y con o sin IVA va el monto que se resta. La renta en pesos es la misma de `desglose`;
+    se informa también como % del precio con IVA y del precio sin IVA (el % que se carga es de una u otra según la base elegida)."""
+    iva_serv = ayala_core._IVA_SERVICIOS_ML
+    sin_iva = precio / iva_factor
+    comision = comision_pct / 100 * precio
+    financiero = financiero_pct / 100 * precio
+    iibb = iibb_pct / 100 * sin_iva
+    cheque = cheque_pct / 100 * precio
+    full = ayala_core.ENVIO_FULL_PCT_DEFAULT / 100 * precio if envio_full else Decimal("0")
+    costo_fijo = ayala_core.costo_fijo_para_precio(precio, costo_fijo_tramos) if costo_fijo_tramos else Decimal("0")
+    renta = sin_iva - costo_sin_iva - comision / iva_serv - financiero - envio_real / iva_serv - iibb - cheque - full - costo_orden - costo_fijo
+    L = [
+        {"clave": "precio", "monto": precio, "iva": "con IVA", "signo": 0},
+        {"clave": "precio_sin_iva", "monto": sin_iva, "iva": "sin IVA", "signo": 0, "iva_factor": iva_factor},
+        {"clave": "costo", "monto": costo_sin_iva, "iva": "sin IVA", "signo": -1},
+        {"clave": "comision", "pct": comision_pct, "sobre": "precio con IVA", "con_iva": comision, "monto": comision / iva_serv, "iva": "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
+        {"clave": "financiero", "pct": financiero_pct, "sobre": "precio con IVA", "con_iva": financiero, "monto": financiero, "iva": "se resta tal cual, sin dividir por IVA", "signo": -1},
+        {"clave": "envio", "con_iva": envio_real, "monto": envio_real / iva_serv, "iva": "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
+        {"clave": "iibb", "pct": iibb_pct, "sobre": "precio sin IVA", "monto": iibb, "iva": "sin IVA", "signo": -1},
+        {"clave": "cheque", "pct": cheque_pct, "sobre": "precio con IVA", "monto": cheque, "iva": "se resta tal cual (sobre el precio con IVA)", "signo": -1},
+    ]
+    if envio_full:
+        L.append({"clave": "envio_full", "pct": ayala_core.ENVIO_FULL_PCT_DEFAULT, "sobre": "precio con IVA", "monto": full, "iva": "se resta tal cual", "signo": -1})
+    if costo_orden:
+        L.append({"clave": "costo_orden", "monto": costo_orden, "iva": "monto fijo, se resta tal cual", "signo": -1})
+    if costo_fijo:
+        L.append({"clave": "costo_fijo", "monto": costo_fijo, "iva": "monto fijo por unidad (tramo de precio de ML), se resta tal cual", "signo": -1})
+    L.append({"clave": "renta", "monto": renta, "iva": "sin IVA", "signo": 0})
+    return {"lineas": L, "renta": renta, "renta_pct_con_iva": renta / precio * 100 if precio else Decimal("0"), "renta_pct_sin_iva": renta / sin_iva * 100 if sin_iva else Decimal("0")}
 
 
 # ── foto guardada de las tarifas («Tarifas: hace X · Actualizar») ──
