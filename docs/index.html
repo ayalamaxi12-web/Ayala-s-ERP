@@ -6229,7 +6229,8 @@ async function ayalaCoreTarifasActualizar(){
 }
 async function ayalaCoreMercadosInit(){
   const url=getBackendUrl();if(!url)return;
-  if(!confirm('Esto crea en el Sheet del ERP la pestaña «Mercados» (con los valores iniciales) y la pestaña «Envios» (vacía), solo si todavía no existen. No pisa nada. ¿Seguir?'))return;
+  const sh=(AC_MK&&AC_MK.sheet)||{};if(!sh.configurado){toast('Falta configurar MERCADOS_SHEET_ID en el servidor','error');return;}
+  if(!confirm(`Esto crea en el Sheet «${sh.nombre||'(sin nombre: no se pudo leer)'}» la pestaña «Mercados» (con los valores iniciales) y la pestaña «Envios» (vacía), solo si todavía no existen. No pisa nada. ¿Seguir?`))return;
   try{
     const res=await fetch(`${url}/mercados/init`,{method:'POST'});const d=await res.json().catch(()=>({}));
     if(!res.ok)throw new Error(d.detail||('HTTP '+res.status));
@@ -6290,7 +6291,9 @@ function ayalaCoreConfigRender(){
   const notas=[...new Set(mks.flatMap(k=>nm[k]||[]))],info=AC_MK.informacion||[];
   const pend=todos.filter(x=>/falta dato|vencida|todavía no rige|Falló/.test(x)),conf=todos.filter(x=>!pend.includes(x));
   const tar=t.origen==='hoja'?edad:'usando los valores iniciales del código';
-  let h=`<div class="ac-config-lin"><span>Tarifas: ${tar}</span><button type="button" class="btn" id="ac-tarifas-btn" onclick="ayalaCoreTarifasActualizar()">Actualizar</button>${t.origen==='codigo'?'<button type="button" class="btn" onclick="ayalaCoreMercadosInit()">Crear pestañas Mercados y Envios</button>':''}</div>`;
+  // Sin la variable MERCADOS_SHEET_ID en el servidor no hay Sheet de configuración: los botones que leen o escriben el Sheet no se muestran.
+  const sh=AC_MK.sheet||{configurado:false,variable:'MERCADOS_SHEET_ID'};
+  let h=`<div class="ac-config-lin"><span>Tarifas: ${tar}${sh.configurado?` · Sheet: ${acEsc(sh.nombre||'(sin acceso: compartilo con la cuenta de servicio como Editora)')}`:` · falta configurar <code>${acEsc(sh.variable)}</code> en el servidor`}</span>${sh.configurado?`<button type="button" class="btn" id="ac-tarifas-btn" onclick="ayalaCoreTarifasActualizar()">Actualizar</button>${t.origen==='codigo'?'<button type="button" class="btn" onclick="ayalaCoreMercadosInit()">Crear pestañas Mercados y Envios</button>':''}`:''}</div>`;
   // Un solo resumen (detalle plegado); lo informativo (valores del código, «copiado de Frávega») va aparte en gris y no cuenta como aviso.
   if(todos.length)h+=`<details class="ac-config-av"><summary>${[pend.length?`<b>${pend.length} aviso${pend.length===1?'':'s'} de configuración</b>`:'',conf.length?`${conf.length} a confirmar`:''].filter(Boolean).join(' · ')}</summary><ul>${pend.map(x=>`<li class="ac-aviso-txt">${acEsc(x)}</li>`).join('')}${conf.map(x=>`<li>${acEsc(x)}</li>`).join('')}</ul></details>`;
   if(notas.length)h+=`<div class="ac-config-nota">${notas.map(acEsc).join(' ')}</div>`;

@@ -137,6 +137,8 @@ def sesion_fn(monkeypatch):
 
 @pytest.fixture
 def cliente(monkeypatch, sesion_fn):
+    monkeypatch.setenv("MERCADOS_SHEET_ID", "SHEET-DE-PRUEBA")
+    main._SHEET_NOMBRE_CACHE.update(id=None, nombre=None, en=0.0)
     monkeypatch.setattr(main.costos_ecom, "proveedores_de_costo_e_iva", lambda: (_Costo(), _Iva()))
     monkeypatch.setattr(main, "tc_info_rapido", lambda: {"tc": D("1450"), "source": "cache", "fecha": None})
     return TestClient(main.app)
@@ -242,3 +244,32 @@ def test_el_desglose_cierra_con_la_renta_pedida(cliente):
 def test_ml_trae_su_comision_real_en_el_lote_sin_cambiar_precios(cliente):
     r = cliente.get("/ayala-core/motor-lote", params={"skus": ayala_core.SKUS_PILOTO[0]}).json()["resultados"][0]
     assert r["comision_pct"] == 15.32 and r["mercado"] == "ml"
+
+
+def test_sin_la_variable_no_se_lee_ni_se_escribe_ningun_sheet_y_la_pantalla_lo_sabe(cliente, monkeypatch):
+    monkeypatch.delenv("MERCADOS_SHEET_ID")
+    abierto = []
+    monkeypatch.setattr(main, "get_gs", lambda: abierto.append(1))
+    e = cliente.get("/mercados/tarifas").json()
+    assert e["sheet"] == {"configurado": False, "nombre": None, "variable": "MERCADOS_SHEET_ID"} and e["tarifas"]["origen"] == "codigo"
+    for ruta in ("/mercados/init", "/mercados/tarifas/actualizar"):
+        r = cliente.post(ruta)
+        assert r.status_code == 409 and "MERCADOS_SHEET_ID" in r.json()["detail"]
+    assert abierto == []                                                      # nunca se abrió un Sheet
+
+
+def test_con_la_variable_escribe_y_lee_solo_ese_sheet_y_devuelve_su_nombre(cliente, monkeypatch):
+    ss = _SS()
+    ss.title = "ERP Global – Configuración"
+    abiertos = []
+
+    class GS(_GS):
+        def open_by_key(self, k):
+            abiertos.append(k)
+            return super().open_by_key(k)
+    monkeypatch.setattr(main, "get_gs", lambda: GS(ss))
+    e = cliente.get("/mercados/tarifas").json()
+    assert e["sheet"] == {"configurado": True, "nombre": "ERP Global – Configuración", "variable": "MERCADOS_SHEET_ID"}
+    r = cliente.post("/mercados/init").json()
+    assert r["sheet"]["nombre"] == "ERP Global – Configuración" and "creada" in r["pestanas"]["Mercados"]
+    assert set(abiertos) == {"SHEET-DE-PRUEBA"}                               # y no el Sheet fijo del código

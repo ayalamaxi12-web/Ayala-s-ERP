@@ -2878,6 +2878,39 @@ def _info_mercados() -> dict:
     return {k: {"nombre": v["nombre"], "condiciones": v["condiciones"], "etiqueta_contado": v["etiqueta_contado"], "usa_por_defecto": mercados_mod.ACTIVOS_POR_DEFECTO[k]}
             for k, v in mercados_mod.MERCADOS.items()}
 
+# ── Sheet de las tarifas de mercados ──
+# La pestaña «Mercados» (y «Envios») vive en el Sheet que indica la variable de entorno `MERCADOS_SHEET_ID` (el ID de la URL del Sheet, entre `/d/` y `/edit`). Sin esa variable
+# no se lee ni se escribe ningún Sheet: las tarifas salen de los valores iniciales del código y la pantalla oculta «Crear pestañas». La cuenta de servicio de Google tiene que
+# ser Editora de ese Sheet.
+MERCADOS_SHEET_VARIABLE = "MERCADOS_SHEET_ID"
+_SHEET_NOMBRE_CACHE: dict = {"id": None, "nombre": None, "en": 0.0}
+
+
+def _mercados_sheet_id() -> str:
+    return (os.environ.get(MERCADOS_SHEET_VARIABLE) or "").strip()
+
+
+def _mercados_sheet_info() -> dict:
+    sid = _mercados_sheet_id()
+    if not sid:
+        return {"configurado": False, "nombre": None, "variable": MERCADOS_SHEET_VARIABLE}
+    c = _SHEET_NOMBRE_CACHE
+    if c["id"] != sid or time.time() - c["en"] > 3600:
+        try:
+            nombre = get_gs().open_by_key(sid).title
+        except Exception:  # noqa: BLE001 -- sin acceso: se informa sin nombre, nunca se cae la pantalla
+            nombre = None
+        c.update(id=sid, nombre=nombre, en=time.time())
+    return {"configurado": True, "nombre": c["nombre"], "variable": MERCADOS_SHEET_VARIABLE}
+
+
+def _exigir_mercados_sheet() -> str:
+    sid = _mercados_sheet_id()
+    if not sid:
+        raise HTTPException(status_code=409, detail=f"Falta configurar la variable de entorno {MERCADOS_SHEET_VARIABLE} (el ID del Sheet de configuración) en el servidor.")
+    return sid
+
+
 def _estado_tarifas() -> dict:
     payload, info = _tarifas_actuales()
     filas = payload["filas"]
@@ -2894,7 +2927,7 @@ def _estado_tarifas() -> dict:
         notas_por_mercado[k] = [n["texto"] for n in par["notas"]]
     web = mercados_mod.parametros_mercado("web", filas)
     return {"tarifas": info, "comunes": {**{k: float(v) for k, v in com["valores"].items()}, "recargo_cuotas": float(web["recargo_cuotas"] or 0)}, "avisos": avisos + com["avisos"], "informacion": informacion, "notas_por_mercado": notas_por_mercado, "avisos_por_mercado": por_mercado,
-            "mercados": _info_mercados(), "filas": len(filas)}
+            "mercados": _info_mercados(), "filas": len(filas), "sheet": _mercados_sheet_info()}
 
 @app.get("/mercados/tarifas")
 async def mercados_tarifas():
@@ -2903,8 +2936,9 @@ async def mercados_tarifas():
 
 def _actualizar_tarifas_sync() -> dict:
     from rentabilidad import db as _db
+    sid = _exigir_mercados_sheet()
     try:
-        mercados_mod.actualizar_foto(_db.sesion, lambda: mercados_mod.leer_hoja(get_gs(), SPREADSHEET_ID))
+        mercados_mod.actualizar_foto(_db.sesion, lambda: mercados_mod.leer_hoja(get_gs(), sid))
     except Exception as e:
         _TARIFAS_CACHE.update(en=0.0)
         raise HTTPException(status_code=502, detail=f"No se pudo leer la pestaña «Mercados»: {mercados_mod.ml_foto.mensaje_para_usuario(e)}")
@@ -2918,8 +2952,9 @@ async def mercados_tarifas_actualizar():
 @app.post("/mercados/init")
 async def mercados_init():
     """Crea las pestañas «Mercados» (con los valores iniciales) y «Envios» (vacía, con encabezados) en el Sheet del ERP si no existen. No pisa nada."""
+    sid = _exigir_mercados_sheet()
     try:
-        return {"pestanas": await run_in_threadpool(lambda: mercados_mod.crear_pestanas(get_gs(), SPREADSHEET_ID))}
+        return {"sheet": _mercados_sheet_info(), "pestanas": await run_in_threadpool(lambda: mercados_mod.crear_pestanas(get_gs(), sid))}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudieron crear las pestañas: {mercados_mod.ml_foto.mensaje_para_usuario(e)}")
 

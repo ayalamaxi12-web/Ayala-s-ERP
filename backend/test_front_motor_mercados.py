@@ -94,3 +94,11 @@ def test_impacto_costo_orden_en_ml_junto_al_interruptor():
     html = INDEX.read_text(encoding="utf-8") if hasattr(INDEX, "read_text") else open(INDEX, encoding="utf-8").read()
     assert 'id="ac-orden-impacto"' in html and "async function ayalaCoreImpactoOrden" in html
     assert "usar_costo_orden=false" in html and "usar_costo_orden=true" in html
+
+
+def test_crear_pestanas_se_oculta_sin_la_variable_y_la_confirmacion_dice_el_sheet():
+    src = open(INDEX, encoding="utf-8").read() if isinstance(INDEX, str) else INDEX.read_text(encoding="utf-8")
+    cfg = _fn(src, "ayalaCoreConfigRender")
+    assert "sh.configurado?`<button" in cfg and "Crear pestañas Mercados y Envios" in cfg and "falta configurar" in cfg
+    ini = _fn(src, "ayalaCoreMercadosInit")
+    assert "Esto crea en el Sheet «${sh.nombre" in ini and "if(!sh.configurado)" in ini
