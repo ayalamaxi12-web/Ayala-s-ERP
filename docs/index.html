@@ -1735,8 +1735,8 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <div class="fr-barra" style="display:flex;align-items:center;gap:0">
         <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
         <button class="btn" id="full-repo-tab-btn-MT" onclick="goFullRepoTab('MT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">Arg</button>
-        <input type="file" id="full-repo-pdf-input" accept="application/pdf" style="display:none" onchange="fullRepoSubirPDF(this.files[0])">
-        <button class="btn" style="margin-left:auto" title="PDF &quot;Instrucciones de preparación&quot; de un envío Full en preparación -- completa Envíos pendientes (paq.) con lo que ya vas a mandar en ese envío" onclick="qs('full-repo-pdf-input').click()"><span data-ico="file-text" data-size="16" aria-hidden="true"></span> Cargar PDF de envío pendiente</button>
+        <input type="file" id="full-repo-pdf-input" accept="application/pdf" multiple style="display:none" onchange="fullRepoSubirPDF(this.files)">
+        <button class="btn" style="margin-left:auto" title="PDF &quot;Instrucciones de preparación&quot; de un envío Full en preparación -- completa Envíos pendientes (paq.) con lo que ya vas a mandar en ese envío" onclick="qs('full-repo-pdf-input').click()"><span data-ico="file-text" data-size="16" aria-hidden="true"></span> Cargar PDF de envío pendiente (uno o varios)</button>
         <span id="full-repo-pdf-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></span>
         <button class="btn primary" onclick="exportFullReposicionParaML()"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Exportar para subir a ML</button>
         <button class="btn" onclick="exportFullReposicion()"><span data-ico="download" data-size="16" aria-hidden="true"></span> Exportar CSV</button>
@@ -4676,29 +4676,32 @@ function goFullRepoTab(cuenta){
 // duplicarían sin este dato manual. Reemplaza el valor de la fila (no suma) --
 // pedido de Maxx 2026-09-08: no debería haber más de un envío en preparación
 // pendiente a la vez.
-async function fullRepoSubirPDF(file){
-  if(!file)return;
+// Uno o varios PDF de envíos (cada uno es un envío distinto: p. ej. #79425274 pendiente de recepción y otro en preparación ya cerrado): se SUMAN los de cada código ML y
+// solo queda cargado lo que traen los PDF subidos (el resto, en 0) -- pedido de Maxx 2026-09-08.
+async function fullRepoSubirPDF(archivos){
+  const files=archivos?Array.from(archivos):[];if(!files.length)return;
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   if(!fullRepoResult){alert('Corré la simulación primero');return;}
-  const status=qs('full-repo-pdf-status');status.textContent='Leyendo PDF...';
+  const status=qs('full-repo-pdf-status');status.textContent=`Leyendo ${files.length} PDF...`;
   try{
-    const fd=new FormData();fd.append('archivo',file);
-    const res=await fetch(`${url}/ml-full/reposicion/pdf-envio-pendiente`,{method:'POST',body:fd});
-    if(!res.ok){const e=await res.json().catch(()=>({}));status.textContent='❌ '+(e.detail||'Error');return;}
-    const{pendientes_por_inventory}=await res.json();
-    // Reemplaza TODO fullRepoEnviosPend, no solo lo que matchea -- si no, una
-    // fila que traía el dato viejo de la API (envios_pendientes_por_inventory,
-    // ver ml_full.py) quedaba pisando el PDF en vez de quedar en 0. Pedido de
-    // Maxx 2026-09-08: que solo quede cargado lo que trae el PDF subido.
+    const suma={};let leidos=0;
+    for(const file of files){
+      const fd=new FormData();fd.append('archivo',file);
+      const res=await fetch(`${url}/ml-full/reposicion/pdf-envio-pendiente`,{method:'POST',body:fd});
+      if(!res.ok){const e=await res.json().catch(()=>({}));status.textContent=`❌ "${file.name}": ${e.detail||'Error'}`;return;}
+      const{pendientes_por_inventory}=await res.json();
+      Object.entries(pendientes_por_inventory).forEach(([inv,u])=>{suma[inv]=(suma[inv]||0)+u;});
+      leidos++;
+    }
     let matcheados=0;
     fullRepoEnviosPend={};
     fullRepoResult.filas.forEach(f=>{
-      const u=pendientes_por_inventory[f.inventory_id];
+      const u=suma[f.inventory_id];
       if(u===undefined)return;
       fullRepoEnviosPend[f.item_id]=Math.ceil(u/f.factor);
       matcheados++;
     });
-    status.textContent=`✅ ${matcheados} publicaciones actualizadas con "${file.name}" (${Object.keys(pendientes_por_inventory).length} códigos en el PDF) -- el resto quedó en 0`;
+    status.textContent=`✅ ${matcheados} publicaciones actualizadas con ${leidos} PDF (${Object.keys(suma).length} códigos en total) -- el resto quedó en 0`;
     renderFullReposicionTabla();
   }catch(e){status.textContent='❌ '+e.message;}
   qs('full-repo-pdf-input').value='';

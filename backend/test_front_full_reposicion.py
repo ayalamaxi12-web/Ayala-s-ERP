@@ -109,3 +109,8 @@ def test_filtros_para_revisar_y_seleccion_para_enviar_son_cosas_distintas():
         assert t in SRC, t
     # el filtro no toca la selección: solo las acciones de «Para enviar» y el casillero de la cabecera cambian fullRepoSeleccion
     assert "fullRepoSeleccion" not in _fn(SRC, "fullRepoSetFiltro") and "fullRepoVisibles()" in _fn(SRC, "fullRepoSeleccionar") and "fullRepoVisibles()" in _fn(SRC, "fullRepoToggleAll")
+
+def test_pdf_de_envio_pendiente_acepta_varios_y_los_suma():
+    assert 'id="full-repo-pdf-input" accept="application/pdf" multiple' in SRC
+    f = _fn(SRC, "fullRepoSubirPDF")
+    assert "suma[inv]=(suma[inv]||0)+u" in f and "for(const file of files)" in f
