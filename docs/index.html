@@ -800,6 +800,11 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
   #full-reposicion-tbody .fr-fila.fr-abierta .fr-mas{display:block}
   #full-reposicion-tbody .fr-fila .fr-vermas{display:block}
 }
+.fr-cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fr-cab-res{flex:1;min-width:0;font-weight:400;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.fr-min{margin-left:auto}
+.fr-busq{width:100%;max-width:32rem;min-height:44px;margin:0 0 8px;padding:0 16px;border:1px solid var(--divisor);border-radius:var(--r-control);font:inherit;background:var(--superficie);color:var(--tinta)}
+.fr-busq-res{font-size:var(--fs-tabla);color:var(--texto-suave);margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -1661,10 +1666,12 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
   <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:12px">Solo lectura — no escribe en Mercado Libre ni en Ecom. Reemplaza la conciliación manual de FULL_TABLA_OPERATIVA.xlsx.</div>
 
   <div class="card" style="margin-bottom:14px">
-    <div class="card-title"><span data-ico="search" data-size="16" aria-hidden="true"></span> Conciliación de stock (ML vs Ecom)</div>
+    <div class="card-title fr-cab"><span data-ico="search" data-size="16" aria-hidden="true"></span> Conciliación de stock (ML vs Ecom)<span class="fr-cab-res" id="full-res-conc"></span><button type="button" class="btn btn-linea fr-min" id="full-min-conc" aria-expanded="true" aria-controls="full-cuerpo-conc" onclick="fullToggle('conc')">Minimizar</button></div>
+    <div id="full-cuerpo-conc">
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Suma el stock Full real de las dos cuentas (Group/Arg), deduplicado por inventario, aplica el factor de pack desde la vinculación de Ecom, y compara contra el depósito "ML Full".</p>
     <div id="full-conciliar-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-conciliar-wrap" style="display:none;margin-top:12px">
+      <input type="search" id="full-conc-busq" class="fr-busq" placeholder="Buscar SKU o publicación (MLA)…" aria-label="Buscar en la conciliación" oninput="fullBuscar('conc')">
       <div id="full-conciliar-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
       <div class="table-wrap">
         <table>
@@ -1674,10 +1681,12 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
       </div>
     </div>
     <div id="full-conciliar-pie" class="full-pie"></div>
+    </div>
   </div>
 
   <div class="card">
-    <div class="card-title"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Simulador de reposición por publicación (MLA)</div>
+    <div class="card-title fr-cab"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Simulador de reposición por publicación (MLA)<span class="fr-cab-res" id="full-res-repo"></span><button type="button" class="btn btn-linea fr-min" id="full-min-repo" aria-expanded="true" aria-controls="full-cuerpo-repo" onclick="fullToggle('repo')">Minimizar</button></div>
+    <div id="full-cuerpo-repo">
     <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Calcula cuánto conviene enviarle a CADA publicación (no al SKU agregado) según su propia venta, su propio stock, y la fecha en que va a llegar el envío. Cuando el disponible combinado de Ecom+Táctica no alcanza para todas las publicaciones de un mismo SKU, prioriza a la que más vende. Detecta venta censurada. No crea el envío real.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Fecha estimada de llegada<input type="date" id="full-repo-fecha-llegada" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px"></label>
@@ -1687,6 +1696,8 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
     </div>
     <div id="full-reposicion-log" style="margin-top:10px;background:var(--surface2);border-radius:5px;padding:10px;font-family:'DM Mono',monospace;font-size:10px;max-height:120px;overflow-y:auto;display:none"></div>
     <div id="full-reposicion-wrap" style="display:none;margin-top:12px">
+      <input type="search" id="full-repo-busq" class="fr-busq" placeholder="Buscar por SKU, MLA, código ML (MLID) o título…" aria-label="Buscar en el simulador de reposición" oninput="fullBuscar('repo')">
+      <div id="full-reposicion-busq-res" class="fr-busq-res" role="status" aria-live="polite"></div>
       <div id="full-reposicion-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
       <div class="fr-barra" style="display:flex;align-items:center;gap:0">
         <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
@@ -1705,6 +1716,7 @@ body[data-nuevo] #page-full-ml .btn.btn-linea,body[data-nuevo] #page-full-ml [id
       </div>
     </div>
     <div id="full-reposicion-pie" class="full-pie"></div>
+    </div>
   </div>
 </div>
 
@@ -4537,6 +4549,7 @@ let fullFotoDatos={conciliar:null,reposicion:null},fullActualizando={};
 function fullFecha(iso){return iso?new Date(iso).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';}
 function fullHace(iso){return iso?costosEdadTxt((Date.now()-Date.parse(iso))/1000):'sin datos';}
 async function fullFotoCargar(){
+  fullMinRestaurar();
   const url=getBackendUrl();if(!url)return;
   for(const k of Object.keys(FULL_FOTO)){
     try{
@@ -4600,7 +4613,9 @@ async function fullActualizar(k){
 function renderFullConciliar(result){
   qs('full-conciliar-wrap').style.display='block';
   qs('full-conciliar-resumen').textContent=`${result.filas.length} SKUs · ${result.filas.filter(f=>f.diferencia).length} con diferencia · ${result.incidencias_sku.length} sin SKU · ${result.incidencias_sin_vincular.length} sin vincular · ${result.skus_no_en_ecom.length} sin match en Ecom`;
-  const filas=[...result.filas].sort((a,b)=>Math.abs(b.diferencia||0)-Math.abs(a.diferencia||0));
+  const rc=qs('full-res-conc');if(rc)rc.textContent=` · ${result.filas.length} SKU · ${result.filas.filter(f=>f.diferencia).length} con diferencia`;
+  const qb=(qs('full-conc-busq')||{}).value||'';
+  const filas=[...result.filas].filter(f=>fullCoincide(qb,[f.sku,...(f.publicaciones||[]).flatMap(p=>[p.item_id,p.inventory_id,p.titulo])])).sort((a,b)=>Math.abs(b.diferencia||0)-Math.abs(a.diferencia||0));
   qs('full-conciliar-tbody').innerHTML=filas.map(f=>{
     const dif=f.diferencia;
     const difColor=!dif?'var(--text2)':(dif>0?'var(--green)':'var(--red)');
@@ -4658,7 +4673,8 @@ async function fullRepoSubirPDF(file){
 }
 function fullRepoToggleAll(checked){
   if(!fullRepoResult) return;
-  fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab).forEach(f=>{fullRepoSeleccion[f.item_id]=checked;});
+  const qb=(qs('full-repo-busq')||{}).value||'';
+  fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab&&fullCoincide(qb,[f.item_id,f.inventory_id,f.sku,f.sku_ml,f.titulo])).forEach(f=>{fullRepoSeleccion[f.item_id]=checked;});   // con una búsqueda, solo las que se ven
   renderFullReposicionTabla();
 }
 function renderFullReposicion(result){
@@ -4689,6 +4705,7 @@ function _fullRepoResumen(){
   const seleccionadas=r.filas.filter(f=>fullRepoSeleccion[f.item_id]);
   const totalSeleccionado=seleccionadas.reduce((s,f)=>s+(f._sugerido||0),0);
   const chips=[[r.filas.length,'publicaciones'],[r.filas.filter(f=>f._sugerido>0).length,'con envío sugerido'],[totalSugerido,'paquetes sugeridos'],[seleccionadas.length,`seleccionadas (${seleccionadas.filter(f=>f.inventory_id&&f._sugerido>0).length} para exportar · ${totalSeleccionado} paq.)`],[r.filas.filter(f=>f.censurado).length,'venta censurada'],[r.incidencias_sin_vincular.length,'sin vincular'],[r.skus_no_en_ecom.length,'SKU sin match en Ecom']];
+  const rr=qs('full-res-repo');if(rr)rr.textContent=` · ${r.filas.length} publicaciones · ${r.filas.filter(f=>f._sugerido>0).length} con envío sugerido`;
   qs('full-reposicion-resumen').innerHTML=chips.map(([n,t])=>`<span class="fr-chip"><b>${n}</b> ${t}</span>`).join('');
 }
 // Replica en el navegador el reparto de `ml_reposicion._repartir_sugerido`
@@ -4740,6 +4757,19 @@ function fullRepoPorQue(f){
   else if(f._sugerido<f._cantidadEnviar)m.push('el disponible alcanza solo en parte');
   return m.join(' · ');
 }
+// Minimizar / expandir cada bloque del módulo (se recuerda en la sesión); minimizado queda un resumen en el encabezado.
+function fullToggle(k,forzar){
+  const cuerpo=qs('full-cuerpo-'+k),btn=qs('full-min-'+k);if(!cuerpo||!btn)return;
+  const abrir=forzar!==undefined?forzar:cuerpo.hidden;
+  cuerpo.hidden=!abrir;btn.setAttribute('aria-expanded',abrir);btn.textContent=abrir?'Minimizar':'Expandir';
+  qs('full-res-'+k).hidden=abrir;
+  try{sessionStorage.setItem('full_min_'+k,abrir?'0':'1');}catch(e){}
+}
+function fullMinRestaurar(){['conc','repo'].forEach(k=>{let v=null;try{v=sessionStorage.getItem('full_min_'+k);}catch(e){}if(v==='1')fullToggle(k,false);else qs('full-res-'+k).hidden=true;});}
+let fullBusqT=null;
+function fullBuscar(k){clearTimeout(fullBusqT);fullBusqT=setTimeout(()=>{if(k==='repo'){if(fullRepoResult)renderFullReposicionTabla();}else if(fullFotoDatos.conciliar&&fullFotoDatos.conciliar.payload)renderFullConciliar(fullFotoDatos.conciliar.payload);},150);}
+// Todas las palabras escritas tienen que estar (sin mayúsculas ni tildes) en alguno de los textos de la fila.
+function fullCoincide(q,textos){const n=acNormTxt(q).trim();if(!n)return true;const h=acNormTxt(textos.filter(Boolean).join(' '));return n.split(/\s+/).every(w=>h.includes(w));}
 function fullRepoVerMas(b){const tr=b.closest('tr'),a=tr.classList.toggle('fr-abierta');b.setAttribute('aria-expanded',a);b.textContent=a?'Ver menos':'Ver más';}
 function fullRepoCalculoTxt(f){
   const n=x=>Number(x).toLocaleString('es-AR',{maximumFractionDigits:2});
@@ -4749,7 +4779,9 @@ function renderFullReposicionTabla(){
   if(!fullRepoResult) return;
   _fullRepoRecalcular();
   _fullRepoResumen();
-  const filas=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab).sort((a,b)=>b._sugerido-a._sugerido);
+  const qb=(qs('full-repo-busq')||{}).value||'',deTab=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab);
+  const filas=deTab.filter(f=>fullCoincide(qb,[f.item_id,f.inventory_id,f.sku,f.sku_ml,f.titulo])).sort((a,b)=>b._sugerido-a._sugerido);
+  const br=qs('full-reposicion-busq-res');if(br)br.textContent=qb.trim()?`Mostrando ${filas.length} de ${deTab.length} en esta pestaña`:'';
   qs('full-reposicion-tbody').innerHTML=filas.map(f=>{
     const pendiente=fullRepoEnviosPend[f.item_id]||0;
     const marcado=fullRepoSeleccion[f.item_id]?'checked':'';
@@ -4761,7 +4793,7 @@ function renderFullReposicionTabla(){
       <td class="fr-mas" data-l="SKU ML" style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
       <td class="fr-mas" data-l="Factor" style="text-align:right">${f.factor>1?'×'+f.factor:'—'}</td>
       <td class="fr-k" data-l="Stock Full" style="text-align:right">${f.stock_full}</td>
-      <td class="fr-mas" data-l="Ventas Full 30d" style="text-align:right">${f.ventas_full??f.ventas_periodo}</td>
+      <td class="fr-mas" data-l="Ventas Full 30d" style="text-align:right" title="${acEsc(`Salidas de Full (operaciones SALE_CONFIRMATION) del inventario ${f.inventory_id||'—'} en los últimos ${f.dias_periodo} días: ${f.ventas_full??f.ventas_periodo} u.${f.primera_venta?` · primera ${f.primera_venta}, última ${f.ultima_venta}`:''}`)}">${f.ventas_full??f.ventas_periodo}</td>
       <td class="fr-mas" data-l="Ventas mi depósito 30d" style="text-align:right">${f.ventas_deposito||0}</td>
       <td class="fr-k" data-l="Ventas 30d" style="text-align:right" title="${acEsc(fullRepoCalculoTxt(f))}">${f.ventas_periodo}${f.censurado?` <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">${ico('zap',12)}</span>`:''}</td>
       <td class="fr-mas" data-l="Ventas/día" style="text-align:right">${f.ventas_diarias}</td>
@@ -4770,7 +4802,7 @@ function renderFullReposicionTabla(){
       <td class="fr-k" data-l="A enviar" style="text-align:right;font-weight:600" title="En paquetes (lo que se prepara para esta publicación), no en unidades reales del SKU">${f._cantidadEnviar}</td>
       <td class="fr-k" data-l="Sugerido" style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}" title="En paquetes">${f._sugerido}</td>
       <td class="fr-mas" data-l="Envíos pendientes" style="text-align:right">
-        <input type="number" min="0" value="${pendiente}" title="En paquetes -- sugerido por ML, editable" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();">
+        <input type="number" min="0" value="${pendiente}" title="${acEsc(`En paquetes. Es lo que Mercado Libre informa como NO disponible todavía (not_available_quantity) de los envíos de reposición del inventario ${f.inventory_id||'—'}${f.envio_pendiente_ids&&f.envio_pendiente_ids.length?' (#'+f.envio_pendiente_ids.join(', #')+')':''} en los últimos ${f.dias_periodo} días. Editable.`)}" style="width:56px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right" onchange="fullRepoEnviosPend['${f.item_id}']=Number(this.value)||0;renderFullReposicionTabla();">
         ${f.envio_pendiente_ids&&f.envio_pendiente_ids.length?`<div style="font-size:8px;color:var(--text3)" title="Número${f.envio_pendiente_ids.length>1?'s':''} de envío real -- verificalo en el panel de Full de ML">#${f.envio_pendiente_ids.join(', #')}</div>`:''}
       </td>
       <td class="fr-mas" data-l="Stock Ecom" style="text-align:right">${f.stock_ecom===null?'—':Math.max(0,f.stock_ecom)}${(f.flags||[]).includes('ecom_negativo')?' <span class="full-tag" title="Stock negativo en Ecom: se usa 0">negativo en Ecom</span>':''}</td>
