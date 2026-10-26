@@ -6,7 +6,7 @@ from fastapi import FastAPI, BackgroundTasks, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import requests, re, time, os, gspread
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from starlette.concurrency import run_in_threadpool
 from google.oauth2.service_account import Credentials
@@ -2536,9 +2536,17 @@ async def ml_ofertas_costos_envio_status(job_id: str):
 
 HIST_OFERTAS_SHEET_NAME = "Historial Ofertas ML"
 HIST_OFERTAS_HEADERS = ["Fecha", "Cuenta", "Item ID", "SKU", "Accion", "Tipo/Promocion",
-                         "Precio Anterior", "Precio Nuevo", "Margen % Resultante", "Bajo Umbral", "Operador"]
+                         "Precio Anterior", "Precio Nuevo", "Margen % Resultante", "Bajo Umbral", "Operador", "Hora", "Origen"]
+
+_ORIGEN_PONER_PRECIO = "Precios y ofertas ML"
+
+
+def _hora_argentina() -> str:
+    return datetime.now(timezone(timedelta(hours=-3))).strftime("%H:%M:%S")
+
 
 def _registrar_historial_oferta(fila: dict):
+    fila = {"Hora": _hora_argentina(), **fila}       # el registro lleva fecha Y hora (quién y cuándo)
     gs = get_gs()
     ss = gs.open_by_key(SPREADSHEET_ID)
     try:
@@ -3305,12 +3313,25 @@ async def ayala_core_aplicar_precio(item_id: str, request: Request, background_t
     precio = Decimal(str(body["precio"]))
     precio_tachado_raw = body.get("precio_tachado")
     precio_tachado = Decimal(str(precio_tachado_raw)) if precio_tachado_raw not in (None, "") else None
+    # «Poner precio» de Precios y ofertas ML: el operador elige el precio (nada se multiplica), operador OBLIGATORIO también acá (no solo en la pantalla), solo precio de lista
+    # y se registra solo si ML lo aceptó y el GET de verificación lo confirmó.
+    es_poner_precio = body.get("origen") == _ORIGEN_PONER_PRECIO
+    if es_poner_precio:
+        if not str(body.get("operador", "")).strip():
+            raise HTTPException(status_code=422, detail="Falta el operador: sin operador no se cambia ningún precio.")
+        if precio <= 0 or precio_tachado is not None:
+            raise HTTPException(status_code=422, detail="«Poner precio» fija solo el precio de lista, mayor a 0 y sin tachado.")
     r = await run_in_threadpool(_ayala_core_aplicar_precio_sync, item_id, cuenta, precio, precio_tachado)
+    if es_poner_precio and not r.get("ok"):
+        return r
     background_tasks.add_task(_registrar_historial_oferta, {
         "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
-        "Accion": "Ayala Core -- aplicar precio", "Tipo/Promocion": "Ayala Core",
+        "Accion": "Poner precio" if es_poner_precio else "Ayala Core -- aplicar precio",
+        "Tipo/Promocion": "Precio de lista" if es_poner_precio else "Ayala Core",
         "Precio Anterior": body.get("precio_anterior", ""),
         "Precio Nuevo": f"{precio}" + (f" (tachado {precio_tachado})" if precio_tachado is not None else ""),
-        "Margen % Resultante": "", "Bajo Umbral": "No", "Operador": body.get("operador", ""),
+        "Margen % Resultante": body.get("margen_pct", "") if es_poner_precio else "",
+        "Bajo Umbral": ("Sí" if body.get("bajo_umbral") else "No"),
+        "Operador": body.get("operador", ""), "Origen": body.get("origen") or "Ayala Core",
     })
     return r
