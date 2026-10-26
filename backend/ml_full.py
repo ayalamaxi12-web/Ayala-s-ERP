@@ -417,7 +417,7 @@ def detalle_operaciones(ml: MLFullClient, cuenta: str, inventory_id: str, desde:
         r = o.get("result") or {}
         ev.append({"fecha": o.get("date_created"), "inbound_id": next((x.get("value") for x in refs if x.get("type") == "inbound_id"), None),
                    "cantidad_evento": (o.get("detail") or {}).get("available_quantity"), "total": r.get("total"), "disponible": r.get("available_quantity"),
-                   "no_disponible": r.get("not_available_quantity")})
+                   "no_disponible": r.get("not_available_quantity"), "resultado_crudo": r, "referencias": refs, "detalle_crudo": o.get("detail")})
     ev.sort(key=lambda x: x["fecha"] or "")
     return {"inventory_id": inventory_id, "cuenta": cuenta, "desde": desde, "hasta": hasta, "ventas": sal, "total_ventas": sum(x["cantidad"] for x in sal),
             "envios": ev}

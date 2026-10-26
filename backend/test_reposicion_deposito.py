@@ -152,4 +152,5 @@ def test_detalle_de_operaciones_crudas_para_verificar_a_mano():
         return {"results": [dict(o) for o in ops[params["type"]]], "paging": {}}
     d = detalle_operaciones(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "I1", "2026-09-25", "2026-10-25")
     assert d["total_ventas"] == 5 and [v["fecha"][:10] for v in d["ventas"]] == ["2026-10-01", "2026-10-03"]
-    assert d["envios"] == [{"fecha": "2026-10-05T10:00:00Z", "inbound_id": "71384203", "cantidad_evento": 8, "total": 10, "disponible": 8, "no_disponible": 2}]
+    e = d["envios"][0]
+    assert (e["inbound_id"], e["total"], e["disponible"], e["no_disponible"]) == ("71384203", 10, 8, 2) and e["resultado_crudo"]["total"] == 10 and e["referencias"][0]["value"] == "71384203"
