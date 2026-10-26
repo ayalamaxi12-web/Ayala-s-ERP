@@ -133,3 +133,24 @@ def test_lectura_de_ordenes_dia_por_dia_pagina_y_reporta_dias_fallidos():
     acum, fallidos = ml.ventas_pagadas_por_item("IT", "2026-10-01", "2026-10-03")
     assert acum == {("MLA9", None): 2 * 60 * 2} and fallidos == ["2026-10-02"]      # dos días leídos (60 órdenes × 2 u.), uno fallido
     assert ("2026-10-01", 50) in llamadas                                             # segunda página
+
+
+def test_el_resultado_trae_el_rango_exacto_leido():
+    r = correr(True)
+    assert r.periodo == {"desde": "2026-09-25", "hasta": "2026-10-25", "dias": 30}
+
+
+def test_detalle_de_operaciones_crudas_para_verificar_a_mano():
+    from ml_full import detalle_operaciones
+    ops = {"SALE_CONFIRMATION": [{"inventory_id": "I1", "date_created": "2026-10-03T10:00:00Z", "detail": {"available_quantity": -2}},
+                                 {"inventory_id": "I1", "date_created": "2026-10-01T10:00:00Z", "detail": {"available_quantity": -3}}],
+           "INBOUND_RECEPTION": [{"inventory_id": "I1", "date_created": "2026-10-05T10:00:00Z", "detail": {"available_quantity": 8},
+                                  "result": {"total": 10, "available_quantity": 8, "not_available_quantity": 2}, "external_references": [{"type": "inbound_id", "value": "71384203"}]}]}
+
+    def get(url, params, headers):
+        assert params["date_from"] == "2026-09-25" and params["date_to"] == "2026-10-25"
+        return {"results": [dict(o) for o in ops[params["type"]]], "paging": {}}
+    d = detalle_operaciones(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "I1", "2026-09-25", "2026-10-25")
+    assert d["total_ventas"] == 5 and [v["fecha"][:10] for v in d["ventas"]] == ["2026-10-01", "2026-10-03"]
+    e = d["envios"][0]
+    assert (e["inbound_id"], e["total"], e["disponible"], e["no_disponible"]) == ("71384203", 10, 8, 2) and e["resultado_crudo"]["total"] == 10 and e["referencias"][0]["value"] == "71384203"
