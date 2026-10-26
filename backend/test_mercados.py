@@ -57,7 +57,7 @@ def test_oncity_y_megatone_usan_los_mismos_numeros_pero_con_sus_propias_filas_y_
 
 def test_ml_conserva_sus_parametros_de_siempre():
     par = mk.parametros_mercado("ml", FILAS, HOY)
-    assert par["comision_pct"] == ayala_core.COMISION_ML_DEFAULT == D("15.5") and par["financiero"]["reducida"] == D("5.00") and par["financiero"]["12"] == D("21.60")
+    assert par["comision_pct"] == ayala_core.COMISION_ML_DEFAULT == D("15.5") and par["financiero"]["reducida"] == D("5.00") and par["financiero"]["12"] == D("20.80")
     assert par["condiciones"] == ["contado", "reducida", "3", "6", "9", "12"]
 
 

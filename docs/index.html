@@ -2176,7 +2176,7 @@ const RULES=[
 // con RULES de arriba -- esas son el margen de seguridad propio que Maxx
 // carga en Ecom, más alto a propósito). Debe reflejar exactamente
 // CUOTAS_PCT_DEFAULT de backend/ml_ofertas.py -- si se corrige uno, corregir el otro.
-const CUOTAS_PCT_ML={3:8.90,6:13.40,9:17.80,12:21.60};
+const CUOTAS_PCT_ML={3:8.50,6:12.90,9:17.30,12:20.80};
 const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const PALETTE=[1,2,3,4,5,6,7,8,9,10,11,12].map(i=>cssv('--grafico-'+i));   // colores de los gráficos: salen de los tokens del sistema
 const GRAF={c1:cssv('--grafico-1'),c2:cssv('--grafico-2'),c3:cssv('--grafico-3'),c4:cssv('--grafico-4'),c5:cssv('--grafico-5'),c6:cssv('--grafico-6'),texto:cssv('--texto-suave'),grilla:cssv('--divisor'),fondo:cssv('--superficie'),fuente:cssv('--fuente')};
@@ -3309,7 +3309,7 @@ function cargarCostosEcom(force){
 }
 // ── Costo fijo de ML por tramo de precio: FUENTE ÚNICA = motor de precios del backend (GET /rentabilidad/pricing/ml-costo-fijo). ──
 // CRITERIOS_MARGEN: nada de montos copiados en el front. Mientras no llega la respuesta (o si el backend no responde) rige el respaldo = seed del motor.
-const ML_COSTO_FIJO={tramos:[[16000,1330],[24000,2740],[33000,3320],[null,0]],origen:'respaldo',cargado:false,cargando:null};
+const ML_COSTO_FIJO={tramos:[[15000,1330],[24000,2740],[33000,3320],[null,0]],origen:'respaldo',cargado:false,cargando:null};
 function cargarCostoFijoML(force){
   if(ML_COSTO_FIJO.cargando)return ML_COSTO_FIJO.cargando;
   if(ML_COSTO_FIJO.cargado&&!force)return Promise.resolve();
@@ -3326,7 +3326,7 @@ function cargarCostoFijoML(force){
 function mlCostoFijoTexto(){const t=ML_COSTO_FIJO.tramos;let d=0;return t.filter(x=>x[0]!==null).map(x=>{const r=`${d/1000}-${x[0]/1000}k $${x[1]}`;d=x[0];return r;}).join(' · ')+` · ≥${d/1000}k sin cargo (${ML_COSTO_FIJO.origen})`;}
 // ── Cuotas de ML (% del precio que absorbe el vendedor): FUENTE ÚNICA = motor de precios (GET /rentabilidad/pricing/ml-cuotas, editable en el backend). ──
 // Valores oficiales de ML (Maxx, 2026-10): 3c 8,9 · 6c 13,4 · 9c 17,8 · 12c 21,6. Respaldo si el backend no responde = el seed del motor.
-const ML_CUOTAS={planes:{3:8.9,6:13.4,9:17.8,12:21.6},reducida:5,origen:'respaldo',cargado:false,cargando:null};
+const ML_CUOTAS={planes:{3:8.5,6:12.9,9:17.3,12:20.8},reducida:5,origen:'respaldo',cargado:false,cargando:null};
 function cargarCuotasML(force){
   if(ML_CUOTAS.cargando)return ML_CUOTAS.cargando;
   if(ML_CUOTAS.cargado&&!force)return Promise.resolve();

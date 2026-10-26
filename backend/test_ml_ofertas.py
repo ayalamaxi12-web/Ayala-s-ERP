@@ -101,8 +101,8 @@ def test_domain_id_none_usa_comision_general():
 
 def test_costo_fijo_por_tramo_de_precio():
     params = ParametrosMargen()
-    casos = [(Decimal(10000), Decimal(1255)), (Decimal(20000), Decimal(2500)),
-             (Decimal(30000), Decimal(3030)), (Decimal(33000), Decimal(0)), (Decimal(50000), Decimal(0))]
+    casos = [(Decimal(10000), Decimal(1330)), (Decimal(14999), Decimal(1330)), (Decimal(15000), Decimal(2740)), (Decimal(20000), Decimal(2740)),
+             (Decimal(30000), Decimal(3320)), (Decimal(33000), Decimal(0)), (Decimal(50000), Decimal(0))]
     for precio, esperado in casos:
         r = calcular_margen_oferta(precio, Decimal("1.21"), Decimal(0), None, None, params)
         assert r.costo_fijo == esperado, f"precio={precio}"
@@ -125,7 +125,7 @@ def test_cuotas_suman_solo_si_se_ofrecen():
     sin_cuotas = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), None, None, params)
     con_6_cuotas = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), None, 6, params)
     assert sin_cuotas.cuotas == Decimal(0)
-    assert con_6_cuotas.cuotas == Decimal(10000) * Decimal("13.40") / 100
+    assert con_6_cuotas.cuotas == Decimal(10000) * Decimal("12.90") / 100
     assert con_6_cuotas.margen < sin_cuotas.margen
 
 
@@ -1051,8 +1051,8 @@ def test_activar_en_campana_tradicional_suma_envio_real_sin_cuotas():
 
 
 def test_activar_en_campana_tradicional_suma_cuotas_y_envio_en_ese_orden():
-    # PM $100.000 en 3 cuotas (8.90%, corregido 2026-09-02) -> $108.900,
-    # + envío real $12.000 -> $120.900. Confirmado el orden con Maxx:
+    # PM $100.000 en 3 cuotas (8,50 %, ayuda de ML 27/10) -> $108.500,
+    # + envío real $12.000 -> $120.500. Confirmado el orden con Maxx:
     # cuotas primero, envío después.
     ml_ofertas._ultima_venta_cache.clear()
     ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
@@ -1061,8 +1061,8 @@ def test_activar_en_campana_tradicional_suma_cuotas_y_envio_en_ese_orden():
         r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
 
         assert r["ok"] is True
-        assert r["precio_final"] == 120900.0
-        assert r["precio_tachado_pedido"] == 161200.0  # 120900 / 0.75, ROUND_HALF_UP
+        assert r["precio_final"] == 120500.0
+        assert r["precio_tachado_pedido"] == 160667.0  # 120500 / 0.75, ROUND_HALF_UP
         assert "3 cuotas sin interés" in r["ajuste_cuotas_envio"]
         assert "envío real" in r["ajuste_cuotas_envio"]
     finally:

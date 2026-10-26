@@ -10,7 +10,7 @@ no implementada acá).
 
     base_sin_iva   = precio_oferta / (1 + iva_pct)
     comision       = precio_oferta × comisión_por_dominio_ML  (o general si no está en la tabla)
-    costo_fijo     = tramo_por_precio(precio_oferta)          # 1255/2500/3030/0, solo <33k
+    costo_fijo     = tramo_por_precio(precio_oferta)          # 1330/2740/3320/0, solo <33k
     cuotas         = precio_oferta × cuotas_pct                # 0 si no ofrece cuotas
     envio          = tramo_por_precio(precio_oferta)           # 0 si <33k, con descuento MercadoLíder Platinum si aplica
     imp_cheque     = precio_oferta × 1,2%                      # sobre el precio CON IVA (bruto)
@@ -159,9 +159,9 @@ COMISION_GENERAL_DEFAULT = Decimal("15.5")
 # Costo fijo por unidad vendida (logística Flex/acuerdo/retiro), solo <33k.
 # (techo_precio, monto) ascendente + catch-all final (techo=None).
 COSTO_FIJO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
-    (Decimal(16000), Decimal(1255)),
-    (Decimal(24000), Decimal(2500)),
-    (Decimal(33000), Decimal(3030)),
+    (Decimal(15000), Decimal(1330)),
+    (Decimal(24000), Decimal(2740)),
+    (Decimal(33000), Decimal(3320)),
     (None, Decimal(0)),
 ]
 
@@ -173,7 +173,7 @@ COSTO_FIJO_TRAMOS_DEFAULT: list[tuple[Decimal | None, Decimal]] = [
 # cambió, se verificó en el mismo simulador. Mismo ajuste aplicado en
 # docs/index.html (CUOTAS_PCT_ML y OFM.cuotasPct) y en AYALA_CORE.md.
 CUOTAS_PCT_DEFAULT: dict[int, Decimal] = {
-    3: Decimal("8.90"), 6: Decimal("13.40"), 9: Decimal("17.80"), 12: Decimal("21.60"),
+    3: Decimal("8.50"), 6: Decimal("12.90"), 9: Decimal("17.30"), 12: Decimal("20.80"),   # 27/10: ayuda oficial de ML (dato más reciente, pedido de Maxi); antes 8,90/13,40/17,80/21,60
 }
 
 # Envío con descuento por reputación (MercadoLíder Platinum). (techo, monto).
