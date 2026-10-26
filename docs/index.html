@@ -821,6 +821,11 @@ body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.
 body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.table-wrap thead th{position:sticky;top:0;z-index:2}
 .fr-barra{flex-wrap:wrap;gap:8px}
 .fr-barra #full-repo-pdf-status{order:10;flex:1 1 100%;font-size:var(--fs-tabla);color:var(--texto-suave)}
+.fr-herr{display:flex;flex-wrap:wrap;gap:12px 24px;margin:0 0 12px}
+.fr-herr-grupo{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fr-herr-tit{font-size:var(--fs-tabla);color:var(--texto-suave)}
+.fr-filtros{display:flex;flex-wrap:wrap;gap:8px}
+body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--mod-btn-fondo);border-color:var(--mod-btn-borde);color:var(--mod-btn-texto);font-weight:700}
 </style>
 </head>
 <body>
@@ -1717,6 +1722,15 @@ body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.
     <div id="full-reposicion-wrap" style="display:none;margin-top:12px">
       <input type="search" id="full-repo-busq" class="fr-busq" placeholder="Buscar por SKU, MLA, código ML (MLID) o título…" aria-label="Buscar en el simulador de reposición" oninput="fullBuscar('repo')">
       <div id="full-reposicion-busq-res" class="fr-busq-res" role="status" aria-live="polite"></div>
+      <div class="fr-herr">
+        <div class="fr-herr-grupo"><span class="fr-herr-tit" id="fr-filtro-tit">Para revisar (solo cambia lo que ves)</span><div id="full-repo-filtros" class="fr-filtros" role="group" aria-labelledby="fr-filtro-tit"></div></div>
+        <div class="fr-herr-grupo"><span class="fr-herr-tit" id="fr-sel-tit">Para enviar (marca filas)</span>
+          <div class="fr-filtros" role="group" aria-labelledby="fr-sel-tit">
+            <button type="button" class="btn btn-linea" onclick="fullRepoSeleccionar('visibles-sugerido')" title="Tilda las filas que ves y tienen cantidad sugerida">Tildar las visibles con sugerido</button>
+            <button type="button" class="btn btn-linea" onclick="fullRepoSeleccionar('visibles-todas')" title="Tilda todas las filas que ves">Tildar todas las visibles</button>
+            <button type="button" class="btn btn-linea" onclick="fullRepoSeleccionar('quitar-visibles')" title="Destilda las filas que ves">Destildar las visibles</button>
+          </div></div>
+      </div>
       <div id="full-reposicion-resumen" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px"></div>
       <div class="fr-barra" style="display:flex;align-items:center;gap:0">
         <button class="btn" id="full-repo-tab-btn-IT" onclick="goFullRepoTab('IT')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">Group</button>
@@ -4689,10 +4703,37 @@ async function fullRepoSubirPDF(file){
   }catch(e){status.textContent='❌ '+e.message;}
   qs('full-repo-pdf-input').value='';
 }
+// ── Revisar (filtro) y enviar (selección): el filtro solo cambia lo que se ve; la selección es lo que se exporta, y se conserva al cambiar de filtro. ──
+let fullRepoFiltro='todos';
+const FULL_FILTROS=[
+  ['todos','Todos',()=>true],
+  ['historial','Con historial en Full',f=>(f.ventas_full||0)>0||f.stock_full>0],
+  ['nuevos','Nuevos: sin historial en Full',f=>(f.ventas_full||0)===0&&f.stock_full===0&&(f.deposito_usado||0)>0],
+  ['quebraron','Quebraron stock',f=>!!f.censurado],
+  ['sugerido','Con envío sugerido',f=>f._sugerido>0],
+  ['incompletos','Datos incompletos',f=>!!f.datos_incompletos]
+];
+function fullRepoBusqueda(f){const qb=(qs('full-repo-busq')||{}).value||'';return fullCoincide(qb,[f.item_id,f.inventory_id,f.sku,f.sku_ml,f.titulo]);}
+function fullRepoPasaFiltro(f){const d=FULL_FILTROS.find(x=>x[0]===fullRepoFiltro);return d?d[2](f):true;}
+function fullRepoVisibles(){return fullRepoResult?fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab&&fullRepoBusqueda(f)&&fullRepoPasaFiltro(f)):[];}
+function fullRepoSetFiltro(k){fullRepoFiltro=k;renderFullReposicionTabla();}
+function fullRepoFiltrosRender(){
+  const el=qs('full-repo-filtros');if(!el||!fullRepoResult)return;
+  const deTab=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab);
+  el.innerHTML=FULL_FILTROS.map(([k,t,fn])=>`<button type="button" class="btn btn-linea fr-filtro" aria-pressed="${fullRepoFiltro===k}" onclick="fullRepoSetFiltro('${k}')">${t} <b>${deTab.filter(fn).length}</b></button>`).join('');
+}
+function fullRepoSeleccionar(modo){
+  if(!fullRepoResult)return;
+  fullRepoVisibles().forEach(f=>{
+    if(modo==='quitar-visibles')fullRepoSeleccion[f.item_id]=false;
+    else if(modo==='visibles-todas')fullRepoSeleccion[f.item_id]=true;
+    else if(f._sugerido>0)fullRepoSeleccion[f.item_id]=true;
+  });
+  renderFullReposicionTabla();
+}
 function fullRepoToggleAll(checked){
   if(!fullRepoResult) return;
-  const qb=(qs('full-repo-busq')||{}).value||'';
-  fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab&&fullCoincide(qb,[f.item_id,f.inventory_id,f.sku,f.sku_ml,f.titulo])).forEach(f=>{fullRepoSeleccion[f.item_id]=checked;});   // con una búsqueda, solo las que se ven
+  fullRepoVisibles().forEach(f=>{fullRepoSeleccion[f.item_id]=checked;});   // solo las que se ven (búsqueda + filtro)
   renderFullReposicionTabla();
 }
 function fullFechaCorta(iso){return iso?iso.slice(0,10).split('-').reverse().join('/'):'';}
@@ -4835,8 +4876,9 @@ function renderFullReposicionTabla(){
   _fullRepoRecalcular();
   _fullRepoResumen();
   const qb=(qs('full-repo-busq')||{}).value||'',deTab=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab);
-  const filas=deTab.filter(f=>fullCoincide(qb,[f.item_id,f.inventory_id,f.sku,f.sku_ml,f.titulo])).sort((a,b)=>b._sugerido-a._sugerido);
-  const br=qs('full-reposicion-busq-res');if(br)br.textContent=qb.trim()?`Mostrando ${filas.length} de ${deTab.length} en esta pestaña`:'';
+  fullRepoFiltrosRender();
+  const filas=fullRepoVisibles().sort((a,b)=>b._sugerido-a._sugerido);
+  const br=qs('full-reposicion-busq-res');if(br)br.textContent=(qb.trim()||fullRepoFiltro!=='todos')?`Mostrando ${filas.length} de ${deTab.length} en esta pestaña`:'';
   qs('full-reposicion-tbody').innerHTML=filas.map(f=>{
     const pendiente=fullRepoEnviosPend[f.item_id]||0;
     const marcado=fullRepoSeleccion[f.item_id]?'checked':'';

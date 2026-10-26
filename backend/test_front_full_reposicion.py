@@ -103,3 +103,9 @@ def test_semanas_y_fecha_recalculan_sin_actualizar():
     assert _objetivo(fila, "2", "2026-11-03", params) == [7.0, 14.0]          # mismos valores que la lectura: números del servidor
     assert _objetivo(fila, "3", "2026-11-03", params) == [10.5, 16.0]         # 0,5/día × 3 semanas × 7; en Full 20 − 0,5 × 8 días = 16
     assert _objetivo({**fila, "ventas_diarias_exacta": None}, "3", "2026-11-03", params) == [7.0, 14.0]     # lectura vieja sin dato exacto: no se inventa nada
+
+def test_filtros_para_revisar_y_seleccion_para_enviar_son_cosas_distintas():
+    for t in ('id="full-repo-filtros"', "Para revisar (solo cambia lo que ves)", "Para enviar (marca filas)", "fullRepoSeleccionar('visibles-sugerido')", "Nuevos: sin historial en Full"):
+        assert t in SRC, t
+    # el filtro no toca la selección: solo las acciones de «Para enviar» y el casillero de la cabecera cambian fullRepoSeleccion
+    assert "fullRepoSeleccion" not in _fn(SRC, "fullRepoSetFiltro") and "fullRepoVisibles()" in _fn(SRC, "fullRepoSeleccionar") and "fullRepoVisibles()" in _fn(SRC, "fullRepoToggleAll")
