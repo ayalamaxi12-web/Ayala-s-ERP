@@ -4755,6 +4755,7 @@ function _fullRepoRecalcular(){
 // «Por qué» de cada fila, en texto: lo fijo (flags del backend) + lo que resulta del cálculo con los envíos pendientes que haya cargados.
 function fullRepoPorQue(f){
   const fl=f.flags||[],m=[];
+  if(f.datos_incompletos)m.push('datos incompletos: no se pudieron leer las ventas de Full (Mercado Libre limitó las consultas); volvé a actualizar');
   if(fl.includes('sin_sku'))m.push('sin SKU');
   if(fl.includes('sin_vincular'))m.push('sin vincular en Ecom (factor 1 asumido)');
   if(fl.includes('sin_ecom'))m.push('sin match en Ecom');

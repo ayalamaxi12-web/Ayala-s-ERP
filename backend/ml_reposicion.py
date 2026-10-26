@@ -400,7 +400,8 @@ def calcular_reposicion_mla(
                 # Solo si la publicación NO tuvo ventas en Full y NO tiene stock en Full: lo que vende desde mi depósito es una referencia de lo que podría vender
                 # en Full, y se manda una PARTE (`fraccion_deposito`), no todo (vender por los dos depósitos no duplica la venta). Si ya opera en Full, manda
                 # su venta de Full (corregida por quiebre) y las ventas de mi depósito quedan solo como dato.
-                if ventas_total == 0 and stock_full_mla == 0:
+                # Si las ventas de Full de esta publicación NO se pudieron leer (cuota de Mercado Libre), "0 ventas" es un dato falso: no se estima nada.
+                if ventas_total == 0 and stock_full_mla == 0 and pub.get("inventory_id") not in inventarios_sin_leer:
                     deposito_usado = round(ventas_deposito * fraccion_deposito)
                     ventas_diarias += deposito_usado / dias_ventas
 

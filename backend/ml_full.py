@@ -426,6 +426,9 @@ def detalle_operaciones(ml: MLFullClient, cuenta: str, inventory_id: str, desde:
 
 
 VIGENCIA_PROCESO_INTERNO_DIAS = 2
+# Estados de «no disponible» que son unidades RECHAZADAS (no se van a acreditar), no mercadería pendiente: nunca cuentan como envío pendiente. Caso real (OVRA28323,
+# envío 77766737): 1 u. `not_supported` en el último evento mientras el panel mostraba el envío procesado.
+ESTADOS_NO_PENDIENTES = {"not_supported", "damaged", "expired", "defective", "rejected", "lost", "discarded"}
 
 
 def _pendiente_vigente(resumen: dict, fecha_evento: str, hasta: str, no_disponible: int) -> int:
@@ -442,6 +445,8 @@ def _pendiente_vigente(resumen: dict, fecha_evento: str, hasta: str, no_disponib
     vigente = 0
     for d in detalle:
         cant = d.get("quantity") or 0
+        if d.get("status") in ESTADOS_NO_PENDIENTES:
+            continue
         if d.get("status") == "internal_process" and edad > VIGENCIA_PROCESO_INTERNO_DIAS:
             continue
         vigente += cant

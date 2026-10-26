@@ -887,3 +887,10 @@ def test_unidades_en_proceso_interno_de_un_evento_viejo_no_son_pendientes():
     otro = {"not_available_detail": [{"status": "waiting", "quantity": 5}]}
     assert _pendiente_vigente(otro, "2026-10-01T00:00:00Z", "2026-10-26", 5) == 5    # otros estados se cuentan siempre
     assert _pendiente_vigente({}, "2026-10-01T00:00:00Z", "2026-10-26", 3) == 3      # sin detalle: como antes
+
+
+def test_unidades_rechazadas_no_son_pendientes_aunque_el_evento_sea_reciente():
+    from ml_full import _pendiente_vigente
+    r = {"not_available_detail": [{"status": "not_supported", "quantity": 1}, {"status": "internal_process", "quantity": 2}]}
+    assert _pendiente_vigente(r, "2026-10-03T11:48:00Z", "2026-10-26", 3) == 0          # rechazadas + proceso viejo
+    assert _pendiente_vigente(r, "2026-10-25T11:48:00Z", "2026-10-26", 3) == 2          # el proceso de hoy sí cuenta; lo rechazado nunca
