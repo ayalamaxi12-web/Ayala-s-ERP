@@ -62,11 +62,13 @@ def test_formula_canonica_caso_toner():
     assert r.comision == Decimal("6200.0")
     assert r.costo_fijo == Decimal(0)
     assert r.cuotas == Decimal(0)
-    assert r.envio == Decimal(7000)
+    # 27/10 (Maxi): envío único $8.500 desde $33.000 y costo por orden de Ecom $149,12.
+    assert r.envio == Decimal(8500)
+    assert r.costo_orden == Decimal("149.12")
     assert r.imp_cheque == Decimal("480.0")
     assert r.iibb == Decimal("1652.89256198347107438016529")
-    assert r.margen == Decimal("2724.95867768595041322314050")
-    assert r.margen_pct == Decimal("0.08243000000000000000000000011")
+    assert r.margen == r.base_sin_iva - Decimal("6200") - Decimal(8500) - Decimal("480") - r.iibb - Decimal("149.12") - Decimal(15000)
+    assert round(r.margen, 2) == Decimal("1075.84")
 
 
 def test_comision_general_si_el_dominio_no_esta_en_la_tabla():
@@ -113,11 +115,13 @@ def test_envio_por_tramo_de_precio():
     # obligado -- el costo es 0, no $9.800 (ver comentario de
     # ENVIO_TRAMOS_DEFAULT en el módulo).
     params = ParametrosMargen()
-    casos = [(Decimal(10000), Decimal(0)), (Decimal(33000), Decimal(7000)),
-             (Decimal(49999), Decimal(7000)), (Decimal(50000), Decimal(7470))]
+    casos = [(Decimal(10000), Decimal(0)), (Decimal(32999), Decimal(0)), (Decimal(33000), Decimal(8500)),
+             (Decimal(49999), Decimal(8500)), (Decimal(50000), Decimal(8500))]
     for precio, esperado in casos:
         r = calcular_margen_oferta(precio, Decimal("1.21"), Decimal(0), None, None, params)
         assert r.envio == esperado, f"precio={precio}"
+    # con el envío real de la publicación se usa ese y no la regla
+    assert calcular_margen_oferta(Decimal(40000), Decimal("1.21"), Decimal(0), None, None, params, envio_real=Decimal(6123)).envio == Decimal(6123)
 
 
 def test_cuotas_suman_solo_si_se_ofrecen():
@@ -141,10 +145,10 @@ def test_cuotas_18_no_existe_devuelve_cero():
 def test_flags_en_false_anulan_el_componente():
     params = ParametrosMargen(
         usar_comision=False, usar_costo_fijo=False, usar_cuotas=False,
-        usar_envio=False, usar_imp_cheque=False, usar_iibb=False,
+        usar_envio=False, usar_imp_cheque=False, usar_iibb=False, usar_costo_orden=False,
     )
     r = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), "MLA-TONERS", 6, params)
-    assert (r.comision, r.costo_fijo, r.cuotas, r.envio, r.imp_cheque, r.iibb) == (Decimal(0),) * 6
+    assert (r.comision, r.costo_fijo, r.cuotas, r.envio, r.imp_cheque, r.iibb, r.costo_orden) == (Decimal(0),) * 7
     assert r.margen == r.base_sin_iva  # nada se resta salvo el costo (acá 0)
 
 

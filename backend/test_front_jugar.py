@@ -15,7 +15,7 @@ from rentabilidad.motor_precios import EntradaMotor, margen_a_precio, precio_a_m
 
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
 INDEX = pm.INDEX
-FUNS = ('cfgN', 'compExtraFijo', 'compMargenAt', 'acNormBusq', 'acComparable', 'acPrecioParaIgualar', 'acFormas', 'acPrecioUnit', 'acLinea', 'acRolRank',
+FUNS = ('cfgN', 'compExtraFijo', 'ofmPorTramo', 'mlEnvioRegla', 'mlMargenUnico', 'compMargenAt', 'acNormBusq', 'acComparable', 'acPrecioParaIgualar', 'acFormas', 'acPrecioUnit', 'acLinea', 'acRolRank',
         'acJugarCalcular', 'acPrecioParaMargen')
 
 
@@ -24,7 +24,7 @@ def _js(caso):
     fns = '\n'.join(pm.extraer_funcion(src, n) for n in FUNS)
     tramos = [[float(t['hasta']), float(t['valor'])] for t in pm.tramos_costo_fijo_ml(pm.parametros_seed()) if t['hasta'] is not None] + [[None, 0]]
     cuotas = {'reducida': 5, 'planes': pm.planes_ml_js()}
-    js = ("global.window={};global.qs=()=>null;global.S={shippingThreshold:33000,shippingCost:8500};const ML_COSTO_FIJO={tramos:" + json.dumps(tramos) + "};"
+    js = ("global.window={COMPDESC:{orden:" + ("true" if caso.get("con_orden") else "false") + "}};const ML_COSTO_ORDEN=149.12;global.qs=()=>null;global.S={shippingThreshold:33000,shippingCost:8500};const ML_COSTO_FIJO={tramos:" + json.dumps(tramos) + "};"
           "const AC={skuPorKey:{}};const AC_ROL_ORDEN={Rey:0,Media:1,Barato:2};\n" + fns +
           "\nconst c=JSON.parse(process.argv[1]);const pmd=c.pm||{};const ctx={margenAt:compMargenAt,cuotas:c.cuotas,umbral:33000,envio:8500,tc:1000,pm:pmd,"
           "iva:(sku,p)=>(c.ivas||{})[sku.toLowerCase()]||(p&&p.iva)||1.21,costoUsd:sku=>(c.costos||{})[sku.toLowerCase()]||0};"
