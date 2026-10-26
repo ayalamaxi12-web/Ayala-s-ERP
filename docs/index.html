@@ -904,7 +904,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
     <a href="#" class="sidebar-item" data-page="verificar-ml" data-mod="ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
     <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="zap" aria-hidden="true"></span>Full ML</a>
-    <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Ofertas ML</a>
+    <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Precios y ofertas ML</a>
     <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
     <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
     <a href="#" class="sidebar-item" data-page="competidores" data-mod="ml" onclick="goPage('competidores',this);return false;"><span class="icon" data-ico="trophy" aria-hidden="true"></span>Competidores ML</a>
@@ -5559,9 +5559,70 @@ function ofmRenderGestionarPanel(itemId,promociones){
       <span>Precio de venta <span style="color:var(--text3);font-size:8px">(el "ahora", el que cobrás)</span><input type="text" id="ofm-act-precio-${itemId}" value="${Math.round(precioActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
       <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarActivar('${itemId}')">⚡ ${descuentoActivo?'Actualizar':'Activar'}</button>
     </div>
-    <div id="ofm-act-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>`;
+    <div id="ofm-act-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>
+    ${ofmPonerPrecioHtml(f,itemId,promociones,pmDisponible?pmRec.ml:null)}`;
   ofmSimularActivar(itemId);
   ofmSimularCampana(itemId);
+  ofmSimularPoner(itemId);
+}
+// ── «Poner precio» (precio de LISTA) -- el operador elige el precio, no se multiplica nada. Solo sin promoción en curso (ML puede rechazarlo o cambiar el tachado) y con la escritura habilitada a mano
+// (prueba en vivo con una publicación propia pendiente). Escribe con POST /ayala-core/item/{id}/aplicar-precio (verifica con un GET y registra operador, margen, bajo umbral, fecha y hora). ──
+function ofmPonerHabilitado(){try{return localStorage.getItem('ofm_poner_precio')==='1';}catch(e){return false;}}
+function ofmPonerHabilitar(on){try{localStorage.setItem('ofm_poner_precio',on?'1':'0');}catch(e){}document.querySelectorAll('[data-pp-item]').forEach(b=>ofmSimularPoner(b.dataset.ppItem));}
+function ofmPonerPrecioHtml(f,itemId,promociones,pmMl){
+  const enCurso=promociones.some(p=>p.status==='started');
+  const precioLista=f.precio_normal||0;
+  return `<div data-pp-item="${itemId}" style="margin-top:14px;padding-top:8px;border-top:1px solid var(--border)">
+    <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Poner precio de lista</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Cambia el precio de lista de la publicación. Vos elegís el precio: no se multiplica ni se suma nada. Precio actual de lista: <b>$${fmtN(Math.round(precioLista))}</b>${f.precio_oferta&&f.precio_oferta!==precioLista?` · precio de oferta vigente: <b>$${fmtN(Math.round(f.precio_oferta))}</b>`:''}${pmMl?` · PM (solo referencia): $${fmtN(Math.round(pmMl))}`:''}.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
+      <label style="display:flex;gap:6px;align-items:center">Precio nuevo <input type="text" inputmode="numeric" id="ofm-pp-precio-${itemId}" aria-label="Precio nuevo de lista para ${itemId}" oninput="ofmSimularPoner('${itemId}')" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text)"></label>
+      <button type="button" class="btn-xs" id="ofm-pp-btn-${itemId}" onclick="ofmConfirmarPoner('${itemId}')" disabled>Poner precio</button>
+      <label style="font-size:9px;color:var(--text3)"><input type="checkbox" ${ofmPonerHabilitado()?'checked':''} onchange="ofmPonerHabilitar(this.checked)"> Escritura habilitada (prueba en vivo)</label>
+    </div>
+    ${enCurso?`<div id="ofm-pp-aviso-${itemId}" data-pp-bloqueo="1" style="margin-top:4px;font-size:10px;color:var(--yellow)">⚠ La publicación tiene una promoción en curso: ML puede rechazar el cambio o alterar el tachado. Sacala primero (arriba, «Sacar solo de esta»). Mientras tanto el botón queda desactivado.</div>`:''}
+    <div id="ofm-pp-margen-${itemId}" style="margin-top:6px;font-size:10px" aria-live="polite"></div>
+    <div id="ofm-pp-res-${itemId}" style="margin-top:4px;font-size:10px" role="status"></div></div>`;
+}
+function ofmPonerCalc(itemId){
+  const f=ofmFilaPorId[itemId];const precio=Math.round(parseFloat(String(qs('ofm-pp-precio-'+itemId)?.value||'').replace(',','.')))||0;
+  if(!f||!precio)return{f,precio,motivo:'Cargá el precio nuevo.'};
+  if(f._costoUnitSinIva==null)return{f,precio,m:null,motivo:`Sin costo/IVA: margen sin dato (SKU: ${f.sku||'sin SKU'}).`};
+  const tc=ofmTc();if(!tc)return{f,precio,m:null,motivo:'Sin TC del BNA: margen sin dato.'};
+  const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
+  return{f,precio,m,bajo:m.margenPct!==null&&m.margenPct*100<OFM.umbral};
+}
+function ofmSimularPoner(itemId){
+  const out=qs('ofm-pp-margen-'+itemId),btn=qs('ofm-pp-btn-'+itemId);if(!out||!btn)return;
+  const c=ofmPonerCalc(itemId);
+  if(c.m){
+    const col=c.bajo?'var(--red)':c.m.margenPct>0.20?'var(--green)':'var(--yellow)';
+    out.innerHTML=`<div style="${c.bajo?'border:1px solid var(--red);border-radius:6px;padding:4px 6px;':''}">Margen con ese precio: <b style="color:${col}">${c.m.margenPct!==null?(c.m.margenPct*100).toFixed(1)+' % ($'+fmtN(Math.round(c.m.margen))+')':'—'}</b>${c.bajo?` <b style="color:var(--red)">⚠ BAJO EL UMBRAL (${OFM.umbral} %)</b> · se confirma aparte`:''}</div>`;
+  }else out.innerHTML=`<span style="color:var(--text3)">${c.motivo||''}</span>`;
+  const bloqueada=!!document.querySelector(`#ofm-pp-aviso-${itemId}[data-pp-bloqueo]`);
+  btn.disabled=!c.precio||bloqueada||!ofmPonerHabilitado();
+  btn.title=!ofmPonerHabilitado()?'Escritura apagada hasta la prueba en vivo: tildá «Escritura habilitada»':bloqueada?'Hay una promoción en curso':'';
+  btn.textContent=c.bajo?'Confirmar igual (bajo umbral)':'Poner precio';
+}
+async function ofmConfirmarPoner(itemId){
+  const operador=ofmRequireOperador();if(!operador)return;
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const c=ofmPonerCalc(itemId),f=c.f;if(!f||!c.precio||!ofmPonerHabilitado())return;
+  const res=qs('ofm-pp-res-'+itemId),btn=qs('ofm-pp-btn-'+itemId);
+  const anterior=Math.round(f.precio_normal||0);
+  const margenTxt=c.m&&c.m.margenPct!==null?(c.m.margenPct*100).toFixed(1)+' %':'sin dato';
+  let msg=`¿Cambiar el precio de lista?\n\nCuenta: ${etiquetaCuenta(f.cuenta)}\nPublicación: ${itemId}\nSKU: ${f.sku||'sin SKU'}\nPrecio: $${fmtN(anterior)} → $${fmtN(c.precio)}\nMargen resultante: ${margenTxt} (umbral ${OFM.umbral} %)\nOperador: ${operador}`;
+  if(c.bajo)msg+=`\n\n⚠ ESE MARGEN QUEDA BAJO EL UMBRAL. Confirmá solo si es intencional.`;
+  if(!confirm(msg))return;
+  btn.disabled=true;res.textContent='Aplicando...';
+  try{
+    const r=await fetch(`${url}/ayala-core/item/${itemId}/aplicar-precio`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cuenta:f.cuenta,sku:f.sku||'',precio:c.precio,precio_anterior:anterior,margen_pct:c.m&&c.m.margenPct!==null?(c.m.margenPct*100).toFixed(2):'',bajo_umbral:!!c.bajo,operador,origen:'Precios y ofertas ML'})});
+    const d=await r.json();
+    if(d.ok){res.innerHTML=`<span style="color:var(--green)">✅ ML confirmó el precio $${fmtN(c.precio)} (verificado con una lectura aparte). Quedó registrado a nombre de ${acEsc(operador)}.</span>`;f.precio_normal=c.precio;}
+    else res.innerHTML=`<span style="color:var(--red)">❌ ML no lo aplicó: ${acEsc(d.error||d.detail||'error desconocido')}. No se reintenta solo.</span>`;
+  }catch(e){res.innerHTML=`<span style="color:var(--red)">❌ ${acEsc(e.message)}. No se sabe si ML lo aplicó: revisá la publicación antes de reintentar.</span>`;}
+  ofmSimularPoner(itemId);
 }
 function ofmSimularActivar(itemId){
   const f=ofmFilaPorId[itemId];const out=qs('ofm-act-margen-'+itemId);
