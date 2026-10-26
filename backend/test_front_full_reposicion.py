@@ -121,4 +121,4 @@ def test_lo_que_se_muestra_va_en_unidades_de_la_publicacion():
     f = _fn(SRC, "fullU")
     js = f + "console.log(JSON.stringify([fullU({factor:3},339),fullU({factor:1},12),fullU({factor:3},22.6),fullU(null,5)]));"
     assert json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout) == [113, 12, 7.5, 5]
-    assert "fullU(f,f.stock_full)" in SRC and "fullU(f,f.ventas_periodo)" in SRC and "fullU(f,f.ventas_diarias)" in SRC and "fullU(f,f.stock_objetivo)" in SRC
+    assert "fullU(f,f.stock_full)" in SRC and "fullU(f,f.ventas_periodo)" in SRC and "fullU(f,f.ventas_diarias)" in SRC and "fullU(f,f._objetivo)" in SRC
