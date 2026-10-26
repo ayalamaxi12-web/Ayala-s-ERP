@@ -6235,7 +6235,7 @@ function ayalaCoreSkuListaActualizar(){
 }
 function ayalaCoreSkuBuscar(q){
   const n=acNormTxt(q).trim();if(!n)return [];const out=[];
-  for(let k=0;k<AC_TODOS.length;k++){const x=AC_TODOS[k];if(AC_SEL.includes(x))continue;const i=(AC_TODOS_N[k]||acNormTxt(x)).indexOf(n);if(i>=0)out.push({x,i,n:n.length});}
+  for(let k=0;k<AC_TODOS.length;k++){const x=AC_TODOS[k];if(AC_SEL.includes(x))continue;const i=((typeof AC_TODOS_N!=='undefined'&&AC_TODOS_N[k])||acNormTxt(x)).indexOf(n);if(i>=0)out.push({x,i,n:n.length});}
   return out.sort((a,b)=>(a.i>0)-(b.i>0)||a.i-b.i||a.x.localeCompare(b.x,'es')).slice(0,15);
 }
 function ayalaCoreSkuSugerir(){
