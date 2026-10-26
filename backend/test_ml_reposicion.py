@@ -200,7 +200,7 @@ def test_detecta_censura_y_corrige_la_tasa_diaria():
 
     fila = resultado.filas[0]
     assert fila.censurado is True
-    assert fila.ventas_diarias == 6.0  # 30 / 5, no 30 / 30
+    assert fila.ventas_diarias == 5.0  # 30 ventas en 6 días (del 16 al 21, contando los dos extremos), no 30 / 30
     assert fila.stock_tactica is None  # SKU no está en el Sheet
 
 
@@ -298,11 +298,11 @@ def test_cantidad_enviar_y_sugerido_se_muestran_en_paquetes_no_en_unidades_reale
     fila = resultado.filas[0]
     assert fila.factor == 2
     assert fila.ventas_periodo == 64
-    # 64 unidades reales en 10 días de ventana (censurado) -> 6.4/día ->
-    # objetivo 3 semanas = 134.4 -> round() = 134 unidades reales (stock
-    # full 0, nada que restar) -> 134/2 = 67 paquetes.
-    assert fila.cantidad_enviar == 67
-    assert fila.sugerido == 67  # Pitec tiene de sobra (1000), no lo topea
+    # 64 unidades reales en 11 días de ventana (censurado, contando los dos
+    # extremos) -> 5.82/día -> objetivo 3 semanas = 122.2 -> round() = 122
+    # unidades reales (stock full 0, nada que restar) -> 122/2 = 61 paquetes.
+    assert fila.cantidad_enviar == 61
+    assert fila.sugerido == 61  # Pitec tiene de sobra (1000), no lo topea
 
 
 def test_stock_a_llegada_resta_las_ventas_del_transito_pero_nunca_negativo():
