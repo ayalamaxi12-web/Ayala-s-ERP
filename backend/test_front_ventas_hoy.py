@@ -19,3 +19,12 @@ def test_llama_al_endpoint_en_vivo_se_refresca_solo_y_escapa_los_sku():
 def test_los_estilos_de_la_pantalla_usan_solo_tokens():
     css = re.findall(r"\.vh-[^{]*\{[^}]*\}", SRC)
     assert css and not any(re.search(r"#[0-9a-fA-F]{3,8}\b", c) for c in css)
+
+
+def test_cada_mercado_usa_sus_colores_logo_y_tipografia_del_motor():
+    assert 'data-mk=\\"${t.clave}\\"' in SRC or 'data-mk="${t.clave}"' in SRC
+    for mk, tokens in {"ml": ("--mk-ml", "--fuente-mk-ml"), "fravega": ("--mk-fravega-violeta", "--fuente-mk-fravega"), "oncity": ("--mk-oncity-azul", "--fuente-mk-oncity"),
+                       "megatone": ("--mk-megatone-gris", "--fuente-mk-megatone"), "web": ("--celeste-marca",)}.items():
+        css = " ".join(re.findall(r"\.vh-card\[data-mk=%s\][^{]*\{[^}]*\}" % mk, SRC))
+        assert all(t in css for t in tokens), mk
+    assert "AC_TARJETA[t.clave]" in SRC and "ayalaCoreCargarFuentes();ventasHoyCargar(false)" in SRC

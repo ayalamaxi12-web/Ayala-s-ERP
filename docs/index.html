@@ -230,6 +230,23 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .vh-fila{display:grid;grid-template-columns:18px 1fr auto;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:12px;align-items:center}
 .vh-fila .vh-sku{overflow-wrap:anywhere;font-weight:600}.vh-fila .vh-d{color:var(--text3);font-size:11px}.vh-fila .vh-m{text-align:right;font-weight:700}
 .vh-vacio{padding:10px 16px 16px;color:var(--text3);font-size:12px}
+/* Ventas de hoy: identidad de cada mercado (mismos colores, logos y tipografías que las tarjetas del Motor de Precios, `.ac-tk`) */
+.vh-top{display:flex;flex-direction:column;gap:2px}
+.vh-marca{display:flex;align-items:center;gap:10px;min-height:30px}
+.vh-logo{height:28px;width:auto;max-width:150px;object-fit:contain}
+.vh-card[data-mk=ml],.vh-card[data-mk=ml] *{font-family:var(--fuente-mk-ml)!important}
+.vh-card[data-mk=ml] .vh-top{background:var(--mk-ml);color:var(--mk-ml-tinta)}
+.vh-card[data-mk=ml] .vh-kpi{background:var(--mk-ml-franja)}
+.vh-card[data-mk=fravega],.vh-card[data-mk=fravega] *{font-family:var(--fuente-mk-fravega)!important}
+.vh-card[data-mk=fravega] .vh-top{background:var(--superficie);color:var(--mk-fravega-negro);border-bottom:3px solid var(--mk-fravega-violeta)}
+.vh-card[data-mk=fravega] .vh-kpi{background:var(--mk-fravega-gris)}
+.vh-card[data-mk=oncity],.vh-card[data-mk=oncity] *{font-family:var(--fuente-mk-oncity)!important}
+.vh-card[data-mk=oncity] .vh-top{background:var(--mk-oncity-azul);color:var(--superficie)}
+.vh-card[data-mk=oncity] .vh-kpi{background:var(--mk-oncity-chip)}
+.vh-card[data-mk=megatone],.vh-card[data-mk=megatone] *{font-family:var(--fuente-mk-megatone)!important}
+.vh-card[data-mk=megatone] .vh-top{background:var(--mk-megatone-gris);color:var(--mk-megatone-texto)}
+.vh-card[data-mk=web] .vh-top{background:var(--celeste-marca);color:var(--tinta)}
+.vh-card[data-mk=web] .vh-kpi{background:var(--celeste-100)}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -2441,10 +2458,12 @@ const DASH_CAB={dashboard:['Ventas & Rentabilidad','Histórico de Táctica y Eco
 let VH_TIMER=null;
 function vhPlata(n){return Number(n||0).toLocaleString('es-AR',{maximumFractionDigits:0});}
 function vhPct(n){return n==null?'—':Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})+' %';}
+// Logo y nombre del mercado: los de las tarjetas del Motor (AC_TARJETA); si el logo ya dice el nombre (Frávega, OnCity, Megatone) el nombre queda solo para lectores de pantalla.
+function vhMarca(t){const m=AC_TARJETA[t.clave];if(!m)return `<span class="vh-t">${acEsc(t.etiqueta)}</span>`;return `<img class="vh-logo" src="${m.logo}" alt="${m.alt}">${m.alt?`<span class="ac-sr">${acEsc(t.etiqueta)}</span>`:`<span class="vh-t">${acEsc(t.etiqueta)}</span>`}`;}
 function vhCard(t){
   const cls=t.rentabilidad<0?'vh-neg':'vh-pos';
   const filas=t.top_skus.map((x,i)=>`<div class="vh-fila"><span class="vh-d">${i+1}</span><div><div class="vh-sku">${acEsc(x.sku)}</div><div class="vh-d">${x.ordenes} ${x.ordenes===1?'orden':'órdenes'} · sin IVA $ ${vhPlata(x.facturacion_sin_iva)} · renta <span class="${x.rentabilidad<0?'vh-neg':'vh-pos'}">$ ${vhPlata(x.rentabilidad)} (${vhPct(x.rentabilidad_pct)})</span></div></div><span class="vh-m">$ ${vhPlata(x.facturacion)}</span></div>`).join('');
-  return `<section class="vh-card" aria-label="Ventas de hoy: ${acEsc(t.etiqueta)}"><div class="vh-top"><div class="vh-t">${acEsc(t.etiqueta)}</div><div class="vh-monto"><small>$</small>${vhPlata(t.facturacion)}</div><div class="vh-iva">con IVA · sin IVA $ ${vhPlata(t.facturacion_sin_iva)}</div></div>
+  return `<section class="vh-card" data-mk="${t.clave}" aria-label="Ventas de hoy: ${acEsc(t.etiqueta)}"><div class="vh-top"><div class="vh-marca">${vhMarca(t)}</div><div class="vh-monto"><small>$</small>${vhPlata(t.facturacion)}</div><div class="vh-iva">con IVA · sin IVA $ ${vhPlata(t.facturacion_sin_iva)}</div></div>
     <div class="vh-kpis"><div class="vh-kpi"><span>Renta $</span><b class="${cls}">$ ${vhPlata(t.rentabilidad)}</b></div><div class="vh-kpi"><span>Renta % (s/ precio sin IVA)</span><b class="${cls}">${vhPct(t.rentabilidad_pct)}</b></div><div class="vh-kpi"><span>Órdenes cobradas</span><b>${t.ordenes}</b></div><div class="vh-kpi"><span>Sin costo calculado</span><b>${t.sin_costo}</b></div></div>
     ${t.top_skus.length?`<div class="vh-lista"><h3>Top ${t.top_skus.length} SKU del día (monto cobrado)</h3>${filas}</div>`:'<div class="vh-vacio">Todavía no hay ventas cobradas hoy.</div>'}</section>`;
 }
@@ -2460,7 +2479,7 @@ async function ventasHoyCargar(forzar){
     sub.textContent=`Órdenes cobradas del ${d.fecha} desde las 00:00 (hora Argentina) · actualizado a las ${hora}${d.cache_seg>0?` (dato de hace ${d.cache_seg} s)`:''}. Se actualiza solo cada minuto.`;
   }catch(e){sub.textContent='No se pudo leer Ecom ('+(e.message||e)+'). Se reintenta en un minuto.';}
 }
-function ventasHoyEntrar(){ventasHoyCargar(false);clearInterval(VH_TIMER);VH_TIMER=setInterval(()=>{if(document.body.dataset.page==='ventas-hoy'&&!document.hidden)ventasHoyCargar(false);else if(document.body.dataset.page!=='ventas-hoy'){clearInterval(VH_TIMER);VH_TIMER=null;}},60000);}
+function ventasHoyEntrar(){ayalaCoreCargarFuentes();ventasHoyCargar(false);clearInterval(VH_TIMER);VH_TIMER=setInterval(()=>{if(document.body.dataset.page==='ventas-hoy'&&!document.hidden)ventasHoyCargar(false);else if(document.body.dataset.page!=='ventas-hoy'){clearInterval(VH_TIMER);VH_TIMER=null;}},60000);}
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
