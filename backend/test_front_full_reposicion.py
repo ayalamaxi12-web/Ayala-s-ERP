@@ -12,7 +12,7 @@ def _porque(fila, pend=0):
     return subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout.strip()
 
 
-BASE = {"item_id": "M1", "flags": [], "ventas_diarias": 2, "stock_objetivo": 42, "stock_a_llegada": 0, "_necesarioReal": 42, "_sugerido": 42, "_cantidadEnviar": 42, "_disp": 100}
+BASE = {"item_id": "M1", "flags": [], "ventas_diarias": 2, "_objetivo": 42, "_aLlegada": 0, "_necesarioReal": 42, "_sugerido": 42, "_cantidadEnviar": 42, "_disp": 100}
 
 
 def test_motivos_de_quiebre_y_de_deposito_parcial():
@@ -25,7 +25,7 @@ def test_motivos_de_quiebre_y_de_deposito_parcial():
 def test_motivos_en_texto():
     assert _porque(BASE) == ""
     assert _porque({**BASE, "ventas_diarias": 0, "_necesarioReal": 0, "_sugerido": 0, "_cantidadEnviar": 0}) == "sin ventas en el período"
-    assert _porque({**BASE, "_necesarioReal": 0, "_sugerido": 0, "_cantidadEnviar": 0, "stock_a_llegada": 50}) == "Full ya cubre el objetivo"
+    assert _porque({**BASE, "_necesarioReal": 0, "_sugerido": 0, "_cantidadEnviar": 0, "_aLlegada": 50}) == "Full ya cubre el objetivo"
     assert _porque({**BASE, "_necesarioReal": 0, "_sugerido": 0, "_cantidadEnviar": 0}, pend=50) == "el envío pendiente cubre"
     assert _porque({**BASE, "_sugerido": 0, "_disp": 0}) == "sin disponible en Pitec ni Táctica"
     assert _porque({**BASE, "_sugerido": 0}) == "el disponible se asignó a otra publicación del mismo SKU"
@@ -87,3 +87,19 @@ def test_layout_kpi_titulo_con_logo_actualizar_arriba_y_scroll_en_caja():
     assert ".section-hdr:has(>img,>svg,>[data-ico]){display:flex;align-items:center;gap:14px" in SRC
     assert SRC.index('id="full-reposicion-pie"') < SRC.index('id="full-reposicion-tbody"') and SRC.index('id="full-conciliar-pie"') < SRC.index('id="full-conciliar-tbody"')
     assert "#full-reposicion-wrap)>.table-wrap{max-height:calc(100vh - 9rem);overflow:auto}" in SRC
+
+
+def _objetivo(fila, sem, fecha, params, hoy="2026-10-26"):
+    js = ("const _q={'full-repo-semanas':{value:'%s'},'full-repo-fecha-llegada':{value:'%s'}};const qs=i=>_q[i];" % (sem, fecha)
+          + "const fullRepoResult={params:%s};" % json.dumps(params)
+          + "const _D=Date;Date=class extends _D{constructor(...a){a.length?super(...a):super('%sT00:00:00')}};" % hoy
+          + _fn(SRC, "fullRepoObjetivo") + f"\nconst f={json.dumps(fila)};fullRepoObjetivo(f);console.log(JSON.stringify([f._objetivo,f._aLlegada]));")
+    return json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+
+
+def test_semanas_y_fecha_recalculan_sin_actualizar():
+    fila = {"ventas_diarias_exacta": 0.5, "ventas_diarias": 0.5, "stock_full": 20, "stock_objetivo": 7.0, "stock_a_llegada": 14.0}
+    params = {"semanas_objetivo": 2, "fecha_llegada": "2026-11-03"}
+    assert _objetivo(fila, "2", "2026-11-03", params) == [7.0, 14.0]          # mismos valores que la lectura: números del servidor
+    assert _objetivo(fila, "3", "2026-11-03", params) == [10.5, 16.0]         # 0,5/día × 3 semanas × 7; en Full 20 − 0,5 × 8 días = 16
+    assert _objetivo({**fila, "ventas_diarias_exacta": None}, "3", "2026-11-03", params) == [7.0, 14.0]     # lectura vieja sin dato exacto: no se inventa nada
