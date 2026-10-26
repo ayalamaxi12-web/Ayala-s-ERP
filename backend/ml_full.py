@@ -295,6 +295,42 @@ class MLFullClient:
                     entrada["ultima"] = fecha
         return acumulado
 
+    def serie_full_por_inventory(self, cuenta: str, inventory_ids: list[str], desde: str, hasta: str) -> dict[str, dict]:
+        """Día por día, para reconstruir CUÁNTOS DÍAS hubo stock en Full: las salidas (`SALE_CONFIRMATION`) y las unidades que se acreditaron como disponibles
+        (`INBOUND_RECEPTION`). Los dos tipos salen de los mismos lotes que ya se leen (con caché no se vuelven a pedir). Cada envío trae su cantidad disponible ACUMULADA
+        en cada evento (y a veces eventos repetidos): lo acreditado ese día es el aumento del máximo acumulado de ese envío, así un evento repetido no suma dos veces.
+        Devuelve {inventory_id: {"ventas": {fecha: unidades}, "creditos": {fecha: unidades}}}, en unidades de paquete."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        out: dict[str, dict] = {}
+        for i in range(0, len(inventory_ids), 20):
+            lote = inventory_ids[i:i + 20]
+            ventas = self._operaciones_lote(cuenta, headers, lote, desde, hasta, "SALE_CONFIRMATION")
+            envios = self._operaciones_lote(cuenta, headers, lote, desde, hasta, "INBOUND_RECEPTION")
+            if ventas is None or envios is None:
+                continue          # el lote falló: esas filas siguen con el cálculo por ventana de ventas
+            for op in ventas:
+                inv = op.get("inventory_id")
+                if inv:
+                    d = out.setdefault(inv, {"ventas": {}, "creditos": {}})["ventas"]
+                    f = (op.get("date_created") or "")[:10]
+                    d[f] = d.get(f, 0) + abs((op.get("detail") or {}).get("available_quantity") or 0)
+            por_envio: dict[tuple, list] = {}
+            for op in envios:
+                inv = op.get("inventory_id")
+                refs = op.get("external_references") or []
+                inbound = next((r.get("value") for r in refs if r.get("type") == "inbound_id"), None)
+                disp = (op.get("result") or {}).get("available_quantity")
+                if inv and inbound and disp is not None:
+                    por_envio.setdefault((inv, inbound), []).append(((op.get("date_created") or ""), disp))
+            for (inv, _), evs in por_envio.items():
+                d = out.setdefault(inv, {"ventas": {}, "creditos": {}})["creditos"]
+                maximo = 0
+                for fecha, disp in sorted(evs):
+                    if disp > maximo:
+                        d[fecha[:10]] = d.get(fecha[:10], 0) + (disp - maximo)
+                        maximo = disp
+        return out
+
     def ventas_pagadas_por_item(self, cuenta: str, desde: str, hasta: str) -> tuple[dict[tuple, int], list[str]]:
         """Ventas PAGADAS de TODAS las publicaciones de la cuenta (salgan de Full o de mi depósito, normal o Flex), por (item_id, variation_id), en unidades de
         publicación (paquetes). Lee `orders/search` día por día (así no se choca con el tope de paginado de la API). Devuelve (acumulado, días que no se pudieron leer).

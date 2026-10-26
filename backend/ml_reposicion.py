@@ -146,6 +146,7 @@ class FilaReposicionMLA:
     stock_tactica: int | None
     envio_pendiente: int = 0            # en paquetes -- ver ml_full.envios_pendientes_por_inventory
     envio_pendiente_ids: list[str] = field(default_factory=list)  # inbound_id reales, para verificar a mano
+    dias_con_stock: int | None = None   # días del período en que hubo stock en Full (solo se calcula si quebró): la venta diaria se mide sobre esos días
     datos_incompletos: bool = False     # las ventas/envíos de esta publicación no se pudieron leer de ML (cuota): el cálculo NO es confiable
     # Demanda (unidades REALES del SKU, ya con el factor de pack). `ventas_periodo` es la demanda USADA: ventas de Full + (si el interruptor está activado) mi depósito.
     ventas_full: int = 0
@@ -268,6 +269,27 @@ def _vinculaciones(ecom, item_ids: list[str], progreso=None) -> dict:
             if not isinstance(v, _Error):
                 _cache_vinculacion[i] = (ahora, v)
     return out
+
+
+def _dias_con_stock(serie: dict | None, stock_actual: int, desde: str, hasta: str) -> int | None:
+    """Días del período en que hubo stock en Full, reconstruidos con las salidas y las acreditaciones de cada día. El stock del primer día se estima como lo que hay hoy
+    menos lo acreditado más lo vendido en el período. Un día cuenta si empezó con stock o si ese día se acreditó mercadería. `None` si no hay serie o no se puede
+    reconstruir (entonces se usa la ventana entre la primera y la última venta)."""
+    if not serie:
+        return None
+    ventas, creditos = serie.get("ventas", {}), serie.get("creditos", {})
+    if not ventas and not creditos:
+        return None
+    nivel = max(0, stock_actual - sum(creditos.values()) + sum(ventas.values()))
+    dia, fin, con_stock = date.fromisoformat(desde), date.fromisoformat(hasta), 0
+    while dia <= fin:
+        k = dia.isoformat()
+        entra = creditos.get(k, 0)
+        if nivel > 0 or entra > 0:
+            con_stock += 1
+        nivel = max(0, nivel + entra - ventas.get(k, 0))
+        dia += timedelta(days=1)
+    return con_stock or None
 
 
 def _grupo_pub(pub: dict) -> tuple:
@@ -457,6 +479,18 @@ def calcular_reposicion_mla(
         grupos_con_fila = {_grupo_pub(pub) for fila in resultado_conciliacion.filas for pub in fila.publicaciones}
 
     inventarios_sin_leer = {inv for lote in getattr(ml, "lotes_fallidos", []) for inv in lote["inventory_ids"]}
+    # Publicaciones que quebraron (0 en Full, ventas, y hace ≥3 días que no venden): para ellas la venta diaria se mide sobre los DÍAS CON STOCK, no sobre todo el tramo
+    # entre la primera y la última venta (que incluye los días sin stock y subestima el ritmo real). Se lee solo para esos inventarios.
+    series_full: dict[str, dict] = {}
+    if hasattr(ml, "serie_full_por_inventory"):
+        quebrados: dict[str, set[str]] = {}
+        for fila_sku in resultado_conciliacion.filas:
+            for pub in fila_sku.publicaciones:
+                vi = ventas_por_inventory.get(pub["inventory_id"]) if pub.get("inventory_id") else None
+                if vi and pub["disponible"] == 0 and vi["unidades"] * pub["factor"] >= 5 and (hoy - date.fromisoformat(vi["ultima"])).days >= 3:
+                    quebrados.setdefault(pub["cuenta"], set()).add(pub["inventory_id"])
+        for cuenta, ids in quebrados.items():
+            series_full.update(ml.serie_full_por_inventory(cuenta, sorted(ids), desde, hasta))
     filas: list[FilaReposicionMLA] = []
     total_skus = len(resultado_conciliacion.filas)
     for idx_sku, fila_sku in enumerate(resultado_conciliacion.filas):
@@ -472,8 +506,10 @@ def calcular_reposicion_mla(
 
             dias_sin_vender = (hoy - date.fromisoformat(ultima)).days if ultima else dias_ventas
             censurado = stock_full_mla == 0 and ventas_total >= 5 and dias_sin_vender >= 3
+            dias_con_stock = None
             if censurado and primera and ultima:
-                ventana = (date.fromisoformat(ultima) - date.fromisoformat(primera)).days + 1   # días de venta contando los dos extremos (16 al 21 = 6 días)
+                dias_con_stock = _dias_con_stock(series_full.get(pub["inventory_id"]), pub["disponible"], desde, hasta)
+                ventana = dias_con_stock or ((date.fromisoformat(ultima) - date.fromisoformat(primera)).days + 1)   # sin serie: días entre la primera y la última venta, contando los dos extremos
                 ventas_diarias = ventas_total / ventana
             else:
                 ventas_diarias = ventas_total / dias_ventas
@@ -518,7 +554,7 @@ def calcular_reposicion_mla(
                 envio_pendiente=envio_pend["unidades"] if envio_pend else 0,
                 envio_pendiente_ids=envio_pend["inbound_ids"] if envio_pend else [],
                 datos_incompletos=bool(pub.get("inventory_id") in inventarios_sin_leer),
-                ventas_full=ventas_total, ventas_deposito=ventas_deposito, deposito_usado=deposito_usado,
+                ventas_full=ventas_total, ventas_deposito=ventas_deposito, deposito_usado=deposito_usado, dias_con_stock=dias_con_stock,
                 flags=flags_stock + (["sin_vincular"] if not pub.get("vinculado", True) else []), avisos=list(avisos_stock),
             ))
 

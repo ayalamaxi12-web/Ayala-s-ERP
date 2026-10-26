@@ -1743,7 +1743,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th>En Full</th><th title="Ventas pagadas de los últimos días que salieron de Full">Ventas Full 30d</th><th title="Referencia: lo que esa publicación vendió desde mi depósito (normal y Flex) en el período: total pagado de la publicación menos lo de Full. Solo cuenta para la demanda si no tuvo ventas en Full ni stock en Full, y entonces se usa el % elegido.">Ventas mi depósito 30d</th><th title="Lo que se usa para calcular: las ventas de Full (corregidas si quebró el stock) o, si la publicación no vende en Full ni tiene stock allí, el % elegido de lo que vende desde mi depósito">Demanda usada</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th><th>Por qué</th></tr></thead>
+          <thead><tr><th style="cursor:default"><input type="checkbox" title="Marcar/desmarcar todas las de esta pestaña" onchange="fullRepoToggleAll(this.checked)"></th><th>MLA</th><th>MLID</th><th>SKU</th><th>SKU ML</th><th title="Unidades reales por paquete">Factor</th><th title="Unidades de la publicación (un combo ×3 cuenta como 1)">En Full</th><th title="Ventas de esta publicación que salieron de Full (un combo ×3 es UNA venta). El detalle muestra también las unidades reales del SKU.">Ventas Full 30d</th><th title="Referencia: lo que esa publicación vendió desde mi depósito (normal y Flex) en el período: total pagado de la publicación menos lo de Full. Solo cuenta para la demanda si no tuvo ventas en Full ni stock en Full, y entonces se usa el % elegido.">Ventas mi depósito 30d</th><th title="Lo que se usa para calcular: las ventas de Full (corregidas si quebró el stock) o, si la publicación no vende en Full ni tiene stock allí, el % elegido de lo que vende desde mi depósito">Demanda usada</th><th>Ventas/día</th><th>Stock objetivo</th><th>Stock a llegada</th><th title="En paquetes">Cantidad a enviar (paq.)</th><th title="En paquetes">Sugerido (paq.)</th><th title="En paquetes">Envíos pendientes (paq.)</th><th>Stock Ecom</th><th>Stock Táctica</th><th>Por qué</th></tr></thead>
           <tbody id="full-reposicion-tbody"></tbody>
         </table>
       </div>
@@ -4834,7 +4834,7 @@ function fullRepoPorQue(f){
   else if(f._necesarioReal<=0)m.push(pend>0&&(f._objetivo-f._aLlegada)>0?'el envío pendiente cubre':'Full ya cubre el objetivo');
   else if(f._sugerido===0)m.push(f._disp<=0?'sin disponible en Pitec ni Táctica':'el disponible se asignó a otra publicación del mismo SKU');
   else if(f._sugerido<f._cantidadEnviar)m.push('el disponible alcanza solo en parte');
-  if(f.censurado)m.push(`quebró stock en Full: ${f.ventas_full} ventas entre ${fullFechaCorta(f.primera_venta)} y ${fullFechaCorta(f.ultima_venta)}; la venta diaria se corrigió a ${f.ventas_diarias}/día (no ${(f.ventas_full/(f.dias_periodo||30)).toFixed(1)})`);
+  if(f.censurado)m.push(`quebró stock en Full: ${fullU(f,f.ventas_full)} ventas, del ${fullFechaCorta(f.primera_venta)} al ${fullFechaCorta(f.ultima_venta)}${f.dias_con_stock?` y solo en ${f.dias_con_stock} días con stock`:''}; la venta diaria se midió sobre ${f.dias_con_stock?'esos días':'ese tramo'}: ${fullU(f,f.ventas_diarias)}/día (no ${fullU(f,f.ventas_full/(f.dias_periodo||30))})`);
   if(f.deposito_usado>0)m.push(`no vende en Full ni tiene stock allí: demanda estimada con ${Math.round(100*f.deposito_usado/Math.max(1,f.ventas_deposito))} % de lo que vende desde mi depósito (${f.ventas_deposito} u.)`);
   return m.join(' · ');
 }
@@ -4869,6 +4869,8 @@ async function fullRepoDetalle(btn,inv,cuenta){
       <div class="table-wrap"><table><caption>Eventos de envío (INBOUND_RECEPTION). El simulador cuenta como pendiente la suma de «no disponible» del evento más reciente de cada envío.</caption><thead><tr><th>Envío</th><th>Fecha</th><th style="text-align:right">Total</th><th style="text-align:right">Disponible</th><th style="text-align:right">No disponible</th><th>Dato crudo de ML</th></tr></thead><tbody>${e}</tbody></table></div></div>`;
   }catch(err){td.innerHTML=`<span class="ac-aviso-txt">No se pudo leer el detalle: ${acEsc(err.message)}</span>`;}
 }
+// Todo lo que se MUESTRA va en unidades de la publicación (un combo ×3 es UNA venta, no tres); por dentro el cálculo usa unidades reales del SKU para compararlas con el stock de Ecom/Táctica.
+function fullU(f,x){const v=(Number(x)||0)/((f&&f.factor)||1);return Math.round(v*10)/10;}
 function fullRepoVerMas(b){const tr=b.closest('tr'),a=tr.classList.toggle('fr-abierta');b.setAttribute('aria-expanded',a);b.textContent=a?'Ver menos':'Ver más';}
 function fullRepoCalculoTxt(f){
   const n=x=>Number(x).toLocaleString('es-AR',{maximumFractionDigits:2});
@@ -4892,13 +4894,13 @@ function renderFullReposicionTabla(){
       <td class="fr-sku" data-l="SKU">${f.sku}${f.dato_anterior||f.datos_incompletos?` <span class="full-tag" title="${f.datos_incompletos?'Ventas y envíos sin leer: el cálculo no es confiable':'No se pudo leer en la última actualización: se muestra la lectura anterior'}">${f.datos_incompletos?'datos incompletos':'dato anterior'}</span>`:''}</td>
       <td class="fr-mas" data-l="SKU ML" style="font-size:9px;color:var(--text3)">${f.sku_ml||'—'}</td>
       <td class="fr-mas" data-l="Factor" style="text-align:right">${f.factor>1?'×'+f.factor:'—'}</td>
-      <td class="fr-k" data-l="Stock Full" style="text-align:right">${f.stock_full}</td>
-      <td class="fr-mas" data-l="Ventas Full 30d" style="text-align:right" title="${acEsc(`Salidas de Full (operaciones SALE_CONFIRMATION) del inventario ${f.inventory_id||'—'} en los últimos ${f.dias_periodo} días: ${f.ventas_full??f.ventas_periodo} u.${f.primera_venta?` · primera ${f.primera_venta}, última ${f.ultima_venta}`:''}`)}">${f.ventas_full??f.ventas_periodo}${f.inventory_id?` <button type="button" class="btn-xs fr-det" onclick="fullRepoDetalle(this,'${f.inventory_id}','${f.cuenta}')">Ver detalle</button>`:''}</td>
-      <td class="fr-mas" data-l="Ventas mi depósito 30d" style="text-align:right">${f.ventas_deposito||0}</td>
-      <td class="fr-k" data-l="Ventas 30d" style="text-align:right" title="${acEsc(fullRepoCalculoTxt(f))}">${f.ventas_periodo}${f.censurado?` <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">${ico('zap',12)}</span>`:''}</td>
-      <td class="fr-mas" data-l="Ventas/día" style="text-align:right">${f.ventas_diarias}</td>
-      <td class="fr-mas" data-l="Stock objetivo" style="text-align:right">${f._objetivo}</td>
-      <td class="fr-mas" data-l="Stock a llegada" style="text-align:right">${f._aLlegada}</td>
+      <td class="fr-k" data-l="Stock Full" style="text-align:right">${fullU(f,f.stock_full)}</td>
+      <td class="fr-mas" data-l="Ventas Full 30d" style="text-align:right" title="${acEsc(`Salidas de Full (operaciones SALE_CONFIRMATION) del inventario ${f.inventory_id||'—'} en los últimos ${f.dias_periodo} días: ${fullU(f,f.ventas_full??f.ventas_periodo)} ventas de esta publicación${f.factor>1?` (${f.ventas_full??f.ventas_periodo} u. reales del SKU, ×${f.factor})`:''}${f.primera_venta?` · primera ${f.primera_venta}, última ${f.ultima_venta}`:''}`)}">${fullU(f,f.ventas_full??f.ventas_periodo)}${f.inventory_id?` <button type="button" class="btn-xs fr-det" onclick="fullRepoDetalle(this,'${f.inventory_id}','${f.cuenta}')">Ver detalle</button>`:''}</td>
+      <td class="fr-mas" data-l="Ventas mi depósito 30d" style="text-align:right">${fullU(f,f.ventas_deposito||0)}</td>
+      <td class="fr-k" data-l="Ventas 30d" style="text-align:right" title="${acEsc(fullRepoCalculoTxt(f))}">${fullU(f,f.ventas_periodo)}${f.censurado?` <span style="color:var(--yellow)" title="Venta censurada: el producto quebró y se corrigió la tasa diaria">${ico('zap',12)}</span>`:''}</td>
+      <td class="fr-mas" data-l="Ventas/día" style="text-align:right">${fullU(f,f.ventas_diarias)}</td>
+      <td class="fr-mas" data-l="Stock objetivo" style="text-align:right">${fullU(f,f._objetivo)}</td>
+      <td class="fr-mas" data-l="Stock a llegada" style="text-align:right">${fullU(f,f._aLlegada)}</td>
       <td class="fr-k" data-l="A enviar" style="text-align:right;font-weight:600" title="En paquetes (lo que se prepara para esta publicación), no en unidades reales del SKU">${f._cantidadEnviar}</td>
       <td class="fr-k" data-l="Sugerido" style="text-align:right;font-weight:600;${f._sugerido<f._cantidadEnviar?'color:var(--accent)':''}" title="En paquetes">${f._sugerido}</td>
       <td class="fr-mas" data-l="Envíos pendientes" style="text-align:right">
@@ -4916,7 +4918,7 @@ function exportFullReposicion(){
   if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
   _fullRepoRecalcular();
   const h='Cuenta,MLA,MLID,SKU,SKU_ML,Factor,En Full,Ventas Full 30d,Ventas mi deposito 30d,Demanda usada,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar_Paquetes,Sugerido_Paquetes,Envios_Pendientes_Paquetes,Stock_Ecom,Stock_Tactica,Por que';
-  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,f.stock_full,f.ventas_full??f.ventas_periodo,f.ventas_deposito||0,f.ventas_periodo,f.ventas_diarias,f._objetivo,f._aLlegada,f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom==null?'':Math.max(0,f.stock_ecom),f.stock_tactica==null?'sin dato de Tactica':f.stock_tactica,'"'+(f._porQue||'').replace(/"/g,'""')+'"'].join(','));
+  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,fullU(f,f.stock_full),fullU(f,f.ventas_full??f.ventas_periodo),fullU(f,f.ventas_deposito||0),fullU(f,f.ventas_periodo),fullU(f,f.ventas_diarias),fullU(f,f._objetivo),fullU(f,f._aLlegada),f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom==null?'':Math.max(0,f.stock_ecom),f.stock_tactica==null?'sin dato de Tactica':f.stock_tactica,'"'+(f._porQue||'').replace(/"/g,'""')+'"'].join(','));
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${new Date().toISOString().slice(0,10)}.csv`;a.click();
   toast('Exportado');

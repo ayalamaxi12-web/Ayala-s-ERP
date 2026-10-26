@@ -221,3 +221,32 @@ def test_los_lotes_fallidos_se_reintentan_en_la_misma_corrida(monkeypatch):
     r = rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=True, espera_reintento_seg=0)
     f = {x.item_id: x for x in r.filas}["MLA1"]
     assert estado["n"] == 2 and f.ventas_full == 30 and not f.datos_incompletos        # el reintento trajo las ventas: ya no está incompleta
+
+
+def test_dias_con_stock_del_ejemplo_de_maxx_100_u_del_3_al_8_y_10_u_del_15_al_17():
+    serie = {"creditos": {"2026-10-03": 100, "2026-10-15": 10}, "ventas": {f"2026-10-0{d}": v for d, v in ((3, 20), (4, 20), (5, 20), (6, 15), (7, 15), (8, 10))}}
+    serie["ventas"].update({"2026-10-16": 4, "2026-10-17": 6})
+    # stock hoy 0: estaba en 0 antes del 3, se agotó el 8, volvió a tener el 15 y se agotó el 17 -> 6 + 3 = 9 días con stock (no los 15 días entre la primera y la última venta)
+    assert rep._dias_con_stock(serie, 0, "2026-09-26", "2026-10-26") == 9
+    assert rep._dias_con_stock({}, 0, "2026-09-26", "2026-10-26") is None
+
+
+def test_un_envio_con_eventos_repetidos_no_suma_dos_veces_lo_acreditado():
+    from ml_full import MLFullClient as M
+    ev = lambda f, d: {"inventory_id": "I1", "date_created": f, "result": {"available_quantity": d}, "external_references": [{"type": "inbound_id", "value": "77"}], "detail": {}}
+    ops = {"SALE_CONFIRMATION": [{"inventory_id": "I1", "date_created": "2026-10-04T10:00:00Z", "detail": {"available_quantity": -3}}],
+           "INBOUND_RECEPTION": [ev("2026-10-03T10:00:00Z", 18), ev("2026-10-03T10:00:00Z", 18), ev("2026-10-03T11:00:00Z", 30), ev("2026-10-03T11:00:00Z", 30), ev("2026-10-05T10:00:00Z", 40)]}
+    m = M(get_fn=lambda u, p, h: {"results": [dict(o) for o in ops[p["type"]]], "paging": {}}, token_fn=lambda c: "t")
+    s = m.serie_full_por_inventory("IT", ["I1"], "2026-09-26", "2026-10-26")["I1"]
+    assert s["creditos"] == {"2026-10-03": 30, "2026-10-05": 10} and s["ventas"] == {"2026-10-04": 3}      # 40 en total, no 118
+
+
+def test_la_venta_diaria_de_un_quiebre_usa_los_dias_con_stock():
+    ml, ecom, tac = armar()
+    ml._stock = {"INV1": 0}
+    ml._full = {"IT": {"INV1": {"unidades": 110, "primera": "2026-10-03", "ultima": "2026-10-17"}}}
+    ml._pagado = {"IT": {("MLA1", None): 110}}
+    ml.serie_full_por_inventory = lambda c, ids, d, h: {"INV1": {"creditos": {"2026-10-03": 100, "2026-10-15": 10},
+        "ventas": {"2026-10-03": 30, "2026-10-04": 30, "2026-10-05": 20, "2026-10-06": 10, "2026-10-07": 5, "2026-10-08": 5, "2026-10-16": 4, "2026-10-17": 6}}}
+    f = {x.item_id: x for x in rep.calcular_reposicion_mla(ml, ecom, tac, cuentas=["IT", "MT"], hoy=HOY, fecha_llegada=HOY, contar_deposito=False).filas}["MLA1"]
+    assert f.censurado and f.dias_con_stock == 9 and f.ventas_diarias == 12.22          # 110 ventas ÷ 9 días con stock (antes: 110 ÷ 15 = 7,33)
