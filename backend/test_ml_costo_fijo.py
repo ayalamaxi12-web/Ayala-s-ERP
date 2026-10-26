@@ -61,3 +61,11 @@ def test_el_espejo_js_da_el_mismo_precio_que_el_backend():
     out = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
     esperado = [int(ac.calcular_precio_condicion(costo_sin_iva=D(c), iva_factor=D("1.21"), envio_real=D(0), financiero_pct=D(0), renta_pct=D(30), costo_orden=ac.COSTO_ORDEN_ECOM_DEFAULT, costo_fijo_tramos=ac.COSTO_FIJO_ML_TRAMOS)) for c in (2000, 9000, 15000, 21000, 30000, 60000)]
     assert out == esperado
+
+
+def test_full_exporta_solo_la_cuenta_de_la_pestana():
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), '..', 'docs', 'index.html'), encoding='utf-8').read()
+    assert "filas.filter(f=>f.cuenta===fullRepoTab).map(f=>[f.cuenta" in src       # el CSV no mezcla cuentas
+    assert "full-carga-ml-${fullRepoNombreCuenta(fullRepoTab)}" in src               # el de ML va por cuenta y lo dice en el nombre
+    assert 'id="full-repo-exp-cuenta-ml"' in src

@@ -35,6 +35,7 @@ ML no informa por API los envíos ya despachados que todavía no entraron. Para 
 ## 6. Exportar
 - **Exportar para subir a ML**: solo filas **marcadas con cantidad > 0 y con código de ML**. Por eso el contador puede decir «622 seleccionadas» pero exportar menos: las que no están habilitadas en Full (sin código) se salen y se avisa «hay que habilitarla en Mercado Libre».
 - **Exportar CSV**: para revisar o guardar en otro formato.
+- **Los dos exportan solo la cuenta de la pestaña abierta** (el botón y el nombre del archivo dicen *Group* o *Arg*: `full-carga-ml-Group-…csv`). Para armar las dos cuentas: exportá con una pestaña, cambiá de pestaña y exportá de nuevo; así cada archivo se sube masivo a su cuenta de ML sin mezclar códigos.
 
 ## 7. Qué pasa si…
 - *Pasan los días sin actualizar:* la foto vieja se ve igual, con su fecha; las alertas viejas pasan a «ya no aparece».

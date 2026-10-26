@@ -1741,8 +1741,8 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
         <input type="file" id="full-repo-pdf-input" accept="application/pdf" multiple style="display:none" onchange="fullRepoSubirPDF(this.files)">
         <button class="btn" style="margin-left:auto" title="PDF &quot;Instrucciones de preparación&quot; de un envío Full en preparación -- completa Envíos pendientes (paq.) con lo que ya vas a mandar en ese envío" onclick="qs('full-repo-pdf-input').click()"><span data-ico="file-text" data-size="16" aria-hidden="true"></span> Cargar PDF de envío pendiente (uno o varios)</button>
         <span id="full-repo-pdf-status" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></span>
-        <button class="btn primary" onclick="exportFullReposicionParaML()"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Exportar para subir a ML</button>
-        <button class="btn" onclick="exportFullReposicion()"><span data-ico="download" data-size="16" aria-hidden="true"></span> Exportar CSV</button>
+        <button class="btn primary" onclick="exportFullReposicionParaML()"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Exportar para subir a ML — <b id="full-repo-exp-cuenta-ml">Group</b></button>
+        <button class="btn" onclick="exportFullReposicion()"><span data-ico="download" data-size="16" aria-hidden="true"></span> Exportar CSV — <b id="full-repo-exp-cuenta-csv">Group</b></button>
       </div>
       <div class="table-wrap">
         <table>
@@ -4669,8 +4669,11 @@ function renderFullConciliar(result){
 }
 let fullRepoResult=null, fullRepoTab='IT', fullRepoEnviosPend={}, fullRepoSeleccion={};
 function runFullReposicion(){return fullActualizar('reposicion');}
+function fullRepoNombreCuenta(c){return c==='IT'?'Group':'Arg';}
+function fullRepoRotularExport(){['ml','csv'].forEach(k=>{const e=qs('full-repo-exp-cuenta-'+k);if(e)e.textContent=fullRepoNombreCuenta(fullRepoTab);});}
 function goFullRepoTab(cuenta){
   fullRepoTab=cuenta;
+  fullRepoRotularExport();
   const bIT=qs('full-repo-tab-btn-IT'),bMT=qs('full-repo-tab-btn-MT');
   bIT.style.borderBottomColor=cuenta==='IT'?'var(--accent)':'transparent';bIT.style.opacity=cuenta==='IT'?'1':'.6';
   bMT.style.borderBottomColor=cuenta==='MT'?'var(--accent)':'transparent';bMT.style.opacity=cuenta==='MT'?'1':'.6';
@@ -4924,10 +4927,10 @@ function exportFullReposicion(){
   if(!fullRepoResult||!fullRepoResult.filas.length){toast('Sin datos','error');return;}
   _fullRepoRecalcular();
   const h='Cuenta,MLA,MLID,SKU,SKU_ML,Factor,En Full,Ventas Full 30d,Ventas mi deposito 30d,Demanda usada,Ventas_Diarias,Stock_Objetivo,Stock_A_Llegada,Cantidad_A_Enviar_Paquetes,Sugerido_Paquetes,Envios_Pendientes_Paquetes,Stock_Ecom,Stock_Tactica,Por que';
-  const lines=fullRepoResult.filas.map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,fullU(f,f.stock_full),fullU(f,f.ventas_full??f.ventas_periodo),fullU(f,f.ventas_deposito||0),fullU(f,f.ventas_periodo),fullU(f,f.ventas_diarias),fullU(f,f._objetivo),fullU(f,f._aLlegada),f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom==null?'':Math.max(0,f.stock_ecom),f.stock_tactica==null?'sin dato de Tactica':f.stock_tactica,'"'+(f._porQue||'').replace(/"/g,'""')+'"'].join(','));
+  const lines=fullRepoResult.filas.filter(f=>f.cuenta===fullRepoTab).map(f=>[f.cuenta,f.item_id,f.inventory_id||'',f.sku,f.sku_ml||'',f.factor,fullU(f,f.stock_full),fullU(f,f.ventas_full??f.ventas_periodo),fullU(f,f.ventas_deposito||0),fullU(f,f.ventas_periodo),fullU(f,f.ventas_diarias),fullU(f,f._objetivo),fullU(f,f._aLlegada),f._cantidadEnviar,f._sugerido,fullRepoEnviosPend[f.item_id]||0,f.stock_ecom==null?'':Math.max(0,f.stock_ecom),f.stock_tactica==null?'sin dato de Tactica':f.stock_tactica,'"'+(f._porQue||'').replace(/"/g,'""')+'"'].join(','));
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${new Date().toISOString().slice(0,10)}.csv`;a.click();
-  toast('Exportado');
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-reposicion-${fullRepoNombreCuenta(fullRepoTab)}-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  toast(`Exportado: solo la cuenta ${fullRepoNombreCuenta(fullRepoTab)}`);
 }
 // Mismas 6 columnas que pide la planilla real de ML ("Selección de
 // productos para enviar al centro de almacenamiento", confirmada contra
@@ -4952,7 +4955,7 @@ function exportFullReposicionParaML(){
   const h='SKU,Codigo universal,Codigo ML,Numero de publicacion,Numero de producto,Cantidad de unidades';
   const lines=seleccion.map(f=>['','',f.inventory_id,'','',f._sugerido].join(','));
   const blob=new Blob(['﻿'+[h].concat(lines).join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-carga-ml-${fullRepoTab}-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`full-carga-ml-${fullRepoNombreCuenta(fullRepoTab)}-${new Date().toISOString().slice(0,10)}.csv`;a.click();
   const fuera=tildadas.length-seleccion.length;toast(`Exportado (${seleccion.length} publicaciones, cuenta ${fullRepoTab})${fuera?` · ${fuera} tildada${fuera===1?'':'s'} quedaron afuera: cantidad 0 o sin código ML (hay que habilitarla en Mercado Libre)`:''}`);
 }
 
