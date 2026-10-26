@@ -211,6 +211,25 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
   .page{padding:12px;}
   .dash-filters{padding:8px 12px;}
 }
+
+/* Ventas de hoy: una tarjeta por canal, en vivo (solo tokens) */
+.vh-cab{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.vh-cab h2{margin:0;font-size:18px}.vh-sub{font-size:12px;color:var(--text3)}
+.vh-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+.vh-card{background:var(--surface);border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta);overflow:hidden}
+.vh-top{background:var(--accent);color:var(--on-accent,var(--surface));padding:14px 16px}
+.vh-top .vh-t{font-size:12px;font-weight:700;opacity:.9}
+.vh-monto{font-size:26px;font-weight:700;margin-top:4px;line-height:1.1}.vh-monto small{font-size:14px;font-weight:600;margin-right:4px}
+.vh-iva{font-size:12px;margin-top:4px;opacity:.9}
+.vh-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px}
+.vh-kpi{background:var(--bg2,var(--bg));border-radius:var(--r-recuadro);padding:8px 10px;text-align:center}
+.vh-kpi span{display:block;font-size:11px;color:var(--text3)}.vh-kpi b{font-size:15px}
+.vh-pos{color:var(--green)}.vh-neg{color:var(--red)}
+.vh-lista{padding:4px 16px 14px;margin:0;list-style:none}
+.vh-lista h3{font-size:12px;margin:6px 0;color:var(--text2)}
+.vh-fila{display:grid;grid-template-columns:18px 1fr auto;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:12px;align-items:center}
+.vh-fila .vh-sku{overflow-wrap:anywhere;font-weight:600}.vh-fila .vh-d{color:var(--text3);font-size:11px}.vh-fila .vh-m{text-align:right;font-weight:700}
+.vh-vacio{padding:10px 16px 16px;color:var(--text3);font-size:12px}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -863,6 +882,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="sidebar-section">
     <div class="sidebar-section-label">Dashboard</div>
     <a href="#" class="sidebar-item active" data-page="dashboard" onclick="goPage('dashboard',this);return false;"><span class="icon" data-ico="home" aria-hidden="true"></span>Ventas &amp; Rentabilidad</a>
+    <a href="#" class="sidebar-item" data-page="ventas-hoy" onclick="goPage('ventas-hoy',this);return false;"><span class="icon" data-ico="clock" aria-hidden="true"></span>Ventas de hoy</a>
     <a href="#" class="sidebar-item" data-page="historico" onclick="goPage('historico',this);return false;"><span class="icon" data-ico="line-chart" aria-hidden="true"></span>Histórico de Unidades</a>
     <a href="#" class="sidebar-item" data-page="cobranzas" onclick="goPage('cobranzas',this);return false;"><span class="icon" data-ico="wallet" aria-hidden="true"></span>Cobranzas</a>
     <a href="#" class="sidebar-item" data-page="brasil" onclick="goPage('brasil',this);return false;"><span class="icon" data-ico="globe" aria-hidden="true"></span>Brasil</a>
@@ -1079,6 +1099,11 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
 <div id="page-dashboard" class="page active"><div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div></div>
 <div id="page-dashboard-vivo" style="display:none;flex-direction:column;gap:18px;padding:20px;flex:1"><div class="loading-block"><span>Sin datos -- corré una consulta en la barra de arriba</span></div></div>
 
+<div id="page-ventas-hoy" class="page">
+  <div class="vh-cab"><div><h2>Ventas de hoy</h2><div class="vh-sub" id="vh-sub" aria-live="polite">Órdenes cobradas desde las 00:00 (hora Argentina). Se actualiza solo cada minuto.</div></div>
+    <button type="button" class="btn" onclick="ventasHoyCargar(true)"><span data-ico="refresh" data-size="16" aria-hidden="true"></span> Actualizar ahora</button></div>
+  <div id="vh-grid" class="vh-grid"><div class="loading-block"><div class="spinner"></div><span>Cargando ventas de hoy...</span></div></div>
+</div>
 <div id="page-historico" class="page">
   <div class="card" style="margin-bottom:0">
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
@@ -2253,7 +2278,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
 const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','competidores':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const PAGINAS_ESTILO_NUEVO=new Set(['ventas-hoy','ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','competidores','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -2412,6 +2437,30 @@ const DASH_PAGES=['dashboard','historico','cobranzas','brasil'];
 // Bandera: la «Consulta en vivo» (panel con fechas, TC y «Consultar») y la pestaña «En vivo» de Ventas & Rentabilidad quedan ocultas; el código sigue ahí. Poner en true para volver a mostrarlas. «Cierres guardados» y «Cargar liquidación Frávega» NO dependen de esta bandera.
 const VENTAS_EN_VIVO=false;
 const DASH_CAB={dashboard:['Ventas & Rentabilidad','Histórico de Táctica y Ecom, con comparación entre dos períodos.'],historico:['Histórico de Unidades','Unidades vendidas por SKU y mes, con comparación entre SKU.'],cobranzas:['Cobranzas','Cobranzas semanales desde la planilla de ventas.'],brasil:['Brasil','Ventas de Brasil desde la planilla.']};
+// ── VENTAS DE HOY (en vivo, solo lectura): GET /rentabilidad/ventas-hoy -- órdenes COBRADAS creadas hoy (hora Argentina), mismo criterio que la rentabilidad ──
+let VH_TIMER=null;
+function vhPlata(n){return Number(n||0).toLocaleString('es-AR',{maximumFractionDigits:0});}
+function vhPct(n){return n==null?'—':Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})+' %';}
+function vhCard(t){
+  const cls=t.rentabilidad<0?'vh-neg':'vh-pos';
+  const filas=t.top_skus.map((x,i)=>`<div class="vh-fila"><span class="vh-d">${i+1}</span><div><div class="vh-sku">${acEsc(x.sku)}</div><div class="vh-d">${x.ordenes} ${x.ordenes===1?'orden':'órdenes'} · sin IVA $ ${vhPlata(x.facturacion_sin_iva)} · renta <span class="${x.rentabilidad<0?'vh-neg':'vh-pos'}">$ ${vhPlata(x.rentabilidad)} (${vhPct(x.rentabilidad_pct)})</span></div></div><span class="vh-m">$ ${vhPlata(x.facturacion)}</span></div>`).join('');
+  return `<section class="vh-card" aria-label="Ventas de hoy: ${acEsc(t.etiqueta)}"><div class="vh-top"><div class="vh-t">${acEsc(t.etiqueta)}</div><div class="vh-monto"><small>$</small>${vhPlata(t.facturacion)}</div><div class="vh-iva">con IVA · sin IVA $ ${vhPlata(t.facturacion_sin_iva)}</div></div>
+    <div class="vh-kpis"><div class="vh-kpi"><span>Renta $</span><b class="${cls}">$ ${vhPlata(t.rentabilidad)}</b></div><div class="vh-kpi"><span>Renta % (s/ precio sin IVA)</span><b class="${cls}">${vhPct(t.rentabilidad_pct)}</b></div><div class="vh-kpi"><span>Órdenes cobradas</span><b>${t.ordenes}</b></div><div class="vh-kpi"><span>Sin costo calculado</span><b>${t.sin_costo}</b></div></div>
+    ${t.top_skus.length?`<div class="vh-lista"><h3>Top ${t.top_skus.length} SKU del día (monto cobrado)</h3>${filas}</div>`:'<div class="vh-vacio">Todavía no hay ventas cobradas hoy.</div>'}</section>`;
+}
+async function ventasHoyCargar(forzar){
+  const g=qs('vh-grid'),sub=qs('vh-sub');if(!g)return;
+  const bu=getBackendUrl();if(!bu){g.innerHTML='<div class="vh-vacio">Falta la URL del backend (Configuración).</div>';return;}
+  try{
+    const r=await fetch(`${bu}/rentabilidad/ventas-hoy${forzar?'?forzar=true':''}`);
+    if(!r.ok)throw new Error('estado '+r.status);
+    const d=await r.json();
+    g.innerHTML=d.tarjetas.map(vhCard).join('');
+    const hora=new Date(d.actualizado).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Argentina/Buenos_Aires'});
+    sub.textContent=`Órdenes cobradas del ${d.fecha} desde las 00:00 (hora Argentina) · actualizado a las ${hora}${d.cache_seg>0?` (dato de hace ${d.cache_seg} s)`:''}. Se actualiza solo cada minuto.`;
+  }catch(e){sub.textContent='No se pudo leer Ecom ('+(e.message||e)+'). Se reintenta en un minuto.';}
+}
+function ventasHoyEntrar(){ventasHoyCargar(false);clearInterval(VH_TIMER);VH_TIMER=setInterval(()=>{if(document.body.dataset.page==='ventas-hoy'&&!document.hidden)ventasHoyCargar(false);else if(document.body.dataset.page!=='ventas-hoy'){clearInterval(VH_TIMER);VH_TIMER=null;}},60000);}
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
@@ -2435,6 +2484,7 @@ function goPage(page,el){
   if(['competidores','analisis-competencia','campanas-ml','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
+  if(page==='ventas-hoy')ventasHoyEntrar();
   if(page==='proyeccion'&&!proyLoaded)proyeccionCargar();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
   if(page==='brasil'&&!brLoaded)loadBrasil();
