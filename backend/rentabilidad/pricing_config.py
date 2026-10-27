@@ -58,7 +58,7 @@ def guardar(db: Session, planes_pct: dict, vigente_desde: date, cargado_por: str
     """Agrega una fila por plan que CAMBIA (los iguales no se tocan). -> cantidad de filas escritas."""
     par_actual = None
     from .motor_precios import cargar_parametros
-    par_actual = cargar_parametros(db, vigente_desde)
+    par_actual = cargar_parametros(db, vigente_desde, criterios=False)
     actuales = {x["plan"]: x["pct"] for x in cuotas_ml(par_actual)}
     n = 0
     for plan, pct in validar_planes(planes_pct).items():

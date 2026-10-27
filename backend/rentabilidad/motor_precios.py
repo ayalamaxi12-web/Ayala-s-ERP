@@ -108,7 +108,31 @@ def _vigentes(filas, clave, fecha: date):
     return elegidas
 
 
-def cargar_parametros(db: Session, fecha: date) -> ParametrosMotor:
+def aplicar_criterios_ml(par: ParametrosMotor) -> ParametrosMotor:
+    """Mercado Libre usa los criterios de la página «Criterios de precio» (comisión única, cuotas, costo fijo por tramo, IIBB, cheque y costo por orden de Ecom): una sola fuente para
+    el Motor de Precios, Ofertas ML, Análisis y Campañas ML. Pisa lo que traen las tablas `pricing_*` solo para ML; los otros canales no se tocan."""
+    try:
+        from ml_ofertas import PARAMS_ML as P
+    except ImportError:          # el paquete se usa sin el resto del backend: quedan las tablas
+        return par
+    pct = lambda v: Decimal(str(v)) / 100
+    valores = dict(par.valores)
+    valores.update({("ML", "comision_general"): pct(P["comision"]), ("ML", "iibb"): pct(P["iibb"]), ("ML", "imp_cheque"): pct(P["cheque"]), ("ML", "costo_orden"): Decimal(str(P["orden"]))})
+    cuotas = dict(par.cuotas)
+    cuotas[("ML", "reducida")] = pct(P["reducida"])
+    for n, v in P["cuotas"].items():
+        cuotas[("ML", str(n))] = pct(v)
+    tramos = dict(par.tramos)
+    desde, fijos = Decimal(0), []
+    for techo, monto in P["tramos"]:
+        if techo is not None:
+            fijos.append(Tramo(desde, Decimal(str(techo)), Decimal(str(monto)), "precio"))
+            desde = Decimal(str(techo))
+    tramos["ml_costo_fijo"] = fijos
+    return ParametrosMotor(valores=valores, comision_categoria=par.comision_categoria, cuotas=cuotas, tramos=tramos)
+
+
+def cargar_parametros(db: Session, fecha: date, criterios: bool = True) -> ParametrosMotor:
     """Los parámetros vigentes a `fecha`. Una tabla de tramos vale entera: se
     toma el conjunto de filas con la `vigente_desde` más reciente <= fecha."""
     valores = {k: f.valor for k, f in _vigentes(db.query(PricingParametro).all(), lambda f: (f.canal, f.clave), fecha).items()}
@@ -125,7 +149,8 @@ def cargar_parametros(db: Session, fecha: date) -> ParametrosMotor:
             (Tramo(f.desde, f.hasta, f.valor, f.unidad) for f in de_tabla if f.vigente_desde == ultima),
             key=lambda t: t.desde,
         )
-    return ParametrosMotor(valores=valores, comision_categoria=comision, cuotas=cuotas, tramos=tramos)
+    par = ParametrosMotor(valores=valores, comision_categoria=comision, cuotas=cuotas, tramos=tramos)
+    return aplicar_criterios_ml(par) if criterios else par
 
 
 # ── Entrada y resultado ──
@@ -204,10 +229,10 @@ def _estructura(p: Decimal, e: EntradaMotor, par: ParametrosMotor, p_lista: Deci
         comision = e.comision_pct if e.comision_pct is not None else par.valor(canal, "comision_general")
         fijo = e.costo_fijo_ml if e.costo_fijo_ml is not None else (par.tramo("ml_costo_fijo", p_lista) or Decimal(0))
         envio = e.envio if p_lista >= par.valor(canal, "umbral_envio_gratis") else Decimal(0)
-        return _Estructura(
-            pct={"comision": comision * mas_iva, "cuotas": _cuotas(e, par, mas_iva)},
-            fijos={"costo_fijo": fijo * mas_iva, "envio": envio},
-        )
+        fijos = {"costo_fijo": fijo * mas_iva, "envio": envio}
+        if ("ML", "costo_orden") in par.valores:          # costo por orden de Ecom (criterio de precio): se descuenta en toda venta por Ecom
+            fijos["costo_orden"] = par.valores[("ML", "costo_orden")]
+        return _Estructura(pct={"comision": comision * mas_iva, "cuotas": _cuotas(e, par, mas_iva)}, fijos=fijos)
     if canal == "WEB":
         medio = "comision_mp_credito" if e.medio_pago == "credito" else "comision_mp_otros"
         return _Estructura(

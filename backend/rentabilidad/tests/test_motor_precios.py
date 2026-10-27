@@ -40,19 +40,19 @@ def test_ml_precio_a_margen_contado_desglosa_cada_cargo(par):
     assert r.venta_sin_iva == d("182133.94")
     assert r.cargos == {
         "comision": d("31194.99"), "cuotas": d("0.00"), "costo_fijo": d("0.00"), "envio": d("29410.00"),
-        "imp_cheque": d("2415.10"), "iibb": d("9106.70"), "costo": d("56105.10"),
+        "imp_cheque": d("2415.10"), "iibb": d("9106.70"), "costo": d("56105.10"), "costo_orden": d("149.12"),
     }
-    assert r.rentabilidad == d("53902.05")
-    assert r.margen == d("0.2959")
+    assert r.rentabilidad == d("53752.93")
+    assert r.margen == d("0.2951")
 
 
 def test_ml_tres_cuotas_descuenta_el_cargo_por_cuotas(par):
     r = m.precio_a_margen(d("239645"), _plancha(plan="3"), par)
-    assert r.cargos["cuotas"] == d("21328.41")  # 8,9%
-    assert r.margen == d("0.2728")
+    assert r.cargos["cuotas"] == d("20369.83")  # 8,5% (criterios)
+    assert r.margen == d("0.2765")
 
 
-@pytest.mark.parametrize("plan,precio", [("contado", "203019"), ("3", "257399"), ("6", "297719")])
+@pytest.mark.parametrize("plan,precio", [("contado", "203369"), ("3", "254779"), ("6", "293139")])
 def test_ml_margen_a_precio_cumple_el_margen_pedido(par, plan, precio):
     r = m.margen_a_precio(d("0.30"), _plancha(plan=plan), par)
     assert r.precio == d(precio)
@@ -84,9 +84,9 @@ def test_ml_costo_fijo_de_la_publicacion_tiene_prioridad_sobre_la_tabla(par):
 
 def test_ml_margen_a_precio_recalcula_si_el_precio_cae_en_un_tramo_de_costo_fijo(par):
     r = m.margen_a_precio(d("0.30"), _plancha(costo=d("3000"), envio=d("0")), par)
-    assert r.precio == d("10279")
+    assert r.precio == d("10639")
     assert r.cargos["costo_fijo"] == d("1330.00")
-    assert r.margen == d("0.3000")
+    assert r.margen == d("0.3002")  # el redondeo a terminación de planilla sube un poco el margen
 
 
 def test_ml_categoria_sin_fila_usa_la_comision_general(par):
@@ -119,7 +119,7 @@ def test_web_debito_usa_la_tarifa_al_instante(par):
 
 
 def test_ml_y_mp_no_comparten_tabla_de_cuotas(par):
-    assert par.cuota("ML", "3") == d("0.089")
+    assert par.cuota("ML", "3") == d("0.085")
     assert par.cuota("WEB", "3") == d("0.034")
 
 
@@ -181,7 +181,7 @@ def test_un_cambio_con_vigencia_futura_no_afecta_hoy(db_session):
     db_session.add(PricingParametro(canal="*", clave="iibb", valor=d("0.065"), vigente_desde=date(2026, 10, 1), cargado_por="test"))
     db_session.add(PricingCuotas(canal="ML", plan="3", pct=d("0.095"), vigente_desde=date(2026, 10, 1), cargado_por="test"))
     db_session.flush()
-    hoy, despues = m.cargar_parametros(db_session, HOY), m.cargar_parametros(db_session, date(2026, 10, 1))
+    hoy, despues = m.cargar_parametros(db_session, HOY, criterios=False), m.cargar_parametros(db_session, date(2026, 10, 1), criterios=False)
     assert hoy.valor("ML", "iibb") == d("0.05") and despues.valor("ML", "iibb") == d("0.065")
     assert hoy.cuota("ML", "3") == d("0.089") and despues.cuota("ML", "3") == d("0.095")
 
@@ -190,10 +190,10 @@ def test_una_tabla_de_tramos_nueva_reemplaza_entera_a_la_anterior(db_session):
     db_session.add(PricingTramo(tabla="ml_costo_fijo", unidad="precio", desde=d("0"), hasta=d("20000"), valor=d("1500"),
                                 vigente_desde=date(2026, 10, 1), cargado_por="test"))
     db_session.flush()
-    despues = m.cargar_parametros(db_session, date(2026, 10, 1))
+    despues = m.cargar_parametros(db_session, date(2026, 10, 1), criterios=False)
     assert despues.tramo("ml_costo_fijo", d("18000")) == d("1500")
     assert despues.tramo("ml_costo_fijo", d("25000")) is None  # la tabla vieja ya no rige
-    assert m.cargar_parametros(db_session, HOY).tramo("ml_costo_fijo", d("18000")) == d("2740")
+    assert m.cargar_parametros(db_session, HOY, criterios=False).tramo("ml_costo_fijo", d("18000")) == d("2740")
 
 
 def test_la_tabla_de_fee_de_fravega_rige_desde_el_7_de_septiembre(db_session):
@@ -221,7 +221,7 @@ def test_migracion_del_motor_coincide_con_los_modelos():
 
 def test_tramos_costo_fijo_ml_son_los_de_la_tabla_y_sobre_33000_no_hay_cargo(par):
     t = m.tramos_costo_fijo_ml(par)
-    assert [(x["desde"], x["hasta"], x["valor"]) for x in t] == [(d("0"), d("16000"), d("1330")), (d("16000"), d("24000"), d("2740")), (d("24000"), d("33000"), d("3320"))]
+    assert [(x["desde"], x["hasta"], x["valor"]) for x in t] == [(d("0"), d("15000"), d("1330")), (d("15000"), d("24000"), d("2740")), (d("24000"), d("33000"), d("3320"))]
     assert m.precio_a_margen(d("33000"), _plancha(envio=d("0")), par).cargos["costo_fijo"] == d("0.00")
 
 
@@ -235,3 +235,11 @@ def test_endpoint_ml_costo_fijo(monkeypatch, db_session):
     monkeypatch.setattr(api, "sesion", _ses)
     j = api.pricing_ml_costo_fijo(date(2026, 9, 30))
     assert [x["valor"] for x in j["tramos"]] == [1330, 2740, 3320] and j["sin_cargo_desde"] == 33000 and j["umbral_envio_gratis"] == 33000
+
+
+def test_ml_del_motor_toma_los_criterios_de_precio(par):
+    """Campañas ML y el motor leen lo mismo que «Criterios de precio»: comisión 15,5%, cuotas, costo fijo con techo 15.000 y costo por orden."""
+    assert par.valor("ML", "comision_general") == d("0.155")
+    assert [par.cuota("ML", p) for p in ("reducida", "3", "6", "9", "12")] == [d("0.05"), d("0.085"), d("0.129"), d("0.173"), d("0.208")]
+    assert par.valor("ML", "costo_orden") == d("149.12")
+    assert par.tramo("ml_costo_fijo", d("14999")) == d("1330") and par.tramo("ml_costo_fijo", d("15000")) == d("2740")
