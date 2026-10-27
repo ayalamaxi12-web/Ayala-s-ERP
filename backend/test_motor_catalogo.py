@@ -145,3 +145,10 @@ def test_un_sku_que_falta_refresca_y_si_aparece_calcula(monkeypatch):
     monkeypatch.setattr(main, "tc_info_rapido", lambda: {"tc": D("1450"), "source": "cache", "fecha": None})
     r = TestClient(main.app).get("/ayala-core/motor-lote", params={"skus": "PINMK-CIRC-3IN1-PK"}).json()["resultados"][0]
     assert "error" not in r and estado["refrescos"] == 1
+
+
+def test_ml_sin_cambios_informa_el_costo_por_orden_que_ya_incluye_su_precio(api):
+    cl, _ = api
+    r = cl.get("/ayala-core/motor-lote", params={"skus": "PINMK-CIRC-3IN1-BL"}).json()["resultados"][0]
+    p = r["parametros"]
+    assert p["costo_orden"] == 149.12 and p["comision_pct"] == 15.5      # antes la tarjeta decía «sin costo por orden» aunque el precio ya lo incluía
