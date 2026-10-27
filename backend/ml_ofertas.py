@@ -912,8 +912,9 @@ def activar_en_campana_tradicional(
     **`tachado_exacto` (carga por Excel, «Precios y ofertas ML»):** el precio
     que llega en `precio_pm` es el FINAL tal cual y `tachado_exacto` el tachado
     tal cual -- no se aplica el ajuste de cuotas/envío ni se calcula el tachado
-    por `descuento_pct`, y si ML pide más descuento visual no se infla el
-    tachado: se revierte y se avisa (lo que subió el usuario es lo que se aplica).
+    por `descuento_pct`. El final nunca cambia; si ML exige más descuento visual
+    que el del Excel, se sube el tachado lo justo (y se avisa) -- igual que en el
+    flujo individual.
 
     `promotion_id` opcional: si no se pasa, se resuelve solo filtrando
     `promociones_seller` por `type == SELLER_CAMPAIGN`, `status` `started`
@@ -1060,13 +1061,6 @@ def activar_en_campana_tradicional(
         return {"ok": False, "error": aviso, "precio_pm": float(precio_pm), "precio_final": float(precio_final),
                 "min_discounted_price": float(min_desc)}
 
-    if max_desc is not None and float(precio_final) > float(max_desc) and tachado_exacto is not None:
-        aviso = _revertir_precio(
-            f"Con el tachado ${precio_tachado} que subiste, ML solo admite como máximo ${max_desc} de precio final "
-            f"en esta campaña (pediste ${precio_final}): necesita más descuento visual. No se cambió lo que subiste."
-        )
-        return {"ok": False, "error": aviso, "precio_final": float(precio_final), "max_discounted_price": float(max_desc)}
-
     if max_desc is not None and float(precio_final) > float(max_desc):
         # El 25% (o el descuento_pct pedido) no alcanza para esta campaña
         # sobre este ítem puntual -- ML exige más "descuento visual". Se
@@ -1090,6 +1084,9 @@ def activar_en_campana_tradicional(
         tachado_aplicado = tachado_ajustado
         pct_real = float((1 - precio_final / tachado_aplicado) * 100)
         aviso_pct = (
+            f"ML exige al menos {pct_real:.1f}% de descuento visual en esta campaña: el tachado pasó de ${precio_tachado} a ${tachado_aplicado}. "
+            f"El precio final NO cambió, sigue siendo ${precio_final}."
+            if tachado_exacto is not None else
             f"Quedó al {pct_real:.1f}% de descuento visual, no al {float(descuento_pct):.0f}% de siempre -- ML "
             f"exige más para esta campaña sobre este ítem. El precio final NO cambió, sigue siendo ${precio_final} "
             "(el tachado es solo para posicionar, no es una rebaja real)."

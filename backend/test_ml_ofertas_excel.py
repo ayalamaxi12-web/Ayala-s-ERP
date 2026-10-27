@@ -258,3 +258,21 @@ def test_el_modo_normal_de_la_campana_tradicional_no_cambia():
     _post.responder = lambda u, h, b: {"price": 10000.0, "original_price": 13333.0}
     ml = MLOfertasEscritura(get_fn=get, token_fn=TOKEN, put_fn=_put, post_fn=_post)
     assert activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(10000))["precio_tachado_pedido"] == 13333.0
+
+
+def test_si_ml_exige_mas_descuento_se_sube_el_tachado_y_el_final_no_cambia():
+    """Caso real: Excel con 20 % (tachado 15.148,75 / final 12.119) y ML exige ≥ ~20,8 % en la campaña: el final queda, sube el tachado."""
+    from ml_ofertas import activar_en_campana_tradicional
+
+    def get(url, params, headers):
+        if url.endswith("/seller-promotions/items/MLA1"):
+            return [{"id": "C1", "type": "SELLER_CAMPAIGN", "status": "candidate", "min_discounted_price": 5000, "max_discounted_price": 11997.81}]
+        return {"id": "MLA1", "price": _put.calls[-1]["price"] if _put.calls else 12119.0, "tags": []}
+    _put.calls, _post.calls = [], []
+    _post.responder = lambda u, h, b: {"price": b["deal_price"], "original_price": _put.calls[-1]["price"]}
+    ml = MLOfertasEscritura(get_fn=get, token_fn=TOKEN, put_fn=_put, post_fn=_post)
+    r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal("12119"), promotion_id="C1", tachado_exacto=Decimal("15148.75"))
+    assert r["ok"] is True and r["precio_final"] == 12119.0
+    assert _post.calls[0]["deal_price"] == 12119.0                     # el final no se toca
+    assert _put.calls[-1]["price"] > 15148.75                           # el tachado sube
+    assert "ML exige al menos" in r["aviso"] and "tachado pasó de" in r["aviso"]
