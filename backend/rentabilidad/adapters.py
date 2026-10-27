@@ -365,7 +365,7 @@ class MargenObjetivoProvider:
     """§9 (L3/L4/L5) y §9/§8.6 (Rentabilidad Real). No hereda de
     `_AdaptadorBase`: combina varias hojas independientes."""
 
-    _PMS_EN_ORDEN = ("veronica", "matias", "cristian")
+    _PMS_EN_ORDEN = ("veronica", "laura", "matias")
 
     def __init__(
         self,
@@ -375,8 +375,8 @@ class MargenObjetivoProvider:
     ):
         self._sheet_ids = sheet_ids or {
             "veronica": config.SHEET_MARGEN_VERONICA_ID,
+            "laura": config.SHEET_MARGEN_LAURA_ID,
             "matias": config.SHEET_MARGEN_MATIAS_ID,
-            "cristian": config.SHEET_MARGEN_CRISTIAN_ID,
         }
         self._sheet_master_id = sheet_master_id or config.SHEET_MASTER_COMPRAS_ML_ID
         self._fetch_fn = fetch_fn or gsheets.leer_valores

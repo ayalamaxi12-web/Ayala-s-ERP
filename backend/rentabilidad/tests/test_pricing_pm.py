@@ -399,3 +399,8 @@ def test_iva_de_respaldo_dice_de_donde_salio_y_el_aviso_va_en_texto():
     p.precargar()
     assert p.tactica_caida and p.factor_con_origen("X") == (Decimal("1.21"), "ECOM") and p.factor("X") == Decimal("1.21")
     assert api._AVISO_TACTICA_CAIDA == "Táctica no respondió (¿VPN apagada?). IVA tomado de Ecom."
+
+
+def test_el_sheet_de_cristian_ya_no_se_sincroniza():
+    assert [f.pm for f in pp.fuentes_pm({})] == ["VERONICA", "LAURA", "MATIAS"]
+    assert "CRISTIAN" not in pp.PMS

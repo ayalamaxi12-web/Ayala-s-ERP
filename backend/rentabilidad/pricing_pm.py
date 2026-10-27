@@ -249,12 +249,13 @@ def leer_xlsx_pm(path: str) -> list[list]:
 # el que ya usa la rentabilidad de Táctica. La cuenta de servicio
 # (`GOOGLE_CREDENTIALS_JSON`) tiene que tener acceso de lectura al Sheet.
 
-PMS = {"VERONICA": "Verónica", "LAURA": "Laura", "CRISTIAN": "Cristian", "MATIAS": "Matías"}
+# Cristian ya no trabaja en la empresa: sus SKUs pasaron a Laura y Verónica y su Sheet ya no se sincroniza (si no, pisaría sus precios con datos viejos).
+PMS = {"VERONICA": "Verónica", "LAURA": "Laura", "MATIAS": "Matías"}
 
 
 @dataclass(frozen=True)
 class FuentePm:
-    pm: str  # clave: VERONICA / LAURA / CRISTIAN / MATIAS
+    pm: str  # clave: VERONICA / LAURA / MATIAS
     sheet_id: str | None
     tab: str | None
 

@@ -59,10 +59,10 @@ TAB_CATEGORIAS = "GRAL CATEGORIAS"
 
 SHEET_BASE_GENERAL_ID = _env("RENT_SHEET_BASE_GENERAL_ID")
 
-# Márgenes objetivo L3/L4/L5 por PM — cascada Verónica → Matías → Cristian (§9, §8.1)
+# Márgenes objetivo L3/L4/L5 por PM — cascada Verónica → Laura → Matías (§9, §8.1; Cristian ya no está en la empresa)
 SHEET_MARGEN_VERONICA_ID = _env("RENT_SHEET_MARGEN_VERONICA_ID")
+SHEET_MARGEN_LAURA_ID = _env("RENT_SHEET_MARGEN_LAURA_ID")
 SHEET_MARGEN_MATIAS_ID = _env("RENT_SHEET_MARGEN_MATIAS_ID")
-SHEET_MARGEN_CRISTIAN_ID = _env("RENT_SHEET_MARGEN_CRISTIAN_ID")
 
 # Rentabilidad esperada por el PM (ECOM AU)
 SHEET_MASTER_COMPRAS_ML_ID = _env("RENT_SHEET_MASTER_COMPRAS_ML_ID")
