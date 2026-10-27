@@ -107,7 +107,7 @@ def test_analizar_devuelve_los_parametros_y_el_costo_para_recalcular_en_la_panta
     j = cli.post("/campanas-ml/analizar", files={"archivo": ("a.xlsx", _ml_sintetico())}).json()
     m = j["motor_ml"]
     assert m["comision"] == 0.155 and m["umbral_envio"] == 33000 and m["cuotas"]["contado"] == 0 and m["cuotas"]["3"] > 0
-    assert m["tramos_costo_fijo"][0] == {"desde": 0.0, "hasta": 16000.0, "valor": 1330.0}
+    assert m["tramos_costo_fijo"][0] == {"desde": 0.0, "hasta": 15000.0, "valor": 1330.0}
     assert j["filas"][1]["calc"] == {"costo": 3000.0, "costo_usd": 2.0, "iva": 1.21, "envio": 0.0, "comision": 0.155}
 
 

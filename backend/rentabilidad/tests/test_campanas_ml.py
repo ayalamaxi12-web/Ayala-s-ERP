@@ -154,10 +154,10 @@ def test_venta_real_de_ml_comision_y_costo_fijo(par):
 
 
 def test_el_tramo_del_costo_fijo_es_el_de_la_lista_no_el_rebajado(par):
-    # fila #5: lista 22.499 (tramo 2.740) con precio final 15.117 (< 16.000, tramo 1.330 si fuera por el final)
-    r = cm.margen_oferta(d("15117"), d("15117"), "contado", d("1000"), d("1.21"), par, d(0), 22499)
+    # lista 22.499 (tramo 2.740) con precio final 14.900 (< 15.000, tramo 1.330 si fuera por el final)
+    r = cm.margen_oferta(d("14900"), d("14900"), "contado", d("1000"), d("1.21"), par, d(0), 22499)
     assert r.cargos["costo_fijo"] == 2740
-    assert cm.margen_oferta(d("15117"), d("15117"), "contado", d("1000"), d("1.21"), par, d(0)).cargos["costo_fijo"] == 1330
+    assert cm.margen_oferta(d("14900"), d("14900"), "contado", d("1000"), d("1.21"), par, d(0)).cargos["costo_fijo"] == 1330
 
 
 def test_envio_por_umbral_de_la_lista(par):
@@ -206,23 +206,16 @@ def test_el_aporte_de_ml_es_un_monto_fijo_y_el_pct_max_lo_respeta(db_session):
     assert abs(float(o["precio_cliente"]) - 41699 * (1 - t / 100)) < 0.01
 
 
-def test_la_comision_se_toma_de_la_categoria(par):
-    """La comisión de ML varía por categoría (15,5% toners, 15% SEW-MINI): se usa la de la categoría si está cargada."""
-    assert cm.comision_de(par, "Comercial y Oficinas") == (d("0.15"), "categoria")
-    assert cm.comision_de(par, " comercial y oficinas ") == (d("0.15"), "categoria")
-    assert cm.comision_de(par, "Insumo De Impresion") == (d("0.155"), "categoria")
-    assert cm.comision_de(par, "Categoría nueva") == (d("0.155"), "general") and cm.comision_de(par, None)[1] == "general"
+def test_la_comision_es_la_unica_del_criterio_y_no_depende_de_la_categoria(par):
+    """Criterios de precio: 15,5% único para ML. La tabla por categoría ya no se usa."""
+    for cat in ("Comercial y Oficinas", " comercial y oficinas ", "Insumo De Impresion", "Categoría nueva", None):
+        assert cm.comision_de(par, cat) == (d("0.155"), "general")
 
 
-def test_analizar_usa_la_comision_de_la_categoria_y_avisa_si_cae_a_la_general(db_session):
+def test_analizar_usa_la_comision_unica_aunque_la_categoria_tenga_fila(db_session):
     datos = {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Comercial y Oficinas", None)}
     r = _analizar(db_session, [_fila()], datos)["filas"][0]
-    assert r["comision_pct"] == 15.0 and r["comision_origen"] == "categoria" and r["calc"]["comision"] == 0.15
-    assert any("de la categoría de la tabla" in a for a in r["avisos"])        # no es la real de ML: avisa
-    sin = _analizar(db_session, [_fila()], {"PV-AB1": DatosSku(d("2"), d("1.21"), None, "Rara", None)})["filas"][0]
-    assert sin["comision_pct"] == 15.5 and sin["comision_origen"] == "general" and any("Comisión ML" in a for a in sin["avisos"])
-    # con la comisión de la categoría el margen es mayor que con la general
-    assert r["margenes"]["contado"]["margen"] > sin["margenes"]["contado"]["margen"]
+    assert r["comision_pct"] == 15.5 and r["comision_origen"] == "general" and r["calc"]["comision"] == 0.155
 
 
 def test_la_comision_real_de_ml_manda_sobre_la_tabla(db_session):

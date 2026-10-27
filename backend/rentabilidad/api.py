@@ -1194,20 +1194,7 @@ def pricing_ml_cuotas(fecha: date | None = None) -> dict:
 def pricing_ml_cuotas_editar(payload: CuotasMLIn) -> dict:
     """Edita las cuotas de ML en un solo lugar (X-ERP-Key). Sin `confirmar` solo muestra qué cambiaría; con `confirmar` agrega filas con `vigente_desde`
     (por defecto hoy) y queda el historial. Los planes son "reducida", "3", "6", "9", "12", en %."""
-    vigente = payload.vigente_desde or (ayer_en_argentina() + timedelta(days=1))
-    if not payload.cargado_por.strip():
-        raise HTTPException(422, "Falta `cargado_por` (quién hace el cambio).")
-    try:
-        with sesion() as db:
-            par = pricing_pm.motor.cargar_parametros(db, vigente)
-            cambios = pricing_config.previsualizar(par, payload.planes)
-            if not payload.confirmar:
-                return {"confirmado": False, "vigente_desde": vigente, "cambios": cambios}
-            escritas = pricing_config.guardar(db, payload.planes, vigente, payload.cargado_por.strip())
-            planes = pricing_config.cuotas_ml(pricing_pm.motor.cargar_parametros(db, vigente))
-    except pricing_config.CuotasInvalidas as e:
-        raise HTTPException(422, str(e))
-    return {"confirmado": True, "vigente_desde": vigente, "filas_escritas": escritas, "cambios": cambios, "planes": planes}
+    raise HTTPException(409, "Las cuotas de Mercado Libre se editan en la página «Criterios de precio» (queda el historial de cambios): este endpoint ya no escribe.")
 
 
 @router.get("/pricing/skus")

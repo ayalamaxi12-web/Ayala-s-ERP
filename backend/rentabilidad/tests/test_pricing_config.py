@@ -11,7 +11,7 @@ HOY = date(2026, 10, 12)
 
 @pytest.fixture()
 def par(db_session):
-    return m.cargar_parametros(db_session, HOY)
+    return m.cargar_parametros(db_session, HOY, criterios=False)  # tabla de la base, sin el criterio de ML
 
 
 def test_cuotas_ml_son_las_oficiales_ordenadas(par):
@@ -31,24 +31,20 @@ def test_previsualizar_no_escribe_y_guardar_solo_lo_que_cambia(db_session, par):
     prev = {x["plan"]: x for x in pc.previsualizar(par, {"3": 8.9, "6": 14})}
     assert prev["3"]["cambia"] is False and prev["6"]["cambia"] is True and str(prev["6"]["actual_pct"]) == "13.4"
     assert pc.guardar(db_session, {"3": 8.9, "6": 14}, HOY, "maxx") == 1                   # el 3 no cambió: no se agrega fila
-    nuevos = {x["plan"]: x["pct"] for x in pc.cuotas_ml(m.cargar_parametros(db_session, HOY))}
+    nuevos = {x["plan"]: x["pct"] for x in pc.cuotas_ml(m.cargar_parametros(db_session, HOY, criterios=False))}
     assert nuevos["6"] == d("0.14") and nuevos["3"] == d("0.089")
     # el motor ya usa el valor nuevo, y a una fecha anterior sigue el viejo (historial)
-    assert {x["plan"]: x["pct"] for x in pc.cuotas_ml(m.cargar_parametros(db_session, date(2026, 10, 1)))}["6"] == d("0.134")
+    assert {x["plan"]: x["pct"] for x in pc.cuotas_ml(m.cargar_parametros(db_session, date(2026, 10, 1), criterios=False))}["6"] == d("0.134")
 
 
-def test_endpoints_get_y_post_con_confirmacion(monkeypatch, db_session):
+def test_endpoints_get_con_criterios_y_post_derivado_a_criterios(monkeypatch, db_session):
     @contextmanager
     def _ses():
         yield db_session
     monkeypatch.setattr(api, "sesion", _ses)
     g = api.pricing_ml_cuotas(HOY)
-    assert [str(x["pct_texto"]) for x in g["planes"]] == ["5", "8.9", "13.4", "17.8", "21.6"]
-    vista = api.pricing_ml_cuotas_editar(api.CuotasMLIn(planes={"12": 22.5}, cargado_por="maxx", vigente_desde=HOY))
-    assert vista["confirmado"] is False and vista["cambios"][0]["cambia"] is True
-    assert str(api.pricing_ml_cuotas(HOY)["planes"][-1]["pct_texto"]) == "21.6"           # sin confirmar no escribió
-    hecho = api.pricing_ml_cuotas_editar(api.CuotasMLIn(planes={"12": 22.5}, cargado_por="maxx", vigente_desde=HOY, confirmar=True))
-    assert hecho["filas_escritas"] == 1 and str(hecho["planes"][-1]["pct_texto"]) == "22.5"
+    assert [str(x["pct_texto"]) for x in g["planes"]] == ["5", "8.5", "12.9", "17.3", "20.8"]  # los de «Criterios de precio»
     with pytest.raises(api.HTTPException) as e:
-        api.pricing_ml_cuotas_editar(api.CuotasMLIn(planes={"18": 20}, cargado_por="maxx"))
-    assert e.value.status_code == 422
+        api.pricing_ml_cuotas_editar(api.CuotasMLIn(planes={"12": 22.5}, cargado_por="maxx", vigente_desde=HOY, confirmar=True))
+    assert e.value.status_code == 409 and "Criterios de precio" in e.value.detail
+    assert str(api.pricing_ml_cuotas(HOY)["planes"][-1]["pct_texto"]) == "20.8"  # no escribió nada

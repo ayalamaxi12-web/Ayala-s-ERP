@@ -37,10 +37,7 @@ def comision_de(par: motor.ParametrosMotor, categoria: str | None, real=None, or
     es un respaldo), o la general."""
     if real is not None:
         return _D(real), origen_real
-    if categoria:
-        c = par.comision_categoria.get(("ML", categoria.strip().lower()))
-        if c is not None:
-            return c, "categoria"
+    # Comisión única de ML (criterio de precio, 15,5 %): la tabla por categoría queda cargada pero ya no se usa (dato viejo, decisión de Maxi 28/10).
     return par.valor("ML", "comision_general"), "general"
 
 
