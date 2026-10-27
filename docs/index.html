@@ -247,6 +247,52 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .vh-card[data-mk=megatone] .vh-top{background:var(--mk-megatone-gris);color:var(--mk-megatone-texto)}
 .vh-card[data-mk=web] .vh-top{background:var(--celeste-marca);color:var(--tinta)}
 .vh-card[data-mk=web] .vh-kpi{background:var(--celeste-100)}
+/* Panel «Gestionar» (Precios y ofertas ML): pestañas, textos cortos y la cuenta plegada; solo tokens */
+.ofg{display:flex;flex-direction:column;gap:14px;font:400 13px/1.45 var(--fuente);color:var(--tinta)}
+.ofg-cab{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start}
+.ofg-tit{margin:0;font-size:16px;font-weight:700;color:var(--tinta)}
+.ofg-sub{font-size:12px;color:var(--texto-suave)}
+.ofg-datos{display:flex;flex-wrap:wrap;gap:8px}
+.ofg-dato{display:flex;flex-direction:column;padding:6px 12px;background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r-recuadro);font-size:11px;color:var(--texto-suave)}
+.ofg-dato b{font-size:14px;color:var(--tinta)}
+.ofg-tabs{display:flex;gap:2px;padding:3px;background:var(--mod-seg-fondo);border-radius:var(--r-recuadro);overflow-x:auto}
+.ofg-tabs button{flex:0 0 auto;min-height:40px;padding:0 16px;border:0;border-radius:var(--r-chico);background:transparent;color:var(--tinta-2);font:400 13px var(--fuente);cursor:pointer;white-space:nowrap}
+.ofg-tabs button[aria-selected="true"]{background:var(--mod-activo-fondo);color:var(--mod-activo-texto);box-shadow:inset 0 0 0 1px var(--mod-activo-borde);font-weight:600}
+.ofg-tabs button:focus-visible{outline:2px solid var(--mod-foco);outline-offset:2px}
+.ofg-n{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:var(--r-chip);background:var(--superficie);font-size:11px;text-align:center}
+.ofg-panel{display:flex;flex-direction:column;gap:12px;padding:4px 2px}
+.ofg-panel[hidden]{display:none}
+.ofg-lead{margin:0;color:var(--tinta-2)}
+.ofg-notas,.ofg-res{display:flex;flex-direction:column;gap:8px}
+.ofg-nota{display:flex;gap:8px;align-items:flex-start;padding:8px 12px;border-radius:var(--r-recuadro);font-size:12px;border:1px solid var(--borde);background:var(--superficie);color:var(--tinta-2)}
+.ofg-nota svg{flex:none;margin-top:1px}
+.ofg-nota-aviso{background:var(--aviso-fondo);border-color:var(--aviso-borde);color:var(--aviso-texto)}
+.ofg-nota-ok svg{color:var(--ok)}
+.ofg-campos{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.ofg-campo{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave);flex:1 1 150px;max-width:220px}
+.ofg-campo input{width:100%}
+.ofg-calc{display:block;min-height:40px;padding:9px 0;font-size:16px;font-weight:700;color:var(--tinta)}
+.ofg-accion{min-height:44px;flex:0 0 auto}
+.ofg-mg{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;padding:10px 14px;border-radius:var(--r-recuadro);border:1px solid var(--borde);background:var(--superficie)}
+.ofg-mg-pct{font-size:22px;font-weight:700}
+.ofg-mg-ok{border-color:var(--ok)}.ofg-mg-ok .ofg-mg-pct{color:var(--ok)}
+.ofg-mg-medio{border-color:var(--atencion)}.ofg-mg-medio .ofg-mg-pct{color:var(--atencion)}
+.ofg-mg-bajo{border:2px solid var(--error);background:var(--error-fondo)}.ofg-mg-bajo .ofg-mg-pct{color:var(--error-texto)}
+.ofg-tag{padding:2px 10px;border-radius:var(--r-chip);background:var(--error);color:var(--superficie);font-size:12px;font-weight:700}
+.ofg-det summary{cursor:pointer;font-size:12px;color:var(--tinta-2);padding:4px 0}
+.ofg-desg{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:2px 24px;margin:8px 0 0}
+.ofg-desg>div{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px solid var(--divisor)}
+.ofg-desg dt{color:var(--texto-suave)}.ofg-desg dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.ofg-total{font-weight:700}
+.ofg-fuente{margin:8px 0 0;font-size:11px;color:var(--texto-suave)}
+.ofg-promo{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 12px;border:1px solid var(--borde);border-radius:var(--r-recuadro);background:var(--superficie)}
+.ofg-promo-ppal{flex:1 1 220px;display:flex;flex-direction:column}
+.ofg-promo-off{opacity:.75}
+.ofg-chip{padding:2px 10px;border-radius:var(--r-chip);border:1px solid var(--borde);font-size:12px;text-transform:capitalize}
+.ofg-chip-ok{border-color:var(--ok);color:var(--ok);font-weight:600}
+.ofg-btn-peligro{color:var(--error-texto);border-color:var(--error)}
+.ofg-vacio{margin:0;color:var(--texto-suave)}
+.ofg-interruptor{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--texto-suave)}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -5511,54 +5557,58 @@ async function ofmCargarPromociones(itemId){
     ofmRenderGestionarPanel(itemId,ofmPromocionesCache[itemId]);
   }catch(e){if(cont)cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
+// ══ Panel «Gestionar» de una publicación (Precios y ofertas ML): una pestaña por tarea, textos cortos, desglose plegado. Mismos ids y mismas cuentas que antes. ══
+let OFG_TAB={};   // pestaña abierta por publicación (se conserva si el panel se vuelve a dibujar)
+const OFG_TABS=[['trad','Oferta tradicional'],['desc','Descuento propio'],['precio','Poner precio'],['promos','Promociones']];
+function ofgTab(itemId,tab){
+  OFG_TAB[itemId]=tab;const c=qs('ofm-gestionar-'+itemId);if(!c)return;
+  c.querySelectorAll('[data-ofg-tab]').forEach(b=>{const on=b.dataset.ofgTab===tab;b.setAttribute('aria-selected',on?'true':'false');b.tabIndex=on?0:-1;if(on&&b.scrollIntoView)b.scrollIntoView({inline:'nearest',block:'nearest'});});
+  c.querySelectorAll('[data-ofg-panel]').forEach(p=>{p.hidden=p.dataset.ofgPanel!==tab;});
+}
+function ofgTabKey(e,itemId){
+  const ks=OFG_TABS.map(t=>t[0]),i=ks.indexOf(OFG_TAB[itemId]||'trad');let j=null;
+  if(e.key==='ArrowRight')j=(i+1)%ks.length;else if(e.key==='ArrowLeft')j=(i+ks.length-1)%ks.length;else if(e.key==='Home')j=0;else if(e.key==='End')j=ks.length-1;
+  if(j===null)return;e.preventDefault();ofgTab(itemId,ks[j]);const b=qs('ofm-gestionar-'+itemId)?.querySelector(`[data-ofg-tab="${ks[j]}"]`);if(b)b.focus();
+}
+function ofgNota(tipo,html){return `<div class="ofg-nota ofg-nota-${tipo}">${ico(tipo==='aviso'?'alert':'check-circle',16)}<span>${html}</span></div>`;}
+function ofgPesos(n){const r=Math.round(n);return (r<0?'−':'')+'$'+fmtN(Math.abs(r));}
+// Margen simulado: el número grande primero, el aviso de umbral con texto y borde (no solo color) y la cuenta línea por línea plegada.
+function ofgMargenHtml(f,m,costoARS,tc){
+  const bajo=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
+  const cls=m.margenPct===null?'':bajo?'ofg-mg-bajo':m.margenPct>0.20?'ofg-mg-ok':'ofg-mg-medio';
+  const pct=m.margenPct!==null?(m.margenPct*100).toFixed(1).replace('.',',')+' %':'—';
+  const L=[['Precio sin IVA',m.baseSinIva,0],['Comisión',m.comision,1]];
+  if(!f._ayalaCoreMotor)L.push(['Costo fijo',m.costoFijo,1]);
+  L.push(['Envío',m.envio,1]);
+  if(!f._ayalaCoreMotor)L.push(['Costo por orden de Ecom',m.costoOrden||0,1]);
+  if(f._ayalaCoreMotor)L.push(['Financiero',m.cuotas,1]);
+  L.push(['Impuesto al cheque',m.impCheque,1],['IIBB',m.iibb,1],['Costo del producto',costoARS,1]);
+  const fila=([t,v,n])=>`<div><dt>${t}</dt><dd>${n?'− ':''}${ofgPesos(v)}</dd></div>`;
+  return `<div class="ofg-mg ${cls}" role="status"><span class="ofg-mg-pct">${pct}</span><span class="ofg-mg-txt">margen · ${m.margenPct!==null?ofgPesos(m.margen):''}${f._ayalaCoreMotor?' · motor Ayala Core':''}</span>${bajo?`<span class="ofg-tag">Bajo el umbral (${OFM.umbral} %)</span>`:''}</div>
+    <details class="ofg-det"><summary>Ver la cuenta</summary><dl class="ofg-desg">${L.map(fila).join('')}<div class="ofg-total"><dt>Margen</dt><dd>${ofgPesos(m.margen)}</dd></div></dl>
+    <p class="ofg-fuente">Costo del producto: USD ${f._costoUnitSinIva.toFixed(2)} × TC ${fmtN(tc)} = ${ofgPesos(costoARS)} (catálogo de Ecom, SKU ${acEsc(f.sku||'sin SKU')}).</p></details>`;
+}
+function ofgSinMargen(f,motivo){return `<div class="ofg-nota ofg-nota-info">${ico('alert',16)}<span>${motivo}</span></div>`;}
 function ofmRenderGestionarPanel(itemId,promociones){
   const cont=qs('ofm-gestionar-'+itemId);if(!cont)return;
   const f=ofmFilaPorId[itemId];
   const promosHtml=promociones.length?promociones.map(p=>{
     const activa=p.status==='started';
-    const badge=activa
-      ?`<span style="color:var(--green);font-weight:700">● PARTICIPANDO</span>`
-      :`<span style="color:var(--text3)">○ ${(p.status||'candidata').toUpperCase()} (no participa)</span>`;
-    const sacarBtn=activa
-      ?`<button class="btn-xs" style="background:rgba(255,107,107,0.15);border-color:rgba(255,107,107,0.4);color:var(--red)" onclick="ofmConfirmarSacar('${itemId}','${p.promotion_type}',${p.promotion_id?`'${p.promotion_id}'`:'null'},'${(p.nombre||p.promotion_type).replace(/'/g,"\\'")}')">🗑 Sacar solo de esta</button>`
-      :`<span style="font-size:9px;color:var(--text3);font-style:italic">no se puede sacar -- no está activa</span>`;
-    return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:10px;opacity:${activa?1:0.55}">
-      <span style="min-width:150px;color:var(--text)">${p.nombre||p.promotion_type}</span>
-      <span style="min-width:120px;color:var(--text3)">${p.promotion_type}</span>
-      <span style="min-width:180px">${badge}</span>
-      <span style="color:var(--text3);min-width:150px">${p.fecha_desde||'—'} → ${p.fecha_hasta||'—'}</span>
-      <span style="color:var(--accent);min-width:70px">${p.precio?'$'+fmtN(Math.round(p.precio)):''}</span>
-      ${sacarBtn}
-    </div>`;
-  }).join(''):'<div style="font-size:10px;color:var(--text3)">Sin promociones activas ahora mismo.</div>';
+    const nombreArg=(p.nombre||p.promotion_type).replace(/'/g,"\\'");
+    return `<div class="ofg-promo${activa?'':' ofg-promo-off'}"><div class="ofg-promo-ppal"><b>${acEsc(p.nombre||p.promotion_type)}</b><span class="ofg-sub">${acEsc(p.promotion_type)} · ${acEsc(p.fecha_desde||'—')} → ${acEsc(p.fecha_hasta||'—')}</span></div>
+      <span class="ofg-chip ${activa?'ofg-chip-ok':''}">${activa?'Participando':acEsc((p.status||'candidata'))}</span>
+      <b class="ofg-promo-precio">${p.precio?ofgPesos(p.precio):''}</b>
+      ${activa?`<button type="button" class="btn ofg-btn-peligro" onclick="ofmConfirmarSacar('${itemId}','${p.promotion_type}',${p.promotion_id?`'${p.promotion_id}'`:'null'},'${nombreArg}')">Sacar de esta</button>`:''}</div>`;
+  }).join(''):'<p class="ofg-vacio">Sin promociones activas ahora mismo.</p>';
 
   const descuentoActivo=promociones.find(p=>p.promotion_type==='PRICE_DISCOUNT'&&p.status==='started');
   const precioActual=descuentoActivo?descuentoActivo.precio:(f.precio_oferta||f.precio_normal||0);
   const tachadoActual=descuentoActivo?descuentoActivo.precio_tachado:(f.precio_normal||precioActual);
-  const accionTxt=descuentoActivo
-    ?'Ya tiene un descuento propio ACTIVO (fila "PRICE_DISCOUNT · ● PARTICIPANDO" arriba) -- esto lo edita.'
-    :'Todavía no tiene descuento propio activo -- esto crea uno nuevo, independiente de las campañas de arriba (esas las gestiona ML, acá solo se puede sacar de ellas, no activarlas).';
-
   const campanaActiva=promociones.find(p=>p.promotion_type==='SELLER_CAMPAIGN'&&/oferta tradicional/i.test(p.nombre||''));
-  // El precio del PM viene del Sheet ya conectado (mismo S.pmData que usan
-  // Verificar Ecom/ML/Táctica) -- pedido explícito de Maxx 2026-08-28: no
-  // hay que ir a mirar la planilla, el ERP ya tiene el dato. Si no está
-  // cargado (SKU sin match, o el Sheet del PM no se conectó todavía en
-  // Configuración) cae a lo que ya había antes, sin romper nada.
   const pmRec=f.sku?S.pmData[normSku(f.sku)]:null;
   const pmDisponible=pmRec&&pmRec.ml>0;
   const precioPmActual=pmDisponible?pmRec.ml:(campanaActiva?campanaActiva.precio:(f.precio_oferta||f.precio_normal||0));
-  const fuentePm=pmDisponible?`<span style="color:var(--green)">precio del PM (${pmRec.pmName||pmRec.pm}): $${fmtN(pmRec.ml)}</span> -- el campo de abajo puede mostrar otro número si tiene cuotas y/o envío real sumado (ver avisos), editable igual si querés forzar otro valor.`
-    :`<span style="color:var(--yellow)">sin dato del PM para el SKU "${f.sku||'sin SKU'}"</span> -- conectá su Sheet en Configuración, o cargalo a mano.`;
-
-  // Pedido de Maxx 2026-09-02: ya NO se queda solo en el aviso -- el
-  // campo "Precio PM (final)" arranca directamente con el precio ya
-  // ajustado (mismo orden que el backend en activar_en_campana_
-  // tradicional: primero cuotas, después envío real), y el tachado se
-  // infla desde ahí. Sigue siendo editable por si Maxx quiere forzar
-  // otro número -- esto solo cambia el valor INICIAL, no lo bloquea.
-  // (Decisión anterior, 2026-09-01, era no autocompletar -- revertida
-  // explícitamente acá, después de probarlo en vivo.)
+  // El campo «Precio final» arranca con el precio del PM ya ajustado (primero cuotas, después envío real, igual que el backend); sigue editable.
   const cuotasRecargoPct=f.cuotas_ofrecidas?CUOTAS_PCT_ML[f.cuotas_ofrecidas]:null;
   const costoEnvio=f.costo_envio_real;
   const costoEnvioAplicable=costoEnvio&&costoEnvio.cost_type==='free'?(Number(costoEnvio.costo_envio_real)||0):0;
@@ -5566,48 +5616,45 @@ function ofmRenderGestionarPanel(itemId,promociones){
   if(cuotasRecargoPct)precioPmAjustado=precioPmAjustado*(1+cuotasRecargoPct/100);
   precioPmAjustado=Math.round(precioPmAjustado+costoEnvioAplicable);
 
-  const cuotasHtml=f.cuotas_ofrecidas?(cuotasRecargoPct!=null
-    ?`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en <b>${f.cuotas_ofrecidas} cuotas sin interés</b> -- ML te cobra ${cuotasRecargoPct}% por eso, ya sumado al precio de abajo.</div>`
-    :`<div style="font-size:9px;color:var(--yellow);margin-bottom:6px">⚠ Esta publicación está en ${f.cuotas_ofrecidas} cuotas sin interés, pero no tengo el % que cobra ML para esa cantidad -- revisalo a mano.</div>`
-  ):'';
-
-  // Costo real de envío -- ver ofmCostosEnvioRun/costo-envio endpoint.
-  let costoEnvioHtml='';
-  if(costoEnvio===null){
-    costoEnvioHtml=`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">📦 Sin dato de envío real todavía para este ítem -- corré "Actualizar costos de envío reales" (al final de la página) para congelarlo.</div>`;
-  }else if(costoEnvio){
-    const fv=costoEnvio.fecha_venta||'';
-    const fecha=fv.length>=10?`${fv.slice(8,10)}/${fv.slice(5,7)}`:'?';
-    costoEnvioHtml=costoEnvio.cost_type==='free'
-      ?`<div style="font-size:9px;color:var(--text2);margin-bottom:6px">📦 Costo real de envío de la última venta (${fecha}): <b>$${fmtN(Math.round(costoEnvio.costo_envio_real))}</b> -- ya sumado al precio de abajo.</div>`
-      :`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">📦 La última venta (${fecha}) no tuvo envío gratis -- lo pagó el comprador, sin costo real que vos absorbas ahí.</div>`;
+  const notas=[];
+  notas.push(pmDisponible?ofgNota('ok',`Precio del PM (${acEsc(pmRec.pmName||pmRec.pm)}): <b>${ofgPesos(pmRec.ml)}</b>. El campo puede mostrar otro número si suma cuotas o envío; podés editarlo.`)
+    :ofgNota('aviso',`Sin dato del PM para el SKU «${acEsc(f.sku||'sin SKU')}»: conectá su Sheet en Configuración o cargalo a mano.`));
+  if(f.cuotas_ofrecidas)notas.push(cuotasRecargoPct!=null?ofgNota('aviso',`En <b>${f.cuotas_ofrecidas} cuotas sin interés</b>: ML cobra ${cuotasRecargoPct} %, ya sumado al precio.`)
+    :ofgNota('aviso',`En ${f.cuotas_ofrecidas} cuotas sin interés, pero no tengo el % que cobra ML para esa cantidad: revisalo a mano.`));
+  if(costoEnvio===null)notas.push(ofgNota('aviso','Sin dato de envío real para esta publicación: corré «Actualizar costos de envío reales» (al final de la página).'));
+  else if(costoEnvio){
+    const fv=costoEnvio.fecha_venta||'',fecha=fv.length>=10?`${fv.slice(8,10)}/${fv.slice(5,7)}`:'?';
+    notas.push(costoEnvio.cost_type==='free'?ofgNota('ok',`Envío real de la última venta (${fecha}): <b>${ofgPesos(costoEnvio.costo_envio_real)}</b>, ya sumado al precio.`)
+      :ofgNota('ok',`La última venta (${fecha}) no tuvo envío gratis: no hay costo de envío que absorbas.`));
   }
+  const activa=OFG_TAB[itemId]||'trad';
+  const tabs=OFG_TABS.map(([k,t])=>`<button type="button" role="tab" id="ofg-t-${k}-${itemId}" data-ofg-tab="${k}" aria-selected="${k===activa}" aria-controls="ofg-p-${k}-${itemId}" tabindex="${k===activa?0:-1}" onclick="ofgTab('${itemId}','${k}')">${t}${k==='promos'&&promociones.length?` <span class="ofg-n">${promociones.length}</span>`:''}</button>`).join('');
+  const panel=(k,html)=>`<div role="tabpanel" id="ofg-p-${k}-${itemId}" data-ofg-panel="${k}" aria-labelledby="ofg-t-${k}-${itemId}" class="ofg-panel" ${k===activa?'':'hidden'}>${html}</div>`;
+  const chips=[['Precio de lista',f.precio_normal],f.precio_oferta&&f.precio_oferta!==f.precio_normal?['Precio de oferta',f.precio_oferta]:null,pmDisponible?['PM',pmRec.ml]:null].filter(Boolean)
+    .map(([t,v])=>`<span class="ofg-dato"><span>${t}</span><b>${ofgPesos(v||0)}</b></span>`).join('');
 
-  cont.innerHTML=`
-    <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Promociones activas — ${f.titulo||itemId}</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Solo lo que dice <span style="color:var(--green);font-weight:700">● PARTICIPANDO</span> está corriendo ahora. Lo demás es elegible pero no está activo -- ML lo activa solo según sus reglas, no se puede forzar desde acá.</div>
-    ${promosHtml}
-    <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">🏷️ Oferta Tradicional (campaña propia mensual)</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Calcula el tachado para que, con el % de descuento que pongas (el mismo que ves en Promociones de ML), el precio final quede exactamente en el del PM que cargues acá abajo -- si la publicación está en cuotas y/o tiene envío real congelado, el backend le suma esos ajustes antes de armar el tachado (ver avisos arriba), y te confirma en el resultado el precio final que quedó de verdad. Mete la publicación en tu campaña propia activa (se detecta sola, no hace falta elegirla). ${campanaActiva?`Ya está en "${campanaActiva.nombre}".`:''}</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${fuentePm}</div>
-    ${cuotasHtml}
-    ${costoEnvioHtml}
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
-      <span>Precio PM (final) <span style="color:var(--text3);font-size:8px">(lo que cobrás -- ya con cuotas/envío sumado si aplica)</span><input type="text" id="ofm-camp-precio-${itemId}" value="${precioPmAjustado}" oninput="ofmSimularCampana('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <span>Descuento % <span style="color:var(--text3);font-size:8px">(el mismo % que ves en Promociones de ML)</span><input type="text" id="ofm-camp-inflacion-${itemId}" value="${OFM.inflacionDefaultPct}" oninput="ofmSimularCampana('${itemId}')" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <span id="ofm-camp-tachado-${itemId}" style="color:var(--text3);font-size:9px"></span>
-      <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarCampana('${itemId}')">📢 Meter en campaña</button>
-    </div>
-    <div id="ofm-camp-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>
-    <div style="font-weight:700;color:var(--accent);font-size:11px;margin:12px 0 2px">Descuento propio (independiente de lo de arriba)</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">${accionTxt}</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
-      <span>Precio tachado <span style="color:var(--text3);font-size:8px">(el "antes", más alto)</span><input type="text" id="ofm-act-tachado-${itemId}" value="${Math.round(tachadoActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <span>Precio de venta <span style="color:var(--text3);font-size:8px">(el "ahora", el que cobrás)</span><input type="text" id="ofm-act-precio-${itemId}" value="${Math.round(precioActual)}" oninput="ofmSimularActivar('${itemId}')" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:right;margin-left:4px"></span>
-      <button class="btn-xs" style="background:rgba(0,229,160,0.15);border-color:rgba(0,229,160,0.4);color:var(--green)" onclick="ofmConfirmarActivar('${itemId}')">⚡ ${descuentoActivo?'Actualizar':'Activar'}</button>
-    </div>
-    <div id="ofm-act-margen-${itemId}" style="margin-top:6px;font-size:10px"></div>
-    ${ofmPonerPrecioHtml(f,itemId,promociones,pmDisponible?pmRec.ml:null)}`;
+  cont.innerHTML=`<div class="ofg">
+    <div class="ofg-cab"><div><h3 class="ofg-tit">${acEsc(f.titulo||itemId)}</h3><div class="ofg-sub">${acEsc(itemId)} · SKU ${acEsc(f.sku||'—')} · ${etiquetaCuenta(f.cuenta)}</div></div><div class="ofg-datos">${chips}</div></div>
+    <div class="ofg-tabs" role="tablist" aria-label="Qué querés hacer con esta publicación" onkeydown="ofgTabKey(event,'${itemId}')">${tabs}</div>
+    ${panel('trad',`<p class="ofg-lead">Mete la publicación en tu campaña mensual con el precio del PM como precio final; el tachado se calcula con el descuento que pongas.</p>
+      <div class="ofg-notas">${notas.join('')}</div>
+      <div class="ofg-campos">
+        <label class="ofg-campo">Precio final (lo que cobrás)<input type="text" inputmode="decimal" class="fi campo-num" id="ofm-camp-precio-${itemId}" value="${precioPmAjustado}" oninput="ofmSimularCampana('${itemId}')"></label>
+        <label class="ofg-campo">Descuento %<input type="text" inputmode="decimal" class="fi campo-num" id="ofm-camp-inflacion-${itemId}" value="${OFM.inflacionDefaultPct}" oninput="ofmSimularCampana('${itemId}')"></label>
+        <div class="ofg-campo">Tachado resultante<output class="ofg-calc" id="ofm-camp-tachado-${itemId}">—</output></div>
+        <button type="button" class="btn primary ofg-accion" onclick="ofmConfirmarCampana('${itemId}')">Meter en campaña</button>
+      </div>
+      <div id="ofm-camp-margen-${itemId}" class="ofg-res"></div>`)}
+    ${panel('desc',`<p class="ofg-lead">${descuentoActivo?'Ya tiene un descuento propio activo: esto lo edita.':'No tiene descuento propio activo: esto crea uno nuevo, independiente de las campañas (esas las gestiona ML; acá solo se puede sacar de ellas).'}</p>
+      <div class="ofg-campos">
+        <label class="ofg-campo">Precio tachado (el «antes»)<input type="text" inputmode="decimal" class="fi campo-num" id="ofm-act-tachado-${itemId}" value="${Math.round(tachadoActual)}" oninput="ofmSimularActivar('${itemId}')"></label>
+        <label class="ofg-campo">Precio de venta (el «ahora»)<input type="text" inputmode="decimal" class="fi campo-num" id="ofm-act-precio-${itemId}" value="${Math.round(precioActual)}" oninput="ofmSimularActivar('${itemId}')"></label>
+        <button type="button" class="btn primary ofg-accion" onclick="ofmConfirmarActivar('${itemId}')">${descuentoActivo?'Actualizar descuento':'Activar descuento'}</button>
+      </div>
+      <div id="ofm-act-margen-${itemId}" class="ofg-res"></div>`)}
+    ${panel('precio',ofmPonerPrecioHtml(f,itemId,promociones,pmDisponible?pmRec.ml:null))}
+    ${panel('promos',`<p class="ofg-lead">Solo lo marcado «Participando» está corriendo. Lo demás es elegible, pero lo activa ML según sus reglas.</p>${promosHtml}`)}
+  </div>`;
   ofmSimularActivar(itemId);
   ofmSimularCampana(itemId);
   ofmSimularPoner(itemId);
@@ -5616,36 +5663,32 @@ function ofmRenderGestionarPanel(itemId,promociones){
 // (prueba en vivo con una publicación propia pendiente). Escribe con POST /ayala-core/item/{id}/aplicar-precio (verifica con un GET y registra operador, margen, bajo umbral, fecha y hora). ──
 function ofmPonerHabilitado(){try{return localStorage.getItem('ofm_poner_precio')==='1';}catch(e){return false;}}
 function ofmPonerHabilitar(on){try{localStorage.setItem('ofm_poner_precio',on?'1':'0');}catch(e){}document.querySelectorAll('[data-pp-item]').forEach(b=>ofmSimularPoner(b.dataset.ppItem));}
-function ofmPonerPrecioHtml(f,itemId,promociones,pmMl){
+function ofmPonerPrecioHtml(f,itemId,promociones){
   const enCurso=promociones.some(p=>p.status==='started');
-  const precioLista=f.precio_normal||0;
-  return `<div data-pp-item="${itemId}" style="margin-top:14px;padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px">Poner precio de lista</div>
-    <div style="font-size:9px;color:var(--text3);margin-bottom:6px">Cambia el precio de lista de la publicación. Vos elegís el precio: no se multiplica ni se suma nada. Precio actual de lista: <b>$${fmtN(Math.round(precioLista))}</b>${f.precio_oferta&&f.precio_oferta!==precioLista?` · precio de oferta vigente: <b>$${fmtN(Math.round(f.precio_oferta))}</b>`:''}${pmMl?` · PM (solo referencia): $${fmtN(Math.round(pmMl))}`:''}.</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--text2)">
-      <label style="display:flex;gap:6px;align-items:center">Precio nuevo <input type="text" inputmode="numeric" id="ofm-pp-precio-${itemId}" aria-label="Precio nuevo de lista para ${itemId}" oninput="ofmSimularPoner('${itemId}')" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text)"></label>
-      <button type="button" class="btn-xs" id="ofm-pp-btn-${itemId}" onclick="ofmConfirmarPoner('${itemId}')" disabled>Poner precio</button>
-      <label style="font-size:9px;color:var(--text3)"><input type="checkbox" ${ofmPonerHabilitado()?'checked':''} onchange="ofmPonerHabilitar(this.checked)"> Escritura habilitada (prueba en vivo)</label>
+  return `<div data-pp-item="${itemId}">
+    <p class="ofg-lead">Cambia el precio de lista. Vos elegís el precio: no se multiplica ni se suma nada.</p>
+    ${enCurso?`<div id="ofm-pp-aviso-${itemId}" data-pp-bloqueo="1" class="ofg-nota ofg-nota-aviso">${ico('alert',16)}<span>Hay una promoción en curso: ML puede rechazar el cambio o alterar el tachado. Sacala primero (pestaña Promociones). Mientras tanto el botón queda desactivado.</span></div>`:''}
+    <div class="ofg-campos">
+      <label class="ofg-campo">Precio nuevo de lista<input type="text" inputmode="numeric" class="fi campo-num" id="ofm-pp-precio-${itemId}" aria-label="Precio nuevo de lista para ${itemId}" oninput="ofmSimularPoner('${itemId}')"></label>
+      <button type="button" class="btn primary ofg-accion" id="ofm-pp-btn-${itemId}" onclick="ofmConfirmarPoner('${itemId}')" disabled>Poner precio</button>
     </div>
-    ${enCurso?`<div id="ofm-pp-aviso-${itemId}" data-pp-bloqueo="1" style="margin-top:4px;font-size:10px;color:var(--yellow)">⚠ La publicación tiene una promoción en curso: ML puede rechazar el cambio o alterar el tachado. Sacala primero (arriba, «Sacar solo de esta»). Mientras tanto el botón queda desactivado.</div>`:''}
-    <div id="ofm-pp-margen-${itemId}" style="margin-top:6px;font-size:10px" aria-live="polite"></div>
-    <div id="ofm-pp-res-${itemId}" style="margin-top:4px;font-size:10px" role="status"></div></div>`;
+    <div id="ofm-pp-margen-${itemId}" class="ofg-res" aria-live="polite"></div>
+    <div id="ofm-pp-res-${itemId}" class="ofg-res" role="status"></div>
+    <label class="ofg-interruptor"><input type="checkbox" ${ofmPonerHabilitado()?'checked':''} onchange="ofmPonerHabilitar(this.checked)"> Escritura habilitada (prueba en vivo)</label></div>`;
 }
 function ofmPonerCalc(itemId){
   const f=ofmFilaPorId[itemId];const precio=Math.round(parseFloat(String(qs('ofm-pp-precio-'+itemId)?.value||'').replace(',','.')))||0;
   if(!f||!precio)return{f,precio,motivo:'Cargá el precio nuevo.'};
-  if(f._costoUnitSinIva==null)return{f,precio,m:null,motivo:`Sin costo/IVA: margen sin dato (SKU: ${f.sku||'sin SKU'}).`};
+  if(f._costoUnitSinIva==null)return{f,precio,m:null,motivo:`Sin costo/IVA: margen sin dato (SKU: ${acEsc(f.sku||'sin SKU')}).`};
   const tc=ofmTc();if(!tc)return{f,precio,m:null,motivo:'Sin TC del BNA: margen sin dato.'};
-  const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
-  return{f,precio,m,bajo:m.margenPct!==null&&m.margenPct*100<OFM.umbral};
+  const costoARS=f._costoUnitSinIva*tc;
+  const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
+  return{f,precio,m,costoARS,tc,bajo:m.margenPct!==null&&m.margenPct*100<OFM.umbral};
 }
 function ofmSimularPoner(itemId){
   const out=qs('ofm-pp-margen-'+itemId),btn=qs('ofm-pp-btn-'+itemId);if(!out||!btn)return;
   const c=ofmPonerCalc(itemId);
-  if(c.m){
-    const col=c.bajo?'var(--red)':c.m.margenPct>0.20?'var(--green)':'var(--yellow)';
-    out.innerHTML=`<div style="${c.bajo?'border:1px solid var(--red);border-radius:6px;padding:4px 6px;':''}">Margen con ese precio: <b style="color:${col}">${c.m.margenPct!==null?(c.m.margenPct*100).toFixed(1)+' % ($'+fmtN(Math.round(c.m.margen))+')':'—'}</b>${c.bajo?` <b style="color:var(--red)">⚠ BAJO EL UMBRAL (${OFM.umbral} %)</b> · se confirma aparte`:''}</div>`;
-  }else out.innerHTML=`<span style="color:var(--text3)">${c.motivo||''}</span>`;
+  out.innerHTML=c.m?ofgMargenHtml(c.f,c.m,c.costoARS,c.tc):(c.motivo?`<p class="ofg-vacio">${c.motivo}</p>`:'');
   const bloqueada=!!document.querySelector(`#ofm-pp-aviso-${itemId}[data-pp-bloqueo]`);
   btn.disabled=!c.precio||bloqueada||!ofmPonerHabilitado();
   btn.title=!ofmPonerHabilitado()?'Escritura apagada hasta la prueba en vivo: tildá «Escritura habilitada»':bloqueada?'Hay una promoción en curso':'';
@@ -5666,9 +5709,9 @@ async function ofmConfirmarPoner(itemId){
     const r=await fetch(`${url}/ayala-core/item/${itemId}/aplicar-precio`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({cuenta:f.cuenta,sku:f.sku||'',precio:c.precio,precio_anterior:anterior,margen_pct:c.m&&c.m.margenPct!==null?(c.m.margenPct*100).toFixed(2):'',bajo_umbral:!!c.bajo,operador,origen:'Precios y ofertas ML'})});
     const d=await r.json();
-    if(d.ok){res.innerHTML=`<span style="color:var(--green)">✅ ML confirmó el precio $${fmtN(c.precio)} (verificado con una lectura aparte). Quedó registrado a nombre de ${acEsc(operador)}.</span>`;f.precio_normal=c.precio;}
-    else res.innerHTML=`<span style="color:var(--red)">❌ ML no lo aplicó: ${acEsc(d.error||d.detail||'error desconocido')}. No se reintenta solo.</span>`;
-  }catch(e){res.innerHTML=`<span style="color:var(--red)">❌ ${acEsc(e.message)}. No se sabe si ML lo aplicó: revisá la publicación antes de reintentar.</span>`;}
+    if(d.ok){res.innerHTML=ofgNota('ok',`ML confirmó el precio $${fmtN(c.precio)} (verificado con una lectura aparte). Quedó registrado a nombre de ${acEsc(operador)}.`);f.precio_normal=c.precio;}
+    else res.innerHTML=ofgNota('aviso',`ML no lo aplicó: ${acEsc(d.error||d.detail||'error desconocido')}. No se reintenta solo.`);
+  }catch(e){res.innerHTML=ofgNota('aviso',`${acEsc(e.message)}. No se sabe si ML lo aplicó: revisá la publicación antes de reintentar.`);}
   ofmSimularPoner(itemId);
 }
 function ofmSimularActivar(itemId){
@@ -5676,40 +5719,19 @@ function ofmSimularActivar(itemId){
   const precio=parseFloat(qs('ofm-act-precio-'+itemId)?.value)||0;
   const tachado=parseFloat(qs('ofm-act-tachado-'+itemId)?.value)||0;
   if(!f||!out)return;
-  const avisoOrden=(tachado&&precio&&tachado<=precio)?`<div style="color:var(--yellow);margin-bottom:3px">⚠ El tachado (${fmtN(tachado)}) debería ser MAYOR que el precio de venta (${fmtN(precio)}) -- así como está, no se ve como un descuento real.</div>`:'';
-  // Regla real de ML confirmada en developers.mercadolibre.com.ar/es_ar/
-  // descuento-individual (2026-08-28): el descuento tiene que estar entre
-  // 5% y <80% para que el tachado se aplique -- avisar ANTES de mandar el
-  // pedido, no solo después de que ML lo rechace.
-  let avisoDescuento='';
+  const avisos=[];
+  if(tachado&&precio&&tachado<=precio)avisos.push(`El tachado (${fmtN(tachado)}) debería ser MAYOR que el precio de venta (${fmtN(precio)}): así no se ve como un descuento real.`);
+  // Regla real de ML (developers.mercadolibre.com.ar/es_ar/descuento-individual, 2026-08-28): el descuento tiene que estar entre 5 % y menos de 80 % para que se aplique el tachado.
   if(tachado&&precio&&tachado>precio){
     const descPct=(tachado-precio)/tachado*100;
-    if(descPct<5)avisoDescuento=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige mínimo 5% para aplicar el tachado (si no, "the price is not credible").</div>`;
-    else if(descPct>=80)avisoDescuento=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- ML exige menos de 80%, así como está probablemente lo rechace.</div>`;
+    if(descPct<5)avisos.push(`Descuento de ${descPct.toFixed(1)} %: ML exige mínimo 5 % para aplicar el tachado (si no, «the price is not credible»).`);
+    else if(descPct>=80)avisos.push(`Descuento de ${descPct.toFixed(1)} %: ML exige menos de 80 %; así como está probablemente lo rechace.`);
   }
-  if(f._costoUnitSinIva==null){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin costo/IVA -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
-  const tc=ofmTc();if(!tc){out.innerHTML=`${avisoOrden}${avisoDescuento}<span style="color:var(--text3)">Sin TC del BNA (ni guardado) -- no se puede simular margen</span>`;return;}
+  const av=avisos.map(t=>ofgNota('aviso',t)).join('');
+  if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}).`);return;}
+  const tc=ofmTc();if(!tc){out.innerHTML=av+ofgSinMargen(f,'Sin TC del BNA (ni guardado): no se puede simular el margen.');return;}
   const costoARS=f._costoUnitSinIva*tc;
-  const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
-  const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
-  const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
-  const resumen=`Margen simulado${f._ayalaCoreMotor?' (motor Ayala Core)':''}: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
-  // Costo fijo no existe en el motor de Ayala Core -- se omite
-  // en vez de mostrar $0 como si aplicara, y "Cuotas" pasa a llamarse
-  // "Financiero" (mismo número, nombre real de ese cargo en ese motor).
-  const desglose=`<div style="display:grid;grid-template-columns:repeat(4,auto);gap:2px 14px;margin-top:4px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace">
-    <span>Base sin IVA: $${fmtN(Math.round(m.baseSinIva))}</span>
-    <span>− Comisión: $${fmtN(Math.round(m.comision))}</span>
-    ${f._ayalaCoreMotor?'':`<span>− Costo fijo: $${fmtN(Math.round(m.costoFijo))}</span>`}
-    <span>− Envío: $${fmtN(Math.round(m.envio))}</span>
-    ${f._ayalaCoreMotor?'':`<span>− Costo por orden Ecom: $${fmtN(Math.round(m.costoOrden||0))}</span>`}
-    ${f._ayalaCoreMotor?`<span>− Financiero: $${fmtN(Math.round(m.cuotas))}</span><span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>`:`<span>− Imp.CH: $${fmtN(Math.round(m.impCheque))}</span>`}
-    <span>− IIBB: $${fmtN(Math.round(m.iibb))}</span>
-    <span>− Costo producto: $${fmtN(Math.round(costoARS))}</span>
-    <span style="color:${color}">= Margen: $${fmtN(Math.round(m.margen))}</span>
-  </div>
-  <div style="margin-top:2px;font-size:8px;color:var(--text3)">Costo producto = costo USD (Táctica, SKU ${f.sku||'sin SKU'}) × TC. USD: ${f._costoUnitSinIva.toFixed(2)} × TC: ${fmtN(tc)} = $${fmtN(Math.round(costoARS))} -- si no coincide con Táctica, comparar el SKU exacto.</div>`;
-  out.innerHTML=avisoOrden+avisoDescuento+resumen+desglose;
+  out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,null),costoARS,tc);
 }
 async function ofmConfirmarActivar(itemId){
   const operador=ofmRequireOperador();if(!operador)return;
@@ -5753,23 +5775,18 @@ function ofmSimularCampana(itemId){
   const precio=parseFloat(qs('ofm-camp-precio-'+itemId)?.value)||0;
   const descuentoPct=parseFloat(qs('ofm-camp-inflacion-'+itemId)?.value)||0;
   if(!f||!out)return;
-  // Corregido 2026-08-28 (bug real, MLA627267951: 25% de descuento sobre
-  // $16.865 en la sección de Promociones de ML dio $12.648,75 -- NO
-  // precio*1.25). tachado × (1 − descuento%) = precio, no al revés.
+  // Corregido 2026-08-28 (bug real, MLA627267951: 25% de descuento sobre $16.865 en la sección de Promociones de ML dio $12.648,75 -- NO precio*1.25). tachado × (1 − descuento%) = precio, no al revés.
   const tachado=descuentoPct<100?Math.round(precio/(1-descuentoPct/100)):0;
-  const tachadoEl=qs('ofm-camp-tachado-'+itemId);if(tachadoEl)tachadoEl.textContent=`= tachado $${fmtN(tachado)}`;
-  if(f._costoUnitSinIva==null){out.innerHTML=`<span style="color:var(--text3)">Sin costo/IVA -- no se puede simular margen (SKU: ${f.sku||'sin SKU'})</span>`;return;}
-  const tc=ofmTc();if(!tc){out.innerHTML=`<span style="color:var(--text3)">Sin TC del BNA (ni guardado) -- no se puede simular margen</span>`;return;}
-  const costoARS=f._costoUnitSinIva*tc;
-  const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
-  const bajoUmbral=m.margenPct!==null&&m.margenPct*100<OFM.umbral;
-  const color=m.margenPct===null?'var(--text2)':bajoUmbral?'var(--red)':m.margenPct>0.20?'var(--green)':'var(--yellow)';
-  let avisoDesc='';
+  const tachadoEl=qs('ofm-camp-tachado-'+itemId);if(tachadoEl)tachadoEl.textContent=tachado?ofgPesos(tachado):'—';
+  let av='';
   if(precio>0&&tachado>precio){
     const descPct=(tachado-precio)/tachado*100;
-    if(descPct<10||descPct>=80)avisoDesc=`<div style="color:var(--yellow);margin-bottom:3px">⚠ Descuento de ${descPct.toFixed(1)}% -- las campañas propias exigen entre 10% y 80%.</div>`;
+    if(descPct<10||descPct>=80)av=ofgNota('aviso',`Descuento de ${descPct.toFixed(1)} %: las campañas propias exigen entre 10 % y 80 %.`);
   }
-  out.innerHTML=`${avisoDesc}Margen simulado${f._ayalaCoreMotor?' (motor Ayala Core)':''}: <span style="color:${color};font-weight:700">${m.margenPct!==null?(m.margenPct*100).toFixed(1)+'% ($'+fmtN(Math.round(m.margen))+')':'—'}</span>${bajoUmbral?' ⚠ bajo umbral ('+OFM.umbral+'%)':''}`;
+  if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}).`);return;}
+  const tc=ofmTc();if(!tc){out.innerHTML=av+ofgSinMargen(f,'Sin TC del BNA (ni guardado): no se puede simular el margen.');return;}
+  const costoARS=f._costoUnitSinIva*tc;
+  out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,null),costoARS,tc);
 }
 // Pedido explícito de Maxx 2026-09-01: cuando ML rechaza por credibilidad
 // y devuelve un techo real (`techo_acreditado_ml`), no es un error mudo --

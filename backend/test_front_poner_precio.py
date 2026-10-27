@@ -24,5 +24,15 @@ def test_con_promocion_en_curso_el_boton_queda_desactivado():
 
 
 def test_el_aviso_bajo_umbral_no_depende_solo_del_color():
-    fn = SRC.split("function ofmSimularPoner")[1].split("\n}\n")[0]
-    assert "BAJO EL UMBRAL" in fn and "border:1px solid var(--red)" in fn and "Confirmar igual (bajo umbral)" in fn
+    fn = SRC.split("function ofgMargenHtml")[1].split("\n}\n")[0]
+    assert "Bajo el umbral" in fn and "ofg-mg-bajo" in fn
+    assert any("border:2px solid var(--error)" in c for c in SRC.split("\n") if c.startswith(".ofg-mg-bajo"))
+    assert "Confirmar igual (bajo umbral)" in SRC.split("function ofmSimularPoner")[1].split("\n}\n")[0]
+
+
+def test_el_panel_gestionar_tiene_pestanas_accesibles_y_la_cuenta_plegada():
+    assert 'role="tablist"' in SRC and 'role="tab"' in SRC and 'role="tabpanel"' in SRC and "function ofgTabKey" in SRC
+    assert "<details class=\"ofg-det\"><summary>Ver la cuenta</summary>" in SRC
+    css = " ".join(c for c in SRC.split("\n") if c.startswith(".ofg"))
+    import re
+    assert css and not re.search(r"#[0-9a-fA-F]{3,8}\b", css)         # solo tokens
