@@ -439,3 +439,11 @@ def test_sesion_vencida_o_sin_configurar_se_avisa_y_no_se_toca_nada():
     with pytest.raises(fs.FravegaNoConfigurado):
         fs.cookies_desde_env({})
     assert fs.cookies_desde_env({"FRAVEGA_SELLER_AUTH": "a", "FRAVEGA_SELLER_ID": "b", "FRAVEGA_SELLER_APP": "c"}) == {"X-SELLER-AUTH": "a", "X-FVG-SELLER-ID": "b", "X-SELLER-APP": "c"}
+
+
+def test_el_cierre_diario_corre_la_sincronizacion_de_fravega_antes_de_armar_el_ciclo():
+    """La corrida diaria (scripts/ecom_diario.py) sincroniza Frávega antes de construir y guardar las ventas, y un fallo no la frena."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / "scripts" / "ecom_diario.py").read_text(encoding="utf-8")
+    assert 0 < src.index("sincronizar_proxima_liquidacion") < src.index("fetch = api._fetch_fn_con_cache")
+    assert "no se pudo sincronizar Frávega" in src
