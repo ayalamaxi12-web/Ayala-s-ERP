@@ -303,6 +303,26 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ac-env-ok{border-color:var(--ok);color:var(--tinta)}.ac-env-ok svg{color:var(--ok)}
 .ac-env-mal{background:var(--aviso-fondo);border-color:var(--aviso-borde);color:var(--aviso-texto)}
 .ac-env-sw{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--texto-suave)}
+/* Precios y ofertas ML: cabecera, cuenta y secciones plegables (solo tokens) */
+.ofm-cab{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between;align-items:flex-end;margin-bottom:8px}
+.ofm-tit{margin:0;font-size:20px;font-weight:700;color:var(--tinta)}
+.ofm-sub{margin:4px 0 0;font-size:13px;color:var(--texto-suave);max-width:60ch}
+.ofm-acc{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+.ofm-op{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave)}
+.ofm-chk{display:flex;gap:8px;align-items:center;min-height:44px;font-size:13px;color:var(--tinta-2);cursor:pointer}
+.ofm-costos{font-size:12px}
+.ofm-foto{font-size:13px;color:var(--tinta-2);margin-bottom:4px}
+.ofm-estado{font-size:12px;color:var(--texto-suave);margin-bottom:6px}
+.ofm-seg{display:inline-flex;gap:2px;padding:3px;margin:8px 0;background:var(--mod-seg-fondo);border-radius:var(--r-recuadro)}
+.ofm-seg-b{min-height:40px;padding:0 22px;border:0;border-radius:var(--r-chico);background:transparent;color:var(--tinta-2);font:400 14px var(--fuente);cursor:pointer}
+.ofm-seg-b[aria-pressed="true"]{background:var(--mod-activo-fondo);color:var(--mod-activo-texto);box-shadow:inset 0 0 0 1px var(--mod-activo-borde);font-weight:600}
+.ofm-seg-b:focus-visible{outline:2px solid var(--mod-foco);outline-offset:2px}
+.ofm-sec{margin-top:16px;border:1px solid var(--borde);border-radius:var(--r-recuadro);background:var(--superficie)}
+.ofm-sec>summary{cursor:pointer;padding:14px 16px;font-size:14px;font-weight:600;color:var(--tinta)}
+.ofm-sec-c{padding:0 16px 16px}
+.ofm-sec-c,.ofm-sec-c *{font-family:var(--fuente)!important}
+.ofm-sec-c div,.ofm-sec-c span,.ofm-sec-c label{font-size:13px!important}
+.ofm-sec-c [style*="margin-bottom:6px"]{margin-bottom:10px!important}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -1887,32 +1907,29 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
      lectura -- Fase 3 (crear/editar ofertas) queda gateada por
      docs/business/COMERCIAL/00_LEEME.md §5, no implementada acá.) -->
 <div id="page-ofertas-margen" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px">
-    <div>
-      <div class="section-hdr" style="margin-bottom:4px">📊 Ofertas ML — Margen real</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Campañas propias + de ML, Group y Arg · margen con costo/IVA de Táctica (nunca del PM) · simulá, activá y sacá ofertas desde acá</div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace">Operador:
-        <select id="ofm-operador" onchange="localStorage.setItem('ofm_operador',this.value)" class="fi" style="font-size:10px;padding:3px 6px">
-          <option value="">Elegir...</option>
+  <div class="ofm-cab">
+    <div><h2 class="ofm-tit">Precios y ofertas ML</h2><p class="ofm-sub">Las ofertas de las dos cuentas con su margen real. Simulá, activá o sacá ofertas y poné precios desde acá.</p></div>
+    <div class="ofm-acc">
+      <label class="ofm-op">Operador
+        <select id="ofm-operador" onchange="localStorage.setItem('ofm_operador',this.value)" class="fi">
+          <option value="">Elegir…</option>
           <option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option>
         </select>
-      </span>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer;font-size:10px;color:var(--text2);font-family:'DM Mono',monospace" title="Suma el descuento propio por publicación (PRICE_DISCOUNT) -- no tiene listado masivo en la API de ML, escanea publicación por publicación de las ~6.200 activas"><input type="checkbox" id="ofm-incluir-propias" checked>Incluir ofertas propias (lento)</label>
-      <span class="js-costos-ecom" style="display:inline-flex;gap:6px;align-items:center;font-size:10px;font-family:'DM Mono',monospace"></span>
-      <button class="btn primary" onclick="ofmRun()" id="btn-ofm-run">🔄 Actualizar ahora</button>
+      </label>
+      <label class="ofm-chk" title="Suma el descuento propio por publicación (PRICE_DISCOUNT): no tiene listado masivo en la API de ML, se escanea publicación por publicación de las ~6.200 activas"><input type="checkbox" id="ofm-incluir-propias" checked> Incluir descuentos propios (lento)</label>
+      <span class="js-costos-ecom ofm-costos"></span>
+      <button class="btn primary" onclick="ofmRun()" id="btn-ofm-run">Actualizar ahora</button>
     </div>
   </div>
-  <div id="ofm-foto-info" role="status" aria-live="polite" style="font-size:11px;color:var(--text2);margin-bottom:4px"></div>
-  <div id="ofm-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px"></div>
+  <div id="ofm-foto-info" class="ofm-foto" role="status" aria-live="polite"></div>
+  <div id="ofm-status" class="ofm-estado"></div>
   <div id="ofm-log" style="display:none;max-height:110px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
 
   <div id="ofm-panel" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
 
-  <div style="display:flex;gap:6px;margin-bottom:4px">
-    <button class="btn" id="ofm-tab-IT" onclick="ofmTab('IT')">📦 Group</button>
-    <button class="btn btn-secondary" id="ofm-tab-MT" onclick="ofmTab('MT')">📦 Arg</button>
+  <div class="ofm-seg" role="group" aria-label="Cuenta de Mercado Libre">
+    <button type="button" class="ofm-seg-b" id="ofm-tab-IT" aria-pressed="true" onclick="ofmTab('IT')">Group</button>
+    <button type="button" class="ofm-seg-b" id="ofm-tab-MT" aria-pressed="false" onclick="ofmTab('MT')">Arg</button>
   </div>
 
   <div class="stats-row" id="ofm-stats-wrap" style="display:none" role="group" aria-label="Resumen de ofertas: tocá un número para filtrar la tabla">
@@ -1948,19 +1965,16 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <nav class="ofm-pag" id="ofm-pag" aria-label="Paginación de ofertas"></nav>
   </div>
 
-  <div style="margin-top:24px">
-    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔎 Buscar una publicación puntual (tenga o no oferta activa)</div>
-    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">La tabla de arriba solo trae MLAs que YA tienen algo activo. Para activar una oferta nueva en uno que hoy no tiene nada, buscalo acá.</div>
+  <details class="ofm-sec"><summary>Buscar una publicación puntual</summary><div class="ofm-sec-c">
+    <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">La tabla solo trae publicaciones que ya tienen algo activo. Para activar una oferta en una que hoy no tiene nada, buscala acá.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <input type="text" id="ofm-buscar-mla" placeholder="MLA (ej: MLA123456789)" onkeydown="if(event.key==='Enter')ofmBuscarMLA()" style="width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;outline:none">
       <select id="ofm-buscar-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select>
-      <button class="btn" onclick="ofmBuscarMLA()">🔎 Buscar</button>
+      <button class="btn" onclick="ofmBuscarMLA()">Buscar</button>
     </div>
     <div id="ofm-busqueda-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px"></div>
-  </div>
-
-  <div style="margin-top:24px">
-    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">🔔 Alertas — SKUs candidatos a oferta y no la tienen (Fase 2)</div>
+  </div></details>
+  <details class="ofm-sec"><summary>Candidatos a oferta: SKUs que venden y no tienen una</summary><div class="ofm-sec-c">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
       <span style="display:flex;gap:4px;align-items:center">Ventas mínimas <input type="text" id="ofm-alertas-minventas" value="5" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"></span>
       <span style="display:flex;gap:4px;align-items:center">en <input type="text" id="ofm-alertas-dias" value="30" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"> días</span>
@@ -1975,10 +1989,8 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
         <tbody id="ofm-alertas-tbody"></tbody>
       </table>
     </div>
-  </div>
-
-  <div style="margin-top:24px">
-    <div class="section-hdr" style="font-size:13px;margin-bottom:6px">💸 Costos de envío reales (reemplaza el aproximado de $8.500)</div>
+  </div></details>
+  <details class="ofm-sec"><summary>Costos de envío reales</summary><div class="ofm-sec-c">
     <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:6px">Barre las ventas pagadas recientes de las dos cuentas y "congela" el costo real de envío de la última venta de cada MLA -- corré esto cada tanto (no hace falta más seguido). El panel de "Oferta Tradicional" de cada publicación lo muestra apenas lo corriste al menos una vez.</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
       <span style="display:flex;gap:4px;align-items:center">Días hacia atrás <input type="text" id="ofm-costos-envio-dias" value="60" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"></span>
@@ -1986,7 +1998,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <span id="ofm-costos-envio-status" style="color:var(--text3)"></span>
     </div>
     <div id="ofm-costos-envio-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace"></div>
-  </div>
+  </div></details>
 </div>
 
 <!-- Motor de precios, etapa 2 (2026-09-29): todos los SKU con el precio que
@@ -5113,7 +5125,7 @@ async function ofmFotoCargar(){
     if(m.job_id&&!ofmJobIdOfertas){
       ofmJobIdOfertas=m.job_id;const btn=qs('btn-ofm-run'),status=qs('ofm-status'),logEl=qs('ofm-log');
       btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Hay una actualización en curso (la lanzó otra persona o la automática)';logEl.style.display='block';
-      pollFullJob(`${url}/ml-ofertas/status/${m.job_id}`,logEl,status,btn,'🔄 Actualizar ahora',(result)=>{ofmJobIdOfertas=null;ofmOnResult(result);ofmFotoCargar();});
+      pollFullJob(`${url}/ml-ofertas/status/${m.job_id}`,logEl,status,btn,'Actualizar ahora',(result)=>{ofmJobIdOfertas=null;ofmOnResult(result);ofmFotoCargar();});
     }
     if(m.existe&&m.obtenido_en!==OFM_FOTO_TS){
       const v=await (await fetch(`${url}/ml-ofertas/foto`)).json();
@@ -5151,7 +5163,7 @@ async function ofmReconectarJobActivo(){
     toast('🔄 Reconectado a un proceso que ya estaba corriendo...');
     btn.disabled=true;btn.textContent='● corriendo...';status.textContent='Reconectado: '+guardado.jobId;logEl.style.display='block';
     qs('ofm-incluir-propias').checked=!!guardado.incluirPropias;
-    pollFullJob(guardado.statusUrl,logEl,status,btn,'🔄 Actualizar ahora',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
+    pollFullJob(guardado.statusUrl,logEl,status,btn,'Actualizar ahora',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);});
   }catch(e){/* backend no disponible ahora -- no limpiar, reintentar en la próxima visita a la página */}
 }
 async function ofmRun(){
@@ -5165,8 +5177,8 @@ async function ofmRun(){
     const{job_id}=await res.json();
     ofmJobIdOfertas=job_id;status.textContent='Job: '+job_id;
     ofmGuardarJobActivo(job_id,incluirPropias);
-    pollFullJob(`${url}/ml-ofertas/status/${job_id}`,logEl,status,btn,'🔄 Actualizar ahora',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);if(incluirPropias)ofmFotoCargar();});
-  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🔄 Actualizar ahora';}
+    pollFullJob(`${url}/ml-ofertas/status/${job_id}`,logEl,status,btn,'Actualizar ahora',(result)=>{ofmLimpiarJobActivo();ofmOnResult(result);if(incluirPropias)ofmFotoCargar();});
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='Actualizar ahora';}
 }
 function ofmOnResult(result){
   ofmResult=result;
@@ -5185,7 +5197,7 @@ function ofmOnResult(result){
 }
 function ofmTab(cuenta){
   ofmTabCuenta=cuenta;
-  ['IT','MT'].forEach(c=>{const b=qs('ofm-tab-'+c);if(b)b.className='btn'+(c===cuenta?' primary':' btn-secondary');});
+  ['IT','MT'].forEach(c=>{const b=qs('ofm-tab-'+c);if(b)b.setAttribute('aria-pressed',c===cuenta?'true':'false');});
   ofmRender();
 }
 // Filtro "diferencia vs PM" -- pedido de Maxx 2026-09-09: marcar ofertas

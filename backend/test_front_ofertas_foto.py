@@ -18,3 +18,12 @@ def test_la_foto_se_pide_barata_primero_y_muestra_fecha_hora_y_aviso_de_falla():
 
 def test_actualizar_ahora_arranca_tildado_con_los_descuentos_propios():
     assert 'id="ofm-incluir-propias" checked' in SRC and "Actualizar ahora</button>" in SRC and 'id="ofm-foto-info"' in SRC
+
+
+def test_la_pagina_tiene_cabecera_limpia_cuenta_segmentada_y_secciones_plegadas():
+    pag = SRC[SRC.index('id="page-ofertas-margen"'):SRC.index('<!-- Motor de precios, etapa 2')]
+    assert '<h2 class="ofm-tit">Precios y ofertas ML</h2>' in pag and "📊" not in pag and "📦" not in pag and "🔎" not in pag and "🔔" not in pag and "💸" not in pag
+    assert pag.count('<details class="ofm-sec">') == 3                                       # buscar, candidatos y costos de envío: plegados por defecto
+    assert 'id="ofm-tab-IT" aria-pressed="true"' in pag and "setAttribute('aria-pressed'" in SRC.split("function ofmTab(cuenta)")[1][:300]
+    for i in ("ofm-buscar-mla", "ofm-alertas-tbody", "btn-ofm-costos-envio", "ofm-operador", "ofm-incluir-propias", "btn-ofm-run"):
+        assert f'id="{i}"' in pag, i                                                         # mismos ids: nada se rompe
