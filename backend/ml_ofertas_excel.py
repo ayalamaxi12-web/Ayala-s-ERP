@@ -293,7 +293,7 @@ def aplicar(
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "error": f"Error inesperado: {e}"}
         if r.get("ok"):
-            resultados.append({**base, "estado": "ok", "mensaje": "Aplicada.", "precio": r.get("precio"), "tachado": r.get("original_price")})
+            resultados.append({**base, "estado": "ok", "mensaje": "Aplicada." + (" " + r["aviso"] if r.get("aviso") else ""), "precio": r.get("precio"), "tachado": r.get("original_price")})
             historial.append({
                 "Fecha": _hoy(), "Cuenta": cuenta, "Item ID": f["mla"], "SKU": f.get("sku", ""), "Accion": "Activar en campaña",
                 "Tipo/Promocion": f"SELLER_CAMPAIGN ({r.get('nombre_campana') or promotion_id})", "Precio Anterior": f.get("precio_actual", ""),
