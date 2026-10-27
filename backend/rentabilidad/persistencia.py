@@ -671,6 +671,9 @@ def aplicar_liquidacion_fravega(
         LiquidacionFravega.liquidacion_desde == liquidacion.desde,
         LiquidacionFravega.liquidacion_hasta == liquidacion.hasta,
     ).delete(synchronize_session=False)
+    db.query(LiquidacionFravega).filter(
+        LiquidacionFravega.archivo == ARCHIVO_PROXIMA_LIQUIDACION, LiquidacionFravega.orden.in_(list(liquidacion.ordenes)),
+    ).delete(synchronize_session=False)
     for orden in liquidacion.ordenes.values():
         db.add(LiquidacionFravega(
             orden=orden.orden, valor_sku=orden.valor_sku, comision=orden.comision,
@@ -679,7 +682,14 @@ def aplicar_liquidacion_fravega(
         ))
     db.flush()
 
-    ventas = db.query(VentaEcom).filter(VentaEcom.orden_externa.in_(list(liquidacion.ordenes))).all()
+    con_venta = _reaplicar_ventas(db, list(liquidacion.ordenes), resultado)
+    resultado.sin_venta_en_ecom = len(set(liquidacion.ordenes) - con_venta)
+    return resultado
+
+
+def _reaplicar_ventas(db: Session, ordenes: list[str], resultado: "ResultadoLiquidacionFravega") -> set[str]:
+    """Vuelve a resolver comisión/envío (`comision_fravega`) de las ventas de Frávega guardadas con esas órdenes y recalcula su rentabilidad."""
+    ventas = db.query(VentaEcom).filter(VentaEcom.orden_externa.in_(ordenes)).all()
     con_venta = set()
     for venta in ventas:
         con_venta.add(venta.orden_externa)
@@ -692,7 +702,35 @@ def aplicar_liquidacion_fravega(
             resultado.canceladas_observadas.append(venta.numero_orden)
         else:
             resultado.ventas_actualizadas.append(venta.numero_orden)
-    resultado.sin_venta_en_ecom = len(set(liquidacion.ordenes) - con_venta)
+    return con_venta
+
+
+# Marca de las filas de `liquidacion_fravega` que vienen del Seller Center («Próxima liquidación», antes del cierre de la quincena). La liquidación
+# quincenal (Excel) manda siempre: las pisa orden por orden y nunca se suman a ella.
+ARCHIVO_PROXIMA_LIQUIDACION = "API Seller Center · próxima liquidación"
+
+
+def sincronizar_proxima_liquidacion(db: Session, ordenes: list) -> ResultadoLiquidacionFravega:
+    """Reemplaza la comisión y el fee logístico ESTIMADOS por los reales de «Próxima liquidación» (ver `fravega_seller`).
+
+    - Snapshot completo: se borran las filas anteriores de esta fuente y se vuelven a cargar (idempotente).
+    - Las órdenes que ya están en una liquidación quincenal cargada se saltean (la quincenal es la final).
+    - Las `Devuelta` y las sin comisión no se cargan: quedan estimadas hasta la liquidación (que trae las cancelaciones).
+    - Las órdenes que estaban cargadas por esta fuente y ya no aparecen vuelven al estimado."""
+    from .fravega_seller import ESTADO_DEVUELTA
+
+    previas = {f.orden for f in db.query(LiquidacionFravega).filter(LiquidacionFravega.archivo == ARCHIVO_PROXIMA_LIQUIDACION).all()}
+    con_quincenal = {f.orden for f in db.query(LiquidacionFravega).filter(LiquidacionFravega.archivo != ARCHIVO_PROXIMA_LIQUIDACION).all()
+                     } | {f.orden for f in db.query(LiquidacionFravega).filter(LiquidacionFravega.archivo.is_(None)).all()}
+    db.query(LiquidacionFravega).filter(LiquidacionFravega.archivo == ARCHIVO_PROXIMA_LIQUIDACION).delete(synchronize_session=False)
+    vigentes = [o for o in ordenes if o.estado != ESTADO_DEVUELTA and o.comision > 0 and o.orden not in con_quincenal]
+    for o in vigentes:
+        db.add(LiquidacionFravega(orden=o.orden, valor_sku=o.valor_sku, comision=o.comision, fee_logistico=o.fee_logistico,
+                                  liquidacion_desde=o.fecha, liquidacion_hasta=o.fecha, archivo=ARCHIVO_PROXIMA_LIQUIDACION))
+    db.flush()
+    resultado = ResultadoLiquidacionFravega(ordenes_en_liquidacion=len(vigentes))
+    con_venta = _reaplicar_ventas(db, sorted(previas | {o.orden for o in vigentes}), resultado)
+    resultado.sin_venta_en_ecom = len({o.orden for o in vigentes} - con_venta)
     return resultado
 
 
