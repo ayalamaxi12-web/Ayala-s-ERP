@@ -122,3 +122,16 @@ def test_el_iibb_propio_de_un_canal_se_usa_en_su_cuenta(sesion_fn):
     main._criterios_cambiaron()
     m = main._preparar_mercado("fravega")
     assert m["usados"]["iibb_pct"] == D(3) and main._preparar_mercado("web")["usados"]["iibb_pct"] == D(5)
+
+
+def test_ofertas_ml_y_el_motor_comparten_los_criterios_y_el_endpoint_los_entrega(sesion_fn):
+    import ml_ofertas as mo
+    C.editar(sesion_fn, "ml", "comision_base", "", "16", "Maxi")
+    C.editar(sesion_fn, "ml", "costo_fijo", "15000", "2000", "Maxi")
+    C.editar(sesion_fn, "todos", "costo_orden", "", "200", "Maxi")
+    main._criterios_cambiaron()
+    p = mo.ParametrosMargen()                                     # lo que usa Ofertas ML al calcular
+    assert p.comision_general == D(16) and p.costo_fijo_tramos[0] == (D(15000), D(2000)) and p.costo_orden == D(200)
+    d = TestClient(main.app).get("/criterios/ml").json()
+    assert d["comision"] == 16 and d["orden"] == 200 and d["tramos"][0] == [15000, 2000] and d["tramos"][-1] == [None, 0] and d["cuotas"]["3"] == 8.5 and d["reducida"] == 5
+    assert ac.PARAMS_ML is mo.PARAMS_ML
