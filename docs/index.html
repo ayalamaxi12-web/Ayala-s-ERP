@@ -963,7 +963,6 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="sidebar-section">
     <div class="sidebar-section-label">Ayala Core</div>
     <a href="#" class="sidebar-item" data-page="ayala-core" onclick="goPage('ayala-core',this);return false;"><span class="icon" data-ico="cpu" aria-hidden="true"></span>Motor de Precios</a>
-    <a href="#" class="sidebar-item" data-page="pricing" onclick="goPage('pricing',this);return false;"><span class="icon" data-ico="bar-chart" aria-hidden="true"></span>Precios &amp; Márgenes</a>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Gestión de Precios</div>
@@ -975,17 +974,10 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <!-- "Ofertas ML" vieja (page-ofertas-ml, ajuste masivo contra PM Sheet) sacada
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
-    <a href="#" class="sidebar-item" data-page="verificar-ml" data-mod="ml" onclick="goPage('verificar-ml',this);return false;"><span class="icon" data-ico="box" aria-hidden="true"></span>Verificar ML</a>
     <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="zap" aria-hidden="true"></span>Full ML</a>
     <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Precios y ofertas ML</a>
     <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
     <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Inteligencia Comercial</div>
-    <a href="#" class="sidebar-item" data-page="intel-entidades" onclick="goPage('intel-entidades',this);return false;"><span class="icon" data-ico="building" aria-hidden="true"></span>Entidades</a>
-    <a href="#" class="sidebar-item" data-page="intel-referencias" onclick="goPage('intel-referencias',this);return false;"><span class="icon" data-ico="link" aria-hidden="true"></span>Referencias</a>
-    <a href="#" class="sidebar-item" data-page="intel-mix" onclick="goPage('intel-mix',this);return false;"><span class="icon" data-ico="flask" aria-hidden="true"></span>Mix</a>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Compras</div>
@@ -999,7 +991,6 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <div class="sidebar-section-label">Sistema</div>
     <a href="#" class="sidebar-item" data-page="config" onclick="goPage('config',this);return false;"><span class="icon" data-ico="sliders" aria-hidden="true"></span>Configuración</a>
     <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Reglas de Precio</a>
-    <a href="#" class="sidebar-item" data-page="mltools" onclick="goPage('mltools',this);return false;"><span class="icon" data-ico="wrench" aria-hidden="true"></span>ML Tools</a>
   </div>
 </nav>
 <div class="app-body">
@@ -2497,6 +2488,9 @@ function ventasHoyEntrar(){ayalaCoreCargarFuentes();ventasHoyCargar(false);clear
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
+  // Módulos sacados del menú (28/10, decisión de Maxx): sus links viejos abren el módulo que los reemplaza. El código de las páginas sigue en el archivo hasta la limpieza final.
+  const MENU_RETIRADOS={'pricing':'ayala-core','verificar-ml':'ofertas-margen','intel-entidades':'analisis-competencia','intel-referencias':'analisis-competencia','intel-mix':'analisis-competencia','mltools':'config'};
+  if(MENU_RETIRADOS[page]){page=MENU_RETIRADOS[page];el=null;}
   if(page==='competidores'){page='analisis-competencia';el=null;}   // Competidores ML (jubilado): su link viejo abre Análisis de Competencia; «Enviar a Ecom» vive en «Jugar mi precio»
   if(page==='intel-comercial'){page='analisis-competencia';el=null;}   // SKUs & Referencias (jubilada): su link viejo abre Análisis de Competencia (vista Por SKU)
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
