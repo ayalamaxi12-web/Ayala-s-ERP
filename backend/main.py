@@ -24,6 +24,7 @@ from rentabilidad import costos_ecom
 from rentabilidad.api import migrar_y_sembrar, router as rentabilidad_router
 from rentabilidad.config import ConfiguracionFaltante
 from proyeccion_snapshot import router as proyeccion_router
+import criterios as criterios_mod
 import ml_ofertas_foto
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
@@ -61,6 +62,15 @@ async def _configuracion_faltante_handler(request: Request, exc: ConfiguracionFa
 async def _error_no_manejado_handler(request: Request, exc: Exception):
     print(f"Error no manejado en {request.url.path}: {exc!r}")
     return JSONResponse(status_code=500, content={"detail": f"Error interno: {exc}"})
+
+
+@app.on_event("startup")
+def _criterios_startup():
+    """Deja al día los criterios de Mercado Libre apenas arranca (antes de que corra cualquier cálculo o job)."""
+    try:
+        _tarifas_actuales()
+    except Exception as e:  # noqa: BLE001 -- sin base se usan los valores del código
+        print(f"Criterios: no se pudieron cargar en el arranque: {e}")
 
 
 @app.on_event("startup")
@@ -2811,7 +2821,9 @@ def _tarifas_actuales() -> tuple[dict, dict]:
     from rentabilidad import db as _db
     if _TARIFAS_CACHE["payload"] is None or time.time() - _TARIFAS_CACHE["en"] > 60:
         p, info = mercados_mod.foto_o_iniciales(_db.sesion)
+        p = {**p, "filas": criterios_mod.completar(p["filas"])}
         _TARIFAS_CACHE.update(en=time.time(), payload=p, info=info)
+        mercados_mod.aplicar_criterios_ml(p["filas"])     # Mercado Libre usa los mismos criterios que se editan en la página
     return _TARIFAS_CACHE["payload"], _TARIFAS_CACHE["info"]
 
 
@@ -2820,13 +2832,13 @@ def _preparar_mercado(mercado: str, usar_costo_orden=None, usar_cheque=None, usa
     if mercado not in mercados_mod.MERCADOS:
         raise HTTPException(status_code=422, detail=f"Mercado desconocido: {mercado!r}.")
     cambios = any(x is not None for x in (usar_costo_orden, usar_cheque, usar_iibb, costo_orden, cheque_pct, iibb_pct))
+    payload, info = _tarifas_actuales()       # también deja al día los criterios de Mercado Libre
     if mercado == "ml" and not cambios:
         return None
-    payload, info = _tarifas_actuales()
     filas = payload["filas"]
     com = mercados_mod.comunes(filas)
     par = mercados_mod.parametros_mercado(mercado, filas, recargo_cuotas=Decimal(str(recargo_cuotas)) if recargo_cuotas is not None else None)
-    v = com["valores"]
+    v = {k: val for k, (val, _origen) in mercados_mod.valores_canal(filas, mercado).items()}     # el propio del canal, o el común
     act = mercados_mod.ACTIVOS_POR_DEFECTO[mercado]
     usados = {
         "orden": act["orden"] if usar_costo_orden is None else bool(usar_costo_orden), "cheque": act["cheque"] if usar_cheque is None else bool(usar_cheque),
@@ -2969,7 +2981,7 @@ def _ayala_core_motor_sync(
             costo_fijo_tramos=_mercado["par"].get("costo_fijo_tramos")).items()} for c in precios}
     # «Ver cuenta»: la cuenta línea por línea de cada condición (solo mostrar). Mercado Libre sin cambios usa los parámetros de siempre.
     if _mercado is None:
-        cp = {"comision": ayala_core.COMISION_ML_DEFAULT, "iibb": ayala_core.IIBB_PCT_DEFAULT, "cheque": ayala_core.IMP_CHEQUE_PCT_DEFAULT, "orden": ayala_core.COSTO_ORDEN_ECOM_DEFAULT, "tramos": ayala_core.COSTO_FIJO_ML_TRAMOS}
+        cp = {"comision": ayala_core.PARAMS_ML["comision"], "iibb": ayala_core.PARAMS_ML["iibb"], "cheque": ayala_core.PARAMS_ML["cheque"], "orden": ayala_core.PARAMS_ML["orden"], "tramos": ayala_core.PARAMS_ML["tramos"]}
         fin = lambda c: ayala_core._financiero_pct(int(c) if c.isdigit() else c)
     else:
         u = _mercado["usados"]
@@ -2994,10 +3006,10 @@ def _ayala_core_motor_sync(
         "precios": {k: float(v) for k, v in precios.items()},
         "precios_unitarios": {k: round(float(v) / cantidad, 2) for k, v in precios.items()},
         "item": item_info,
-        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"]), "comision_pct": float(ayala_core.COMISION_ML_DEFAULT),
+        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"]), "comision_pct": float(ayala_core.PARAMS_ML["comision"]),
            # Lo que ML descuenta en la cuenta de siempre, para que la tarjeta lo muestre (antes decía «sin costo por orden» aunque el precio ya lo incluía).
-           "parametros": {"comision_pct": float(ayala_core.COMISION_ML_DEFAULT), "costo_orden": float(ayala_core.COSTO_ORDEN_ECOM_DEFAULT),
-                          "cheque_pct": float(ayala_core.IMP_CHEQUE_PCT_DEFAULT), "iibb_pct": float(ayala_core.IIBB_PCT_DEFAULT)}}),
+           "parametros": {"comision_pct": float(ayala_core.PARAMS_ML["comision"]), "costo_orden": float(ayala_core.PARAMS_ML["orden"]),
+                          "cheque_pct": float(ayala_core.PARAMS_ML["cheque"]), "iibb_pct": float(ayala_core.PARAMS_ML["iibb"])}}),
         "errores_condicion": errores_condicion,
         "desglose_mercado": desglose_m,
         "renta_base": renta_base,
@@ -3092,6 +3104,43 @@ async def mercados_init():
         return {"sheet": _mercados_sheet_info(), "pestanas": await run_in_threadpool(lambda: mercados_mod.crear_pestanas(get_gs(), sid))}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudieron crear las pestañas: {mercados_mod.ml_foto.mensaje_para_usuario(e)}")
+
+# ── Criterios de precio por canal (página «Criterios de precio»): ver `criterios.py` ──
+def _criterios_cambiaron() -> None:
+    _TARIFAS_CACHE.update(en=0.0)
+    _tarifas_actuales()      # recarga y deja al día los criterios de Mercado Libre
+
+
+@app.get("/criterios")
+async def criterios_vista():
+    from rentabilidad import db as _db
+    return await run_in_threadpool(lambda: criterios_mod.vista(_db.sesion))
+
+
+@app.put("/criterios/valor")
+async def criterios_valor(request: Request):
+    """Cambia un criterio. Operador obligatorio; queda en el historial (quién, cuándo, antes y después)."""
+    from rentabilidad import db as _db
+    b = await request.json()
+    try:
+        e = await run_in_threadpool(lambda: criterios_mod.editar(_db.sesion, str(b.get("mercado", "")), str(b.get("concepto", "")), str(b.get("cuotas", "")), b.get("valor"), str(b.get("operador", ""))))
+    except criterios_mod.CriterioInvalido as ex:
+        raise HTTPException(status_code=422, detail=str(ex))
+    await run_in_threadpool(_criterios_cambiaron)
+    return {"ok": True, "cambio": e}
+
+
+@app.post("/criterios/volver-al-comun")
+async def criterios_volver_al_comun(request: Request):
+    from rentabilidad import db as _db
+    b = await request.json()
+    try:
+        e = await run_in_threadpool(lambda: criterios_mod.volver_al_comun(_db.sesion, str(b.get("mercado", "")), str(b.get("concepto", "")), str(b.get("operador", ""))))
+    except criterios_mod.CriterioInvalido as ex:
+        raise HTTPException(status_code=422, detail=str(ex))
+    await run_in_threadpool(_criterios_cambiaron)
+    return {"ok": True, "cambio": e}
+
 
 @app.get("/ayala-core/catalogo-skus")
 async def ayala_core_catalogo_skus():
@@ -3268,6 +3317,7 @@ async def ayala_core_publicaciones_run(
     pedido de Maxx 2026-09-15: pisar el TC de BNA a mano, sin el parámetro
     sigue siendo el TC en vivo."""
     job_id = f"ayalacore_pub_{int(time.time())}"
+    _tarifas_actuales()      # los criterios de Mercado Libre al día antes de leer las publicaciones
     tc = tc if tc is not None else float(tc_bna_requerido())
     lista_cuentas = [c for c in cuentas.split(",") if c] or None
     lista_skus = [s for s in skus.split(",") if s] or None
