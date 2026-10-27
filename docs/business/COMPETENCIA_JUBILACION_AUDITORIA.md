@@ -90,3 +90,11 @@ Para elegir la publicación a la que se envía el precio u oferta hay que mostra
 
 ## Etapa A de Competidores ML (hecha)
 El panel de parámetros de margen (comisión, costo fijo ML, IVA, IIBB, cheque, envío y TC) se mudó a Análisis de Competencia con los mismos ids (`cfg-*`, `ac-tc`, `comp-desc-panel`), así que **Jugar, Mix y los cálculos no cambian** y los valores guardados (`localStorage` `comp_cfg`) se siguen leyendo. Cambios de comportamiento a tener en cuenta: (1) Competidores usa el **TC del panel** (`ac-tc`) en lugar de su propio campo `comp-tc`, que se eliminó; (2) cambiar un parámetro vuelve a dibujar Análisis **y** Competidores (antes solo Competidores). «Baja s/comp.» (`cfg-baja`) queda en Competidores porque solo la usa esa pantalla.
+
+## Etapa D (hecha): «Enviar a Ecom» en «Jugar mi precio» y Competidores ML retirado
+Decisión de Maxx (28/10): el envío de precio a Ecom pasa a «Jugar mi precio» y se retira Competidores ML.
+- **Nuevo:** `POST /competencia/enviar-precio-ecom` y el bloque «Enviar a Ecom» del panel Jugar: cambia el precio de **contado (por unidad)** del SKU en la lista «Mercado Libre» de Ecom. Escritura **apagada por defecto** (casilla «Escritura habilitada»), operador obligatorio (también en el backend), confirmación con margen y umbral, **no toca SKU con varias variantes** (Ecom las cambiaría todas: se hace desde Verificar Ecom), **no envía combos**, se da por bueno solo si una lectura aparte de Ecom lo confirma y se registra en `Historial Ofertas ML` (Accion «Enviar precio a Ecom», Origen «Análisis de Competencia»).
+- **Diferencia con el «✏ Ecom» viejo:** enviaba «PM × cantidad + envío» (un precio comparable con el envío incluido); el nuevo envía el precio de contado que elegiste en Jugar.
+- **Retirado:** la pantalla Competidores ML (menú, página, `loadCompetidores`, `renderCompetidores`, «Refrescar historial», «✏ Ecom»). Su link viejo abre Análisis de Competencia. Se conservó `compMargenAt`, `COMPDESC` y el panel de parámetros (los usa Análisis).
+- **Se pierde de la vista:** las ventas y los títulos de las publicaciones de cada competidor (pestañas `V-*`). Los datos y las pestañas no se tocaron.
+- **Backend sin tocar:** `POST /competidores/refresh` y su estado quedan (sin caller en el front) hasta confirmar que ningún flujo de n8n los usa.

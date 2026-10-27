@@ -1064,6 +1064,62 @@ async def ecom_update_price_endpoint(request: Request):
     print(f"UPDATE PRICE: sku={body.get('sku')} price={body.get('price')} result={result}")
     return result
 
+_ORIGEN_ENVIAR_ECOM = "Análisis de Competencia"
+_LISTA_ECOM_ML = "Mercado Libre"
+
+
+def _precio_en_lista(variants: list, lista: str):
+    """(entrada de la lista, cantidad de variantes). Mismo criterio de nombre que `ecom_update_price`."""
+    for v in variants:
+        for p in v["prices"]:
+            if lista.lower() in p["name"].lower() or p["name"].lower() in lista.lower():
+                return p, len(variants)
+    return None, len(variants)
+
+
+@app.post("/competencia/enviar-precio-ecom")
+async def competencia_enviar_precio_ecom(request: Request, background_tasks: BackgroundTasks):
+    """«Enviar a Ecom» de «Jugar mi precio»: cambia el precio del SKU en la lista «Mercado Libre» de Ecom. Reemplaza al «✏ Ecom» de Competidores ML, con más cuidado:
+    operador obligatorio, un SKU con varias variantes NO se toca (Ecom las cambiaría todas; eso se hace desde Verificar Ecom, que elige la variante) y el cambio se da por bueno
+    solo si una lectura aparte de Ecom lo confirma. Se registra con operador y hora en `Historial Ofertas ML` (solo si Ecom lo aceptó)."""
+    body = await request.json()
+    cookie, sku = body.get("cookie"), str(body.get("sku", "")).strip()
+    operador = str(body.get("operador", "")).strip()
+    try:
+        precio = Decimal(str(body.get("precio")))
+    except Exception:
+        raise HTTPException(status_code=422, detail="Precio no válido.")
+    if not operador:
+        raise HTTPException(status_code=422, detail="Falta el operador: sin operador no se cambia ningún precio.")
+    if not cookie or not sku or precio <= 0:
+        raise HTTPException(status_code=422, detail="Faltan la conexión a Ecom, el SKU o un precio mayor a 0.")
+    html = await ecom_fetch_price_html(cookie, sku)
+    variants = ecom_parse_variants(html) if html else []
+    if not variants:
+        return {"ok": False, "error": f"No se encontró el SKU {sku} en Ecom (¿venció la conexión? conectá Ecom de nuevo)."}
+    entrada, n_variantes = _precio_en_lista(variants, _LISTA_ECOM_ML)
+    if n_variantes > 1:
+        return {"ok": False, "error": f"{sku} tiene {n_variantes} variantes en Ecom: no se cambia desde acá porque se modificarían todas. Hacelo desde Verificar Ecom."}
+    if entrada is None:
+        return {"ok": False, "error": f"El SKU {sku} no tiene la lista «{_LISTA_ECOM_ML}» en Ecom."}
+    anterior = entrada["currentPrice"]
+    r = await ecom_update_price(cookie, sku, sku, None, float(precio), _LISTA_ECOM_ML)
+    if not r.get("success"):
+        return {"ok": False, "error": r.get("error") or "Ecom no aplicó el cambio."}
+    html2 = await ecom_fetch_price_html(cookie, sku)
+    nueva, _ = _precio_en_lista(ecom_parse_variants(html2) if html2 else [], _LISTA_ECOM_ML)
+    real = nueva["currentPrice"] if nueva else None
+    if real is None or abs(real - float(precio)) > 0.5:
+        return {"ok": False, "error": f"Ecom respondió éxito pero la lectura aparte no confirma el precio (real: {real!r}, pedido: {float(precio)})."}
+    background_tasks.add_task(_registrar_historial_oferta, {
+        "Fecha": date.today().isoformat(), "Cuenta": "Ecom", "Item ID": "", "SKU": sku,
+        "Accion": "Enviar precio a Ecom", "Tipo/Promocion": f"Lista {_LISTA_ECOM_ML} (Ecom)",
+        "Precio Anterior": anterior, "Precio Nuevo": real, "Margen % Resultante": body.get("margen_pct", ""),
+        "Bajo Umbral": "Sí" if body.get("bajo_umbral") else "No", "Operador": operador, "Origen": _ORIGEN_ENVIAR_ECOM,
+    })
+    return {"ok": True, "precio_anterior": anterior, "precio_nuevo": real}
+
+
 @app.post("/ecom/find-listing")
 async def ecom_find_listing_endpoint(request: Request):
     body = await request.json()
