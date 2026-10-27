@@ -235,6 +235,7 @@ class _FakeTactica:
 
 def _correr(sesion_fn, modulo, ml, job="j1", **kw):
     mff._jobs[job] = {"status": "queued", "log": [], "progress": None}
+    kw.setdefault("historial_fn", lambda res: "https://sheet.invalid")
     mff.actualizar(job, modulo, sesion_fn=sesion_fn, ml_fn=lambda cache: ml, ecom_fn=_FakeEcom, tactica_fn=_FakeTactica, **kw)
     return mff._jobs[job]
 
@@ -320,3 +321,16 @@ def test_endpoint_alerta_vista(cliente, sesion_fn):
     assert cliente.post(f"/ml-full/foto/alertas/{aid}/vista").json() == {"ok": True}
     assert cliente.get("/ml-full/foto/conciliacion").json()["alertas"][0]["estado"] == "vista"
     assert cliente.post("/ml-full/foto/alertas/nada/vista").status_code == 404
+
+
+def test_cada_conciliacion_nueva_anota_la_columna_en_el_historial_y_si_falla_no_tira_la_actualizacion(sesion_fn, monkeypatch):
+    monkeypatch.setattr(ml_full, "SELLERS", {"IT": 1, "MT": 2})
+    anotadas = []
+    job = _correr(sesion_fn, "conciliacion", _FakeML(), job="h1", historial_fn=lambda res: anotadas.append({f.sku: f.diferencia for f in res.filas}) or "https://sheet.invalid")
+    assert job["status"] == "done" and anotadas == [{"SKU1": 0, "SKU2": 3}]
+    assert any("Historial de conciliación actualizado" in l for l in job["log"])
+
+    def roto(res):
+        raise RuntimeError("Sheets caído")
+    job = _correr(sesion_fn, "conciliacion", _FakeML(), job="h2", historial_fn=roto)
+    assert job["status"] == "done" and any("No se pudo actualizar el historial" in l and "Sheets caído" in l for l in job["log"])

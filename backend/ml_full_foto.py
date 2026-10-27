@@ -21,7 +21,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 import ml_foto
 from ml_auth import SELLERS
-from ml_full import (EcomFullAdapter, FilaConciliacion, MLFullClient, ResultadoConciliacion, TacticaStockSheetAdapter, conciliar)
+from ml_full import (EcomFullAdapter, FilaConciliacion, MLFullClient, ResultadoConciliacion, TacticaStockSheetAdapter, conciliar, registrar_historial_conciliacion)
 from ml_full import detalle_operaciones as ml_full_detalle
 from ml_reposicion import calcular_reposicion_mla
 from rentabilidad import db as _db
@@ -124,14 +124,25 @@ def _guardar_conciliacion(sesion_fn, res: ResultadoConciliacion, previo: dict | 
     return estado, len(sin_leer)
 
 
+def _anotar_historial(job_id: str, res: ResultadoConciliacion, historial_fn) -> None:
+    """Agrega la columna de esta lectura al Sheet «Historial» de la conciliación (una columna por lectura, una fila por SKU). Corría solo en el job viejo
+    (`ml_full.iniciar_job`); al pasar a la foto guardada quedó sin escribirse. Los SKU que no se pudieron leer no están en `filas`: quedan en blanco.
+    Si falla no tira la actualización: queda en el log."""
+    try:
+        _log(job_id, f"Historial de conciliación actualizado: {historial_fn(res)}")
+    except Exception as e:  # noqa: BLE001
+        _log(job_id, f"No se pudo actualizar el historial en Sheets: {e}")
+
+
 def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo: float = 3, fecha_llegada: date | None = None, contar_deposito: bool = True, fraccion_deposito: float = 0.3, *,
-               sesion_fn=None, ml_fn=None, ecom_fn=None, tactica_fn=None) -> None:
+               sesion_fn=None, ml_fn=None, ecom_fn=None, tactica_fn=None, historial_fn=None) -> None:
     """Corre una actualización completa y la deja guardada. Siempre termina el job (éxito o error): el botón del front nunca queda esperando. Las fábricas
     `*_fn` son para los tests."""
     sesion_fn = sesion_fn or _db.sesion
     ml_fn = ml_fn or (lambda cache: MLFullClient(cache=cache))
     ecom_fn = ecom_fn or (lambda: EcomFullAdapter(EcomApiClient()))
     tactica_fn = tactica_fn or TacticaStockSheetAdapter
+    historial_fn = historial_fn or registrar_historial_conciliacion
     mod = MODULOS[modulo]
     params = _params_repo(dias_ventas, semanas_objetivo, contar_deposito, fraccion_deposito) if modulo == "reposicion" else ""
     _log(job_id, "Esperando que termine otra actualización de Full ML..." if _turno.locked() else "Iniciando actualización...")
@@ -153,6 +164,7 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
                     _log(job_id, "Leyendo stock de Full y vinculaciones...")
                     res_conc = conciliar(ml, ecom, progreso_cb=_progreso)
                     _guardar_conciliacion(sesion_fn, res_conc, previo_conc, t0)
+                    _anotar_historial(job_id, res_conc, historial_fn)
                 else:
                     _log(job_id, "Reutilizo la conciliación guardada hace menos de %d min (no se vuelve a leer)." % REUSO_CONCILIACION_MIN)
                 previo = _foto_previa(MOD_REPO, params, sesion_fn)
@@ -170,6 +182,7 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
             else:
                 res = conciliar(ml, ecom, progreso_cb=_progreso)
                 estado, n_inc = _guardar_conciliacion(sesion_fn, res, previo_conc, t0)
+                _anotar_historial(job_id, res, historial_fn)
             _jobs[job_id]["progress"] = None
             _log(job_id, "Listo." if estado == "completa" else f"Listo con datos incompletos para {n_inc} SKU.")
             _jobs[job_id]["status"] = "done"
