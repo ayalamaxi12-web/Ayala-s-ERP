@@ -2994,7 +2994,10 @@ def _ayala_core_motor_sync(
         "precios": {k: float(v) for k, v in precios.items()},
         "precios_unitarios": {k: round(float(v) / cantidad, 2) for k, v in precios.items()},
         "item": item_info,
-        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"]), "comision_pct": float(ayala_core.COMISION_ML_DEFAULT)}),
+        **(_mercado_respuesta(_mercado, envio_real) if _mercado is not None else {"mercado": "ml", "condiciones": list(mercados_mod.MERCADOS["ml"]["condiciones"]), "comision_pct": float(ayala_core.COMISION_ML_DEFAULT),
+           # Lo que ML descuenta en la cuenta de siempre, para que la tarjeta lo muestre (antes decía «sin costo por orden» aunque el precio ya lo incluía).
+           "parametros": {"comision_pct": float(ayala_core.COMISION_ML_DEFAULT), "costo_orden": float(ayala_core.COSTO_ORDEN_ECOM_DEFAULT),
+                          "cheque_pct": float(ayala_core.IMP_CHEQUE_PCT_DEFAULT), "iibb_pct": float(ayala_core.IIBB_PCT_DEFAULT)}}),
         "errores_condicion": errores_condicion,
         "desglose_mercado": desglose_m,
         "renta_base": renta_base,
