@@ -409,6 +409,14 @@ class MLOfertasClient(MLFullClient):
             progreso_cb(total, total, "catalogo")
         return salida
 
+    def precios_item(self, item_id: str, cuenta: str) -> list[dict]:
+        """Todos los precios de la publicación, mayoristas incluidos (`GET /items/{id}/prices` con el header
+        `show-all-prices: true`, developers.mercadolibre.com.ar/precio-por-cantidad). Un precio mayorista es el que trae
+        `conditions.min_purchase_unit`."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}", "show-all-prices": "true"}
+        d = self._get(f"https://api.mercadolibre.com/items/{item_id}/prices", {}, headers) or {}
+        return d.get("prices") or []
+
     def detalle_item_completo(self, item_id: str, cuenta: str) -> dict:
         """UN ítem, con `price` -- distinto de `detalle_items_ofertas`
         (que es para lotes de hasta 20 y no pide `price`, porque cada
@@ -760,6 +768,34 @@ class MLOfertasEscritura(MLOfertasClient):
         return {"ok": False,
                 "error": f"ML respondió éxito pero el GET de verificación no confirma el precio base "
                          f"(real: {precio_real!r}, pedido: {float(precio_base)})."}
+
+    def sacar_precios_mayoristas(self, item_id: str, cuenta: str) -> dict:
+        """Saca TODOS los precios por cantidad (mayorista) de la publicación y deja solo los demás precios.
+
+        Documentado (developers.mercadolibre.com.ar/precio-por-cantidad, «Agregar, modificar y eliminar»): `POST /items/{id}/prices/
+        standard/quantity` con `{"prices": [{"id": ...}]}`; para mantener un precio se manda solo su id, y **un precio cuyo id no
+        se manda se elimina**. Por eso acá se manda únicamente el id de los precios que NO son mayoristas. Se verifica con un GET
+        aparte (nunca se confía en la respuesta del POST). Ojo: ML avisó que desde el 27/10/2026 este endpoint deja de aceptar
+        precios con valor absoluto; si el borrado falla se devuelve el error de ML tal cual.
+
+        Devuelve `{"ok": True, "sacados": [{"min": unidades, "precio": monto}, ...]}` (para anotarlos y poder recargarlos a mano
+        si hiciera falta), o `{"ok": False, "error": ...}`."""
+        precios = self.precios_item(item_id, cuenta)
+        mayoristas = [p for p in precios if (p.get("conditions") or {}).get("min_purchase_unit")]
+        if not mayoristas:
+            return {"ok": True, "sacados": []}
+        sacados = sorted(({"min": (p["conditions"]["min_purchase_unit"]), "precio": p.get("amount")} for p in mayoristas), key=lambda x: x["min"])
+        conservar = [{"id": str(p["id"])} for p in precios if p.get("id") is not None and p not in mayoristas]
+        if not conservar:
+            return {"ok": False, "error": "No encontré el precio estándar de la publicación para conservarlo; no toqué nada."}
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}", "Content-Type": "application/json"}
+        d = self._post(f"https://api.mercadolibre.com/items/{item_id}/prices/standard/quantity", headers, {"prices": conservar}) or {}
+        if d.get("error") or d.get("prices") is None:
+            return {"ok": False, "error": f"ML no aceptó sacar el precio mayorista: {d.get('message') or d}"}
+        quedan = [p for p in self.precios_item(item_id, cuenta) if (p.get("conditions") or {}).get("min_purchase_unit")]
+        if quedan:
+            return {"ok": False, "error": "ML respondió éxito pero el precio mayorista sigue en la publicación."}
+        return {"ok": True, "sacados": sacados}
 
     def meter_en_campana(self, item_id: str, cuenta: str, promotion_id: str, deal_price: Decimal) -> dict:
         """Enrola la publicación en una campaña `SELLER_CAMPAIGN` que ya
@@ -1187,6 +1223,30 @@ def activar_en_campana_tradicional(
     if aviso_pct:
         resultado["aviso"] = aviso_pct
     return resultado
+
+
+def _texto_mayoristas(sacados: list[dict]) -> str:
+    return "; ".join(f"desde {x['min']} u. a ${x['precio']}" for x in sacados) or "sin detalle"
+
+
+def activar_en_campana_con_mayorista(ml: MLOfertasEscritura, cuenta: str, item_id: str, precio_pm: Decimal, sacar_mayorista: bool = False, **kw) -> dict:
+    """`activar_en_campana_tradicional`, y si ML no deja cambiar el precio porque la publicación tiene precio mayorista
+    (`standard_price_by_quantity`) y `sacar_mayorista` está tildado (Maxx lo autorizó 27/10/2026), saca el mayorista y reintenta UNA vez.
+    Solo se saca si hace falta: si la oferta entra con el mayorista puesto, no se toca. El detalle de lo sacado queda en `mayoristas_sacados`."""
+    r = activar_en_campana_tradicional(ml, cuenta, item_id, precio_pm, **kw)
+    if r.get("ok") or not sacar_mayorista or "standard_price_by_quantity" not in (r.get("error") or ""):
+        return r
+    q = ml.sacar_precios_mayoristas(item_id, cuenta)
+    if not q.get("ok"):
+        return {**r, "error": f"{r['error']} Además no se pudo sacar el precio mayorista: {q['error']}"}
+    txt = _texto_mayoristas(q["sacados"])
+    r2 = activar_en_campana_tradicional(ml, cuenta, item_id, precio_pm, **kw)
+    r2["mayoristas_sacados"] = q["sacados"]
+    if r2.get("ok"):
+        r2["aviso"] = ((r2.get("aviso") + " ") if r2.get("aviso") else "") + f"Se sacó el precio mayorista ({txt}) para poder poner la oferta."
+    else:
+        r2["error"] = f"{r2.get('error')} OJO: el precio mayorista ya se había sacado ({txt}); si lo querés de nuevo hay que cargarlo a mano en ML."
+    return r2
 
 
 def listar_promociones_item(ml: MLOfertasClient, cuenta: str, item_id: str) -> list[dict]:

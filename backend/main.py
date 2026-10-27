@@ -2747,9 +2747,9 @@ async def ml_ofertas_item_sacar(item_id: str, request: Request, background_tasks
         })
     return r
 
-def _activar_campana_sync(item_id: str, cuenta: str, precio_pm: Decimal, descuento_pct: Decimal, promotion_id: str | None) -> dict:
+def _activar_campana_sync(item_id: str, cuenta: str, precio_pm: Decimal, descuento_pct: Decimal, promotion_id: str | None, sacar_mayorista: bool = False) -> dict:
     ml = ml_ofertas.MLOfertasEscritura()
-    return ml_ofertas.activar_en_campana_tradicional(ml, cuenta, item_id, precio_pm, descuento_pct, promotion_id)
+    return ml_ofertas.activar_en_campana_con_mayorista(ml, cuenta, item_id, precio_pm, sacar_mayorista, descuento_pct=descuento_pct, promotion_id=promotion_id)
 
 @app.post("/ml-ofertas/item/{item_id}/activar-campana")
 async def ml_ofertas_item_activar_campana(item_id: str, request: Request, background_tasks: BackgroundTasks):
@@ -2766,7 +2766,13 @@ async def ml_ofertas_item_activar_campana(item_id: str, request: Request, backgr
     precio_pm = Decimal(str(body["precio_pm"]))
     descuento_pct = Decimal(str(body.get("descuento_pct", 25)))
     promotion_id = body.get("promotion_id")
-    r = await run_in_threadpool(_activar_campana_sync, item_id, cuenta, precio_pm, descuento_pct, promotion_id)
+    r = await run_in_threadpool(_activar_campana_sync, item_id, cuenta, precio_pm, descuento_pct, promotion_id, bool(body.get("sacar_mayorista")))
+    if r.get("mayoristas_sacados"):
+        background_tasks.add_task(_registrar_historial_oferta, {
+            "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
+            "Accion": "Sacar precio mayorista", "Tipo/Promocion": "standard_price_by_quantity",
+            "Precio Anterior": ml_ofertas._texto_mayoristas(r["mayoristas_sacados"]), "Precio Nuevo": "", "Operador": body.get("operador", ""),
+        })
     if r.get("ok"):
         background_tasks.add_task(_registrar_historial_oferta, {
             "Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": item_id, "SKU": body.get("sku", ""),
@@ -2847,7 +2853,7 @@ async def ml_ofertas_excel_aplicar(request: Request):
         raise HTTPException(status_code=422, detail="Falta elegir la campaña o no hay filas para aplicar.")
     job_id = f"mlexcel_b_{int(time.time() * 1000)}"
     ml_ofertas_excel.lanzar(ml_ofertas_excel.iniciar_aplicacion, job_id, cuenta, promotion_id, filas, body.get("operador", ""),
-                            _registrar_historial_oferta_lote)
+                            bool(body.get("sacar_mayorista")), _registrar_historial_oferta_lote)
     return {"job_id": job_id, "total": len(filas)}
 
 

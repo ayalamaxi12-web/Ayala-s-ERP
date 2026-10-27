@@ -24,7 +24,7 @@ from typing import Callable
 
 from ml_ofertas import (
     MLOfertasClient, MLOfertasEscritura, ParametrosMargen, _cuotas_sin_interes, _sku_de_item,
-    activar_en_campana_tradicional, calcular_margen_oferta,
+    _texto_mayoristas, activar_en_campana_con_mayorista, calcular_margen_oferta,
 )
 
 MAX_FILAS = 500
@@ -200,6 +200,9 @@ def analizar(
             f["avisos"].append(f"La publicación está «{d['status']}» en ML ({d.get('sub_status') or 'sin detalle'}).")
         if d.get("available_quantity") == 0:
             f["avisos"].append("La publicación no tiene stock.")
+        f["mayorista"] = "standard_price_by_quantity" in (d.get("tags") or [])
+        if f["mayorista"]:
+            f["avisos"].append("Tiene precio mayorista: si ML no deja poner el tachado por eso, se puede sacar (casilla «Sacar el precio mayorista si hace falta»).")
         lista, err = promos.get(f["mla"], ([], None))
         if err:
             f["avisos"].append(f"No se pudieron leer sus promociones en ML ({err}): no sé en qué campañas puede entrar.")
@@ -267,7 +270,7 @@ def _chequear_fila(f: dict, promotion_id: str) -> str | None:
 
 
 def aplicar(
-    ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: list[dict], operador: str = "",
+    ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: list[dict], operador: str = "", sacar_mayorista: bool = False,
     progreso_cb: Callable[[int, int, str], None] | None = None, historial_cb: Callable[[list[dict]], None] | None = None,
 ) -> dict:
     """Una por una, con el tachado y el final del Excel. Si ML pide una verificación de seguridad (QR/cara) se corta todo
@@ -288,10 +291,16 @@ def aplicar(
             resultados.append({**base, "estado": "pendiente", "mensaje": motivo})
             continue
         try:
-            r = activar_en_campana_tradicional(
-                ml, cuenta, f["mla"], Decimal(str(f["final"])), promotion_id=promotion_id, tachado_exacto=Decimal(str(f["tachado"])))
+            r = activar_en_campana_con_mayorista(
+                ml, cuenta, f["mla"], Decimal(str(f["final"])), sacar_mayorista, promotion_id=promotion_id, tachado_exacto=Decimal(str(f["tachado"])))
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "error": f"Error inesperado: {e}"}
+        if r.get("mayoristas_sacados"):
+            historial.append({
+                "Fecha": _hoy(), "Cuenta": cuenta, "Item ID": f["mla"], "SKU": f.get("sku", ""), "Accion": "Sacar precio mayorista",
+                "Tipo/Promocion": "standard_price_by_quantity", "Precio Anterior": _texto_mayoristas(r["mayoristas_sacados"]), "Precio Nuevo": "",
+                "Operador": operador, "Origen": "Excel (lote)",
+            })
         if r.get("ok"):
             resultados.append({**base, "estado": "ok", "mensaje": "Aplicada." + (" " + r["aviso"] if r.get("aviso") else ""), "precio": r.get("precio"), "tachado": r.get("original_price")})
             historial.append({
@@ -324,7 +333,7 @@ def _hoy() -> str:
     return date.today().isoformat()
 
 
-def iniciar_aplicacion(job_id: str, cuenta: str, promotion_id: str, filas: list[dict], operador: str = "",
+def iniciar_aplicacion(job_id: str, cuenta: str, promotion_id: str, filas: list[dict], operador: str = "", sacar_mayorista: bool = False,
                        historial_cb: Callable[[list[dict]], None] | None = None, ml: MLOfertasEscritura | None = None) -> None:
     _jobs[job_id] = {"status": "running", "progress": None, "result": None, "log": []}
 
@@ -332,7 +341,7 @@ def iniciar_aplicacion(job_id: str, cuenta: str, promotion_id: str, filas: list[
         _jobs[job_id]["progress"] = {"current": a, "total": t, "label": label}
 
     try:
-        _jobs[job_id]["result"] = aplicar(ml or MLOfertasEscritura(), cuenta, promotion_id, filas, operador, _prog, historial_cb)
+        _jobs[job_id]["result"] = aplicar(ml or MLOfertasEscritura(), cuenta, promotion_id, filas, operador, sacar_mayorista, _prog, historial_cb)
         _jobs[job_id]["status"] = "done"
     except Exception as e:  # noqa: BLE001
         _jobs[job_id]["status"] = "error"

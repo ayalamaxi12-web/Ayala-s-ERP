@@ -276,3 +276,69 @@ def test_si_ml_exige_mas_descuento_se_sube_el_tachado_y_el_final_no_cambia():
     assert _post.calls[0]["deal_price"] == 12119.0                     # el final no se toca
     assert _put.calls[-1]["price"] > 15148.75                           # el tachado sube
     assert "ML exige al menos" in r["aviso"] and "tachado pasó de" in r["aviso"]
+
+
+# ── precio mayorista (27/10/2026: Maxx autorizó sacarlo si es lo que impide el tachado) ──
+
+def _ml_mayorista(estado):
+    """Item con mayorista: `estado['mayorista']` indica si todavía lo tiene; el PUT de precio falla con el mensaje del tag mientras lo tenga."""
+    precios = lambda: ([{"id": "1", "type": "standard", "amount": 12000, "conditions": {"context_restrictions": []}}]
+                       + ([{"id": "7", "type": "standard", "amount": 10000, "conditions": {"context_restrictions": ["channel_marketplace", "user_type_business"], "min_purchase_unit": 10}}] if estado["mayorista"] else []))
+
+    def get(url, params, headers):
+        if url.endswith("/prices"):
+            assert headers.get("show-all-prices") == "true"
+            return {"id": "MLA1", "prices": precios()}
+        if "seller-promotions/users" in url:
+            return {"results": [{"id": "C1", "type": "SELLER_CAMPAIGN", "status": "started", "name": "Oferta Tradicional Oct"}]}
+        if "/seller-promotions/items/" in url:
+            return []
+        return {"id": "MLA1", "price": _put.calls[-1]["price"] if _put.calls and not estado.get("rechaza") else 12000.0, "tags": ["standard_price_by_quantity"] if estado["mayorista"] else []}
+
+    def put(url, headers, body):
+        _put.calls.append(body)
+        if estado["mayorista"]:
+            return {"message": "has_bids", "error": "validation_error"}
+        return {"id": "MLA1", "price": body["price"]}
+
+    def post(url, headers, body):
+        if url.endswith("/prices/standard/quantity"):
+            estado["posts"].append(body)
+            estado["mayorista"] = False
+            return {"id": "MLA1", "prices": [{"id": "1"}]}
+        return {"price": body["deal_price"], "original_price": _put.calls[-1]["price"]}
+    return MLOfertasEscritura(get_fn=get, token_fn=TOKEN, put_fn=put, post_fn=post)
+
+
+def test_saca_el_mayorista_solo_si_ml_no_deja_poner_el_tachado_y_lo_anota():
+    from ml_ofertas import activar_en_campana_con_mayorista
+    _put.calls = []
+    estado = {"mayorista": True, "posts": []}
+    r = activar_en_campana_con_mayorista(_ml_mayorista(estado), "IT", "MLA1", Decimal("9000"), True, promotion_id="C1", tachado_exacto=Decimal("12000"))
+    assert r["ok"] is True and estado["posts"] == [{"prices": [{"id": "1"}]}]       # solo se manda el estándar: el mayorista (id 7) se elimina por omisión
+    assert r["mayoristas_sacados"] == [{"min": 10, "precio": 10000}] and "Se sacó el precio mayorista" in r["aviso"]
+
+
+def test_sin_la_casilla_no_se_toca_el_mayorista_y_se_informa():
+    from ml_ofertas import activar_en_campana_con_mayorista
+    _put.calls = []
+    estado = {"mayorista": True, "posts": []}
+    r = activar_en_campana_con_mayorista(_ml_mayorista(estado), "IT", "MLA1", Decimal("9000"), False, promotion_id="C1", tachado_exacto=Decimal("12000"))
+    assert r["ok"] is False and "mayorista" in r["error"] and estado["posts"] == []
+
+
+def test_el_excel_anota_el_mayorista_sacado_en_el_historial():
+    _put.calls = []
+    estado = {"mayorista": True, "posts": []}
+    f = _aptas("MLA1")[0]
+    f.update(final=9000, tachado=12000)
+    anotado = []
+    r = mx.aplicar(_ml_mayorista(estado), "IT", "C1", [f], "Natalia", True, historial_cb=anotado.append)
+    assert r["resultados"][0]["estado"] == "ok" and "mayorista" in r["resultados"][0]["mensaje"]
+    assert [h["Accion"] for h in anotado[0]] == ["Sacar precio mayorista", "Activar en campaña"]
+    assert "desde 10 u. a $10000" in anotado[0][0]["Precio Anterior"]
+
+
+def test_si_no_hay_mayorista_no_manda_nada():
+    estado = {"mayorista": False, "posts": []}
+    assert _ml_mayorista(estado).sacar_precios_mayoristas("MLA1", "IT") == {"ok": True, "sacados": []} and estado["posts"] == []
