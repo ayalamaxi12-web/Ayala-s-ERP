@@ -66,16 +66,17 @@ def upsert(ws, headers, dicts, claves, trozo=200):
     pos = {}
     for n, f in enumerate(existentes[1:], start=2):
         pos[tuple(str(f[idx[c]]).strip() if idx[c] < len(f) else '' for c in claves)] = n
-    nuevas, data = [], []
+    nuevas_por_clave, data = {}, []
     ultima = col_letra(len(headers))
     for d in dicts:
         k = tuple(str(d.get(c, '')).strip() for c in claves)
         fila = cdb.fila_desde_dict(headers, d)
-        if k in pos:
+        if pos.get(k):                                    # ya está en la hoja: se reemplaza esa fila
             data.append({'range': f'A{pos[k]}:{ultima}{pos[k]}', 'values': [fila]})
-        else:
-            nuevas.append(d)
+        else:                                             # nueva; si la MISMA clave viene dos veces en la tanda queda la última (antes armaba el rango «ANone:LNone» y la hoja rechazaba todo)
+            nuevas_por_clave[k] = d
             pos[k] = None
+    nuevas = list(nuevas_por_clave.values())
     for i in range(0, len(data), trozo):
         ws.batch_update(data[i:i + trozo])
         time.sleep(0.5)
