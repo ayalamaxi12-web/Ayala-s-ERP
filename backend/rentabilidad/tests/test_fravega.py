@@ -351,3 +351,91 @@ def test_oncity_se_guarda_con_la_comision_estimada(db_session):
     assert venta.comision_venta == Decimal("17481") * Decimal("0.15") * IVA_CARGOS
     assert venta.origen_comision == "ESTIMADO_ONCITY"
     assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15") * IVA_CARGOS, 0, "2.1"))
+
+
+# ── «Próxima liquidación» del Seller Center (comisión y envío reales antes de la quincena) ──
+
+from datetime import date as _date
+
+from rentabilidad import fravega_seller as fs
+from rentabilidad.persistencia import ARCHIVO_PROXIMA_LIQUIDACION, sincronizar_proxima_liquidacion
+
+
+def _prox(orden="v90781066frvg-01", estado="Facturada", comision="235766.5289", fee="14639", valor="760537.19"):
+    return fs.OrdenProximaLiquidacion(orden=orden, estado=estado, fecha=_date(2026, 6, 2), valor_sku=Decimal(valor), comision=Decimal(comision),
+                                      fee_logistico=Decimal(fee), descuentos=Decimal(0), neto=Decimal(0))
+
+
+def test_la_proxima_liquidacion_reemplaza_el_estimado_por_el_real_igual_que_la_quincenal(db_session):
+    _guardar(db_session, _fila_fravega())
+    r = sincronizar_proxima_liquidacion(db_session, [_prox()])
+    venta = _venta(db_session, "1387346")
+    assert venta.origen_comision == "LIQUIDACION_FRAVEGA"
+    assert venta.comision_venta == Decimal("235766.5289") * IVA_CARGOS and venta.costo_envio == Decimal("14639") * IVA_CARGOS
+    assert _cerca(venta.rentabilidad, Decimal("193225.65"), tol=Decimal("0.5"))     # mismo número que con la liquidación quincenal
+    assert r.ventas_actualizadas == ["1387346"] and ventas_fravega_estimadas(db_session) == []
+
+
+def test_sincronizar_dos_veces_no_duplica_y_si_la_orden_deja_de_aparecer_vuelve_al_estimado(db_session):
+    _guardar(db_session, _fila_fravega())
+    sincronizar_proxima_liquidacion(db_session, [_prox()])
+    sincronizar_proxima_liquidacion(db_session, [_prox()])
+    assert db_session.query(LiquidacionFravega).filter_by(orden="v90781066frvg-01").count() == 1
+    sincronizar_proxima_liquidacion(db_session, [])
+    assert _venta(db_session, "1387346").origen_comision == "ESTIMADO_FRAVEGA"
+    assert db_session.query(LiquidacionFravega).count() == 0
+
+
+def test_las_devueltas_y_las_sin_comision_no_se_cargan(db_session):
+    _guardar(db_session, _fila_fravega())
+    r = sincronizar_proxima_liquidacion(db_session, [_prox(estado="Devuelta"), _prox(orden="v1frvg-01", comision="0")])
+    assert r.ordenes_en_liquidacion == 0 and _venta(db_session, "1387346").origen_comision == "ESTIMADO_FRAVEGA"
+
+
+def test_la_liquidacion_quincenal_manda_y_nunca_se_suma_a_la_provisoria(db_session):
+    _guardar(db_session, _fila_fravega())
+    sincronizar_proxima_liquidacion(db_session, [_prox(comision="1")])                  # valor provisorio distinto del real
+    aplicar_liquidacion_fravega(db_session, _liquidacion(), archivo="Liq.xlsx")
+    filas = db_session.query(LiquidacionFravega).filter_by(orden="v90781066frvg-01").all()
+    assert [f.archivo for f in filas] == ["Liq.xlsx"]                                   # la provisoria se fue
+    assert _venta(db_session, "1387346").comision_venta == Decimal("235766.5289") * IVA_CARGOS
+    sincronizar_proxima_liquidacion(db_session, [_prox(comision="1")])                  # y una sincronización posterior no la vuelve a meter
+    assert [f.archivo for f in db_session.query(LiquidacionFravega).filter_by(orden="v90781066frvg-01").all()] == ["Liq.xlsx"]
+    assert ARCHIVO_PROXIMA_LIQUIDACION not in {f.archivo for f in db_session.query(LiquidacionFravega).all()}
+
+
+class _Resp:
+    def __init__(self, status=200, cuerpo=None, texto_no_json=False):
+        self.status_code, self._c, self._nj = status, cuerpo, texto_no_json
+
+    def json(self):
+        if self._nj:
+            raise ValueError("html")
+        return self._c
+
+
+def test_traer_proxima_liquidacion_lee_montos_en_negativo_junta_envio_y_fee_y_pagina():
+    item = lambda n, **k: {"fechaVenta": "2026-10-27T11:32:49.829Z", "nroOrden": n, "estado": "Facturada", "totalProductos": 72440, "totalComision": -18544.64,
+                           "totalEnvio": 0, "totalFeeLogistico": -6159, "totalDescuentos": 0, "totalLiquidacion": 47736.36, **k}
+    paginas = {1: {"items": [item("v1frvg-01")], "totalCount": 2}, 2: {"items": [item("v2frvg-01", totalEnvio=-100)], "totalCount": 2}}
+    pedidas = []
+
+    def get(url, params, cookies):
+        import json
+        f = json.loads(params["filter"])
+        pedidas.append(f)
+        return _Resp(200, paginas[f["page"]])
+    r = fs.traer_proxima_liquidacion({"X-SELLER-AUTH": "a"}, get_fn=get)
+    assert [o.orden for o in r] == ["v1frvg-01", "v2frvg-01"] and [p["page"] for p in pedidas] == [1, 2] and pedidas[0]["perPage"] == 200
+    assert r[0].comision == Decimal("18544.64") and r[0].fee_logistico == Decimal("6159") and r[1].fee_logistico == Decimal("6259")
+    assert r[0].fecha == _date(2026, 10, 27)
+
+
+def test_sesion_vencida_o_sin_configurar_se_avisa_y_no_se_toca_nada():
+    import pytest
+    for resp in (_Resp(401), _Resp(302), _Resp(200, texto_no_json=True)):
+        with pytest.raises(fs.SesionFravegaVencida):
+            fs.traer_proxima_liquidacion({"X-SELLER-AUTH": "a"}, get_fn=lambda *a, r=resp: r)
+    with pytest.raises(fs.FravegaNoConfigurado):
+        fs.cookies_desde_env({})
+    assert fs.cookies_desde_env({"FRAVEGA_SELLER_AUTH": "a", "FRAVEGA_SELLER_ID": "b", "FRAVEGA_SELLER_APP": "c"}) == {"X-SELLER-AUTH": "a", "X-FVG-SELLER-ID": "b", "X-SELLER-APP": "c"}

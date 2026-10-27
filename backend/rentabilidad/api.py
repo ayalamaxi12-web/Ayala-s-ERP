@@ -722,6 +722,37 @@ async def cargar_liquidacion_fravega(archivo: UploadFile = File(...)) -> Liquida
     )
 
 
+class ProximaLiquidacionFravegaOut(BaseModel):
+    ordenes_con_comision_real: int  # órdenes de «Próxima liquidación» que quedaron cargadas (sin devueltas ni ya liquidadas en la quincena)
+    ventas_actualizadas: int
+    canceladas_observadas: list[str]
+    sin_venta_en_ecom: int
+    fravega_pendientes: int  # ventas de Frávega que siguen con comisión estimada
+
+
+@router.post("/fravega/proxima-liquidacion/sync", response_model=ProximaLiquidacionFravegaOut)
+def sincronizar_proxima_liquidacion_fravega() -> ProximaLiquidacionFravegaOut:
+    """Trae del Seller Center de Frávega («Estado de cuenta → Próxima liquidación») la comisión y el fee logístico REALES de cada orden
+    facturada y reemplaza los estimados en las ventas de Ecom, sin esperar la liquidación de la quincena (que queda como conciliación final y
+    manda siempre). Lee las cookies de sesión de `FRAVEGA_SELLER_AUTH/ID/APP` (Railway). Pensado para correr cada hora (n8n)."""
+    from . import fravega_seller
+    from .persistencia import sincronizar_proxima_liquidacion
+
+    try:
+        ordenes = fravega_seller.traer_proxima_liquidacion()
+    except fravega_seller.FravegaNoConfigurado as e:
+        raise HTTPException(503, str(e))
+    except fravega_seller.SesionFravegaVencida as e:
+        raise HTTPException(502, str(e))
+    with sesion() as db:
+        resultado = sincronizar_proxima_liquidacion(db, ordenes)
+        db.flush()
+        pendientes = len(ventas_fravega_estimadas(db))
+    return ProximaLiquidacionFravegaOut(
+        ordenes_con_comision_real=resultado.ordenes_en_liquidacion, ventas_actualizadas=len(resultado.ventas_actualizadas),
+        canceladas_observadas=resultado.canceladas_observadas, sin_venta_en_ecom=resultado.sin_venta_en_ecom, fravega_pendientes=pendientes)
+
+
 @router.get("/fravega/pendientes", response_model=list[ResultadoEcomOut])
 def fravega_pendientes() -> list[ResultadoEcomOut]:
     """Ventas de Frávega guardadas que siguen con comisión estimada: las que
