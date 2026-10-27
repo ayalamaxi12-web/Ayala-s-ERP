@@ -274,15 +274,15 @@ def test_responsable_sin_match_devuelve_none():
 
 # ── MargenObjetivoProvider (§9, §8.6) ──
 
-def test_margen_objetivo_cascada_veronica_matias_cristian():
+def test_margen_objetivo_cascada_veronica_laura_matias():
     hdr = ["SKU", "L3 usd SIN IVA", "L4 usd SIN IVA", "L5 usd SIN IVA"]
-    filas_matias = [hdr, ["SKU1", "10", "12", "15"]]
+    filas_laura = [hdr, ["SKU1", "10", "12", "15"]]
 
     def fetch(sheet_id, tab):
-        return filas_matias if sheet_id == "matias-id" else []
+        return filas_laura if sheet_id == "laura-id" else []
 
     prov = MargenObjetivoProvider(
-        sheet_ids={"veronica": "veronica-id", "matias": "matias-id", "cristian": None},
+        sheet_ids={"veronica": "veronica-id", "laura": "laura-id", "matias": None},
         fetch_fn=fetch,
     )
     assert prov.l3_l4_l5("SKU1") == (Decimal("10"), Decimal("12"), Decimal("15"))
