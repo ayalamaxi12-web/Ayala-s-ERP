@@ -342,6 +342,10 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .cr-nota{margin:0 0 4px;font-size:12px;color:var(--texto-suave)}
 .cr-sec{margin-top:16px;border:1px solid var(--borde);border-radius:var(--r-recuadro);background:var(--superficie)}.cr-sec>summary{cursor:pointer;padding:14px 16px;font-size:14px;font-weight:600;color:var(--tinta)}.cr-sec-c{padding:0 16px 16px}
 .cr-hist{width:100%;border-collapse:collapse;font-size:12px}.cr-hist th,.cr-hist td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--divisor)}
+.cr-resumen{display:flex;flex-direction:column;gap:10px;margin-bottom:10px;padding:12px 16px;background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r-recuadro);font-size:13px;color:var(--tinta-2)}
+.cr-resumen-t span{color:var(--texto-suave)}
+.cr-resumen-f{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+.cr-resumen .cr-op input{width:90px}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -1428,21 +1432,11 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   </div>
   <div id="ac-avisos" class="ac-aviso" role="status" style="display:none"></div>
   <div class="stats-row" id="ac-stats" style="display:none"></div>
-  <div id="comp-desc-panel" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <span style="font-weight:700;color:var(--accent)">Parámetros de margen:</span>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.com=this.checked;acRender()">Comisión ML<input type="text" id="cfg-com" value="15.5" onchange="compCfgSave();acRender()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.extra=this.checked;acRender()">Extra fijo ML <span id="comp-costo-fijo-ml" style="color:var(--text3);font-family:'DM Mono',monospace;font-size:10px" title="Viene del motor de precios (backend): no se edita acá">…</span></label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iva=this.checked;acRender()">IVA</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.iibb=this.checked;acRender()">IIBB<input type="text" id="cfg-iibb" value="5" onchange="compCfgSave();acRender()" style="width:30px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.impch=this.checked;acRender()">Imp.CH<input type="text" id="cfg-impch" value="1.2" onchange="compCfgSave();acRender()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.envio=this.checked;acRender()">Envío<input type="text" id="cfg-envio" value="8500" onchange="compCfgSave();acRender()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"><span style="color:var(--text3)">≥33k</span></label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="COMPDESC.orden=this.checked;acRender()">Costo por orden Ecom ($149,12)</label>
-      <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">TC:<input type="text" id="ac-tc" placeholder="BNA auto" oninput="acRender()" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;outline:none"></span>
-    </div>
-    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <span style="font-weight:700;color:var(--accent)">Costo de cuotas ML:</span>
-      <span id="comp-cuotas-ml" style="font-family:'DM Mono',monospace;color:var(--text3)" title="Viene del motor de precios (backend, editable ahí): no se edita acá. Es % del precio y lo absorbe el vendedor.">…</span>
+  <div id="comp-desc-panel" class="cr-resumen">
+    <div class="cr-resumen-t"><b>Criterios de precio vigentes</b> <span id="comp-criterios-txt">cargando…</span></div>
+    <div class="cr-resumen-f">
+      <button type="button" class="btn" onclick="irACriterios()">Ver y editar criterios</button>
+      <label class="cr-op">TC <input type="text" id="ac-tc" placeholder="BNA auto" oninput="acRender()" class="fi campo-num"></label>
     </div>
   </div>
   <div id="ac-filtros" style="display:none">
@@ -1952,7 +1946,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div id="ofm-status" class="ofm-estado"></div>
   <div id="ofm-log" style="display:none;max-height:110px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
 
-  <div id="ofm-panel" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"></div>
+  <div id="ofm-panel" class="cr-resumen"></div>
 
   <div class="ofm-seg" role="group" aria-label="Cuenta de Mercado Libre">
     <button type="button" class="ofm-seg-b" id="ofm-tab-IT" aria-pressed="true" onclick="ofmTab('IT')">Group</button>
@@ -3334,8 +3328,8 @@ async function loadMLSheets(){
 const _oTMV2=toggleMSValue;toggleMSValue=function(id,v){_oTMV2(id,v);if(id==='ms-ac-pm'||id==='ms-ac-cat'){AC.page=1;acRender();}};
 const _oCMS2=clearMS;clearMS=function(id){_oCMS2(id);if(id==='ms-ac-pm'||id==='ms-ac-cat'){AC.page=1;acRender();}};
 const _oSAMS2=selectAllMS;selectAllMS=function(id){_oSAMS2(id);if(id==='ms-ac-pm'||id==='ms-ac-cat'){AC.page=1;acRender();}};
-function compParamResumen(){const e=qs('comp-param-resumen');if(!e)return;const c=window.COMPDESC||{};const on=(k,t)=>c[k]===false?null:t;const tc=parseFloat(((qs('ac-tc')||{}).value||'').replace(',','.'))||S.tcBNA||0;
-  e.textContent='Margen con los parámetros de Análisis de Competencia: '+[on('com','comisión '+cfgN('cfg-com',15.5)+'%'),on('iibb','IIBB '+cfgN('cfg-iibb',5)+'%'),on('impch','cheque '+cfgN('cfg-impch',1.2)+'%'),on('envio','envío $'+cfgN('cfg-envio',8500)),on('extra','costo fijo ML'),'TC '+(tc||'sin TC')].filter(Boolean).join(' · ');}
+function compParamResumen(){const e=qs('comp-param-resumen');if(!e)return;const tc=parseFloat(((qs('ac-tc')||{}).value||'').replace(',','.'))||S.tcBNA||0;
+  e.textContent='Margen con los criterios de precio vigentes: '+['envío $'+(S.shippingCost||8500)+' desde '+(S.shippingThreshold||33000),'TC '+(tc||'sin TC')].join(' · ');}
 // ── COSTO Y TC ÚNICOS (CRITERIOS_MARGEN §7) ──
 // El costo sale del catálogo de artículos de Ecom, vía el backend (/rentabilidad/costos/ecom), NO de la planilla PM
 // (la PM sigue siendo la fuente de PRECIOS). El TC es el del BNA del día, o el último guardado: nunca un valor fijo.
@@ -3389,39 +3383,40 @@ function cargarCostosEcom(force){
 // ── Costo fijo de ML por tramo de precio: FUENTE ÚNICA = motor de precios del backend (GET /rentabilidad/pricing/ml-costo-fijo). ──
 // CRITERIOS_MARGEN: nada de montos copiados en el front. Mientras no llega la respuesta (o si el backend no responde) rige el respaldo = seed del motor.
 const ML_COSTO_FIJO={tramos:[[15000,1330],[24000,2740],[33000,3320],[null,0]],origen:'respaldo',cargado:false,cargando:null};
-function cargarCostoFijoML(force){
-  if(ML_COSTO_FIJO.cargando)return ML_COSTO_FIJO.cargando;
-  if(ML_COSTO_FIJO.cargado&&!force)return Promise.resolve();
-  const bu=getBackendUrl();if(!bu)return Promise.resolve();
-  ML_COSTO_FIJO.cargando=fetch(`${bu}/rentabilidad/pricing/ml-costo-fijo`).then(async r=>{
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||!Array.isArray(d.tramos)||!d.tramos.length)throw new Error(d.detail||('status '+r.status));
-    const t=d.tramos.filter(x=>x.hasta!==null).map(x=>[Number(x.hasta),Number(x.valor)]).sort((a,b)=>a[0]-b[0]);
-    ML_COSTO_FIJO.tramos=t.concat([[null,0]]);ML_COSTO_FIJO.origen='backend';ML_COSTO_FIJO.cargado=true;
-    const el=qs('comp-costo-fijo-ml');if(el)el.textContent=mlCostoFijoTexto();
-  }).catch(e=>{console.warn('Costo fijo ML: se usa el respaldo del motor ('+(e.message||e)+')');}).finally(()=>{ML_COSTO_FIJO.cargando=null;});
-  return ML_COSTO_FIJO.cargando;
-}
+function cargarCostoFijoML(force){return criteriosMlCargar(force);}
 function mlCostoFijoTexto(){const t=ML_COSTO_FIJO.tramos;let d=0;return t.filter(x=>x[0]!==null).map(x=>{const r=`${d/1000}-${x[0]/1000}k $${x[1]}`;d=x[0];return r;}).join(' · ')+` · ≥${d/1000}k sin cargo (${ML_COSTO_FIJO.origen})`;}
 // ── Cuotas de ML (% del precio que absorbe el vendedor): FUENTE ÚNICA = motor de precios (GET /rentabilidad/pricing/ml-cuotas, editable en el backend). ──
 // Valores oficiales de ML (Maxx, 2026-10): 3c 8,9 · 6c 13,4 · 9c 17,8 · 12c 21,6. Respaldo si el backend no responde = el seed del motor.
 const ML_CUOTAS={planes:{3:8.5,6:12.9,9:17.3,12:20.8},reducida:5,origen:'respaldo',cargado:false,cargando:null};
-function cargarCuotasML(force){
-  if(ML_CUOTAS.cargando)return ML_CUOTAS.cargando;
-  if(ML_CUOTAS.cargado&&!force)return Promise.resolve();
-  const bu=getBackendUrl();if(!bu)return Promise.resolve();
-  ML_CUOTAS.cargando=fetch(`${bu}/rentabilidad/pricing/ml-cuotas`).then(async r=>{
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||!Array.isArray(d.planes)||!d.planes.length)throw new Error(d.detail||('status '+r.status));
-    const pl={};let red=ML_CUOTAS.reducida;
-    d.planes.forEach(x=>{const pct=Math.round(Number(x.pct)*1e6)/1e4;if(x.plan==='reducida')red=pct;else if(/^\d+$/.test(x.plan))pl[Number(x.plan)]=pct;});
-    ML_CUOTAS.planes=pl;ML_CUOTAS.reducida=red;ML_CUOTAS.origen='backend';ML_CUOTAS.cargado=true;
-    const el=qs('comp-cuotas-ml');if(el)el.textContent=mlCuotasTexto();
-  }).catch(e=>{console.warn('Cuotas ML: se usa el respaldo del motor ('+(e.message||e)+')');}).finally(()=>{ML_CUOTAS.cargando=null;});
-  return ML_CUOTAS.cargando;
-}
+function cargarCuotasML(force){return criteriosMlCargar(force);}
 function mlCuotasTexto(){return Object.keys(ML_CUOTAS.planes).map(Number).sort((a,b)=>a-b).map(n=>`${n}c ${ML_CUOTAS.planes[n]}%`).join(' · ')+` (${ML_CUOTAS.origen})`;}
-function cargarTablasML(force){return Promise.all([cargarCostoFijoML(force),cargarCuotasML(force)]);}
+function cargarTablasML(force){return criteriosMlCargar(force);}
+// ── Criterios de Mercado Libre: FUENTE ÚNICA = la página «Criterios de precio» (GET /criterios/ml). Ofertas ML, Análisis de Competencia y Jugar calculan con esto; no hay paneles propios. ──
+const CRIT_ML={comision:15.5,iibb:5,cheque:1.2,orden:149.12,origen:'respaldo',cargado:false,cargando:null,en:0};
+function criteriosMlCargar(force){
+  if(CRIT_ML.cargando)return CRIT_ML.cargando;
+  if(CRIT_ML.cargado&&!force&&Date.now()-CRIT_ML.en<120000)return Promise.resolve();
+  const bu=getBackendUrl();if(!bu)return Promise.resolve();
+  CRIT_ML.cargando=fetch(`${bu}/criterios/ml`).then(async r=>{
+    const d=await r.json().catch(()=>({}));if(!r.ok||d.comision==null)throw new Error(d.detail||('estado '+r.status));
+    CRIT_ML.comision=d.comision;CRIT_ML.iibb=d.iibb;CRIT_ML.cheque=d.cheque;CRIT_ML.orden=d.orden;
+    ML_COSTO_ORDEN=d.orden;
+    ML_COSTO_FIJO.tramos=d.tramos.map(t=>[t[0]===null?null:Number(t[0]),Number(t[1])]);ML_COSTO_FIJO.origen='backend';ML_COSTO_FIJO.cargado=true;
+    const pl={};Object.keys(d.cuotas).forEach(k=>{pl[Number(k)]=d.cuotas[k];});ML_CUOTAS.planes=pl;ML_CUOTAS.reducida=d.reducida;ML_CUOTAS.origen='backend';ML_CUOTAS.cargado=true;
+    OFM.comisionGeneral=d.comision;OFM.iibbPct=d.iibb;OFM.impChequePct=d.cheque;
+    CRIT_ML.origen='backend';CRIT_ML.cargado=true;CRIT_ML.en=Date.now();
+    try{criteriosMlRefrescarPantallas();}catch(e){}
+  }).catch(e=>{console.warn('Criterios de ML: se usan los valores de respaldo ('+(e.message||e)+')');}).finally(()=>{CRIT_ML.cargando=null;});
+  return CRIT_ML.cargando;
+}
+function criteriosMlTexto(){const n=v=>String(Number(v)).replace('.',',');return `comisión ${n(CRIT_ML.comision)} % · IIBB ${n(CRIT_ML.iibb)} % · cheque ${n(CRIT_ML.cheque)} % · costo por orden $${n(CRIT_ML.orden)} · costo fijo ${mlCostoFijoTexto()} · cuotas ${mlCuotasTexto()}`;}
+function criteriosMlRefrescarPantallas(){
+  const e=qs('comp-criterios-txt');if(e)e.textContent=criteriosMlTexto();
+  const o=qs('ofm-criterios-txt');if(o)o.textContent=criteriosMlTexto();
+  if(typeof AC!=='undefined'&&AC.data)acRender();if(typeof ofmResult!=='undefined'&&ofmResult)ofmRender();
+  ['comp-param-resumen'].forEach(()=>compParamResumen());
+}
+function irACriterios(){goPage('reglas',document.querySelector('.sidebar-item[data-page="reglas"]'));}
 // ── CONFIG MARGEN COMPETIDORES ──
 function cfgN(id,def){const el=qs(id);if(!el)return def;const v=parseFloat(String(el.value).replace(',','.'));return isNaN(v)?def:v;}
 function compCfgSave(){try{const ids=['cfg-baja','cfg-com','cfg-iibb','cfg-impch','cfg-envio'];const o={_v:2};ids.forEach(i=>{const el=qs(i);if(el)o[i]=el.value;});localStorage.setItem('comp_cfg',JSON.stringify(o));}catch(e){}}
@@ -3430,7 +3425,7 @@ Object.keys(o).forEach(i=>{const el=qs(i);if(el&&o[i]!=='')el.value=o[i];});}cat
 function compExtraFijo(p){for(const t of ML_COSTO_FIJO.tramos){if(t[0]===null||p<t[0])return t[1];}return 0;}
 // Margen % sobre el precio SIN IVA (CRITERIOS_MARGEN §1); antes era sobre el neto de cargos.
 function compMargenAt(precio,ivaFactor,costoARS,qPct){const d=window.COMPDESC||{};const neto=d.iva!==false?precio/ivaFactor:precio;
-  const x=mlMargenUnico(precio,d.iva!==false?ivaFactor:1,costoARS,{comPct:cfgN('cfg-com',15.5),iibbPct:cfgN('cfg-iibb',5),chequePct:cfgN('cfg-impch',1.2),cuotasPct:qPct||0,usar:{com:d.com,costoFijo:d.extra,cuotas:true,envio:d.envio,cheque:d.impch,iibb:d.iibb,orden:d.orden}});
+  const x=mlMargenUnico(precio,d.iva!==false?ivaFactor:1,costoARS,{comPct:CRIT_ML.comision,iibbPct:CRIT_ML.iibb,chequePct:CRIT_ML.cheque,cuotasPct:qPct||0,usar:{com:d.com,costoFijo:d.extra,cuotas:true,envio:d.envio,cheque:d.impch,iibb:d.iibb,orden:d.orden}});
   return{m:(costoARS>0&&neto>0)?x.margen/neto:null,mars:x.margen,d:{neto,com:x.comision,extra:x.costoFijo,iibb:x.iibb,impch:x.impCheque,envio:x.envio,orden:x.costoOrden,cuota:x.cuotas,costo:costoARS}};}
 compCfgLoad();
 
@@ -3587,8 +3582,7 @@ function acRender(){
   qs('ac-count').textContent=filas.length+' SKU';
   acCatRender(filas,fl);
   S.acPage=AC.page;renderPag('ac-pag',pages,filas.length,'acPage','acIrPagina');
-  const c=window.COMPDESC||{},raro=[];if(c.com===false)raro.push('comisión');if(c.iva===false)raro.push('IVA');if(c.iibb===false)raro.push('IIBB');if(c.impch===false)raro.push('cheque');if(c.envio===false)raro.push('envío');if(c.extra===false)raro.push('costo fijo ML');
-  qs('ac-margen-info').innerHTML=`Margen con los parámetros de esta pantalla: comisión ${cfgN('cfg-com',15.5)}% · IIBB ${cfgN('cfg-iibb',5)}% · cheque ${cfgN('cfg-impch',1.2)}% · envío $${cfgN('cfg-envio',8500)} desde ${fmt$(ctx.umbral)} · costo fijo ML ${mlCostoFijoTexto()}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>')+(raro.length?` · <span style="color:var(--yellow)">${ico('alert',14)} en Competidores tenés desactivado: ${raro.join(', ')}</span>`:'');
+  qs('ac-margen-info').innerHTML=`Margen con los <a href="#" onclick="irACriterios();return false">criterios de precio</a> vigentes · envío $${S.shippingCost||8500} desde ${fmt$(ctx.umbral)}`+(ctx.tc?` · TC ${ctx.tc}`:' · <span style="color:var(--red)">sin TC</span>')+(COSTOS_ECOM.cargado?'':' · <span style="color:var(--yellow)">costos de Ecom cargando (el margen aparece cuando lleguen)</span>');
 }
 function acFilaCompleta(key){return AC.filas.find(x=>x.key===key);}   // la fila SIN filtros de vendedor: el simulador compara contra todos los rivales
 function acSimGet(key){return AC.sim[key]||(AC.sim[key]={q:0,px:{},extra:[],rivalCombo:0});}
@@ -5114,9 +5108,9 @@ const OFM={
 function ofmPorTramo(precio,tramos){for(const t of tramos){const techo=t[0],monto=t[1];if(techo===null||precio<techo)return monto;}return 0;}
 // ── MARGEN ÚNICO DE MERCADO LIBRE (decisión de Maxi, 27/10): Ofertas ML y Análisis de Competencia calculan con ESTA función (espejo de ml_ofertas.calcular_margen_oferta).
 // Descuenta, sobre el precio sin IVA: comisión, costo fijo por tramo, cuotas, envío, cheque (sobre el precio con IVA), IIBB (sobre el sin IVA), costo por orden de Ecom y costo.
-const ML_COSTO_ORDEN=149.12;
+let ML_COSTO_ORDEN=149.12;
 // Envío: el REAL de la publicación si se conoce; si no, $0 bajo el umbral ($33.000) y $8.500 (cfg-envio) desde ahí (CRITERIOS_MARGEN §6).
-function mlEnvioRegla(precio,envioReal){return(envioReal!=null&&isFinite(envioReal))?envioReal:(precio>=(S.shippingThreshold||33000)?cfgN('cfg-envio',8500):0);}
+function mlEnvioRegla(precio,envioReal){return(envioReal!=null&&isFinite(envioReal))?envioReal:(precio>=(S.shippingThreshold||33000)?(S.shippingCost||8500):0);}
 function mlMargenUnico(precio,ivaFactor,costoARS,o){
   const u=o.usar||{},baseSinIva=precio/ivaFactor;
   const comision=u.com===false?0:precio*o.comPct/100;
@@ -5141,31 +5135,21 @@ function ofmTc(){return OFM.tc||(typeof ofmResult!=='undefined'&&ofmResult&&ofmR
 function ofmCfgSave(){try{localStorage.setItem('ofm_cfg',JSON.stringify(OFM));}catch(e){}}
 // v2 (2026-10): comisión única 15,5% / IIBB 5% / cheque 1,2% -- un `ofm_cfg` guardado antes de esto
 // traía la comisión por dominio y valores viejos; se descartan esos campos una vez.
-const OFM_CFG_VERSION=3;
-function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o){if((o.cfgVersion||1)<OFM_CFG_VERSION){delete o.comisionPorDominio;delete o.comisionGeneral;delete o.iibbPct;delete o.impChequePct;delete o.cuotasPct;}delete o.envioTramos;delete o.costoFijoTramos;delete o.cuotasPct;Object.assign(OFM,o);}OFM.cfgVersion=OFM_CFG_VERSION;const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
+const OFM_CFG_VERSION=4;
+function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'null');if(o){if((o.cfgVersion||1)<OFM_CFG_VERSION){delete o.comisionPorDominio;delete o.comisionGeneral;delete o.iibbPct;delete o.impChequePct;delete o.cuotasPct;}delete o.envioTramos;['usarComision','usarCostoFijo','usarCuotas','usarEnvio','usarImpCheque','usarIibb','usarOrden','comisionGeneral','iibbPct','impChequePct'].forEach(k=>delete o[k]);delete o.costoFijoTramos;delete o.cuotasPct;Object.assign(OFM,o);}OFM.cfgVersion=OFM_CFG_VERSION;const op=qs('ofm-operador');if(op)op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}ofmRenderPanel();ofmReconectarJobActivo();}
 // `ac-operador` sumado 2026-09-04: el panel "⚙ Gestionar" de Ofertas ML se
 // reutiliza tal cual dentro de Ayala Core (Maxx: "quiero que sea igual
 // que como se ven en Ofertas ML"), que no tiene el campo `ofm-operador`
 // propio -- mismo localStorage `ofm_operador`, campo de input distinto.
 function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
 function ofmRenderPanel(){
-  const dominiosHtml='<span style="font-size:9px;color:var(--text3)">Comisión ML 15,5% único (criterio de margen); la comisión por categoría queda para más adelante.</span>';
   qs('ofm-panel').innerHTML=`
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarComision?'checked':''} onchange="OFM.usarComision=this.checked;ofmCfgSave();ofmRender()">Comisión general<input type="text" value="${OFM.comisionGeneral}" onchange="OFM.comisionGeneral=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:36px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarCostoFijo?'checked':''} onchange="OFM.usarCostoFijo=this.checked;ofmCfgSave();ofmRender()">Costo fijo (&lt;33k)</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarCuotas?'checked':''} onchange="OFM.usarCuotas=this.checked;ofmCfgSave();ofmRender()">Cuotas</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarEnvio?'checked':''} onchange="OFM.usarEnvio=this.checked;ofmCfgSave();ofmRender()">Envío</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarOrden?'checked':''} onchange="OFM.usarOrden=this.checked;ofmCfgSave();ofmRender()">Costo por orden Ecom ($149,12)</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarImpCheque?'checked':''} onchange="OFM.usarImpCheque=this.checked;ofmCfgSave();ofmRender()">Imp.CH<input type="text" value="${OFM.impChequePct}" onchange="OFM.impChequePct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" ${OFM.usarIibb?'checked':''} onchange="OFM.usarIibb=this.checked;ofmCfgSave();ofmRender()">IIBB<input type="text" value="${OFM.iibbPct}" onchange="OFM.iibbPct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:30px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</label>
-      <span style="display:flex;gap:4px;align-items:center">TC:<input type="text" id="ofm-tc" placeholder="${OFM.tc||'BNA auto'}" oninput="OFM.tc=parseFloat(this.value.replace(',','.'))||0;ofmRender()" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;outline:none"></span>
-      <span style="display:flex;gap:4px;align-items:center">Umbral alerta margen:<input type="text" value="${OFM.umbral}" onchange="OFM.umbral=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
-      <span style="display:flex;gap:4px;align-items:center" title="Default del % de tachado al abrir el panel Gestionar de una publicación -- item 17 de Natalia, sigue editable por publicación">Tachado por defecto:<input type="text" value="${OFM.inflacionDefaultPct}" onchange="OFM.inflacionDefaultPct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave()" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center">%</span>
-    </div>
-    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <span style="font-weight:700;color:var(--accent)">Comisión ML:</span>
-      ${dominiosHtml}
+    <div class="cr-resumen-t"><b>Criterios de precio vigentes</b> <span id="ofm-criterios-txt">${criteriosMlTexto()}</span></div>
+    <div class="cr-resumen-f">
+      <button type="button" class="btn" onclick="irACriterios()">Ver y editar criterios</button>
+      <label class="cr-op">TC <input type="text" id="ofm-tc" class="fi campo-num" placeholder="${OFM.tc||'BNA auto'}" oninput="OFM.tc=parseFloat(this.value.replace(',','.'))||0;ofmRender()"></label>
+      <label class="cr-op">Umbral alerta margen (%) <input type="text" class="fi campo-num" value="${OFM.umbral}" onchange="OFM.umbral=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave();ofmRender()"></label>
+      <label class="cr-op" title="Default del % de tachado al abrir el panel Gestionar de una publicación; sigue editable por publicación">Tachado por defecto (%) <input type="text" class="fi campo-num" value="${OFM.inflacionDefaultPct}" onchange="OFM.inflacionDefaultPct=parseFloat(this.value.replace(',','.'))||0;ofmCfgSave()"></label>
     </div>`;
 }
 let ofmResult=null, ofmTabCuenta='IT', ofmJobIdOfertas=null, ofmFilaPorId={};
@@ -8103,14 +8087,11 @@ function colapsableMontar(id,titulo,resumenFn){const el=qs(id);if(!el||el.datase
   btn.addEventListener('click',()=>{const a=btn.getAttribute('aria-expanded')!=='true';btn.setAttribute('aria-expanded',String(a));try{localStorage.setItem('erp_col_'+id,a?'1':'0');}catch(e){}pintar();});
   ['input','change'].forEach(ev=>el.addEventListener(ev,resumir));new MutationObserver(resumir).observe(el,{childList:true,subtree:true});
   pintar();resumir();}
-function ofmResumenParametros(){const o=OFM,n=v=>String(v).replace('.',',');const p=[];
-  if(o.usarComision)p.push('Comisión '+n(o.comisionGeneral)+'%');if(o.usarCostoFijo)p.push('Costo fijo');if(o.usarCuotas)p.push('Cuotas');if(o.usarEnvio)p.push('Envío');if(o.usarOrden)p.push('Costo por orden');
-  if(o.usarImpCheque)p.push('Imp.CH '+n(o.impChequePct)+'%');if(o.usarIibb)p.push('IIBB '+n(o.iibbPct)+'%');p.push('TC '+(o.tc?n(o.tc):'BNA auto'));p.push('Umbral '+n(o.umbral)+'%');return p.join(' · ');}
-function compResumenParametros(el){const v=id=>{const e=qs(id);return e?e.value:'';};
-  return ['Comisión '+v('cfg-com')+'%','IVA','IIBB '+v('cfg-iibb')+'%','Imp.CH '+v('cfg-impch')+'%','Envío $'+v('cfg-envio'),'TC '+(v('ac-tc')||'BNA auto')].join(' · ');}
+function ofmResumenParametros(){const o=OFM,n=v=>String(v).replace('.',',');return 'Criterios vigentes de ML · TC '+(o.tc?n(o.tc):'BNA auto')+' · Umbral '+n(o.umbral)+'%';}
+function compResumenParametros(el){return 'Criterios vigentes · TC '+((qs('ac-tc')||{}).value||'BNA auto');}
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
-  colapsableMontar('ofm-panel','Parámetros de margen',ofmResumenParametros);colapsableMontar('comp-desc-panel','Parámetros de margen',compResumenParametros);
+  colapsableMontar('ofm-panel','Parámetros de margen',ofmResumenParametros);
   setupDZ('dz-ecom','fi-ecom',f=>readFile(f,processEcomCSV));
   setupDZ('dz-pub','fi-pub',f=>readFile(f,showPubMapper));
   setupDZ('dz-tactica','fi-tactica',f=>readFile(f,processTacticaCSV));

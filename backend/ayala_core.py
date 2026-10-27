@@ -19,6 +19,7 @@ from typing import Callable
 
 from ml_auth import SELLERS
 from ml_full import _sku_de_item
+import ml_ofertas
 from ml_ofertas import (
     CUOTAS_PCT_DEFAULT, IIBB_PCT_DEFAULT, IMP_CHEQUE_PCT_DEFAULT, _cuotas_sin_interes, costo_envio_real_item,
 )
@@ -68,10 +69,8 @@ REDUCIDA_PCT_DEFAULT = Decimal("5.00")
 # Parámetros vigentes de Mercado Libre. Arrancan con las constantes de arriba y la página «Criterios de precio» los cambia en caliente (`mercados.aplicar_criterios_ml`):
 # por eso las funciones de abajo los leen AL CALCULAR y no los atan a un valor por defecto al importar. `cuotas` es el mismo dict que `ml_ofertas.CUOTAS_PCT_DEFAULT`
 # (se actualiza en el lugar, así Ofertas ML también lo ve).
-PARAMS_ML: dict = {
-    "comision": COMISION_ML_DEFAULT, "iibb": IIBB_PCT_DEFAULT, "cheque": IMP_CHEQUE_PCT_DEFAULT, "orden": COSTO_ORDEN_ECOM_DEFAULT,
-    "reducida": Decimal("5.00"), "tramos": COSTO_FIJO_ML_TRAMOS, "cuotas": CUOTAS_PCT_DEFAULT,
-}
+PARAMS_ML = ml_ofertas.PARAMS_ML          # el MISMO diccionario que usa Ofertas ML (se define en `ml_ofertas` para que no haya dos copias)
+assert PARAMS_ML["tramos"] == COSTO_FIJO_ML_TRAMOS and PARAMS_ML["comision"] == COMISION_ML_DEFAULT
 _USAR_ML = object()      # «usá los tramos de costo fijo vigentes de ML» (None = sin costo fijo, como en los otros mercados)
 
 # Renta objetivo -- Calculadora!B11 (Contado) + B12 ("Diferencial en

@@ -3117,6 +3117,16 @@ async def criterios_vista():
     return await run_in_threadpool(lambda: criterios_mod.vista(_db.sesion))
 
 
+@app.get("/criterios/ml")
+async def criterios_ml():
+    """Los criterios vigentes de Mercado Libre, en el formato que usan las pantallas (Ofertas ML, Análisis de Competencia): una sola fuente."""
+    await run_in_threadpool(_tarifas_actuales)
+    P = ayala_core.PARAMS_ML
+    f = float
+    return {"comision": f(P["comision"]), "iibb": f(P["iibb"]), "cheque": f(P["cheque"]), "orden": f(P["orden"]), "reducida": f(P["reducida"]),
+            "tramos": [[None if t is None else f(t), f(m)] for t, m in P["tramos"]], "cuotas": {str(k): f(v) for k, v in sorted(P["cuotas"].items())}}
+
+
 @app.put("/criterios/valor")
 async def criterios_valor(request: Request):
     """Cambia un criterio. Operador obligatorio; queda en el historial (quién, cuándo, antes y después)."""

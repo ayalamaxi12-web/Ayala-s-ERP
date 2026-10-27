@@ -199,6 +199,13 @@ COSTO_ORDEN_DEFAULT = Decimal("149.12")
 IMP_CHEQUE_PCT_DEFAULT = Decimal("1.2")
 IIBB_PCT_DEFAULT = Decimal("5")
 
+# Criterios vigentes de Mercado Libre (los de la página «Criterios de precio»). Arrancan con las constantes de arriba y `mercados.aplicar_criterios_ml` los cambia en caliente;
+# el Motor (`ayala_core`) y Ofertas ML leen ESTE mismo diccionario al calcular, así que no hay dos copias.
+PARAMS_ML: dict = {
+    "comision": COMISION_GENERAL_DEFAULT, "iibb": IIBB_PCT_DEFAULT, "cheque": IMP_CHEQUE_PCT_DEFAULT, "orden": COSTO_ORDEN_DEFAULT,
+    "reducida": Decimal("5.00"), "tramos": tuple(COSTO_FIJO_TRAMOS_DEFAULT), "cuotas": CUOTAS_PCT_DEFAULT,
+}
+
 
 def _por_tramo(precio: Decimal, tramos: list[tuple[Decimal | None, Decimal]]) -> Decimal:
     """Primer tramo cuyo techo el precio no alcanza; `None` = catch-all."""
@@ -215,13 +222,13 @@ class ParametrosMargen:
     se resuelven antes de llamar a `calcular_margen_oferta` (TC porque es
     un valor, no un descuento; costo porque sale del catálogo de Ecom por SKU)."""
     comision_por_dominio: dict[str, Decimal] = field(default_factory=lambda: dict(COMISION_POR_DOMINIO_DEFAULT))
-    comision_general: Decimal = COMISION_GENERAL_DEFAULT
-    costo_fijo_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(COSTO_FIJO_TRAMOS_DEFAULT))
-    cuotas_pct: dict[int, Decimal] = field(default_factory=lambda: dict(CUOTAS_PCT_DEFAULT))
+    comision_general: Decimal = field(default_factory=lambda: PARAMS_ML["comision"])
+    costo_fijo_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(PARAMS_ML["tramos"]))
+    cuotas_pct: dict[int, Decimal] = field(default_factory=lambda: dict(PARAMS_ML["cuotas"]))
     envio_tramos: list[tuple[Decimal | None, Decimal]] = field(default_factory=lambda: list(ENVIO_TRAMOS_DEFAULT))
-    imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT
-    iibb_pct: Decimal = IIBB_PCT_DEFAULT
-    costo_orden: Decimal = COSTO_ORDEN_DEFAULT
+    imp_cheque_pct: Decimal = field(default_factory=lambda: PARAMS_ML["cheque"])
+    iibb_pct: Decimal = field(default_factory=lambda: PARAMS_ML["iibb"])
+    costo_orden: Decimal = field(default_factory=lambda: PARAMS_ML["orden"])
     usar_comision: bool = True
     usar_costo_fijo: bool = True
     usar_cuotas: bool = True
