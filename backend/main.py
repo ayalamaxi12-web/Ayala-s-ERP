@@ -28,6 +28,7 @@ from proyeccion_snapshot import router as proyeccion_router
 import criterios as criterios_mod
 import ml_ofertas_foto
 import ml_ofertas_excel
+import ml_full_candidatos
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
 
@@ -2598,6 +2599,18 @@ async def ml_ofertas_alertas_run(
 @app.get("/ml-ofertas/alertas/status/{job_id}")
 async def ml_ofertas_alertas_status(job_id: str):
     return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
+
+@app.post("/ml-full/candidatos/run")
+async def ml_full_candidatos_run(background_tasks: BackgroundTasks, cuenta: str, dias_ventas: int = 30, min_ventas: int = 5):
+    """Candidatos a Full (solo lectura): publicaciones activas que no son de Full y vendieron al menos `min_ventas` en `dias_ventas`."""
+    _cuenta_valida(cuenta)
+    job_id = f"mlfullcand_{int(time.time() * 1000)}"
+    background_tasks.add_task(ml_full_candidatos.iniciar_job, job_id, cuenta, dias_ventas, min_ventas)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-full/candidatos/status/{job_id}")
+async def ml_full_candidatos_status(job_id: str):
+    return ml_full_candidatos.estado_job(job_id) or {"status": "not_found"}
 
 @app.post("/ml-ofertas/costos-envio/run")
 async def ml_ofertas_costos_envio_run(background_tasks: BackgroundTasks, dias: int = 60):

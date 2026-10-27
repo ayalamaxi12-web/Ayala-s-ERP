@@ -1829,6 +1829,19 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:14px" id="full-cand-card">
+    <div class="card-title"><span data-ico="search" data-size="16" aria-hidden="true"></span> Candidatos a Full</div>
+    <p class="ofx-nota">Publicaciones activas que venden bien y todavía <b>no</b> son de Full. Elegí cuántos días mirar y cuántas ventas mínimas. Solo lectura: no valida si ML las acepta en Full, eso lo ve ML al armar el envío.</p>
+    <div class="ofx-fila">
+      <label>Ventas mínimas<input type="text" inputmode="numeric" id="fcand-min" value="5" class="fi campo-num"></label>
+      <label>En los últimos (días)<input type="text" inputmode="numeric" id="fcand-dias" value="30" class="fi campo-num"></label>
+      <button type="button" class="btn" onclick="fullCandRun('IT')" id="btn-fcand-IT">Buscar candidatos Group</button>
+      <button type="button" class="btn" onclick="fullCandRun('MT')" id="btn-fcand-MT">Buscar candidatos Arg</button>
+    </div>
+    <div id="fcand-status" role="status" aria-live="polite" class="ofx-nota"></div>
+    <div id="fcand-log" style="display:none"></div>
+    <div class="table-wrap" id="fcand-wrap" style="display:none"><table class="ofm-tabla"><thead><tr><th scope="col">Cuenta</th><th scope="col">MLA</th><th scope="col">SKU</th><th scope="col">Título</th><th scope="col">Ventas</th><th scope="col">Por día</th><th scope="col">Stock propio</th><th scope="col">Envío hoy</th></tr></thead><tbody id="fcand-tbody"></tbody></table></div>
+  </div>
   <div class="card">
     <div class="card-title fr-cab"><span data-ico="upload" data-size="16" aria-hidden="true"></span> Simulador de reposición por publicación (MLA)<span class="fr-cab-res" id="full-res-repo"></span><button type="button" class="btn btn-linea fr-min" id="full-min-repo" aria-expanded="true" aria-controls="full-cuerpo-repo" onclick="fullToggle('repo')">Minimizar</button></div>
     <div id="full-cuerpo-repo">
@@ -4736,6 +4749,25 @@ function pollFullJob(statusUrl,logEl,statusEl,btn,btnLabel,onDone,onFail){
   },4000);
 }
 function runFullConciliar(){return fullActualizar('conciliar');}
+// ── Candidatos a Full (backend: ml_full_candidatos.py): publicaciones activas con ventas que todavía no son de Full. Solo lectura. ──
+let fullCandDatos={IT:[],MT:[]};
+async function fullCandRun(cuenta){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const btn=qs('btn-fcand-'+cuenta),st=qs('fcand-status'),min=parseInt(qs('fcand-min').value,10)||5,dias=parseInt(qs('fcand-dias').value,10)||30,rotulo=`Buscar candidatos ${etiquetaCuenta(cuenta)}`;
+  btn.disabled=true;btn.textContent='● corriendo...';st.textContent='Iniciando…';
+  try{
+    const r=await fetch(`${url}/ml-full/candidatos/run?cuenta=${cuenta}&dias_ventas=${dias}&min_ventas=${min}`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ml-full/candidatos/status/${job_id}`,qs('fcand-log'),st,btn,rotulo,res=>{fullCandDatos[cuenta]=res.candidatos||[];fullCandPintar();st.textContent=`Listo: ${(res.candidatos||[]).length} candidatos en ${etiquetaCuenta(cuenta)} (≥ ${min} ventas en ${dias} días).`;});
+  }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent=rotulo;}
+}
+function fullCandPintar(){
+  const todos=[...fullCandDatos.IT,...fullCandDatos.MT].sort((a,b)=>b.ventas_periodo-a.ventas_periodo);
+  qs('fcand-wrap').style.display='block';
+  qs('fcand-tbody').innerHTML=todos.length?todos.map(c=>`<tr><td>${etiquetaCuenta(c.cuenta)}</td><td><a href="${acEsc(c.permalink||('https://articulo.mercadolibre.com.ar/'+c.item_id))}" target="_blank" rel="noopener">${acEsc(c.item_id)}</a></td><td>${c.sku?acEsc(c.sku):'<span style="color:var(--error-texto)">sin SKU</span>'}</td><td>${acEsc(c.titulo||'')}</td><td style="text-align:right"><b>${c.ventas_periodo}</b></td><td style="text-align:right">${c.por_dia}</td><td style="text-align:right">${c.stock}</td><td>${acEsc(c.envio||'')}</td></tr>`).join('')
+    :'<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--texto-suave)">Ninguna publicación cumple con esas ventas mínimas.</td></tr>';
+}
 // ── Full ML con foto guardada (backend: ml_full_foto.py). Al abrir se muestra la última lectura exitosa sin leer ML; "Actualizar" lee de a poco. ──
 const FULL_FOTO={conciliar:{mod:'conciliacion',nombre:'Conciliación',pie:'full-conciliar-pie',btn:'btn-full-conciliar',st:'full-conciliar-status',log:'full-conciliar-log',pintar:r=>renderFullConciliar(r)},
   reposicion:{mod:'reposicion',nombre:'Simulador de reposición',pie:'full-reposicion-pie',btn:'btn-full-reposicion',st:'full-reposicion-status',log:'full-reposicion-log',pintar:r=>renderFullReposicion(r)}};
