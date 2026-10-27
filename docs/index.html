@@ -343,6 +343,7 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ofx-al{margin:0;padding-left:16px}.ofx-al li{margin:2px 0}
 .ofx-al .ofx-bloq{color:var(--error-texto)}.ofx-al .ofx-avis{color:var(--aviso-texto)}
 #ofx-tbody td{white-space:normal;vertical-align:top}#ofx-tbody td:last-child{min-width:260px}
+.ofx-mayor{display:flex;gap:8px;align-items:flex-start;min-height:44px;margin:0 0 8px;color:var(--tinta)}.ofx-mayor input{margin-top:3px;width:18px;height:18px}
 .ofx-barra{height:8px;border-radius:var(--r-chip);background:var(--pista);overflow:hidden;margin-top:6px;max-width:420px}
 .ofx-barra>i{display:block;height:100%;background:var(--celeste-600);width:0}
 /* Criterios de precio (solo tokens) */
@@ -2029,6 +2030,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <div id="ofx-res" class="ofx-res">
       <div id="ofx-resumen" class="ofx-resumen"></div>
       <fieldset class="ofx-camp"><legend>Elegí la oferta (campaña propia)</legend><div id="ofx-campanas"></div>
+        <label class="ofx-mayor"><input type="checkbox" id="ofx-mayorista"> Sacar el precio mayorista si hace falta (solo se saca cuando ML no deja poner el tachado por eso; queda anotado en el historial)</label>
         <div class="ofx-fila" style="margin:10px 0 0"><button type="button" class="btn primary" id="ofx-aplicar" onclick="ofxAplicar()" disabled>Aplicar</button>
         <button type="button" class="btn" onclick="ofxPendientesCSV()">Bajar las pendientes (CSV)</button></div></fieldset>
       <div class="ofx-fila"><label>Ver<select id="ofx-filtro" class="fi" onchange="ofxRenderTabla()"><option value="todas">Todas</option><option value="lista">Se pueden aplicar</option><option value="aviso">Con aviso</option><option value="no">No se puede</option><option value="ok">Aplicadas</option><option value="pend">Pendientes</option></select></label></div>
@@ -5653,6 +5655,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
         <label class="ofg-campo">Precio final (lo que cobrás)<input type="text" inputmode="decimal" class="fi campo-num" id="ofm-camp-precio-${itemId}" value="${precioPmAjustado}" oninput="ofmSimularCampana('${itemId}')"></label>
         <label class="ofg-campo">Descuento %<input type="text" inputmode="decimal" class="fi campo-num" id="ofm-camp-inflacion-${itemId}" value="${OFM.inflacionDefaultPct}" oninput="ofmSimularCampana('${itemId}')"></label>
         <div class="ofg-campo">Tachado resultante<output class="ofg-calc" id="ofm-camp-tachado-${itemId}">—</output></div>
+        <label class="ofx-mayor"><input type="checkbox" id="ofg-mayor-${itemId}"> Sacar el precio mayorista si hace falta</label>
         <button type="button" class="btn primary ofg-accion" onclick="ofmConfirmarCampana('${itemId}')">Meter en campaña</button>
       </div>
       <div id="ofm-camp-margen-${itemId}" class="ofg-res"></div>`)}
@@ -5832,7 +5835,7 @@ async function ofmConfirmarCampana(itemId,opts){
   try{
     const res=await fetch(`${url}/ml-ofertas/item/${itemId}/activar-campana`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({cuenta:f.cuenta,precio_pm:precioPm,descuento_pct:descuentoPct,sku:f.sku||'',precio_anterior:f.precio_oferta||f.precio_normal||'',
-        margen_pct:margenPct!==null?(margenPct*100).toFixed(2):'',bajo_umbral:bajoUmbral,operador})});
+        margen_pct:margenPct!==null?(margenPct*100).toFixed(2):'',bajo_umbral:bajoUmbral,operador,sacar_mayorista:!!qs('ofg-mayor-'+itemId)?.checked})});
     const d=await res.json();
     if(d.ok){
       // Pedido de Maxx 2026-09-02: el backend ahora puede ajustar
@@ -5841,7 +5844,7 @@ async function ofmConfirmarCampana(itemId,opts){
       // diálogo de arriba (que todavía no replica esa cuenta del lado
       // del cliente). Avisar el número real aplicado en vez de dejar a
       // Maxx creyendo que se metió al precio que él tipeó.
-      const msgAjuste=d.ajuste_cuotas_envio?` (${d.ajuste_cuotas_envio})`:'';
+      const msgAjuste=(d.ajuste_cuotas_envio?` (${d.ajuste_cuotas_envio})`:'')+(d.mayoristas_sacados&&d.mayoristas_sacados.length?' · Se sacó el precio mayorista.':'');
       toast(`✅ ${itemId}: metida en "${d.nombre_campana||d.promotion_id}" a $${fmtN(d.precio_final??precioPm)}${msgAjuste}`);
       await ofmCargarPromociones(itemId);return;
     }
@@ -5971,10 +5974,10 @@ function ofxRenderTabla(){
 async function ofxAplicar(){
   if(OFX.ocupado||!OFX.sel)return;const op=ofmRequireOperador();if(!op)return;
   const camp=OFX.campanas.find(c=>c.id===OFX.sel),filas=ofxPendientes().filter(f=>ofxPuedeEn(f,OFX.sel));if(!filas.length)return;
-  if(!confirm(`Vas a aplicar ${filas.length} ofertas en «${camp.nombre}» (cuenta ${OFX.cuenta==='IT'?'Group':'Arg'}), con el tachado y el final del Excel.\nEsto cambia precios en Mercado Libre. ¿Seguimos?`))return;
+  if(!confirm(`Vas a aplicar ${filas.length} ofertas en «${camp.nombre}» (cuenta ${OFX.cuenta==='IT'?'Group':'Arg'}), con el tachado y el final del Excel.\nEsto cambia precios en Mercado Libre.`+(qs('ofx-mayorista')?.checked?'\nSi alguna tiene precio mayorista y ML no deja poner el tachado, se le SACA el mayorista (no se recupera solo).':'')+' ¿Seguimos?'))return;
   OFX.ocupado=true;ofxBoton();
   try{
-    const j=await cpPost('/ml-ofertas/excel/aplicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:OFX.cuenta,promotion_id:OFX.sel,operador:op,filas})});
+    const j=await cpPost('/ml-ofertas/excel/aplicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:OFX.cuenta,promotion_id:OFX.sel,operador:op,sacar_mayorista:!!qs('ofx-mayorista')?.checked,filas})});
     const r=await ofxEsperar(j.job_id,'Aplicando');
     const por=Object.fromEntries(r.resultados.map(x=>[x.mla,x]));
     OFX.filas.forEach(f=>{const x=por[f.mla];if(x){f.estado=x.estado;f.mensaje=x.mensaje;}});
