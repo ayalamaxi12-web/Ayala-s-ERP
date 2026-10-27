@@ -323,6 +323,25 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ofm-sec-c,.ofm-sec-c *{font-family:var(--fuente)!important}
 .ofm-sec-c div,.ofm-sec-c span,.ofm-sec-c label{font-size:13px!important}
 .ofm-sec-c [style*="margin-bottom:6px"]{margin-bottom:10px!important}
+/* Criterios de precio (solo tokens) */
+.cr-cab{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between;align-items:flex-end;margin-bottom:8px}
+.cr-tit{margin:0;font-size:20px;font-weight:700;color:var(--tinta)}.cr-sub{margin:4px 0 0;font-size:13px;color:var(--texto-suave);max-width:60ch}
+.cr-op{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave)}
+.cr-seg{display:flex;flex-wrap:wrap;gap:2px;padding:3px;margin:10px 0;background:var(--mod-seg-fondo,var(--fondo));border-radius:var(--r-recuadro)}
+.cr-seg-b{min-height:40px;padding:0 18px;border:0;border-radius:var(--r-chico);background:transparent;color:var(--tinta-2);font:400 14px var(--fuente);cursor:pointer}
+.cr-seg-b[aria-pressed="true"]{background:var(--mod-activo-fondo,var(--superficie));color:var(--mod-activo-texto,var(--tinta));box-shadow:inset 0 0 0 1px var(--mod-activo-borde,var(--borde));font-weight:600}
+.cr-seg-b:focus-visible{outline:2px solid var(--mod-foco,var(--tinta));outline-offset:2px}
+.cr-cuerpo{display:flex;flex-direction:column;gap:12px}
+.cr-t{display:flex;align-items:center;gap:10px;margin:4px 0;font-size:16px;color:var(--tinta)}
+.cr-ap{background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r-recuadro);padding:14px 16px}
+.cr-ap h4{margin:0 0 8px;font-size:14px;color:var(--tinta)}
+.cr-fila{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:6px 0;border-top:1px solid var(--divisor)}
+.cr-fila label{flex:1 1 220px;font-size:13px;color:var(--tinta-2)}
+.cr-campo{display:flex;align-items:center;gap:6px}.cr-u{font-size:13px;color:var(--texto-suave);min-width:14px}
+.cr-fila [hidden]{display:none!important}
+.cr-nota{margin:0 0 4px;font-size:12px;color:var(--texto-suave)}
+.cr-sec{margin-top:16px;border:1px solid var(--borde);border-radius:var(--r-recuadro);background:var(--superficie)}.cr-sec>summary{cursor:pointer;padding:14px 16px;font-size:14px;font-weight:600;color:var(--tinta)}.cr-sec-c{padding:0 16px 16px}
+.cr-hist{width:100%;border-collapse:collapse;font-size:12px}.cr-hist th,.cr-hist td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--divisor)}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -1010,7 +1029,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="sidebar-section">
     <div class="sidebar-section-label">Sistema</div>
     <a href="#" class="sidebar-item" data-page="config" onclick="goPage('config',this);return false;"><span class="icon" data-ico="sliders" aria-hidden="true"></span>Configuración</a>
-    <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Reglas de Precio</a>
+    <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Criterios de precio</a>
   </div>
 </nav>
 <div class="app-body">
@@ -1729,8 +1748,16 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
 
 <!-- REGLAS -->
 <div id="page-reglas" class="page">
-  <div class="section-hdr">Reglas de Precio ML</div>
-  <div class="card">
+  <div class="cr-cab">
+    <div><h2 class="cr-tit">Criterios de precio</h2><p class="cr-sub">Comisiones, impuestos y costos de cada canal, en un solo lugar. Cada cambio pide operador y queda en el historial.</p></div>
+    <label class="cr-op">Operador
+      <select id="cr-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
+  </div>
+  <div class="ofg-nota ofg-nota-aviso" id="cr-aviso"></div>
+  <div class="cr-seg" id="cr-canales" role="group" aria-label="Canal"></div>
+  <div id="cr-cuerpo" class="cr-cuerpo"><div class="loading-block"><div class="spinner"></div><span>Cargando criterios...</span></div></div>
+  <details class="cr-sec"><summary>Historial de cambios</summary><div class="cr-sec-c" id="cr-historial"></div></details>
+  <div class="card" style="display:none">   <!-- tabla de reglas vieja (Verificar ML, ya fuera del menú): sigue en el DOM hasta la limpieza final -->
     <div class="rules-grid" id="rules-grid"></div>
     <button class="btn primary" style="margin-top:14px" id="btn-save-rules">Guardar reglas</button>
   </div>
@@ -2497,6 +2524,55 @@ async function ventasHoyCargar(forzar){
   }catch(e){sub.textContent='No se pudo leer Ecom ('+(e.message||e)+'). Se reintenta en un minuto.';}
 }
 function ventasHoyEntrar(){ayalaCoreCargarFuentes();ventasHoyCargar(false);clearInterval(VH_TIMER);VH_TIMER=setInterval(()=>{if(document.body.dataset.page==='ventas-hoy'&&!document.hidden)ventasHoyCargar(false);else if(document.body.dataset.page!=='ventas-hoy'){clearInterval(VH_TIMER);VH_TIMER=null;}},60000);}
+// ══ CRITERIOS DE PRECIO por canal (backend: GET /criterios, PUT /criterios/valor, POST /criterios/volver-al-comun) ══
+let CR={data:null,canal:'ml',filas:[]};
+function crNum(v){const n=Number(String(v).replace(',','.'));return isFinite(n)?n:0;}
+function crMostrar(v,u){const n=crNum(v);return (u==='$'?'$ ':'')+n.toLocaleString('es-AR',{maximumFractionDigits:2})+(u==='%'?' %':'');}
+async function criteriosCargar(){
+  const bu=getBackendUrl();const cuerpo=qs('cr-cuerpo');if(!cuerpo)return;
+  if(!bu){cuerpo.innerHTML='<p class="ofg-vacio">Falta la URL del backend (Configuración).</p>';return;}
+  try{
+    const r=await fetch(`${bu}/criterios`);if(!r.ok)throw new Error('estado '+r.status);
+    CR.data=await r.json();
+    const op=qs('cr-operador');if(op&&!op.value){try{op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}}
+    criteriosRender();
+  }catch(e){cuerpo.innerHTML=`<p class="ofg-vacio">No se pudieron leer los criterios (${acEsc(e.message||e)}).</p>`;}
+}
+function criteriosCanal(c){CR.canal=c;criteriosRender();}
+function criteriosRender(){
+  const d=CR.data;if(!d)return;
+  qs('cr-aviso').innerHTML=`${ico('alert',16)}<span>Hoy estos valores los usa el <b>Motor de Precios</b>. Ofertas ML, Análisis de Competencia y Campañas ML se conectan en los próximos pasos. ${d.info&&d.info.origen==='codigo'?'Todavía no se editó nada: son los valores iniciales.':''}</span>`;
+  qs('cr-canales').innerHTML=d.canales.map(c=>`<button type="button" class="cr-seg-b" aria-pressed="${c.clave===CR.canal}" onclick="criteriosCanal('${c.clave}')">${acEsc(c.clave==='todos'?'Todos':c.nombre.replace(' (Mercado Pago)',''))}</button>`).join('');
+  const canal=d.canales.find(c=>c.clave===CR.canal)||d.canales[0];CR.filas=[];
+  const logo=AC_TARJETA[canal.clave]?`<img class="vh-logo" src="${AC_TARJETA[canal.clave].logo}" alt="" style="height:22px">`:'';
+  qs('cr-cuerpo').innerHTML=`<h3 class="cr-t">${logo}${acEsc(canal.nombre)}</h3>`+canal.apartados.map(ap=>`<section class="cr-ap" aria-label="${acEsc(ap.titulo)}"><h4>${acEsc(ap.titulo)}</h4>`+
+    (ap.filas.length?ap.filas.map(f=>{const i=CR.filas.push(f)-1;
+      const origen=f.origen==='propio'?'<span class="ofg-chip ofg-chip-ok">propio de este canal</span>':f.origen==='todos'?'<span class="ofg-chip">común</span>':'';
+      return `<div class="cr-fila"><label for="cr-v-${i}">${acEsc(f.etiqueta)}${f.a_confirmar?' <span class="ofg-chip">a confirmar</span>':''}</label>
+        <span class="cr-campo"><input type="text" inputmode="decimal" class="fi campo-num" id="cr-v-${i}" value="${acEsc(f.valor)}" oninput="criteriosSucio(${i})" onkeydown="if(event.key==='Enter')criteriosGuardar(${i})"><span class="cr-u">${f.unidad}</span></span>
+        ${origen}<button type="button" class="btn primary" id="cr-g-${i}" onclick="criteriosGuardar(${i})" hidden>Guardar</button>
+        ${f.puede_volver?`<button type="button" class="btn" onclick="criteriosVolver(${i})">Volver al común</button>`:''}</div>${f.nota?`<p class="cr-nota">${acEsc(f.nota)}</p>`:''}`;}).join(''):'<p class="ofg-vacio">Este canal no usa este apartado.</p>')+'</section>').join('');
+  const h=d.historial||[];
+  qs('cr-historial').innerHTML=h.length?`<table class="cr-hist"><thead><tr><th>Cuándo</th><th>Quién</th><th>Canal</th><th>Criterio</th><th>Antes</th><th>Después</th></tr></thead><tbody>${h.map(x=>`<tr><td>${new Date(x.cuando).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'America/Argentina/Buenos_Aires'})}</td><td>${acEsc(x.operador)}</td><td>${acEsc(x.mercado)}</td><td>${acEsc(x.concepto)}${x.cuotas?' '+acEsc(x.cuotas):''}</td><td>${acEsc(x.antes)}</td><td>${acEsc(x.despues)}</td></tr>`).join('')}</tbody></table>`:'<p class="ofg-vacio">Todavía no se cambió nada.</p>';
+}
+function criteriosSucio(i){const f=CR.filas[i],inp=qs('cr-v-'+i),b=qs('cr-g-'+i);if(b)b.hidden=!(String(inp.value).trim()!==''&&crNum(inp.value)!==crNum(f.valor));}
+async function criteriosLlamar(url,metodo,cuerpo){
+  const r=await fetch(url,{method:metodo,headers:{'Content-Type':'application/json'},body:JSON.stringify(cuerpo)});const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||('estado '+r.status));return d;
+}
+async function criteriosGuardar(i){
+  const f=CR.filas[i],operador=qs('cr-operador')?.value;if(!operador){toast('Elegí el operador primero','error');return;}
+  const nuevo=qs('cr-v-'+i).value;if(String(nuevo).trim()===''||crNum(nuevo)===crNum(f.valor))return;
+  if(!confirm(`¿Cambiar este criterio?\n\nCanal: ${CR.canal}\n${f.etiqueta}: ${crMostrar(f.valor,f.unidad)} → ${crMostrar(nuevo,f.unidad)}\nOperador: ${operador}\n\nCambia los precios que calcula el Motor de Precios.`))return;
+  try{await criteriosLlamar(`${getBackendUrl()}/criterios/valor`,'PUT',{mercado:f.mercado,concepto:f.concepto,cuotas:f.cuotas,valor:nuevo,operador});toast('Criterio guardado');await criteriosCargar();}
+  catch(e){toast('No se guardó: '+(e.message||e),'error');}
+}
+async function criteriosVolver(i){
+  const f=CR.filas[i],operador=qs('cr-operador')?.value;if(!operador){toast('Elegí el operador primero','error');return;}
+  if(!confirm(`¿Volver al valor común?\n\n${f.etiqueta} de este canal deja de ser propio y pasa a usar el valor común.\nOperador: ${operador}`))return;
+  try{await criteriosLlamar(`${getBackendUrl()}/criterios/volver-al-comun`,'POST',{mercado:f.mercado,concepto:f.concepto,operador});toast('Listo: usa el valor común');await criteriosCargar();}
+  catch(e){toast('No se pudo: '+(e.message||e),'error');}
+}
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
@@ -2525,6 +2601,7 @@ function goPage(page,el){
   if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='ventas-hoy')ventasHoyEntrar();
+  if(page==='reglas')criteriosCargar();
   if(page==='proyeccion'&&!proyLoaded)proyeccionCargar();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
   if(page==='brasil'&&!brLoaded)loadBrasil();

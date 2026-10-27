@@ -46,7 +46,7 @@ def _f(mercado, concepto, cuotas="", pct="", iva="", desde="", hasta="", fuente=
 
 
 def _cuotas_ml():
-    return [_f("ml", "cuotas", str(n), str(p), "SI", fuente="panel de parámetros de ML (referencia, no se lee)") for n, p in CUOTAS_PCT_DEFAULT.items()]
+    return [_f("ml", "cuotas", str(n), str(p), "SI", fuente="criterios vigentes de ML") for n, p in CUOTAS_PCT_DEFAULT.items()]
 
 
 def _bloque_fravega(mercado: str, copiado: bool) -> list[list[str]]:
@@ -64,10 +64,13 @@ FILAS_INICIALES: list[list[str]] = [
     _f("todos", "costo_orden", "", "149.12", "", fuente="Maxi 2026-10-24", nota="MONTO EN PESOS por orden de Ecom (no es un %). Vale para todos los mercados; activable por mercado."),
     _f("todos", "impuesto_cheque", "", str(IMP_CHEQUE_PCT_DEFAULT), "", fuente="CRITERIOS_MARGEN §2", nota="sobre el precio con IVA"),
     _f("todos", "iibb", "", str(IIBB_PCT_DEFAULT), "", fuente="CRITERIOS_MARGEN §2", nota="sobre el precio sin IVA"),
-    _f("ml", "comision_base", "", str(ayala_core.COMISION_ML_DEFAULT), "SI", fuente="panel de parámetros de ML (referencia, no se lee)",
+    _f("ml", "comision_base", "", str(ayala_core.COMISION_ML_DEFAULT), "SI", fuente="criterios vigentes de ML",
        nota="Decidido por Maxi (27/10): 15,5 % para Mercado Libre y para todos los mercados. El costo fijo por unidad vendida (< $33.000) se suma en la cuenta."),
-    _f("ml", "reducida", "", str(ayala_core.REDUCIDA_PCT_DEFAULT), "SI", fuente="panel de parámetros de ML (referencia, no se lee)", nota="solo existe en Mercado Libre"),
+    _f("ml", "reducida", "", str(ayala_core.REDUCIDA_PCT_DEFAULT), "SI", fuente="criterios vigentes de ML", nota="solo existe en Mercado Libre"),
     *_cuotas_ml(),
+    *[_f("ml", "costo_fijo", techo, monto, "", fuente="ayuda de ML (2026-10)", nota=nota)
+      for techo, monto, nota in (("15000", "1330", "precio menor a $15.000"), ("24000", "2740", "precio de $15.000 a $23.999"),
+                                 ("33000", "3320", "precio de $24.000 a $32.999"), ("sin_tope", "0", "desde $33.000: sin costo fijo"))],
     _f("web", "comision_base", "", "6", "", fuente="Mercado Pago (Maxi 2026-10-24)", nota="6 % por cobro, cualquier medio de pago"),
     _f("web", "cuotas", "simple", "0.00", A_CONFIRMAR, fuente="Mercado Pago"),
     *[_f("web", "cuotas", n, p, A_CONFIRMAR, fuente="Mercado Pago") for n, p in (("3", "3.40"), ("6", "7.90"), ("9", "12.60"), ("12", "15.20"), ("18", "22.10"), ("24", "27.60"))],
@@ -139,6 +142,47 @@ def comunes(filas: list[dict]) -> dict:
         out[clave] = v
     return {"valores": out, "avisos": avisos}
 
+def valores_canal(filas: list[dict], mercado: str) -> dict:
+    """Costo por orden, cheque e IIBB de UN canal: su fila propia si la tiene (override) o, si no, la común («todos»). -> {clave: (valor, 'propio'|'todos'|'codigo')}."""
+    out = {}
+    for clave, concepto, defecto in (("costo_orden", "costo_orden", Decimal("149.12")), ("cheque_pct", "impuesto_cheque", IMP_CHEQUE_PCT_DEFAULT), ("iibb_pct", "iibb", IIBB_PCT_DEFAULT)):
+        for donde, m in (("propio", mercado), ("todos", "todos")):
+            f = _buscar(filas, m, concepto)
+            v = _num(f["porcentaje"]) if f else None
+            if v is not None:
+                out[clave] = (v, donde)
+                break
+        else:
+            out[clave] = (defecto, "codigo")
+    return out
+
+
+def aplicar_criterios_ml(filas: list[dict]) -> None:
+    """Pasa los criterios de Mercado Libre de la página a `ayala_core.PARAMS_ML` (lo que usan el Motor y la detección de publicaciones). Un dato que falta o no se entiende
+    deja el valor que ya había: nunca se inventa. `cuotas` se actualiza en el lugar (es el mismo dict que usa Ofertas ML)."""
+    P = ayala_core.PARAMS_ML
+    def val(concepto, cuotas=None):
+        f = _buscar(filas, "ml", concepto, cuotas)
+        return _num(f["porcentaje"]) if f else None
+    for clave, concepto in (("comision", "comision_base"), ("reducida", "reducida")):
+        v = val(concepto)
+        if v is not None:
+            P[clave] = v
+    for n in list(P["cuotas"]):
+        v = val("cuotas", str(n))
+        if v is not None:
+            P["cuotas"][n] = v
+    vc = valores_canal(filas, "ml")
+    P["orden"], P["cheque"], P["iibb"] = vc["costo_orden"][0], vc["cheque_pct"][0], vc["iibb_pct"][0]
+    tramos = []
+    for f in filas:
+        if f["mercado"] == "ml" and f["concepto"] == "costo_fijo":
+            techo, monto = (None if f["cuotas"] == "sin_tope" else _num(f["cuotas"])), _num(f["porcentaje"])
+            if monto is not None and (techo is not None or f["cuotas"] == "sin_tope"):
+                tramos.append((techo, monto))
+    if tramos and any(t is None for t, _ in tramos):
+        P["tramos"] = tuple(sorted(tramos, key=lambda x: (x[0] is None, x[0] or 0)))
+
 
 def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None, recargo_cuotas: Decimal | None = None) -> dict:
     """Parámetros de un mercado listos para calcular + avisos de configuración (falta una fila, vigencia vencida/futura, «a confirmar», dato copiado)."""
@@ -150,11 +194,12 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
     avisos: list[dict] = []
     notas: list[dict] = []     # información, no cuenta como aviso (p. ej. «copiado de Frávega»)
     if mercado == "ml":
-        fin = {"contado": Decimal("0"), "reducida": ayala_core.REDUCIDA_PCT_DEFAULT, **{str(k): v for k, v in CUOTAS_PCT_DEFAULT.items()}}
+        P = ayala_core.PARAMS_ML
+        fin = {"contado": Decimal("0"), "reducida": P["reducida"], **{str(k): v for k, v in P["cuotas"].items()}}
         return {"mercado": mercado, "nombre": nombre, "condiciones": list(meta["condiciones"]), "etiqueta_contado": meta["etiqueta_contado"],
-                "comision_pct": ayala_core.COMISION_ML_DEFAULT, "financiero": fin, "recargo_cuotas": None, "faltantes": {}, "avisos": avisos, "notas": notas,
-                "costo_fijo_tramos": ayala_core.COSTO_FIJO_ML_TRAMOS,
-                "desglose": {c: {"base": ayala_core.COMISION_ML_DEFAULT, "cuotas": fin[c], "recargo": Decimal("0"), "total": ayala_core.COMISION_ML_DEFAULT + fin[c]} for c in fin}}
+                "comision_pct": P["comision"], "financiero": fin, "recargo_cuotas": None, "faltantes": {}, "avisos": avisos, "notas": notas,
+                "costo_fijo_tramos": P["tramos"],
+                "desglose": {c: {"base": P["comision"], "cuotas": fin[c], "recargo": Decimal("0"), "total": P["comision"] + fin[c]} for c in fin}}
     def revisar(f, que):
         if not f:
             return

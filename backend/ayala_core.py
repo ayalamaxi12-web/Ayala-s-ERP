@@ -65,6 +65,15 @@ ENVIO_FULL_PCT_DEFAULT = Decimal("0.50")  # solo si envío a Bodega (Full), Tasa
 # 2026-09-02).
 REDUCIDA_PCT_DEFAULT = Decimal("5.00")
 
+# Parámetros vigentes de Mercado Libre. Arrancan con las constantes de arriba y la página «Criterios de precio» los cambia en caliente (`mercados.aplicar_criterios_ml`):
+# por eso las funciones de abajo los leen AL CALCULAR y no los atan a un valor por defecto al importar. `cuotas` es el mismo dict que `ml_ofertas.CUOTAS_PCT_DEFAULT`
+# (se actualiza en el lugar, así Ofertas ML también lo ve).
+PARAMS_ML: dict = {
+    "comision": COMISION_ML_DEFAULT, "iibb": IIBB_PCT_DEFAULT, "cheque": IMP_CHEQUE_PCT_DEFAULT, "orden": COSTO_ORDEN_ECOM_DEFAULT,
+    "reducida": Decimal("5.00"), "tramos": COSTO_FIJO_ML_TRAMOS, "cuotas": CUOTAS_PCT_DEFAULT,
+}
+_USAR_ML = object()      # «usá los tramos de costo fijo vigentes de ML» (None = sin costo fijo, como en los otros mercados)
+
 # Renta objetivo -- Calculadora!B11 (Contado) + B12 ("Diferencial en
 # cuotas") ORIGINALMENTE calculaba esto como una cascada (Contado ->
 # Reducida: sin cambio; Reducida -> 3c -> 6c -> 9c -> 12c: -2 puntos cada
@@ -95,8 +104,8 @@ def _financiero_pct(condicion: str | int) -> Decimal:
     if condicion == "contado":
         return Decimal("0")
     if condicion == "reducida":
-        return REDUCIDA_PCT_DEFAULT
-    pct = CUOTAS_PCT_DEFAULT.get(condicion)
+        return PARAMS_ML["reducida"]
+    pct = PARAMS_ML["cuotas"].get(condicion)
     if pct is None:
         raise ValueError(f"condición de pago no soportada: {condicion!r}")
     return pct
@@ -109,9 +118,9 @@ def calcular_precio_condicion(
     envio_real: Decimal,
     financiero_pct: Decimal,
     renta_pct: Decimal,
-    comision_pct: Decimal = COMISION_ML_DEFAULT,
-    iibb_pct: Decimal = IIBB_PCT_DEFAULT,
-    imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
+    comision_pct: Decimal | None = None,
+    iibb_pct: Decimal | None = None,
+    imp_cheque_pct: Decimal | None = None,
     envio_full: bool = False,
     envio_full_pct: Decimal = ENVIO_FULL_PCT_DEFAULT,
     costo_orden: Decimal = Decimal("0"),
@@ -130,6 +139,9 @@ def calcular_precio_condicion(
     sin importar la alícuota del producto vendido); el IIBB se descuenta
     sobre la alícuota propia del producto (`iva_factor`, o sea sobre el
     neto) y el imp. cheque directo sobre el precio con IVA."""
+    comision_pct = PARAMS_ML["comision"] if comision_pct is None else comision_pct       # sin dato: los de Mercado Libre vigentes
+    iibb_pct = PARAMS_ML["iibb"] if iibb_pct is None else iibb_pct
+    imp_cheque_pct = PARAMS_ML["cheque"] if imp_cheque_pct is None else imp_cheque_pct
     # `costo_orden` (Bloque 2, PR 4): monto fijo en pesos por orden (ej. costo por orden de Ecom). Con 0 -- el valor por defecto, y el que usa Mercado Libre -- la cuenta es exactamente la de siempre.
     numerador = costo_sin_iva + envio_real / _IVA_SERVICIOS_ML + costo_orden
     full = (envio_full_pct / 100) if envio_full else Decimal("0")
@@ -184,11 +196,11 @@ def calcular_precios_todas_condiciones(
     envio_real: Decimal,
     renta_por_condicion: dict[str | int, Decimal] | None = None,
     envio_full: bool = False,
-    comision_pct: Decimal = COMISION_ML_DEFAULT,
-    iibb_pct: Decimal = IIBB_PCT_DEFAULT,
-    imp_cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
-    costo_orden: Decimal = COSTO_ORDEN_ECOM_DEFAULT,
-    costo_fijo_tramos=COSTO_FIJO_ML_TRAMOS,
+    comision_pct: Decimal | None = None,
+    iibb_pct: Decimal | None = None,
+    imp_cheque_pct: Decimal | None = None,
+    costo_orden: Decimal | None = None,
+    costo_fijo_tramos=_USAR_ML,
     renta_base: str = "con_iva",
 ) -> dict[str, Decimal]:
     """El motor completo, las 6 condiciones de una (A.8 punto 2 de
@@ -200,6 +212,12 @@ def calcular_precios_todas_condiciones(
     `RENTA_POR_CONDICION_DEFAULT`) -- debe traer las 6 claves de
     `CONDICIONES`; si no se pasa, usa los defaults."""
     renta_por_condicion = renta_por_condicion or RENTA_POR_CONDICION_DEFAULT
+    comision_pct = PARAMS_ML["comision"] if comision_pct is None else comision_pct
+    iibb_pct = PARAMS_ML["iibb"] if iibb_pct is None else iibb_pct
+    imp_cheque_pct = PARAMS_ML["cheque"] if imp_cheque_pct is None else imp_cheque_pct
+    costo_orden = PARAMS_ML["orden"] if costo_orden is None else costo_orden
+    if costo_fijo_tramos is _USAR_ML:
+        costo_fijo_tramos = PARAMS_ML["tramos"]
     return {
         str(condicion): calcular_precio_condicion(
             costo_sin_iva=costo_sin_iva,
