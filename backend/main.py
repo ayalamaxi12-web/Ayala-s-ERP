@@ -4,12 +4,13 @@ Ayala's ERP - Backend API
 from pydantic import BaseModel
 from fastapi import FastAPI, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import requests, re, time, os, gspread
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from starlette.concurrency import run_in_threadpool
 from google.oauth2.service_account import Credentials
+import io
 import json
 
 import ml_full
@@ -26,6 +27,7 @@ from rentabilidad.config import ConfiguracionFaltante
 from proyeccion_snapshot import router as proyeccion_router
 import criterios as criterios_mod
 import ml_ofertas_foto
+import ml_ofertas_excel
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
 
@@ -2775,6 +2777,78 @@ async def ml_ofertas_item_activar_campana(item_id: str, request: Request, backgr
             "Operador": body.get("operador", ""),
         })
     return r
+
+
+# ── Carga de ofertas por Excel (un Excel por cuenta; ver ml_ofertas_excel.py). El análisis es solo lectura; "aplicar" escribe en ML. ──
+
+def _registrar_historial_oferta_lote(filas: list[dict]):
+    """Una sola escritura al Sheet para todo el lote (60 appends sueltos pasarían la cuota de la API de Sheets)."""
+    gs = get_gs()
+    ss = gs.open_by_key(SPREADSHEET_ID)
+    try:
+        ws = ss.worksheet(HIST_OFERTAS_SHEET_NAME)
+    except Exception:
+        ws = ss.add_worksheet(title=HIST_OFERTAS_SHEET_NAME, rows=20000, cols=len(HIST_OFERTAS_HEADERS))
+        ws.append_row(HIST_OFERTAS_HEADERS)
+    hora = _hora_argentina()
+    ws.append_rows([[{"Hora": hora, **f}.get(h, "") for h in HIST_OFERTAS_HEADERS] for f in filas])
+
+
+def _cuenta_valida(cuenta: str) -> str:
+    if cuenta not in ml_ofertas.SELLERS:
+        raise HTTPException(status_code=422, detail=f"Cuenta inválida: {cuenta!r} (IT o MT).")
+    return cuenta
+
+
+@app.get("/ml-ofertas/excel/plantilla")
+async def ml_ofertas_excel_plantilla():
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ofertas"
+    ws.append(["SKU", "MLA", "Precio tachado", "Precio final"])
+    ws.append(["PLANCHA-SUB-GORRA", "MLA123456789", 20000, 15000])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="plantilla_ofertas_ml.xlsx"'})
+
+
+@app.post("/ml-ofertas/excel/analizar")
+async def ml_ofertas_excel_analizar(background_tasks: BackgroundTasks, archivo: UploadFile = File(...), cuenta: str = Form(...)):
+    """Lee el Excel y lanza el análisis (SOLO LECTURA): alertas por fila y campañas con cuántos MLA pueden participar."""
+    _cuenta_valida(cuenta)
+    leido = ml_ofertas_excel.leer_excel(await archivo.read())
+    if leido["errores"]:
+        raise HTTPException(status_code=422, detail=" ".join(leido["errores"]))
+    try:
+        costo_provider, iva_provider = costos_ecom.proveedores_de_costo_e_iva()
+        tc = tc_bna_requerido()
+    except Exception:
+        costo_provider = iva_provider = tc = None       # sin costo/TC no hay margen, el resto del análisis sigue
+    job_id = f"mlexcel_a_{int(time.time() * 1000)}"
+    ml_ofertas_excel.lanzar(ml_ofertas_excel.iniciar_analisis, job_id, cuenta, leido["filas"], costo_provider, iva_provider, tc)
+    return {"job_id": job_id, "total": len(leido["filas"])}
+
+
+@app.get("/ml-ofertas/excel/status/{job_id}")
+async def ml_ofertas_excel_status(job_id: str):
+    return ml_ofertas_excel.estado_job(job_id) or {"status": "not_found"}
+
+
+@app.post("/ml-ofertas/excel/aplicar")
+async def ml_ofertas_excel_aplicar(request: Request):
+    """ESCRIBE en Mercado Libre: mete en la campaña elegida las filas del análisis con el tachado y el final del Excel."""
+    body = await request.json()
+    cuenta = _cuenta_valida(body.get("cuenta", ""))
+    promotion_id = str(body.get("promotion_id") or "").strip()
+    filas = body.get("filas") or []
+    if not promotion_id or not filas:
+        raise HTTPException(status_code=422, detail="Falta elegir la campaña o no hay filas para aplicar.")
+    job_id = f"mlexcel_b_{int(time.time() * 1000)}"
+    ml_ofertas_excel.lanzar(ml_ofertas_excel.iniciar_aplicacion, job_id, cuenta, promotion_id, filas, body.get("operador", ""),
+                            _registrar_historial_oferta_lote)
+    return {"job_id": job_id, "total": len(filas)}
 
 
 # ══════════════════════════════════════════════════════

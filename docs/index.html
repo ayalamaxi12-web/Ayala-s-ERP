@@ -323,6 +323,28 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ofm-sec-c,.ofm-sec-c *{font-family:var(--fuente)!important}
 .ofm-sec-c div,.ofm-sec-c span,.ofm-sec-c label{font-size:13px!important}
 .ofm-sec-c [style*="margin-bottom:6px"]{margin-bottom:10px!important}
+/* Carga de ofertas por Excel (solo tokens) */
+.ofx-fila{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:10px}
+.ofx-fila label{display:flex;flex-direction:column;gap:4px;color:var(--texto-suave)}
+.ofx-nota{color:var(--texto-suave);margin:0 0 10px;max-width:75ch}
+.ofx-res{display:none;margin-top:12px}
+.ofx-resumen{padding:10px 14px;border-radius:var(--r-recuadro);background:var(--celeste-50);color:var(--tinta);margin-bottom:12px}
+.ofx-camp{border:1px solid var(--borde);border-radius:var(--r-recuadro);padding:12px 14px;margin:0 0 12px}
+.ofx-camp legend{padding:0 6px;font-weight:600;color:var(--tinta)}
+.ofx-opt{display:flex;gap:10px;align-items:flex-start;padding:8px 4px;min-height:44px;cursor:pointer}
+.ofx-opt input{margin-top:3px;width:18px;height:18px}
+.ofx-opt[data-cero="1"]{color:var(--texto-suave)}
+.ofx-n{font-weight:700;color:var(--tinta)}
+.ofx-chip{display:inline-block;padding:2px 10px;border-radius:var(--r-chip);font-size:12px;font-weight:600;white-space:nowrap}
+.ofx-chip[data-e="ok"]{background:var(--ok-fondo);color:var(--ok-texto)}
+.ofx-chip[data-e="no"],.ofx-chip[data-e="error"]{background:var(--error-fondo);color:var(--error-texto)}
+.ofx-chip[data-e="pend"]{background:var(--aviso-fondo);color:var(--aviso-texto);box-shadow:inset 0 0 0 1px var(--aviso-borde)}
+.ofx-chip[data-e="lista"]{background:var(--celeste-100);color:var(--tinta)}
+.ofx-al{margin:0;padding-left:16px}.ofx-al li{margin:2px 0}
+.ofx-al .ofx-bloq{color:var(--error-texto)}.ofx-al .ofx-avis{color:var(--aviso-texto)}
+#ofx-tbody td{white-space:normal;vertical-align:top}#ofx-tbody td:last-child{min-width:260px}
+.ofx-barra{height:8px;border-radius:var(--r-chip);background:var(--pista);overflow:hidden;margin-top:6px;max-width:420px}
+.ofx-barra>i{display:block;height:100%;background:var(--celeste-600);width:0}
 /* Criterios de precio (solo tokens) */
 .cr-cab{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between;align-items:flex-end;margin-bottom:8px}
 .cr-tit{margin:0;font-size:20px;font-weight:700;color:var(--tinta)}.cr-sub{margin:4px 0 0;font-size:13px;color:var(--texto-suave);max-width:60ch}
@@ -1994,6 +2016,24 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <button class="btn" onclick="ofmBuscarMLA()">Buscar</button>
     </div>
     <div id="ofm-busqueda-resultado" style="display:none;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px"></div>
+  </div></details>
+  <details class="ofm-sec" id="ofx-sec"><summary>Cargar un lote de ofertas por Excel</summary><div class="ofm-sec-c">
+    <p class="ofx-nota">Un Excel por cuenta con 4 columnas: <b>SKU, MLA, precio tachado, precio final</b>. Primero se analiza (no cambia nada en Mercado Libre), después elegís la campaña y recién ahí se aplica, con el tachado y el final tal cual los subiste.</p>
+    <div class="ofx-fila">
+      <label>Cuenta<select id="ofx-cuenta" class="fi"><option value="IT">Group</option><option value="MT">Arg</option></select></label>
+      <label>Excel (.xlsx)<input type="file" id="ofx-archivo" accept=".xlsx" class="fi"></label>
+      <button type="button" class="btn primary" id="ofx-analizar" onclick="ofxAnalizar()">Analizar el Excel</button>
+      <button type="button" class="btn" onclick="ofxPlantilla()">Bajar plantilla</button>
+    </div>
+    <div id="ofx-estado" role="status" aria-live="polite" class="ofx-nota"></div>
+    <div id="ofx-res" class="ofx-res">
+      <div id="ofx-resumen" class="ofx-resumen"></div>
+      <fieldset class="ofx-camp"><legend>Elegí la oferta (campaña propia)</legend><div id="ofx-campanas"></div>
+        <div class="ofx-fila" style="margin:10px 0 0"><button type="button" class="btn primary" id="ofx-aplicar" onclick="ofxAplicar()" disabled>Aplicar</button>
+        <button type="button" class="btn" onclick="ofxPendientesCSV()">Bajar las pendientes (CSV)</button></div></fieldset>
+      <div class="ofx-fila"><label>Ver<select id="ofx-filtro" class="fi" onchange="ofxRenderTabla()"><option value="todas">Todas</option><option value="lista">Se pueden aplicar</option><option value="aviso">Con aviso</option><option value="no">No se puede</option><option value="ok">Aplicadas</option><option value="pend">Pendientes</option></select></label></div>
+      <div class="table-wrap"><table class="ofm-tabla"><thead><tr><th scope="col">Fila</th><th scope="col">MLA</th><th scope="col">SKU</th><th scope="col">Tachado</th><th scope="col">Final</th><th scope="col">Margen</th><th scope="col">Estado</th><th scope="col">Alertas</th></tr></thead><tbody id="ofx-tbody"></tbody></table></div>
+    </div>
   </div></details>
   <details class="ofm-sec"><summary>Candidatos a oferta: SKUs que venden y no tienen una</summary><div class="ofm-sec-c">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">
@@ -5861,6 +5901,92 @@ async function ofmBuscarMLA(){
     cont.innerHTML=`<div id="ofm-gestionar-${d.item_id}">Cargando promociones activas...</div>`;
     await ofmCargarPromociones(d.item_id);
   }catch(e){cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+
+// ══ Cargar un lote de ofertas por Excel: analiza (solo lectura) → elegís campaña → aplica (escribe en ML). Un Excel por cuenta. ══
+const OFX={cuenta:'IT',filas:[],campanas:[],sel:null,ocupado:false};
+function ofxEstado(t,pct){const e=qs('ofx-estado');if(!e)return;e.innerHTML=acEsc(t||'')+(pct!=null?`<div class="ofx-barra" aria-hidden="true"><i style="width:${Math.round(pct)}%"></i></div>`:'');}
+async function ofxPlantilla(){
+  try{const bu=getBackendUrl();if(!bu)throw new Error('Falta la URL del backend (Configuración).');
+    const r=await fetch(bu.replace(/\/$/,'')+'/ml-ofertas/excel/plantilla');if(!r.ok)throw new Error('Error '+r.status);
+    const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='plantilla_ofertas_ml.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  }catch(e){toast(e.message,'error');}
+}
+async function ofxEsperar(jobId,etapa){
+  for(;;){
+    const j=await cpPost('/ml-ofertas/excel/status/'+jobId,{});
+    if(j.status==='error')throw new Error((j.log||[]).slice(-1)[0]||'Falló el proceso.');
+    if(j.status==='not_found')throw new Error('El backend se reinició y perdió el proceso: volvé a intentar.');
+    if(j.status==='done')return j.result;
+    const p=j.progress;ofxEstado(p?`${etapa}: ${p.label} (${p.current}/${p.total})`:etapa+'…',p&&p.total?p.current/p.total*100:null);
+    await new Promise(r=>setTimeout(r,1500));
+  }
+}
+async function ofxAnalizar(){
+  if(OFX.ocupado)return;const f=qs('ofx-archivo').files[0];if(!f){toast('Elegí el Excel primero','error');return;}
+  OFX.ocupado=true;qs('ofx-analizar').disabled=true;qs('ofx-res').style.display='none';
+  try{
+    OFX.cuenta=qs('ofx-cuenta').value;const fd=new FormData();fd.append('archivo',f);fd.append('cuenta',OFX.cuenta);
+    ofxEstado('Leyendo el Excel…');
+    const j=await cpPost('/ml-ofertas/excel/analizar',{method:'POST',body:fd});
+    const r=await ofxEsperar(j.job_id,'Analizando');
+    OFX.filas=r.filas.map(x=>({...x,estado:null,mensaje:''}));OFX.campanas=r.campanas;OFX.sel=null;
+    ofxEstado('');qs('ofx-res').style.display='block';ofxRender();
+  }catch(e){ofxEstado('No se pudo analizar: '+e.message);toast(e.message,'error');}
+  finally{OFX.ocupado=false;qs('ofx-analizar').disabled=false;}
+}
+function ofxPendientes(){return OFX.filas.filter(f=>f.estado!=='ok'&&!(f.bloqueos||[]).length);}
+function ofxPuedeEn(f,cid){return (f.candidatas||[]).some(c=>c.id===cid);}
+function ofxRender(){
+  const pend=ofxPendientes(),aplicadas=OFX.filas.filter(f=>f.estado==='ok').length,bloq=OFX.filas.filter(f=>(f.bloqueos||[]).length).length;
+  const sinCamp=pend.filter(f=>!OFX.campanas.some(c=>ofxPuedeEn(f,c.id))).length;
+  qs('ofx-resumen').innerHTML=`<b>${OFX.filas.length}</b> filas · <b>${aplicadas}</b> aplicadas · <b>${pend.length}</b> pendientes de aplicar · <b>${bloq}</b> con «no se puede»`+(sinCamp?` · <b>${sinCamp}</b> no entran en ninguna campaña propia de esta cuenta`:'');
+  const cont=qs('ofx-campanas');
+  if(!OFX.campanas.length){cont.innerHTML='<p class="ofx-nota">Esta cuenta no tiene campañas propias activas o pendientes.</p>';}
+  else cont.innerHTML=OFX.campanas.map(c=>{const n=pend.filter(f=>ofxPuedeEn(f,c.id)).length;const vig=(c.fecha_desde||c.fecha_hasta)?` · ${acEsc((c.fecha_desde||'').slice(0,10))} a ${acEsc((c.fecha_hasta||'').slice(0,10))}`:'';
+    return `<label class="ofx-opt" data-cero="${n?0:1}"><input type="radio" name="ofx-camp" value="${acEsc(c.id)}" ${n?'':'disabled'} ${OFX.sel===c.id?'checked':''} onchange="ofxElegir(this.value)"><span><b>${acEsc(c.nombre)}</b> <span style="color:var(--texto-suave)">(${acEsc(c.status||'')}${vig})</span><br><span class="ofx-n">${n}</span> de ${pend.length} pendientes pueden participar</span></label>`;}).join('');
+  ofxBoton();ofxRenderTabla();
+}
+function ofxElegir(cid){OFX.sel=cid;ofxBoton();ofxRenderTabla();}
+function ofxBoton(){
+  const b=qs('ofx-aplicar'),n=OFX.sel?ofxPendientes().filter(f=>ofxPuedeEn(f,OFX.sel)).length:0;
+  b.disabled=!n||OFX.ocupado;b.textContent=n?`Aplicar ${n} en esta campaña`:'Elegí una campaña para aplicar';
+}
+function ofxEstadoFila(f){
+  if(f.estado==='ok')return['ok','Aplicada'];if(f.estado==='error')return['error','Error'];
+  if((f.bloqueos||[]).length)return['no','No se puede'];
+  if(OFX.sel&&!ofxPuedeEn(f,OFX.sel))return['pend','No entra en esta campaña'];
+  return f.estado==='pendiente'?['pend','Pendiente']:['lista','Se puede aplicar'];
+}
+function ofxRenderTabla(){
+  const fl=qs('ofx-filtro').value,m=n=>n==null?'—':n.toLocaleString('es-AR');
+  const filas=OFX.filas.filter(f=>{const e=ofxEstadoFila(f)[0];return fl==='todas'||(fl==='lista'&&e==='lista')||(fl==='aviso'&&(f.avisos||[]).length)||(fl==='no'&&e==='no')||(fl==='ok'&&e==='ok')||(fl==='pend'&&(e==='pend'||e==='error'));});
+  qs('ofx-tbody').innerHTML=filas.length?filas.map(f=>{const[e,t]=ofxEstadoFila(f);
+    const al=[...(f.bloqueos||[]).map(x=>`<li class="ofx-bloq">${acEsc(x)}</li>`),...(f.mensaje&&f.estado!=='ok'?[`<li class="ofx-bloq">${acEsc(f.mensaje)}</li>`]:[]),...(f.avisos||[]).map(x=>`<li class="ofx-avis">${acEsc(x)}</li>`)].join('');
+    return `<tr><td>${f.fila}</td><td>${acEsc(f.mla)}</td><td>${acEsc(f.sku)}</td><td>${m(f.tachado)}</td><td>${m(f.final)}</td><td>${f.margen_pct==null?'—':f.margen_pct.toFixed(1)+' %'}</td><td><span class="ofx-chip" data-e="${e}">${t}</span></td><td>${al?`<ul class="ofx-al">${al}</ul>`:''}</td></tr>`;}).join('')
+    :'<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--texto-suave)">No hay filas con ese filtro.</td></tr>';
+}
+async function ofxAplicar(){
+  if(OFX.ocupado||!OFX.sel)return;const op=ofmRequireOperador();if(!op)return;
+  const camp=OFX.campanas.find(c=>c.id===OFX.sel),filas=ofxPendientes().filter(f=>ofxPuedeEn(f,OFX.sel));if(!filas.length)return;
+  if(!confirm(`Vas a aplicar ${filas.length} ofertas en «${camp.nombre}» (cuenta ${OFX.cuenta==='IT'?'Group':'Arg'}), con el tachado y el final del Excel.\nEsto cambia precios en Mercado Libre. ¿Seguimos?`))return;
+  OFX.ocupado=true;ofxBoton();
+  try{
+    const j=await cpPost('/ml-ofertas/excel/aplicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:OFX.cuenta,promotion_id:OFX.sel,operador:op,filas})});
+    const r=await ofxEsperar(j.job_id,'Aplicando');
+    const por=Object.fromEntries(r.resultados.map(x=>[x.mla,x]));
+    OFX.filas.forEach(f=>{const x=por[f.mla];if(x){f.estado=x.estado;f.mensaje=x.mensaje;}});
+    const ok=r.resultados.filter(x=>x.estado==='ok').length;
+    ofxEstado(`Listo: ${ok} aplicadas, ${r.resultados.length-ok} quedaron pendientes.`+(r.cortado_por_verificacion?' ML pidió una verificación de seguridad (QR/cara): hacela a mano y volvé a aplicar las que faltan.':'')+(r.aviso_historial?' No se pudo anotar en «Historial Ofertas ML».':''));
+    OFX.sel=null;
+  }catch(e){ofxEstado('No se pudo aplicar: '+e.message);toast(e.message,'error');}
+  finally{OFX.ocupado=false;ofxRender();}
+}
+function ofxPendientesCSV(){
+  const f=OFX.filas.filter(x=>x.estado!=='ok');if(!f.length){toast('No hay pendientes','error');return;}
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const csv=['SKU,MLA,Precio tachado,Precio final,Motivo',...f.map(x=>[x.sku,x.mla,x.tachado,x.final,[...(x.bloqueos||[]),x.mensaje||''].filter(Boolean).join(' | ')].map(q).join(','))].join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download='ofertas_pendientes.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 
 // ── Fase 2 — alertas: SKUs candidatos a oferta y no la tienen ──

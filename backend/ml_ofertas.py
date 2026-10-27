@@ -832,6 +832,7 @@ def _es_challenge_seguridad(mensaje: str) -> bool:
 def activar_en_campana_tradicional(
     ml: MLOfertasEscritura, cuenta: str, item_id: str, precio_pm: Decimal,
     descuento_pct: Decimal = Decimal(25), promotion_id: str | None = None,
+    tachado_exacto: Decimal | None = None,
 ) -> dict:
     """Automatiza el flujo real de Maxx (confirmado 2026-08-28, 80% de su
     uso): mete la publicación en su campaña mensual propia ("Oferta
@@ -908,6 +909,12 @@ def activar_en_campana_tradicional(
     que ya tienen `fijar_precio_base`/`sacar_de_promocion` (vía
     `_put_real`/`_delete_real`) -- no hace falta duplicarlo acá.
 
+    **`tachado_exacto` (carga por Excel, «Precios y ofertas ML»):** el precio
+    que llega en `precio_pm` es el FINAL tal cual y `tachado_exacto` el tachado
+    tal cual -- no se aplica el ajuste de cuotas/envío ni se calcula el tachado
+    por `descuento_pct`, y si ML pide más descuento visual no se infla el
+    tachado: se revierte y se avisa (lo que subió el usuario es lo que se aplica).
+
     `promotion_id` opcional: si no se pasa, se resuelve solo filtrando
     `promociones_seller` por `type == SELLER_CAMPAIGN`, `status` `started`
     o `pending`, Y nombre que contenga "oferta tradicional" (case-
@@ -980,13 +987,13 @@ def activar_en_campana_tradicional(
     # corazón de la función. Se trata como "sin dato" (0), igual que
     # cuando la cache todavía no tiene nada para este ítem.
     cuotas_ofrecidas = _cuotas_sin_interes(previo)
-    cuotas_pct = CUOTAS_PCT_DEFAULT.get(cuotas_ofrecidas) if cuotas_ofrecidas else None
+    cuotas_pct = CUOTAS_PCT_DEFAULT.get(cuotas_ofrecidas) if cuotas_ofrecidas and tachado_exacto is None else None
     precio_con_cuotas = (
         (precio_pm * (1 + cuotas_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if cuotas_pct else precio_pm
     )
     try:
-        envio_info = costo_envio_real_item(ml, item_id, cuenta)
+        envio_info = costo_envio_real_item(ml, item_id, cuenta) if tachado_exacto is None else None
     except Exception:
         envio_info = None
     costo_envio = (
@@ -1002,7 +1009,10 @@ def activar_en_campana_tradicional(
         _ajustes.append(f"+${costo_envio:.0f} de envío real (última venta)")
     ajuste_aviso = f"Precio del PM (${precio_pm}) ajustado a ${precio_final:.0f} -- {', '.join(_ajustes)}." if _ajustes else None
 
-    precio_tachado = (precio_final / (1 - descuento_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    precio_tachado = (
+        tachado_exacto if tachado_exacto is not None
+        else (precio_final / (1 - descuento_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    )
 
     def _revertir_precio(motivo: str) -> str:
         if precio_previo is None:
@@ -1049,6 +1059,13 @@ def activar_en_campana_tradicional(
         )
         return {"ok": False, "error": aviso, "precio_pm": float(precio_pm), "precio_final": float(precio_final),
                 "min_discounted_price": float(min_desc)}
+
+    if max_desc is not None and float(precio_final) > float(max_desc) and tachado_exacto is not None:
+        aviso = _revertir_precio(
+            f"Con el tachado ${precio_tachado} que subiste, ML solo admite como máximo ${max_desc} de precio final "
+            f"en esta campaña (pediste ${precio_final}): necesita más descuento visual. No se cambió lo que subiste."
+        )
+        return {"ok": False, "error": aviso, "precio_final": float(precio_final), "max_discounted_price": float(max_desc)}
 
     if max_desc is not None and float(precio_final) > float(max_desc):
         # El 25% (o el descuento_pct pedido) no alcanza para esta campaña
