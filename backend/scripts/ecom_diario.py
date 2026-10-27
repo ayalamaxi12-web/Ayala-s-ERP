@@ -106,6 +106,21 @@ def main() -> int:
             except Exception as e:
                 log(f"AVISO: no se pudieron sincronizar los precios de PM ({type(e).__name__}: {e}) — sigo con la rentabilidad")
 
+        # Frávega: comisión y envío REALES de «Próxima liquidación» (Seller Center) ANTES de armar el ciclo, así las ventas que se guardan (y el Excel
+        # del histórico que sale de ellas) ya llevan lo que Frávega realmente cobra y no el estimado. No frena la corrida si falla (cookies vencidas,
+        # sin configurar): esas ventas quedan con el estimado o con la última sincronización, y la liquidación quincenal las corrige igual.
+        if not args.solo_consulta:
+            log("Sincronizando comisión y envío reales de Frávega (Seller Center)")
+            try:
+                from rentabilidad import fravega_seller
+                from rentabilidad.persistencia import sincronizar_proxima_liquidacion
+                ordenes_fvg = fravega_seller.traer_proxima_liquidacion()
+                with sesion() as db:
+                    rf = sincronizar_proxima_liquidacion(db, ordenes_fvg)
+                log(f"  Frávega: {rf.ordenes_en_liquidacion} órdenes con comisión real, {len(rf.ventas_actualizadas)} ventas corregidas, {rf.sin_venta_en_ecom} sin venta guardada todavía")
+            except Exception as e:
+                log(f"AVISO: no se pudo sincronizar Frávega ({type(e).__name__}: {e}) — sigo con lo que ya hay (estimado o la última sincronización)")
+
         # TC: siempre el del BNA del día (decisión de Maxx, 2026-09-28); --tc
         # queda para correr a mano un caso puntual. El origen sale al pie del
         # resumen y del informe para poder verificarlo.
