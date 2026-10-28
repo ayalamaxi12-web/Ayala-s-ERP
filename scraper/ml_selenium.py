@@ -17,12 +17,22 @@ JS_PUBLICACION = r"""
 const q = s => document.querySelector(s);
 const t = e => e ? (e.innerText || '').trim() : '';
 const primero = (...sels) => { for (const s of sels) { const v = t(q(s)); if (v) return v; } return ''; };
+// El precio ACTUAL nunca es el tachado: se descartan los montos "previos" (<s>, --previous, original-value). Antes el último respaldo
+// ('[class*="price"] ...') devolvía el primer monto del bloque, que es el tachado cuando hay descuento.
+const esPrevio = e => !!e.closest('s, .andes-money-amount--previous, .ui-pdp-price__original-value');
+const actual = () => {
+  for (const sel of ['.ui-pdp-price__second-line', '.ui-pdp-price', '[class*="price"]']) {
+    for (const f of document.querySelectorAll(sel + ' .andes-money-amount__fraction')) { if (!esPrevio(f) && t(f)) return t(f); }
+  }
+  return '';
+};
+const metaPrecio = (q('meta[itemprop="price"]') || {}).content || '';
 return {
   url: location.href,
   titulo: document.title,
   texto: (document.body.innerText || '').slice(0, 8000),
-  precio: primero('.ui-pdp-price__second-line .andes-money-amount__fraction', '.ui-pdp-price .andes-money-amount__fraction',
-                  '[class*="price"] .andes-money-amount__fraction'),
+  precio: actual(),
+  precio_meta: metaPrecio,
   tachado: primero('.ui-pdp-price__original-value .andes-money-amount__fraction',
                    's.andes-money-amount--previous .andes-money-amount__fraction'),
   descuento: primero('.ui-pdp-price__second-line__label', '.andes-money-amount__discount'),
@@ -41,7 +51,10 @@ cards.forEach(c => {
   const g = s => { const e = c.querySelector(s); return e ? (e.innerText || '').trim() : ''; };
   const a = c.querySelector('a');
   let precio = num(g('.poly-price__current .andes-money-amount__fraction'));
-  if (!precio) { const fr = c.querySelectorAll('.andes-money-amount__fraction'); if (fr.length) precio = num(fr[fr.length - 1].innerText); }
+  if (!precio) {   // el último monto que NO sea el tachado
+    const fr = Array.from(c.querySelectorAll('.andes-money-amount__fraction')).filter(f => !f.closest('s, .andes-money-amount--previous'));
+    if (fr.length) precio = num(fr[fr.length - 1].innerText);
+  }
   out.push({
     title: g('.poly-component__title') || g('.ui-search-item__title'),
     link: a ? a.href : '',

@@ -72,6 +72,22 @@ def _digitos_wid(url):
     return m.group(1) if m else ''
 
 
+def _sin_tachado(precio, tachado, meta, descuento):
+    """Red de seguridad: si el "precio" leído es IGUAL al tachado, se tomó el tachado como actual (síntoma de que cambió el diseño). Se corrige con el
+    precio vigente que declara la página (`<meta itemprop="price">`, si es menor al tachado) o, si no, aplicando el % OFF que muestra.
+    Devuelve (precio, tachado_que_se_había_leído | None)."""
+    if not precio or not tachado or abs(precio - tachado) > 0.5:
+        return precio, None
+    if meta and 0 < meta < tachado:
+        return meta, tachado
+    m = re.search(r'(\d{1,2}(?:[.,]\d+)?)\s*%', str(descuento or ''))
+    if m:
+        pct = float(m.group(1).replace(',', '.'))
+        if 0 < pct < 90:
+            return round(tachado * (1 - pct / 100)), tachado
+    return precio, None
+
+
 def clasificar_publicacion(snap, esperado=None, url_original=None, directo=False):
     """snap: {url, texto, precio, tachado, descuento, cuotas, vendedor}. -> dict con 'estado':
     OK | Caida | Error | Sin lectura | Otro vendedor | Bloqueado (+ precio, tachado, descuento, cuotas, vendedor, detalle).
@@ -85,6 +101,7 @@ def clasificar_publicacion(snap, esperado=None, url_original=None, directo=False
     if bloqueo:
         return dict(base, estado='Bloqueado', bloqueo=bloqueo, detalle=f'ML pidió {bloqueo}')
     precio = cdb.parse_precio(snap.get('precio'))
+    precio, corregido_de = _sin_tachado(precio, cdb.parse_precio(snap.get('tachado')), cdb.parse_precio(snap.get('precio_meta')), snap.get('descuento'))
     texto = str(snap.get('texto') or '').lower()
     if not precio:
         if any(f in texto for f in CAIDA_FRASES):
@@ -92,6 +109,9 @@ def clasificar_publicacion(snap, esperado=None, url_original=None, directo=False
         return dict(base, estado='Error', detalle='No se encontró el precio (¿cambió el diseño de la página o no cargó?)')
     out = dict(base, precio=precio, tachado=cdb.parse_precio(snap.get('tachado')),
                descuento=str(snap.get('descuento') or '').strip(), cuotas=str(snap.get('cuotas') or '').strip())
+    if corregido_de:
+        out['detalle'] = f'Se leyó el precio tachado ({corregido_de:g}) como actual: corregido con el precio vigente de la página'
+
     ids = cdb.extraer_ids(url_original)
     es_catalogo = bool(ids['product_id'])
     vendedor = base['vendedor']

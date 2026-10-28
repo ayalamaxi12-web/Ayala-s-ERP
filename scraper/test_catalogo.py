@@ -239,3 +239,38 @@ def test_js_tarjeta_por_wid():
     # el wid de la propia ganadora (buy box): devuelve el precio principal
     buy = f'<div class="buybox"><form action="/buy"><input name="item_id" value="MLA{wid}"></form>{money("32.980")}<span>Vendido por MTL</span></div>'
     assert _correr_js(mls.JS_OFERTA_POR_WID, doc(buy), wid)['precio'] == '32.980'
+
+
+# ── El precio actual nunca es el tachado (caso real: Pack x10 TN1060 de DISTRIBUIDORA ROMICO, tachado $81.000, vigente $73.000 con 9 % OFF) ──
+
+def _snap(**k):
+    return dict({'url': 'https://articulo.mercadolibre.com.ar/MLA-1', 'texto': 'Nuevo', 'precio': '81.000', 'tachado': '81.000', 'descuento': '9% OFF',
+                 'cuotas': '', 'vendedor': 'DISTRIBUIDORA ROMICO'}, **k)
+
+
+def test_si_se_leyo_el_tachado_como_precio_se_corrige_con_el_precio_vigente_de_la_pagina():
+    r = pml.clasificar_publicacion(_snap(precio_meta='73000'), esperado='DISTRIBUIDORA ROMICO')
+    assert r['estado'] == 'OK' and r['precio'] == 73000 and r['tachado'] == 81000 and 'tachado' in r['detalle']
+
+
+def test_sin_meta_se_corrige_con_el_porcentaje_off():
+    r = pml.clasificar_publicacion(_snap(), esperado='DISTRIBUIDORA ROMICO')
+    assert r['precio'] == 73710 and 'corregido' in r['detalle']          # 81.000 × 0,91
+
+
+def test_un_precio_bien_leido_no_se_toca():
+    r = pml.clasificar_publicacion(_snap(precio='73.000', precio_meta='73000'), esperado='DISTRIBUIDORA ROMICO')
+    assert r['precio'] == 73000 and r['detalle'] == ''
+    sin_descuento = pml.clasificar_publicacion(_snap(precio='81.000', tachado='', descuento=''), esperado='DISTRIBUIDORA ROMICO')
+    assert sin_descuento['precio'] == 81000
+
+
+def test_precio_igual_al_tachado_sin_meta_ni_off_se_deja_como_esta():
+    r = pml.clasificar_publicacion(_snap(descuento=''), esperado='DISTRIBUIDORA ROMICO')
+    assert r['precio'] == 81000 and r['detalle'] == ''
+
+
+def test_los_selectores_del_precio_actual_excluyen_el_tachado():
+    src = open('ml_selenium.py', encoding='utf-8').read()
+    assert 'esPrevio' in src and "closest('s, .andes-money-amount--previous" in src
+    assert "'[class*=\"price\"] .andes-money-amount__fraction')" not in src      # el respaldo viejo, que devolvía el primer monto (el tachado)
