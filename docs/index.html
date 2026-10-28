@@ -1499,12 +1499,16 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <input type="file" id="cp-file" accept=".xlsx" style="display:none" onchange="cpSubir(this)">
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuenta<select id="cp-cuenta-pre" class="fi" onchange="cpGuardarCuentaPre()" title="Elegila antes de subir el Excel: no depende de la detección y se acelera"><option value="">Auto (detectar)</option><option value="IT">IT</option><option value="MT">MT</option></select></span>
     <button class="btn primary" id="btn-cp-subir" onclick="qs('cp-file').click()">📂 Subir Excel de campaña</button>
+    <button class="btn" id="btn-cp-verif-ml" style="display:none" onclick="cpVerificarML()" title="Solo lectura: pregunta a ML cómo ve esta campaña y unas publicaciones de muestra">🔎 Verificar con ML</button>
+    <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
+    <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Margen objetivo %<input type="text" id="cp-obj" value="20" oninput="cpRender()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuota de referencia<select id="cp-plan" class="fi" onchange="cpRender()"><option value="contado">Contado</option><option value="3">3 cuotas</option><option value="6">6 cuotas</option><option value="9">9 cuotas</option><option value="12">12 cuotas</option></select></span>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">TC:<input type="text" id="cp-tc" placeholder="BNA auto" onchange="cpOnTc()" title="Recalcula el costo de todas las filas con este TC" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
     <span id="cp-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
+  <div id="cp-ml-panel" role="status" aria-live="polite" style="display:none;margin-bottom:10px;padding:10px 14px;border:1px solid var(--borde);border-radius:var(--r-recuadro);background:var(--celeste-50);color:var(--tinta);font-size:12px;line-height:1.7"></div>
   <div id="cp-avisos" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6"></div>
   <div class="stats-row" id="cp-stats" style="display:none"></div>
   <div id="cp-cuenta" style="display:none;margin:8px 0;font-size:11px;color:var(--text2);align-items:center;gap:8px;flex-wrap:wrap"></div>
@@ -1516,21 +1520,28 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-mod" onchange="CP.page=1;cpRender()">Solo modificadas</label>
       <label style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2);cursor:pointer"><input type="checkbox" id="cp-solo-aviso" onchange="CP.page=1;cpRender()">Con avisos</label>
       <select id="cp-sort" class="fi" onchange="cpSortSel(this.value)" title="También podés hacer clic en el encabezado de cada columna"><option value="excel">Orden del Excel</option><option value="margen_asc">Menor margen primero</option><option value="margen_desc">Mayor margen primero</option><option value="sku">SKU A-Z</option><option value="col">Por columna (clic en el encabezado)</option></select>
+      <select id="cp-f-pm" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por PM"><option value="">Todos los PM</option></select>
+      <select id="cp-f-cat" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por categoría"><option value="">Todas las categorías</option></select>
+      <select id="cp-f-part" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por participación" style="display:none"><option value="">Participen o no</option><option value="si">Solo las que participan</option><option value="no">Solo las que NO participan</option></select>
+      <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Precio final<input type="text" inputmode="numeric" id="cp-f-pmin" placeholder="desde" oninput="CP.page=1;cpRender()" class="campo-num" style="width:78px"><input type="text" inputmode="numeric" id="cp-f-pmax" placeholder="hasta" oninput="CP.page=1;cpRender()" class="campo-num" style="width:78px"></span>
       <span id="cp-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
       <span id="cp-confirm" style="flex-basis:100%;font-size:10px;font-family:'DM Mono',monospace"></span>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:10px;color:var(--text2)">
-      <b style="color:var(--accent)">Lote</b> (sobre las filas editables filtradas):
+      <span id="cp-lote-part" style="display:none;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:var(--accent)">Participación</b> (sobre las filas filtradas):
+        <button class="btn-xs" onclick="cpLoteParticipa(true)">✓ Participar en todas</button>
+        <button class="btn-xs" onclick="cpLoteParticipa(false)">✗ No participar en ninguna</button></span>
+<span id="cp-lote-old" style="display:contents">      <b style="color:var(--accent)">Lote</b> (sobre las filas editables filtradas):
       <input type="text" id="cp-lote-pct" placeholder="%" style="width:44px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
       <button class="btn-xs" onclick="cpLoteFijo()">Poner ese % a todas</button>
       <button class="btn-xs" onclick="cpLoteMargen()" title="Para cada fila, el mayor % entero (5–80) que deja el margen de la cuota de referencia en el objetivo">Máx. descuento que cumple el margen</button>
-      <button class="btn-xs" onclick="cpLoteOriginal()">Volver al % del Excel</button>
+      <button class="btn-xs" onclick="cpLoteOriginal()">Volver al % del Excel</button></span>
       <span id="cp-lote-info" style="color:var(--text3)"></span>
     </div>
   </div>
   <div class="table-wrap" id="cp-table-wrap" style="display:none">
     <table id="cp-table">
-      <thead><tr><th data-col="item" onclick="cpSortCol('item')">MLA · SKU<span class="cp-ar"></span></th><th data-col="pm" onclick="cpSortCol('pm')">PM<span class="cp-ar"></span></th><th data-col="lista" onclick="cpSortCol('lista')">Lista<span class="cp-ar"></span></th><th data-col="desc" onclick="cpSortCol('desc')">% descuento total<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(entero 5–80)</span></th><th id="cp-th-ml" data-col="ml" onclick="cpSortCol('ml')">% ML<span class="cp-ar"></span></th><th data-col="cliente" onclick="cpSortCol('cliente')">Paga el cliente<span class="cp-ar"></span></th><th data-col="pmml" onclick="cpSortCol('pmml')">PM ML<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(dif.)</span></th><th data-col="c_contado" onclick="cpSortCol('c_contado')">Contado<span class="cp-ar"></span></th><th data-col="c_3" onclick="cpSortCol('c_3')">3 c.<span class="cp-ar"></span></th><th data-col="c_6" onclick="cpSortCol('c_6')">6 c.<span class="cp-ar"></span></th><th data-col="c_9" onclick="cpSortCol('c_9')">9 c.<span class="cp-ar"></span></th><th data-col="c_12" onclick="cpSortCol('c_12')">12 c.<span class="cp-ar"></span></th><th data-col="avisos" onclick="cpSortCol('avisos')">⚠<span class="cp-ar"></span></th></tr></thead>
+      <thead><tr><th id="cp-th-part" data-col="part" onclick="cpSortCol('part')" style="display:none">Participa<span class="cp-ar"></span></th><th data-col="item" onclick="cpSortCol('item')">MLA · SKU<span class="cp-ar"></span></th><th data-col="pm" onclick="cpSortCol('pm')">PM<span class="cp-ar"></span></th><th data-col="lista" onclick="cpSortCol('lista')">Lista<span class="cp-ar"></span></th><th id="cp-th-desc" data-col="desc" onclick="cpSortCol('desc')">% descuento total<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(entero 5–80)</span></th><th id="cp-th-ml" data-col="ml" onclick="cpSortCol('ml')">% ML<span class="cp-ar"></span></th><th data-col="cliente" onclick="cpSortCol('cliente')">Paga el cliente<span class="cp-ar"></span></th><th data-col="pmml" onclick="cpSortCol('pmml')">PM ML<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(dif.)</span></th><th data-col="c_contado" onclick="cpSortCol('c_contado')">Contado<span class="cp-ar"></span></th><th data-col="c_3" onclick="cpSortCol('c_3')">3 c.<span class="cp-ar"></span></th><th data-col="c_6" onclick="cpSortCol('c_6')">6 c.<span class="cp-ar"></span></th><th data-col="c_9" onclick="cpSortCol('c_9')">9 c.<span class="cp-ar"></span></th><th data-col="c_12" onclick="cpSortCol('c_12')">12 c.<span class="cp-ar"></span></th><th data-col="avisos" onclick="cpSortCol('avisos')">⚠<span class="cp-ar"></span></th></tr></thead>
       <tbody id="cp-tbody"></tbody>
     </table>
     <div class="pagination" id="cp-pag"></div>
@@ -2763,13 +2774,19 @@ function cpFiltrar(filas,fl,orig){
     if(fl.soloMod&&!cpModificada(f,orig))return false;
     if(fl.soloAviso&&!(f.avisos&&f.avisos.length))return false;
     if(fl.soloBajo){const m=cpMargen(f,fl.plan);if(m==null||m>=fl.obj)return false;}
+    if(fl.pm&&(f.pm||'')!==fl.pm)return false;
+    if(fl.cat&&(f.categoria||'')!==fl.cat)return false;
+    if(fl.part==='si'&&!f.participa)return false;
+    if(fl.part==='no'&&f.participa)return false;
+    if(fl.pmin!=null&&!(f.precio_cliente>=fl.pmin))return false;
+    if(fl.pmax!=null&&!(f.precio_cliente<=fl.pmax))return false;
     return true;
   });
 }
 // Orden: sort={col,dir}. Los vacíos van siempre al final, sea cual sea la dirección.
 function cpValorOrden(f,col,plan){
   switch(col){
-    case 'item':return f.item_id||null;case 'sku':return f.sku||null;case 'pm':return f.pm||null;
+    case 'part':return f.participa?1:0;case 'item':return f.item_id||null;case 'sku':return f.sku||null;case 'pm':return f.pm||null;
     case 'lista':return f.precio_original;case 'desc':return f.descuento_total_pct;case 'ml':return f.meli_monto||0;
     case 'cliente':return f.precio_cliente;case 'pmml':return f.precio_pm&&f.precio_cliente?f.precio_cliente/f.precio_pm:null;
     case 'margen':return cpMargen(f,plan);case 'avisos':return (f.avisos||[]).length;
@@ -2842,15 +2859,17 @@ async function cpConfirmar(){
       const por={};d.filas.forEach(r=>{por[r.fila]=r;});
       lote.forEach((f,k)=>{const r=por[f.fila];if(!r||f._v!==vs[k])return;
         const dif=cpDifMargenes(f,r);CP.difMax=Math.max(CP.difMax,dif);if(dif>0.011){CP.divergencias++;console.warn('Campañas ML: el navegador y el backend difieren en',dif,'pp para',f.item_id);}
-        const keep={cuenta:f.cuenta,sku_origen:f.sku_origen,_v:f._v};Object.assign(f,r,keep);f._conf=true;});
+        const keep={cuenta:f.cuenta,sku_origen:f.sku_origen,_v:f._v,participa:f.participa,_prop:f._prop,_part0:f._part0,_ml:f._ml,promo_id:f.promo_id,promo_tipo:f.promo_tipo};Object.assign(f,r,keep);f._conf=true;});
     }
   }catch(e){CP.errorConf=e.message;}
   CP.confirmando=false;
   if(CP.otra){CP.otra=false;cpProgramarConfirmacion();}
   cpRender();
 }
-function cpObj(){const v=parseFloat(String(qs('cp-obj').value).replace(',','.'));return isNaN(v)?0:v;}
-function cpPlan(){return qs('cp-plan').value;}
+// Campañas donde ML propone el precio («Sumate al Cyber»): no hay margen objetivo ni cuota de referencia que elegir; el margen se pinta contra el umbral de Precios y ofertas ML.
+function cpEsPropuestas(){return CP.modo==='propuestas';}
+function cpObj(){if(cpEsPropuestas()){const u=(typeof OFM!=='undefined'&&OFM&&OFM.umbral!=null)?Number(OFM.umbral):10;return isNaN(u)?10:u;}const v=parseFloat(String(qs('cp-obj').value).replace(',','.'));return isNaN(v)?0:v;}
+function cpPlan(){return cpEsPropuestas()?'contado':qs('cp-plan').value;}
 function cpCuentaEfectiva(){return CP.cuentaManual||(CP.data&&CP.data.cuentas&&CP.data.cuentas.sugerida)||null;}
 async function cpPost(ruta,opts){
   const bu=getBackendUrl();if(!bu)throw new Error('Falta la URL del backend (Configuración).');
@@ -2869,9 +2888,12 @@ async function cpSubir(inp){
     const fd=new FormData();fd.append('archivo',file);
     const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
     CP.avisosAbiertos=new Set();CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;CP.file=file;
+    CP.modo=d.filas.some(f=>/propuesta/i.test((f.accion||'')+' '+(f.estado||'')))?'propuestas':'normal';
+    d.filas.forEach(f=>{f.participa=!/no aplicar/i.test(f.accion||'');f._part0=f.participa;f._prop=(typeof f.precio_final_ml==='number'&&f.precio_final_ml>0)?f.precio_final_ml:f.precio_cliente;});
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
+    cpArmarFiltros();
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
-    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
+    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{qs('btn-cp-subir').disabled=false;}
@@ -2897,9 +2919,119 @@ function cpKey(ev,fila){
   cpOnPct(fila,val);
   const sig=[...document.querySelectorAll('#cp-tbody input[data-fila]')][i+1];if(sig){sig.focus();sig.select();}
 }
-function cpFiltradasEditables(){
-  const fl={search:qs('cp-search').value,soloEdit:true,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan:cpPlan(),obj:cpObj()};
-  return cpFiltrar(CP.filas,fl,CP.orig);
+function cpNumFiltro(id){const t=qs(id).value;if(String(t).trim()==='')return null;const v=parsePeso(t);return v>0?v:null;}
+function cpFl(soloEdit){return {search:qs('cp-search').value,soloEdit,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan:cpPlan(),obj:cpObj(),
+  pm:qs('cp-f-pm').value,cat:qs('cp-f-cat').value,part:qs('cp-f-part').value,pmin:cpNumFiltro('cp-f-pmin'),pmax:cpNumFiltro('cp-f-pmax')};}
+function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
+function cpArmarFiltros(){
+  const llena=(id,vals,todas)=>{const el=qs(id),act=el.value;el.innerHTML=`<option value="">${todas}</option>`+[...new Set(vals.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>`<option value="${acEsc(v)}">${acEsc(v)}</option>`).join('');el.value=act;};
+  llena('cp-f-pm',CP.filas.map(f=>f.pm),'Todos los PM');llena('cp-f-cat',CP.filas.map(f=>f.categoria),'Todas las categorías');
+  ['cp-f-pmin','cp-f-pmax'].forEach(id=>{qs(id).value='';});qs('cp-f-part').value='';
+}
+// Participación y precio final (campañas con propuestas de ML)
+function cpParticipa(fila,v){const f=CP.filas.find(x=>x.fila===fila);if(f){f.participa=!!v;cpRender();}}
+function cpLoteParticipa(v){
+  const fs=cpFiltrar(CP.filas,cpFl(false),CP.orig);if(!fs.length){toast('No hay filas con ese filtro','error');return;}
+  fs.forEach(f=>{f.participa=v;});qs('cp-lote-info').textContent=`${fs.length} filas ${v?'participan':'no participan'}`;cpRender();
+}
+function cpOnFinal(fila,txt){
+  const f=CP.filas.find(x=>x.fila===fila);if(!f||!f.precio_original)return;
+  const t=String(txt).trim(),p=t===''?f._prop:parsePeso(t);
+  if(!(p>0)||p>f.precio_original+0.005){toast('El precio final tiene que ser mayor a 0 y no superar el precio original ($'+Math.round(f.precio_original)+')','error');cpRender();return;}
+  const T=(1-p/f.precio_original)*100;
+  if(T>80){toast('ML no admite más de 80 % de descuento (con ese precio sería '+T.toFixed(1)+' %)','error');cpRender();return;}
+  if(Math.abs(p-f.precio_cliente)>0.004){cpRecalcular(f,T,CP.data.motor_ml,cpTcActual());f.precio_cliente=cpR2(p);cpProgramarConfirmacion();}
+  cpRender();
+}
+function cpKeyF(ev,fila){
+  if(ev.key!=='Enter')return;ev.preventDefault();
+  const ins=[...document.querySelectorAll('#cp-tbody input[data-fila]')],i=ins.findIndex(x=>x.dataset.fila===String(fila)),val=ev.target.value;
+  cpOnFinal(fila,val);
+  const sig=[...document.querySelectorAll('#cp-tbody input[data-fila]')][i+1];if(sig){sig.focus();sig.select();}
+}
+// ── Participar en la campaña de ML desde el ERP (sin subir otro Excel). Primero verifica (lectura), después prueba con UNA, después el resto. ──
+function cpPromos(){const m={};CP.filas.forEach(f=>{if(f.promo_id){(m[f.promo_id]=m[f.promo_id]||[]).push(f.item_id);}});return m;}
+async function cpEsperarML(jobId,rotulo){
+  for(;;){
+    const j=await cpPost('/campanas-ml/ml/status/'+jobId,{});
+    if(j.status==='error')throw new Error((j.log||[]).slice(-1)[0]||'Falló el proceso.');
+    if(j.status==='not_found')throw new Error('El backend se reinició y perdió el proceso: volvé a intentar.');
+    if(j.status==='done')return j.result;
+    const p=j.progress;qs('cp-status').textContent=p?`${rotulo}: ${p.label} (${p.current}/${p.total})`:rotulo+'…';
+    await new Promise(r=>setTimeout(r,2000));
+  }
+}
+function cpPanel(html){const e=qs('cp-ml-panel');e.style.display='';e.innerHTML=html;}
+async function cpVerificarML(){
+  const cu=cpCuentaEfectiva();if(!cu){toast('No pude detectar la cuenta (IT/MT): elegila arriba','error');return;}
+  const promos=cpPromos();if(!Object.keys(promos).length){toast('El Excel no trae el identificador de la campaña','error');return;}
+  const btn=qs('btn-cp-verif-ml');btn.disabled=true;
+  try{
+    const m=Object.fromEntries(Object.entries(promos).map(([k,v])=>[k,v.slice(0,3)]));
+    const j=await cpPost('/campanas-ml/ml/diagnostico',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,promos:m})});
+    const r=await cpEsperarML(j.job_id,'Preguntándole a ML');
+    CP.diag=r;
+    cpPanel('<b>Así ve ML la campaña</b> (cuenta '+acEsc(cu==='IT'?'Group':'Arg')+')<br>'+r.campanas.map(c=>`• <b>${acEsc(c.nombre||c.promotion_id)}</b> (${acEsc(c.promotion_id)}) — ${c.listada_por_ml?`tipo ML: <b>${acEsc(c.tipo_api||'?')}</b> · estado ${acEsc(c.estado||'?')}`:'<span style="color:var(--error-texto)">ML NO la lista para esta cuenta</span>'}`
+      +c.muestras.map(x=>`<br>&nbsp;&nbsp;↳ ${acEsc(x.item_id)}: ${x.error?acEsc(x.error):x.candidata?`candidata (estado ${acEsc(x.estado||'?')}${x.precio?', precio '+x.precio:''}${x.min?', mín '+x.min:''}${x.max?', máx '+x.max:''})`:'<span style="color:var(--error-texto)">no figura</span>'}`).join('')
+      +c.avisos.map(a=>`<br><span style="color:var(--aviso-texto)">⚠ ${acEsc(a)}</span>`).join('')).join('<br>'));
+    qs('cp-status').textContent='Verificación lista. Si todo se ve bien, «Participar en ML» prueba primero con UNA publicación.';
+  }catch(e){cpPanel('<span style="color:var(--error-texto)">No se pudo verificar: '+acEsc(e.message)+'</span>');qs('cp-status').textContent='❌ '+e.message;}
+  finally{btn.disabled=false;}
+}
+async function cpParticiparPromo(pid,cu,op,filas){
+  // 1) prueba con UNA (verificada en ML)  2) el resto, si la prueba quedó confirmada. Devuelve false si no hay que seguir.
+  const aplicar=r=>{(r.resultados||[]).forEach(x=>{const f=CP.filas.find(y=>y.item_id===x.item_id&&y.promo_id===pid);if(f)f._ml=x;});cpRender();};
+  if(!confirm(`PRIMERO una prueba: se suma UNA publicación (${filas[0].item_id}) a la campaña ${pid} en Mercado Libre y se verifica que ML la muestre adentro.\nEsto escribe en Mercado Libre. ¿Seguimos?`))return false;
+  let j=await cpPost('/campanas-ml/ml/participar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,promotion_id:pid,filas,solo_probar:true,operador:op})});
+  let r=await cpEsperarML(j.job_id,'Probando con una');
+  if(r.error){cpPanel('<span style="color:var(--error-texto)">'+acEsc(r.error)+'</span>');return false;}
+  aplicar(r);const t=r.resultados[0];
+  cpPanel(`<b>Prueba con ${acEsc(t.item_id)} en ${acEsc(pid)}:</b> ${acEsc(t.mensaje)} (tipo enviado a ML: ${acEsc(r.tipo_api)})`);
+  if(t.estado!=='ok'){qs('cp-status').textContent='La prueba no quedó confirmada: no se siguió. Revisá la publicación en ML y avisame qué dice.';return false;}
+  const resto=filas.slice(1);if(!resto.length)return true;
+  if(!confirm(`La prueba funcionó. ¿Sumo las ${resto.length} publicaciones restantes a la campaña ${pid}? (cuenta ${cu==='IT'?'Group':'Arg'}). Si fallan varias seguidas se corta solo.`))return false;
+  j=await cpPost('/campanas-ml/ml/participar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,promotion_id:pid,filas:resto,operador:op})});
+  r=await cpEsperarML(j.job_id,'Sumando a la campaña');aplicar(r);
+  const ok=r.resultados.filter(x=>x.estado==='ok').length,er=r.resultados.filter(x=>x.estado==='error').length,pe=r.resultados.filter(x=>x.estado==='pendiente').length,ver=(r.verificadas_por_muestreo||[]);
+  cpPanel(`<b>${acEsc(pid)} listo:</b> ${ok+1} publicaciones entraron a la campaña · ${er} con error (marcadas «✗ ML», pasá el mouse para ver el motivo) · ${pe} sin intentar.`+(ver.length?`<br>Control por muestreo en ML: ${ver.map(v=>acEsc(v.item_id)+' → '+acEsc(v.estado_en_ml||'no aparece')).join(' · ')}`:'')+(r.aviso_historial?'<br>⚠ No se pudo anotar en «Historial Ofertas ML».':''));
+  return true;
+}
+async function cpParticiparML(){
+  const cu=cpCuentaEfectiva();if(!cu){toast('No pude detectar la cuenta (IT/MT): elegila arriba','error');return;}
+  const op=(typeof ofmRequireOperador==='function')?ofmRequireOperador():'';if(!op)return;
+  const ids=Object.keys(cpPromos());if(!ids.length){toast('El Excel no trae el identificador de la campaña','error');return;}
+  const grupos=ids.map(pid=>[pid,CP.filas.filter(f=>f.participa&&f._ml?.estado!=='ok'&&f.promo_id===pid)]).filter(g=>g[1].length).sort((a,b)=>b[1].length-a[1].length);
+  if(!grupos.length){toast('No hay publicaciones marcadas «Participa» (o ya entraron todas)','error');return;}
+  const btn=qs('btn-cp-part-ml');btn.disabled=true;
+  try{
+    for(const[pid,fs]of grupos){
+      const filas=fs.map(f=>({item_id:f.item_id,sku:f.sku||'',deal_price:(f.precio_cliente!=null&&Math.abs(f.precio_cliente-f._prop)>0.004)?f.precio_cliente:null}));
+      if(!await cpParticiparPromo(pid,cu,op,filas))break;
+    }
+    const dentro=CP.filas.filter(f=>f._ml?.estado==='ok').length;qs('cp-status').textContent=`${dentro} publicaciones participan en la campaña (según las respuestas de ML).`;
+  }catch(e){cpPanel('<span style="color:var(--error-texto)">'+acEsc(e.message)+'</span>');qs('cp-status').textContent='❌ '+e.message;}
+  finally{btn.disabled=false;}
+}
+// El MISMO Excel de ML con lo decidido (FINAL_PRICE y ACTION): es el que se sube a Mercado Libre. El backend edita solo esas dos columnas de las filas que cambian.
+async function cpExportarML(){
+  if(!CP.data||!CP.file){toast('Primero subí el Excel de la campaña','error');return;}
+  const bu=getBackendUrl();if(!bu){toast('Falta la URL del backend (Configuración).','error');return;}
+  const part=CP.filas.filter(f=>f.participa).length,no=CP.filas.length-part,cambios=CP.filas.filter(f=>f.precio_cliente!=null&&Math.abs(f.precio_cliente-f._prop)>0.004).length;
+  if(!confirm(`Vas a descargar el Excel para subir a Mercado Libre:\n• ${part} publicaciones participan («Aplicar propuesta»)\n• ${no} NO participan («No aplicar»)\n• ${cambios} con el precio final distinto al que propuso ML\n\nEsto no cambia nada en ML hasta que lo subas vos. ¿Seguimos?`))return;
+  const st=qs('cp-status'),btn=qs('btn-cp-export-ml');btn.disabled=true;st.textContent='Armando el Excel para ML…';
+  try{
+    const decisiones=CP.filas.map(f=>({fila:f.fila,aplicar:!!f.participa,final_price:(f.precio_cliente!=null&&Math.abs(f.precio_cliente-f._prop)>0.004)?f.precio_cliente:null}));
+    const fd=new FormData();fd.append('archivo',CP.file);fd.append('decisiones',JSON.stringify(decisiones));
+    const r=await fetch(bu.replace(/\/$/,'')+'/campanas-ml/exportar-corregido',{method:'POST',body:fd});
+    if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||('Error '+r.status));}
+    const b=await r.blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=String(CP.file.name).replace(/\.xlsx$/i,'')+'_para_ML.xlsx';a.click();
+    let inf={};try{inf=JSON.parse(r.headers.get('X-Informe')||'{}');}catch(e){}
+    const rech=(inf.rechazadas||[]).length;
+    st.textContent=`✓ Excel descargado: ${inf.no_aplicar||0} filas pasaron a «No aplicar», ${inf.precios_cambiados||0} precios cambiados`+(rech?` · ⚠ ${rech} filas rechazadas (${inf.rechazadas.slice(0,3).map(x=>x.motivo).join('; ')})`:'')+(inf.resto_del_archivo_igual===false?' · ⚠ el resto del archivo cambió, no lo subas':' · el resto del archivo quedó igual')+'. Subilo en la Central de Promociones de ML.';
+    toast('Excel para ML descargado');
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+  finally{btn.disabled=false;}
 }
 function cpLoteFijo(){
   const t=String(qs('cp-lote-pct').value).trim().replace('%','').replace(',','.'),v=Number(t);
@@ -2950,34 +3082,43 @@ function cpCuentaHtml(){
 }
 function cpRender(){
   if(!CP.data)return;
-  const obj=cpObj(),plan=cpPlan(),d=CP.data,simple=d.tipo==='simple';
+  const obj=cpObj(),plan=cpPlan(),d=CP.data,prop=cpEsPropuestas(),simple=d.tipo==='simple'&&!prop;
   const todas=CP.filas,mod=todas.filter(f=>cpModificada(f,CP.orig)).length;
   const bajo=todas.filter(f=>{const m=cpMargen(f,plan);return m!=null&&m<obj;}).length;
-  qs('cp-stats').innerHTML=[[todas.length,'Publicaciones'],[todas.filter(f=>f.editable).length,'Editables en ML'],[todas.filter(f=>cpMargen(f,plan)!=null).length,'Con margen calculado'],[bajo,`Margen < ${obj}% (${plan==='contado'?'contado':plan+' cuotas'})`],[mod,'Modificadas por mí']].map(([v,l])=>`<div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`).join('');
+  // En campañas con propuestas de ML no se elige margen objetivo ni cuota: se ocultan esos controles.
+  [qs('cp-obj'),qs('cp-plan')].forEach(el=>{const sp=el&&el.closest('span');if(sp)sp.style.display=prop?'none':'';});
+  qs('cp-th-part').style.display=prop?'':'none';qs('cp-lote-old').style.display=prop?'none':'contents';qs('cp-f-part').style.display=prop?'':'none';qs('cp-lote-part').style.display=prop?'flex':'none';
+  qs('cp-th-desc').innerHTML=prop?`Precio final<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(ML propone · editá)</span>`:`% descuento total<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(entero 5–80)</span>`;
+  const partN=todas.filter(f=>f.participa).length;
+  qs('cp-stats').innerHTML=(prop?[[todas.length,'Propuestas de ML'],[partN,'Participan'],[todas.length-partN,'No participan'],[bajo,`Margen < ${obj}% (contado)`],[todas.filter(f=>f.precio_cliente!=null&&Math.abs(f.precio_cliente-f._prop)>0.004).length,'Con precio cambiado']]
+    :[[todas.length,'Publicaciones'],[todas.filter(f=>f.editable).length,'Editables en ML'],[todas.filter(f=>cpMargen(f,plan)!=null).length,'Con margen calculado'],[bajo,`Margen < ${obj}% (${plan==='contado'?'contado':plan+' cuotas'})`],[mod,'Modificadas por mí']]).map(([v,l])=>`<div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`).join('');
   const fijos=(d.avisos_generales||[]).concat(d.avisos||[]);
   const av=qs('cp-avisos');av.style.display=fijos.length?'':'none';av.innerHTML=fijos.map(a=>'⚠ '+acEsc(a)).join('<br>');
-  qs('cp-cuenta').innerHTML=cpCuentaHtml()+`<div style="flex-basis:100%;font-size:10px;color:var(--text3)">Tipo de campaña: <b style="color:var(--text2)">${simple?'simple — se edita DISCOUNT_PERCENTAGE (entero 5–80); el descuento es todo del vendedor (sin aporte de ML, criterio conservador)':'con reparto — se juega el descuento TOTAL (entero 5–80); ML mantiene su aporte (MELI_PERCENTAGE) y vos ponés el resto, que es lo que se copia en SELLER_PERCENTAGE'}</b></div>`;
+  qs('cp-cuenta').innerHTML=cpCuentaHtml()+`<div style="flex-basis:100%;font-size:10px;color:var(--text3)">Tipo de campaña: <b style="color:var(--text2)">${prop?'propuestas de Mercado Libre — ML propone el precio de cada publicación («Atractivo» si el precio final es igual o menor al propuesto). Elegí cuáles participan y, si querés, bajá el precio final; el margen es el real con tus costos.':simple?'simple — se edita DISCOUNT_PERCENTAGE (entero 5–80); el descuento es todo del vendedor (sin aporte de ML, criterio conservador)':'con reparto — se juega el descuento TOTAL (entero 5–80); ML mantiene su aporte (MELI_PERCENTAGE) y vos ponés el resto, que es lo que se copia en SELLER_PERCENTAGE'}</b></div>`;
   qs('cp-th-ml').style.display=simple?'none':'';
   document.querySelectorAll('#cp-table thead th[data-col]').forEach(th=>{const c=th.dataset.col,on=CP.sort.col===c;th.querySelector('.cp-ar').textContent=on?(CP.sort.dir===1?' ▲':' ▼'):'';});
-  const fl={search:qs('cp-search').value,soloEdit:qs('cp-solo-edit').checked,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan,obj};
+  const fl=Object.assign(cpFl(false),{soloEdit:qs('cp-solo-edit').checked});
   const filas=cpOrdenar(cpFiltrar(todas,fl,CP.orig),CP.sort,plan);
   const pages=Math.ceil(filas.length/CP.pageSize)||1;CP.page=Math.min(CP.page,pages);S.cpPage=CP.page;
   const ef=cpCuentaEfectiva();
   qs('cp-tbody').innerHTML=filas.slice((CP.page-1)*CP.pageSize,CP.page*CP.pageSize).map(f=>{
-    const mTd=p=>{const m=cpMargen(f,p);return `<td style="font-family:'DM Mono',monospace;color:${cpClaseMargen(m,obj)};${p===plan?'font-weight:800;background:var(--mod-resalte)':''}">${m==null?'—':m.toFixed(1)+'%'}</td>`;};
-    const mod=cpModificada(f,CP.orig),inv=f.editable&&!cpPctValido(f.descuento_total_pct);
-    const pctCel=f.editable?`<input type="text" data-fila="${f.fila}" value="${f.descuento_total_pct==null?'':f.descuento_total_pct}" onchange="cpOnPct(${f.fila},this.value)" onkeydown="cpKey(event,${f.fila})" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide el descuento total entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}${!simple&&f.seller_pct!=null?`<div style="font-size:9px;color:var(--accent)" title="Es el valor a copiar en SELLER_PERCENTAGE">vos ${Math.round(f.seller_pct*1000)/1000}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.descuento_total_pct==null?'—':f.descuento_total_pct+'%'} 🔒</span>`;
+    const mTd=p=>{const m=cpMargen(f,p),r=f.margenes&&f.margenes[p]?f.margenes[p].rentabilidad:null;return `<td style="font-family:'DM Mono',monospace;color:${cpClaseMargen(m,obj)};${p===plan?'font-weight:800;background:var(--mod-resalte)':''}">${m==null?'—':m.toFixed(1)+'%'}${prop&&p===plan&&r!=null?`<div style="font-size:9px;font-weight:400;color:var(--text3)" title="Rentabilidad por unidad al precio final (contado)">$${Math.round(r).toLocaleString('es-AR')}</div>`:''}</td>`;};
+    const mod=cpModificada(f,CP.orig),inv=!prop&&f.editable&&!cpPctValido(f.descuento_total_pct);
+    const poco=prop&&f.precio_cliente!=null&&f.precio_cliente>f._prop+0.005;
+    const precioCel=`<input type="text" inputmode="numeric" data-fila="${f.fila}" value="${f.precio_cliente==null?'':f.precio_cliente}" onchange="cpOnFinal(${f.fila},this.value)" onkeydown="cpKeyF(event,${f.fila})" aria-label="Precio final de ${acEsc(f.item_id)}" class="campo-num" style="width:84px;background:var(--surface2);border:1px solid ${poco?'var(--yellow)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"><div style="font-size:9px;color:var(--text3)" title="Lo que propone Mercado Libre y su descuento">ML: ${f._prop!=null?fmt$(f._prop):'—'}${CP.orig[f.fila]!=null?' (−'+Math.round(CP.orig[f.fila]*10)/10+'%)':''}</div>${poco?'<div style="font-size:9px;color:var(--yellow)">Poco atractivo</div>':''}`;
+    const pctCel=prop?precioCel:f.editable?`<input type="text" data-fila="${f.fila}" value="${f.descuento_total_pct==null?'':f.descuento_total_pct}" onchange="cpOnPct(${f.fila},this.value)" onkeydown="cpKey(event,${f.fila})" style="width:46px;text-align:right;background:var(--surface2);border:1px solid ${inv?'var(--red)':mod?'var(--accent)':'var(--border)'};border-radius:4px;color:var(--text);padding:3px 5px;font-size:11px;font-family:'DM Mono',monospace"${inv?' title="ML pide el descuento total entero entre 5 y 80"':''}>${mod?`<div style="font-size:8px;color:var(--text3)">Excel: ${CP.orig[f.fila]}%</div>`:''}${!simple&&f.seller_pct!=null?`<div style="font-size:9px;color:var(--accent)" title="Es el valor a copiar en SELLER_PERCENTAGE">vos ${Math.round(f.seller_pct*1000)/1000}%</div>`:''}`:`<span style="color:var(--text3)" title="Celda no editable en ML (ya participa)">${f.descuento_total_pct==null?'—':f.descuento_total_pct+'%'} 🔒</span>`;
     const dif=f.precio_pm&&f.precio_cliente?((f.precio_cliente/f.precio_pm-1)*100):null;
     const cuentaChip=f.cuenta&&ef&&f.cuenta!==ef?` <span style="color:var(--yellow)" title="Esta publicación es de la cuenta ${f.cuenta}, no de ${ef}">⚠${f.cuenta}</span>`:'';
-    const avisos=cpOrdenarAvisos(f.avisos||[]);
-    return `<tr${mod?' style="background:var(--mod-resalte)"':''}><td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
+    const avisos=cpOrdenarAvisos((f.avisos||[]).filter(a=>!(prop&&(/^ML pide el descuento TOTAL/.test(a)||/^Celda no editable/.test(a)))));
+    const partTd=prop?`<td style="text-align:center;vertical-align:top"><input type="checkbox" ${f.participa?'checked':''} onchange="cpParticipa(${f.fila},this.checked)" aria-label="Participar con ${acEsc(f.item_id)}" style="width:18px;height:18px">${f._ml?`<div title="${acEsc(f._ml.mensaje||'')}" style="font-size:9px;margin-top:2px;color:${f._ml.estado==='ok'?'var(--ok)':f._ml.estado==='error'?'var(--error)':'var(--atencion)'}">${f._ml.estado==='ok'?'✓ en ML':f._ml.estado==='error'?'✗ ML':'?'}</div>`:''}</td>`:'';
+    return `<tr style="${mod?'background:var(--mod-resalte);':''}${prop&&!f.participa?'opacity:.5':''}">${partTd}<td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
       +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}${f.comision_pct!=null?`<div style="font-size:8px;color:${f.comision_origen==='ml'?'var(--text3)':'var(--yellow)'}" title="${f.comision_origen==='ml'?'Comisión REAL de esta publicación, leída de ML (Cargo por vender)':f.comision_origen==='categoria'?'No se pudo leer la real de ML: se usa la de la categoría de la tabla (puede no coincidir)':'No se pudo leer la real de ML y la categoría no está cargada: se usa la general'}">com ${f.comision_pct}%${f.comision_origen==='ml'?' ✓ML':' (tabla)'}</div>`:''}</td><td>${pctCel}</td>`
       +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?Math.round(f.meli_pct*1000)/1000+'%':'—'}</td>`)
       +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f._conf===false?' <span title="Vista previa calculada en el navegador: el backend la está confirmando" style="color:var(--yellow)">≈</span>':''}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`
       +`<td style="font-family:'DM Mono',monospace">${f.precio_pm?fmt$(f.precio_pm)+(dif!=null?` <span style="font-size:9px;color:${Math.abs(dif)<=1?'var(--green)':dif<0?'var(--red)':'var(--yellow)'}">${dif>0?'+':''}${dif.toFixed(1)}%</span>`:''):'<span style="color:var(--text3)">sin PM</span>'}</td>`
       +CP_PLANES.map(mTd).join('')
       +`<td style="font-size:10px;color:var(--yellow);min-width:130px">${avisos.length?`<div onclick="cpToggleAviso(${f.fila})" style="cursor:pointer" title="${acEsc(avisos.join('\n\n'))}"><b>⚠ ${avisos.length}</b> <span style="font-size:9px;color:var(--text2)">${acEsc(avisos.slice(0,2).map(cpAvisoCorto).join(' · '))}${avisos.length>2?` <span style="color:var(--text3)">+${avisos.length-2} más</span>`:''}</span> <span style="font-size:9px;color:var(--text3)">${CP.avisosAbiertos.has(f.fila)?'▲':'▼'}</span></div>`:''}</td></tr>`
-      +(avisos.length&&CP.avisosAbiertos.has(f.fila)?`<tr class="cp-avisos-row"><td colspan="13" style="background:rgba(255,209,102,.07);font-size:10px;color:var(--text2);padding:6px 12px;line-height:1.6"><b style="color:var(--yellow)">${acEsc(f.item_id)}</b> · por qué está marcada:<br>${avisos.map(a=>'• '+acEsc(a)).join('<br>')}</td></tr>`:'');
+      +(avisos.length&&CP.avisosAbiertos.has(f.fila)?`<tr class="cp-avisos-row"><td colspan="14" style="background:rgba(255,209,102,.07);font-size:10px;color:var(--text2);padding:6px 12px;line-height:1.6"><b style="color:var(--yellow)">${acEsc(f.item_id)}</b> · por qué está marcada:<br>${avisos.map(a=>'• '+acEsc(a)).join('<br>')}</td></tr>`:'');
   }).join('');
   const sinConf=CP.filas.filter(f=>f._conf===false).length;
   qs('cp-count').textContent=filas.length+' filas'+(sinConf?` · ${sinConf} ≈ sin confirmar${CP.confirmando?' (confirmando con el backend…)':''}`:'');

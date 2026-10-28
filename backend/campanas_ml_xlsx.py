@@ -337,3 +337,95 @@ def verificar_integridad(original: bytes, nuevo: bytes, hoja_nueva: str) -> dict
         if mo and not (mn and mn.group(1).startswith(mo.group(1))):
             problemas.append(f"styles.xml: se alteró el prefijo de <{tag}>")
     return {"ok": not problemas, "entradas_identicas": identicas, "problemas": problemas, "entradas_nuevas": extra}
+
+
+# ── Decisiones sobre el Excel de propuestas de ML (campañas tipo «Sumate al Cyber»: ML propone el precio) ──
+
+def _ruta_hoja(zin: zipfile.ZipFile, hoja: str) -> str:
+    wb = zin.read("xl/workbook.xml").decode("utf-8")
+    rels = zin.read("xl/_rels/workbook.xml.rels").decode("utf-8")
+    m = re.search(r'<sheet [^>]*?name="%s"[^>]*?/>' % re.escape(escape(hoja, {'"': "&quot;"})), wb)
+    if not m:
+        raise ExcelInvalido(f"No existe la hoja {hoja!r}")
+    rid = re.search(r'r:id="([^"]+)"', m.group(0)).group(1)
+    r = re.search(r'<Relationship [^>]*?Id="%s"[^>]*?/>' % re.escape(rid), rels)
+    destino = re.search(r'Target="([^"]+)"', r.group(0)).group(1)
+    return destino.lstrip("/") if destino.startswith("/") else "xl/" + destino
+
+
+def _reemplazar_celda(xml: str, ref: str, nueva: str) -> tuple[str, bool]:
+    patron = re.compile(r'<c r="%s"(?:[^>]*?/>|[^>]*?>.*?</c>)' % re.escape(ref), re.S)
+    m = patron.search(xml)
+    if not m:
+        return xml, False
+    return xml[:m.start()] + nueva + xml[m.end():], True
+
+
+def _estilo(celda_xml: str) -> str:
+    m = re.search(r' s="(\d+)"', celda_xml.split(">")[0])
+    return f' s="{m.group(1)}"' if m else ""
+
+
+def aplicar_decisiones(xlsx: bytes, decisiones: list[dict], hoja: str = HOJA_PROMOCIONES) -> tuple[bytes, dict]:
+    """Devuelve el MISMO Excel de ML con las decisiones aplicadas, para volver a subirlo a Mercado Libre.
+
+    `decisiones`: `[{fila, aplicar: bool, final_price: float | None}]`. Solo se tocan DOS columnas de `Promociones` y solo en las filas que cambian:
+    `FINAL_PRICE` (precio final, número) y `ACTION` («Aplicar propuesta» / «No aplicar», las dos opciones de la lista desplegable de ML). Se edita el
+    XML de la hoja directamente (no se reescribe el libro con openpyxl): el resto del archivo queda byte a byte igual, validaciones y formatos incluidos.
+    Se rechaza un precio final <= 0 o mayor al precio original. Devuelve `(xlsx_nuevo, informe)`."""
+    leido = leer_promociones(xlsx, hoja)
+    cab = leido["columnas"]
+    for col in ("FINAL_PRICE", "ACTION"):
+        if col not in cab:
+            raise ExcelInvalido(f"El Excel no tiene la columna {col}: no es un archivo de propuestas de ML")
+    col_precio, col_accion = _col(cab["FINAL_PRICE"]), _col(cab["ACTION"])
+    por_fila = {f["fila"]: f for f in leido["filas"]}
+    zin = zipfile.ZipFile(io.BytesIO(xlsx))
+    ruta = _ruta_hoja(zin, hoja)
+    xml = zin.read(ruta).decode("utf-8")
+    informe = {"precios_cambiados": 0, "no_aplicar": 0, "aplicar": 0, "sin_cambio": 0, "rechazadas": []}
+    for d in decisiones:
+        fila = int(d.get("fila", 0))
+        f = por_fila.get(fila)
+        if not f:
+            informe["rechazadas"].append({"fila": fila, "motivo": "La fila no existe en el Excel"})
+            continue
+        cambio = False
+        precio = d.get("final_price")
+        if precio is not None:
+            precio = round(float(precio), 2)
+            original = f.get("ORIGINAL_PRICE") or 0
+            if precio <= 0 or (original and precio > original + 0.005):
+                informe["rechazadas"].append({"fila": fila, "item_id": f["ITEM_ID"], "motivo": f"Precio final {precio} inválido (tiene que ser mayor a 0 y no superar el precio original {original:g})"})
+                precio = None
+            elif abs(precio - float(f.get("FINAL_PRICE") or 0)) > 0.004:
+                m = re.search(r'<c r="%s%d"[^>]*>' % (col_precio, fila), xml)
+                est = _estilo(m.group(0)) if m else ""
+                xml, ok = _reemplazar_celda(xml, f"{col_precio}{fila}", f'<c r="{col_precio}{fila}"{est} t="n"><v>{repr(precio)}</v></c>')
+                if ok:
+                    informe["precios_cambiados"] += 1
+                    cambio = True
+        accion = "Aplicar propuesta" if d.get("aplicar", True) else "No aplicar"
+        if str(f.get("ACTION") or "").strip() != accion:
+            m = re.search(r'<c r="%s%d"[^>]*>' % (col_accion, fila), xml)
+            est = _estilo(m.group(0)) if m else ""
+            xml, ok = _reemplazar_celda(xml, f"{col_accion}{fila}", f'<c r="{col_accion}{fila}"{est} t="inlineStr"><is><t>{accion}</t></is></c>')
+            if ok:
+                informe["aplicar" if accion == "Aplicar propuesta" else "no_aplicar"] += 1
+                cambio = True
+        if not cambio:
+            informe["sin_cambio"] += 1
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+        for info in zin.infolist():
+            data = xml.encode("utf-8") if info.filename == ruta else zin.read(info.filename)
+            zi = zipfile.ZipInfo(info.filename, info.date_time)
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            zi.external_attr = info.external_attr
+            zout.writestr(zi, data)
+    nuevo = buf.getvalue()
+    # verificación: el resto del archivo no cambió y lo pedido quedó escrito
+    zn = zipfile.ZipFile(io.BytesIO(nuevo))
+    iguales = all(zin.read(n) == zn.read(n) for n in zin.namelist() if n != ruta) and zin.namelist() == zn.namelist()
+    informe["resto_del_archivo_igual"] = iguales
+    return nuevo, informe

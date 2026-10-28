@@ -28,6 +28,7 @@ from proyeccion_snapshot import router as proyeccion_router
 import criterios as criterios_mod
 import ml_ofertas_foto
 import ml_ofertas_excel
+import ml_campanas_participar
 import ml_full_candidatos
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
@@ -728,6 +729,62 @@ def _campanas_exportar_sync(contenido: bytes, payload: str) -> tuple[bytes, dict
     except campanas_ml_xlsx.ExcelInvalido as e:
         raise HTTPException(status_code=422, detail=str(e))
     return nuevo, {**info, **campanas_ml_xlsx.verificar_integridad(contenido, nuevo, info["hoja"]), "filas": len(cuerpo), "tipo": leido["tipo"]}
+
+@app.post("/campanas-ml/ml/diagnostico")
+async def campanas_ml_ml_diagnostico(request: Request):
+    """SOLO LECTURA: cómo ve ML la campaña (tipo real, estado) y unas pocas publicaciones de muestra. Se corre antes de participar."""
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    promos = {str(k): [str(i) for i in v] for k, v in (b.get("promos") or {}).items()}
+    if not promos:
+        raise HTTPException(status_code=422, detail="Faltan las campañas a diagnosticar.")
+    job_id = f"mlcamp_d_{int(time.time() * 1000)}"
+    ml_campanas_participar.lanzar(job_id, lambda prog: ml_campanas_participar.diagnosticar(ml_ofertas.MLOfertasClient(), cuenta, promos))
+    return {"job_id": job_id}
+
+
+@app.post("/campanas-ml/ml/participar")
+async def campanas_ml_ml_participar(request: Request):
+    """ESCRIBE en Mercado Libre: suma las publicaciones a la campaña (card del evento). `solo_probar=true` hace UNA sola y la verifica."""
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    promotion_id = str(b.get("promotion_id") or "").strip()
+    filas = [{"item_id": str(f["item_id"]), "sku": f.get("sku", ""), "deal_price": f.get("deal_price")} for f in (b.get("filas") or []) if f.get("item_id")]
+    if not promotion_id or not filas:
+        raise HTTPException(status_code=422, detail="Falta la campaña o no hay publicaciones para sumar.")
+    job_id = f"mlcamp_p_{int(time.time() * 1000)}"
+    ml_campanas_participar.lanzar(job_id, lambda prog: ml_campanas_participar.participar(
+        ml_ofertas.MLOfertasEscritura(), cuenta, promotion_id, filas, bool(b.get("solo_probar")), prog, _registrar_historial_oferta_lote, b.get("operador", "")))
+    return {"job_id": job_id, "total": 1 if b.get("solo_probar") else len(filas)}
+
+
+@app.get("/campanas-ml/ml/status/{job_id}")
+async def campanas_ml_ml_status(job_id: str):
+    return ml_campanas_participar.estado_job(job_id) or {"status": "not_found"}
+
+
+@app.post("/campanas-ml/exportar-corregido")
+async def campanas_ml_exportar_corregido(archivo: UploadFile = File(...), decisiones: str = Form(...)):
+    """El MISMO Excel de propuestas de ML con lo decidido en el ERP: `FINAL_PRICE` y `ACTION` («Aplicar propuesta» / «No aplicar») de las filas
+    que cambian. Es el archivo que se vuelve a subir a Mercado Libre. No escribe en ML ni en ningún Sheet."""
+    try:
+        lista = json.loads(decisiones)
+        if not isinstance(lista, list):
+            raise ValueError("decisiones tiene que ser una lista")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"Decisiones inválidas: {e}")
+    contenido = await archivo.read()
+
+    def _hacer():
+        try:
+            return campanas_ml_xlsx.aplicar_decisiones(contenido, lista)
+        except campanas_ml_xlsx.ExcelInvalido as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    nuevo, informe = await run_in_threadpool(_hacer)
+    return Response(nuevo, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"X-Informe": json.dumps(informe), "Access-Control-Expose-Headers": "X-Informe",
+                             "Content-Disposition": 'attachment; filename="campana_para_subir_a_ml.xlsx"'})
 
 @app.post("/campanas-ml/exportar")
 async def campanas_ml_exportar(archivo: UploadFile = File(...), payload: str = Form(...)):
