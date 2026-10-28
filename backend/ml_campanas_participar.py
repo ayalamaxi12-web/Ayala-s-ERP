@@ -23,6 +23,10 @@ from ml_ofertas import MLOfertasClient, MLOfertasEscritura
 _jobs: dict[str, dict] = {}
 CORTE_ERRORES_SEGUIDOS = 5
 ESTADOS_ADENTRO = ("started", "pending", "active", "candidate_accepted")
+# Tipos de promoción donde EL VENDEDOR fija el precio: ML exige `deal_price` en el alta (campañas tradicionales). En SMART / MARKETPLACE_CAMPAIGN (co-fondeadas)
+# ML define el precio y `deal_price` no va, salvo que el usuario lo haya cambiado a propósito. Verificado en vivo (28/10/2026): el «TIERS» del Excel del Cyber
+# es un DEAL en la API y la campaña «Ofertas compartidas» es SMART.
+TIPOS_CON_PRECIO = ("DEAL", "SELLER_CAMPAIGN", "DOD", "LIGHTNING", "PRICE_DISCOUNT")
 
 
 def estado_job(job_id: str) -> dict | None:
@@ -77,6 +81,8 @@ def participar_una(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, tipo:
     body = {"promotion_id": promotion_id, "promotion_type": tipo}
     if deal_price is not None:
         body["deal_price"] = float(Decimal(str(deal_price)).quantize(Decimal("0.01")))
+    elif tipo in TIPOS_CON_PRECIO:
+        return {"ok": False, "error": f"Esta campaña es de tipo {tipo}: ML exige el precio final y la fila no lo trae."}
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}", "Content-Type": "application/json"}
     d = ml._post(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}?app_version=v2", headers, body)
     err = _es_error(d)
@@ -94,7 +100,8 @@ def _verificar(ml: MLOfertasClient, cuenta: str, promotion_id: str, item_id: str
 def participar(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: list[dict], solo_probar: bool = False,
                progreso_cb: Callable[[int, int, str], None] | None = None, historial_cb: Callable[[list[dict]], None] | None = None,
                operador: str = "") -> dict:
-    """`filas`: `[{item_id, sku?, deal_price?}]` (deal_price solo si se cambió respecto de lo que propone ML). Primero resuelve el tipo real de la campaña."""
+    """`filas`: `[{item_id, sku?, deal_price?, cambiado?}]`. `deal_price` = precio final de la fila (el que propone ML o el que editó el usuario) y `cambiado` = lo editó el
+    usuario. Primero resuelve el tipo real de la campaña: en tipos donde el vendedor fija el precio (DEAL…) el precio va siempre; en los demás (SMART…) solo si se cambió."""
     campana = next((c for c in ml.promociones_seller(cuenta) if c.get("id") == promotion_id), None)
     if not campana or not campana.get("type"):
         return {"resultados": [], "error": "ML no lista esta campaña entre las promociones de la cuenta: no se puede participar desde el ERP. Usá el Excel."}
@@ -108,7 +115,8 @@ def participar(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: li
             resultados.append({"item_id": f["item_id"], "estado": "pendiente", "mensaje": f"No se intentó: fallaron {CORTE_ERRORES_SEGUIDOS} seguidas, se cortó para no insistir."})
             continue
         try:
-            r = participar_una(ml, cuenta, promotion_id, tipo, f["item_id"], f.get("deal_price"))
+            precio = f.get("deal_price") if (tipo in TIPOS_CON_PRECIO or f.get("cambiado")) else None
+            r = participar_una(ml, cuenta, promotion_id, tipo, f["item_id"], precio)
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "error": f"Error de red: {e}"}
         if r["ok"]:
@@ -121,7 +129,7 @@ def participar(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: li
                 res["estado"] = "ok" if est else "dudosa"
             resultados.append(res)
             historial.append({"Fecha": date.today().isoformat(), "Cuenta": cuenta, "Item ID": f["item_id"], "SKU": f.get("sku", ""), "Accion": "Participar en campaña ML",
-                              "Tipo/Promocion": f"{tipo} ({nombre})", "Precio Anterior": "", "Precio Nuevo": f.get("deal_price") or "propuesta de ML",
+                              "Tipo/Promocion": f"{tipo} ({nombre})", "Precio Anterior": "", "Precio Nuevo": (f.get("deal_price") if (tipo in TIPOS_CON_PRECIO or f.get("cambiado")) else None) or "propuesta de ML",
                               "Operador": operador, "Origen": "Campañas ML"})
         else:
             seguidos += 1

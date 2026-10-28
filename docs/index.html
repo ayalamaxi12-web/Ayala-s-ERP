@@ -3005,7 +3005,7 @@ async function cpParticiparML(){
   const btn=qs('btn-cp-part-ml');btn.disabled=true;
   try{
     for(const[pid,fs]of grupos){
-      const filas=fs.map(f=>({item_id:f.item_id,sku:f.sku||'',deal_price:(f.precio_cliente!=null&&Math.abs(f.precio_cliente-f._prop)>0.004)?f.precio_cliente:null}));
+      const filas=fs.map(f=>({item_id:f.item_id,sku:f.sku||'',deal_price:f.precio_cliente!=null?cpR2(f.precio_cliente):null,cambiado:f.precio_cliente!=null&&Math.abs(f.precio_cliente-f._prop)>0.004}));
       if(!await cpParticiparPromo(pid,cu,op,filas))break;
     }
     const dentro=CP.filas.filter(f=>f._ml?.estado==='ok').length;qs('cp-status').textContent=`${dentro} publicaciones participan en la campaña (según las respuestas de ML).`;

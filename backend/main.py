@@ -749,7 +749,7 @@ async def campanas_ml_ml_participar(request: Request):
     b = await request.json()
     cuenta = _cuenta_valida(b.get("cuenta", ""))
     promotion_id = str(b.get("promotion_id") or "").strip()
-    filas = [{"item_id": str(f["item_id"]), "sku": f.get("sku", ""), "deal_price": f.get("deal_price")} for f in (b.get("filas") or []) if f.get("item_id")]
+    filas = [{"item_id": str(f["item_id"]), "sku": f.get("sku", ""), "deal_price": f.get("deal_price"), "cambiado": bool(f.get("cambiado"))} for f in (b.get("filas") or []) if f.get("item_id")]
     if not promotion_id or not filas:
         raise HTTPException(status_code=422, detail="Falta la campaña o no hay publicaciones para sumar.")
     job_id = f"mlcamp_p_{int(time.time() * 1000)}"
