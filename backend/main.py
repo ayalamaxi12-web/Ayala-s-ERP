@@ -729,6 +729,29 @@ def _campanas_exportar_sync(contenido: bytes, payload: str) -> tuple[bytes, dict
         raise HTTPException(status_code=422, detail=str(e))
     return nuevo, {**info, **campanas_ml_xlsx.verificar_integridad(contenido, nuevo, info["hoja"]), "filas": len(cuerpo), "tipo": leido["tipo"]}
 
+@app.post("/campanas-ml/exportar-corregido")
+async def campanas_ml_exportar_corregido(archivo: UploadFile = File(...), decisiones: str = Form(...)):
+    """El MISMO Excel de propuestas de ML con lo decidido en el ERP: `FINAL_PRICE` y `ACTION` («Aplicar propuesta» / «No aplicar») de las filas
+    que cambian. Es el archivo que se vuelve a subir a Mercado Libre. No escribe en ML ni en ningún Sheet."""
+    try:
+        lista = json.loads(decisiones)
+        if not isinstance(lista, list):
+            raise ValueError("decisiones tiene que ser una lista")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"Decisiones inválidas: {e}")
+    contenido = await archivo.read()
+
+    def _hacer():
+        try:
+            return campanas_ml_xlsx.aplicar_decisiones(contenido, lista)
+        except campanas_ml_xlsx.ExcelInvalido as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    nuevo, informe = await run_in_threadpool(_hacer)
+    return Response(nuevo, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"X-Informe": json.dumps(informe), "Access-Control-Expose-Headers": "X-Informe",
+                             "Content-Disposition": 'attachment; filename="campana_para_subir_a_ml.xlsx"'})
+
 @app.post("/campanas-ml/exportar")
 async def campanas_ml_exportar(archivo: UploadFile = File(...), payload: str = Form(...)):
     """C3: devuelve el mismo Excel con la hoja "ERP Análisis" (columna VALOR A COPIAR). `payload` = JSON {tc, filas:[{fila,

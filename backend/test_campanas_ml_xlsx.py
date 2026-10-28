@@ -254,3 +254,39 @@ def test_campanas_reales_de_ml(nombre):
     assert all(f["ORIGINAL_PRICE"] and f["SELLER_PERCENTAGE"] is not None for f in r["filas"]) and any(f["editable"] for f in r["filas"])
     nuevo, info = c.agregar_hoja(o, "ERP Análisis", ["ITEM_ID"], [[f["ITEM_ID"]] for f in r["filas"]])
     assert c.verificar_integridad(o, nuevo, info["hoja"])["ok"]
+
+
+# ── Decisiones sobre propuestas de ML (FINAL_PRICE + ACTION) ──
+
+def test_aplicar_decisiones_cambia_solo_precio_y_accion_de_las_filas_que_cambian():
+    b = _ml_sintetico()
+    nuevo, inf = c.aplicar_decisiones(b, [{"fila": 6, "aplicar": False, "final_price": 9000.5}, {"fila": 7, "aplicar": True, "final_price": 18000}])
+    assert inf["precios_cambiados"] == 1 and inf["no_aplicar"] == 1 and inf["resto_del_archivo_igual"] is True and inf["rechazadas"] == []
+    f = {x["fila"]: x for x in c.leer_promociones(nuevo)["filas"]}
+    assert f[6]["FINAL_PRICE"] == 9000.5 and f[6]["ACTION"] == "No aplicar"
+    assert f[7]["FINAL_PRICE"] == 18000.0 and f[7]["ACTION"] == "Aplicar propuesta"     # la 7 ya estaba igual en precio; ACTION "Participar" pasa a la opción de ML
+    ws = openpyxl.load_workbook(io.BytesIO(nuevo))["Promociones"]
+    assert ws.data_validations.dataValidation and ws["G6"].fill.fgColor.rgb == "FFCADDF8"   # validación y formato intactos
+
+
+def test_aplicar_decisiones_rechaza_precios_invalidos_y_filas_inexistentes_sin_tocar_nada():
+    b = _ml_sintetico()
+    nuevo, inf = c.aplicar_decisiones(b, [{"fila": 6, "aplicar": True, "final_price": 99999}, {"fila": 6, "aplicar": True, "final_price": 0}, {"fila": 99, "aplicar": True}])
+    assert len(inf["rechazadas"]) == 3 and inf["precios_cambiados"] == 0
+    assert {x["fila"]: x["FINAL_PRICE"] for x in c.leer_promociones(nuevo)["filas"]}[6] == 9500.0
+
+
+def test_aplicar_decisiones_sin_cambios_deja_el_archivo_igual():
+    b = _ml_sintetico()
+    nuevo, inf = c.aplicar_decisiones(b, [{"fila": 6, "aplicar": True, "final_price": 9500}])
+    assert inf["sin_cambio"] == 1 and inf["precios_cambiados"] == 0 and inf["resto_del_archivo_igual"] is True
+
+
+def test_aplicar_decisiones_exige_columnas_de_propuestas():
+    wb = openpyxl.Workbook()
+    wb.active.title = "Promociones"
+    wb.active.append(["ITEM_ID", "ORIGINAL_PRICE", "SELLER_PERCENTAGE"])
+    wb.active.append(["MLA1", 100.0, 5])
+    bio = io.BytesIO(); wb.save(bio)
+    with pytest.raises(c.ExcelInvalido, match="FINAL_PRICE"):
+        c.aplicar_decisiones(bio.getvalue(), [{"fila": 2, "aplicar": False}])
