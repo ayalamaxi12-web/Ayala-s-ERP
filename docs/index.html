@@ -1500,6 +1500,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuenta<select id="cp-cuenta-pre" class="fi" onchange="cpGuardarCuentaPre()" title="Elegila antes de subir el Excel: no depende de la detección y se acelera"><option value="">Auto (detectar)</option><option value="IT">IT</option><option value="MT">MT</option></select></span>
     <button class="btn primary" id="btn-cp-subir" onclick="qs('cp-file').click()">📂 Subir Excel de campaña</button>
     <button class="btn" id="btn-cp-verif-ml" style="display:none" onclick="cpVerificarML()" title="Solo lectura: pregunta a ML cómo ve esta campaña y unas publicaciones de muestra">🔎 Verificar con ML</button>
+    <label style="font-size:12px;color:var(--text2)" title="Queda registrado en el historial de cada alta">Operador <select id="cp-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
@@ -2878,6 +2879,7 @@ async function cpPost(ruta,opts){
   if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
   if(!r.ok)throw new Error(d.detail||('Error '+r.status));return d;
 }
+try{const _op=localStorage.getItem('ofm_operador');if(_op)setTimeout(()=>{const e=qs('cp-operador');if(e)e.value=_op;},0);}catch(e){}
 try{const _cp=localStorage.getItem('cp_cuenta_pre');if(_cp)setTimeout(()=>{const e=qs('cp-cuenta-pre');if(e)e.value=_cp;},0);}catch(e){}
 function cpGuardarCuentaPre(){try{localStorage.setItem('cp_cuenta_pre',qs('cp-cuenta-pre').value);}catch(e){}}
 function cpCuentaPre(){return qs('cp-cuenta-pre').value;}
@@ -2946,8 +2948,12 @@ function cpNumFiltro(id){const t=qs(id).value;if(String(t).trim()==='')return nu
 function cpFl(soloEdit){return {search:qs('cp-search').value,soloEdit,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan:cpPlan(),obj:cpObj(),
   pm:qs('cp-f-pm').value,cat:qs('cp-f-cat').value,part:qs('cp-f-part').value,pmin:cpNumFiltro('cp-f-pmin'),pmax:cpNumFiltro('cp-f-pmax')};}
 function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
+// «Matias» y «Matías» (o «veronica ») son la misma persona: se junta por nombre sin tildes ni mayúsculas y se muestra el que lleva tilde.
+const CP_PM_VISTOS={};
+function cpPmCanon(n){const k=String(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');const t=String(n).trim().replace(/\s+/g,' ');const v=CP_PM_VISTOS[k];if(!v||(t!==v&&/[\u00c0-\u00ff]/.test(t)&&!/[\u00c0-\u00ff]/.test(v)))CP_PM_VISTOS[k]=t;return CP_PM_VISTOS[k];}
 function cpArmarFiltros(){
   const llena=(id,vals,todas)=>{const el=qs(id),act=el.value;el.innerHTML=`<option value="">${todas}</option>`+[...new Set(vals.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>`<option value="${acEsc(v)}">${acEsc(v)}</option>`).join('');el.value=act;};
+  CP.filas.forEach(f=>{if(f.pm)cpPmCanon(f.pm);});CP.filas.forEach(f=>{if(f.pm)f.pm=cpPmCanon(f.pm);});
   llena('cp-f-pm',CP.filas.map(f=>f.pm),'Todos los PM');llena('cp-f-cat',CP.filas.map(f=>f.categoria),'Todas las categorías');
   ['cp-f-pmin','cp-f-pmax'].forEach(id=>{qs(id).value='';});qs('cp-f-part').value='';
 }
@@ -5384,7 +5390,7 @@ function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'n
 // reutiliza tal cual dentro de Ayala Core (Maxx: "quiero que sea igual
 // que como se ven en Ofertas ML"), que no tiene el campo `ofm-operador`
 // propio -- mismo localStorage `ofm_operador`, campo de input distinto.
-function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
+function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value||qs('cp-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
 function ofmRenderPanel(){
   qs('ofm-panel').innerHTML=`
     <div class="cr-resumen-t"><b>Criterios de precio vigentes</b> <span id="ofm-criterios-txt">${criteriosMlTexto()}</span></div>
