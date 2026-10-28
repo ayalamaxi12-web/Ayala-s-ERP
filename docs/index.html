@@ -1494,7 +1494,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
 
 <!-- CAMPAÑAS ML (C2: simulador de campañas — lee el Excel de la Central de Promociones, no escribe nada) -->
 <div id="page-campanas-ml" class="page">
-  <div class="section-hdr">Campañas ML — simulador de descuento <span style="font-size:10px;font-weight:400;color:var(--text3)">(sube el Excel de la campaña · calcula el margen con el aporte de ML · no escribe nada en ML)</span></div>
+  <div class="section-hdr">Campañas ML <span style="font-size:10px;font-weight:400;color:var(--text3)">(subí el Excel de la campaña: ves lo que propone Mercado Libre con tu margen real, elegís qué participa y lo sumás a la campaña desde acá)</span></div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
     <input type="file" id="cp-file" accept=".xlsx" style="display:none" onchange="cpSubir(this)">
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuenta<select id="cp-cuenta-pre" class="fi" onchange="cpGuardarCuentaPre()" title="Elegila antes de subir el Excel: no depende de la detección y se acelera"><option value="">Auto (detectar)</option><option value="IT">IT</option><option value="MT">MT</option></select></span>
@@ -1503,8 +1503,8 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
-    <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Margen objetivo %<input type="text" id="cp-obj" value="20" oninput="cpRender()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
-    <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuota de referencia<select id="cp-plan" class="fi" onchange="cpRender()"><option value="contado">Contado</option><option value="3">3 cuotas</option><option value="6">6 cuotas</option><option value="9">9 cuotas</option><option value="12">12 cuotas</option></select></span>
+    <span style="display:none;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Margen objetivo %<input type="text" id="cp-obj" value="20" oninput="cpRender()" style="width:44px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
+    <span style="display:none;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuota de referencia<select id="cp-plan" class="fi" onchange="cpRender()"><option value="contado">Contado</option><option value="3">3 cuotas</option><option value="6">6 cuotas</option><option value="9">9 cuotas</option><option value="12">12 cuotas</option></select></span>
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">TC:<input type="text" id="cp-tc" placeholder="BNA auto" onchange="cpOnTc()" title="Recalcula el costo de todas las filas con este TC" style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px;font-family:'DM Mono',monospace"></span>
     <span id="cp-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
@@ -3086,7 +3086,7 @@ function cpRender(){
   const todas=CP.filas,mod=todas.filter(f=>cpModificada(f,CP.orig)).length;
   const bajo=todas.filter(f=>{const m=cpMargen(f,plan);return m!=null&&m<obj;}).length;
   // En campañas con propuestas de ML no se elige margen objetivo ni cuota: se ocultan esos controles.
-  [qs('cp-obj'),qs('cp-plan')].forEach(el=>{const sp=el&&el.closest('span');if(sp)sp.style.display=prop?'none':'';});
+  [qs('cp-obj'),qs('cp-plan')].forEach(el=>{const sp=el&&el.closest('span');if(sp)sp.style.display=prop?'none':'flex';});
   qs('cp-th-part').style.display=prop?'':'none';qs('cp-lote-old').style.display=prop?'none':'contents';qs('cp-f-part').style.display=prop?'':'none';qs('cp-lote-part').style.display=prop?'flex':'none';
   qs('cp-th-desc').innerHTML=prop?`Precio final<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(ML propone · editá)</span>`:`% descuento total<span class="cp-ar"></span><br><span style="font-size:8px;font-weight:400">(entero 5–80)</span>`;
   const partN=todas.filter(f=>f.participa).length;
