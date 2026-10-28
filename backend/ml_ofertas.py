@@ -124,7 +124,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable
 
@@ -1596,33 +1596,55 @@ def ventas_recientes_por_item(ml: MLFullClient, cuenta: str, desde_iso: str, has
     seller_id = SELLERS[cuenta]
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
     ultima: dict[str, dict] = {}
-    offset = 0
-    while True:
-        d = ml._get(
+
+    def _iso(dt: datetime) -> str:
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.000-00:00")
+
+    def _pagina(d0: datetime, d1: datetime, offset: int) -> dict:
+        return ml._get(
             "https://api.mercadolibre.com/orders/search",
             {"seller": seller_id, "order.status": "paid",
-             "order.date_closed.from": desde_iso, "order.date_closed.to": hasta_iso,
+             "order.date_closed.from": _iso(d0), "order.date_closed.to": _iso(d1),
              "offset": offset, "limit": 50},
             headers,
-        )
-        resultados = (d or {}).get("results") or []
-        for orden in resultados:
-            fecha = orden.get("date_closed") or ""
-            shipping_id = (orden.get("shipping") or {}).get("id")
-            if not shipping_id:
-                continue
-            for oi in orden.get("order_items") or []:
-                item_id = (oi.get("item") or {}).get("id")
-                if not item_id:
+        ) or {}
+
+    def _barrer(d0: datetime, d1: datetime) -> None:
+        # ML no deja pasar de offset 10.000 (400 Bad Request): si el tramo trae más, se parte a la mitad.
+        d = _pagina(d0, d1, 0)
+        total = (d.get("paging") or {}).get("total", 0)
+        if total > 9950 and (d1 - d0) > timedelta(hours=1):
+            medio = d0 + (d1 - d0) / 2
+            _barrer(d0, medio)
+            _barrer(medio + timedelta(seconds=1), d1)
+            return
+        offset = 0
+        while True:
+            resultados = d.get("results") or []
+            for orden in resultados:
+                fecha = orden.get("date_closed") or ""
+                shipping_id = (orden.get("shipping") or {}).get("id")
+                if not shipping_id:
                     continue
-                previa = ultima.get(item_id)
-                if previa is None or fecha > previa["fecha"]:
-                    ultima[item_id] = {"fecha": fecha, "shipping_id": shipping_id, "orden_id": orden.get("id")}
-        paging = (d or {}).get("paging") or {}
-        total = paging.get("total", 0)
-        offset += len(resultados)
-        if offset >= total or not resultados:
-            break
+                for oi in orden.get("order_items") or []:
+                    item_id = (oi.get("item") or {}).get("id")
+                    if not item_id:
+                        continue
+                    previa = ultima.get(item_id)
+                    if previa is None or fecha > previa["fecha"]:
+                        ultima[item_id] = {"fecha": fecha, "shipping_id": shipping_id, "orden_id": orden.get("id")}
+            offset += len(resultados)
+            if offset >= total or not resultados or offset >= 10000:
+                break
+            d = _pagina(d0, d1, offset)
+
+    f0 = datetime.fromisoformat(desde_iso.replace(".000-00:00", "+00:00"))
+    f1 = datetime.fromisoformat(hasta_iso.replace(".000-00:00", "+00:00"))
+    tramo = f0
+    while tramo < f1:                                       # tramos de 7 días: cada uno cabe en la ventana de ML
+        fin = min(tramo + timedelta(days=7) - timedelta(seconds=1), f1)
+        _barrer(tramo, fin)
+        tramo = fin + timedelta(seconds=1)
     return ultima
 
 

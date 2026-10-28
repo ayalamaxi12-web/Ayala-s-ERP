@@ -1370,3 +1370,23 @@ def test_contar_items_promocion_lee_el_total_sin_traer_los_items():
     url, params = llamadas[0]
     assert url.endswith("/seller-promotions/promotions/P-1/items") and params == {"promotion_type": "DEAL", "app_version": "v2", "status": "candidate", "limit": 1}
     assert MLOfertasClient(get_fn=lambda u, p, h: {"results": []}, token_fn=_FAKE_TOKEN_FN).contar_items_promocion("P", "DEAL", "IT", "started") is None
+
+
+def test_ventas_recientes_por_item_parte_el_rango_en_tramos_y_no_pasa_del_offset_10000():
+    llamadas = []
+
+    class _ML:
+        def _token(self, cuenta):
+            return "t"
+
+        def _get(self, url, params, headers):
+            llamadas.append(params)
+            assert params["offset"] < 10000                                   # ML devuelve 400 de ahí en adelante
+            n = params["offset"] == 0 and 1 or 0
+            res = [{"date_closed": params["order.date_closed.from"], "shipping": {"id": 5}, "id": 1,
+                    "order_items": [{"item": {"id": "MLA1"}}]}] * n
+            return {"results": res, "paging": {"total": n}}
+
+    ultimas = ventas_recientes_por_item(_ML(), "IT", "2026-08-29T00:00:00.000-00:00", "2026-10-28T23:00:00.000-00:00")
+    assert "MLA1" in ultimas
+    assert len(llamadas) >= 8                                                 # 60 días / 7 = 9 tramos
