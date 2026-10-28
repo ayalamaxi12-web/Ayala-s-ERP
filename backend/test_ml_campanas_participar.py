@@ -37,12 +37,28 @@ def test_diagnostico_lee_el_tipo_real_y_marca_las_que_no_son_candidatas():
 
 
 def test_participar_manda_el_tipo_que_informa_ml_y_el_precio_solo_si_cambio():
-    ml = _ML(CAMP, {"MLA1": "started", "MLA2": "started"}, lambda i: {"price": 9000})
-    r = mp.participar(ml, "IT", PID, [{"item_id": "MLA1"}, {"item_id": "MLA2", "deal_price": 8500.5}])
+    ml = _ML(CAMP, {"MLA1": "started", "MLA2": "started"}, lambda i: {"price": 9000})                 # MARKETPLACE_CAMPAIGN: ML fija el precio
+    r = mp.participar(ml, "IT", PID, [{"item_id": "MLA1", "deal_price": 9659.08}, {"item_id": "MLA2", "deal_price": 8500.5, "cambiado": True}])
     assert [x["estado"] for x in r["resultados"]] == ["ok", "ok"]
     assert ml.posts[0][1] == {"promotion_id": PID, "promotion_type": "MARKETPLACE_CAMPAIGN"}            # sin precio: la propuesta de ML
     assert ml.posts[1][1] == {"promotion_id": PID, "promotion_type": "MARKETPLACE_CAMPAIGN", "deal_price": 8500.5}
     assert ml.posts[0][2].endswith("?app_version=v2")
+
+
+def test_en_un_deal_el_precio_va_siempre_y_no_se_manda_sin_precio():
+    """Verificado en vivo: el «TIERS» del Cyber es un DEAL en la API de ML y exige deal_price."""
+    camp = [{"id": PID, "type": "DEAL", "name": "MKP T1 CYBER MONDAY NOV", "status": "pending"}]
+    ml = _ML(camp, {"MLA1": "pending"}, lambda i: {"price": 9659.08})
+    r = mp.participar(ml, "IT", PID, [{"item_id": "MLA1", "deal_price": 9659.08, "cambiado": False}, {"item_id": "MLA2"}])
+    assert ml.posts[0][1] == {"promotion_id": PID, "promotion_type": "DEAL", "deal_price": 9659.08}   # aunque no se haya cambiado
+    assert r["resultados"][1]["estado"] == "error" and "exige el precio" in r["resultados"][1]["mensaje"] and len(ml.posts) == 1
+
+
+def test_en_smart_no_va_precio_si_no_se_cambio():
+    camp = [{"id": PID, "type": "SMART", "name": "Ofertas compartidas CM", "status": "pending"}]
+    ml = _ML(camp, {"MLA1": "pending"}, lambda i: {"price": 1})
+    mp.participar(ml, "IT", PID, [{"item_id": "MLA1", "deal_price": 32682.85, "cambiado": False}])
+    assert ml.posts[0][1] == {"promotion_id": PID, "promotion_type": "SMART"}
 
 
 def test_la_prueba_de_una_solo_hace_una_y_la_verifica_en_ml():
