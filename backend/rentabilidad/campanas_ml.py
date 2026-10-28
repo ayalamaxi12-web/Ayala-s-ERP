@@ -146,6 +146,7 @@ def analizar(
             "seller_monto": _n(o["seller_monto"]), "meli_monto": _n(o["meli_monto"]),
             "precio_vendedor": _n(o["precio_vendedor"]), "precio_cliente": _n(o["precio_cliente"]),
             "precio_final_ml": f.get("FINAL_PRICE"),
+            "promo_id": f.get("PROMO_ID"), "promo_tipo": f.get("PROMO_TYPE"),
                         "cuenta": f.get("cuenta"), "sku_origen": f.get("sku_origen"),
             "pm": None, "precio_pm": None, "costo": None, "margenes": {}, "avisos": av,
         }
