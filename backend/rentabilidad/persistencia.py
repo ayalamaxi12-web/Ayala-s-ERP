@@ -383,10 +383,10 @@ def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decim
 
     - Liquidada (suma de todas las liquidaciones cargadas deja venta neta):
       comisión y fee logístico reales → `LIQUIDACION_FRAVEGA`.
-    - Comisión y fee (reales o estimados) llevan sumado el IVA que Frávega
-      factura aparte (`fravega_iva_cargos`, 21%): la liquidación los trae
-      sin IVA y el costo es la comisión completa (Maxx, 2026-09-29 —
-      mismo criterio que ML/MP y que el motor de precios).
+    - Comisión y fee: se suma `fravega_iva_cargos`, hoy **0** (Maxx,
+      2026-10-27: los montos del Seller Center ya incluyen el IVA y se toman
+      tal cual los muestra la plataforma, igual que ML; antes 21 %, decisión
+      del 2026-09-29). Si algún día vuelve a hacer falta, es solo ese parámetro.
     - Sin liquidación todavía: comisión base estimada
       (`fravega_comision_base` × Precio Final), fee 0 → `ESTIMADO_FRAVEGA`,
       hasta que llegue la liquidación de la quincena.
