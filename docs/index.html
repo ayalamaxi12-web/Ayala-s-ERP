@@ -1509,6 +1509,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <span id="cp-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
   </div>
   <div id="cp-ml-panel" role="status" aria-live="polite" style="display:none;margin-bottom:10px;padding:10px 14px;border:1px solid var(--borde);border-radius:var(--r-recuadro);background:var(--celeste-50);color:var(--tinta);font-size:12px;line-height:1.7"></div>
+  <div id="cp-envio-panel" role="status" aria-live="polite" style="display:none;margin-bottom:10px;padding:10px 14px;border:1px solid var(--aviso-borde);border-radius:var(--r-recuadro);background:var(--aviso-fondo);color:var(--tinta);font-size:12px;line-height:1.7"></div>
   <div id="cp-avisos" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:6px;font-size:10px;color:var(--yellow);font-family:'DM Mono',monospace;line-height:1.6"></div>
   <div class="stats-row" id="cp-stats" style="display:none"></div>
   <div id="cp-cuenta" style="display:none;margin:8px 0;font-size:11px;color:var(--text2);align-items:center;gap:8px;flex-wrap:wrap"></div>
@@ -2891,12 +2892,34 @@ async function cpSubir(inp){
     CP.modo=d.filas.some(f=>/propuesta/i.test((f.accion||'')+' '+(f.estado||'')))?'propuestas':'normal';
     d.filas.forEach(f=>{f.participa=!/no aplicar/i.test(f.accion||'');f._part0=f.participa;f._prop=(typeof f.precio_final_ml==='number'&&f.precio_final_ml>0)?f.precio_final_ml:f.precio_cliente;});
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
-    cpArmarFiltros();
+    cpArmarFiltros();cpEnvioPanel(d.envios_estado);
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
     ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{qs('btn-cp-subir').disabled=false;}
+}
+// Envío real de los últimos 60 días de ventas: sin ese barrido el margen de las publicaciones ≥ umbral no descuenta el envío.
+function cpEnvioPanel(e){
+  const p=qs('cp-envio-panel');if(!p)return;
+  if(!e||!e.requeridos||(e.barrido_hecho&&!e.sin_venta)){p.style.display=e&&e.requeridos?'':'none';p.innerHTML=e&&e.requeridos?`✅ Envío real de los últimos 60 días descontado en ${e.resueltos} de ${e.requeridos} publicaciones.`:'';return;}
+  p.style.display='';
+  p.innerHTML=(e.barrido_hecho?`⚠ ${e.sin_venta} de ${e.requeridos} publicaciones de $33.000 o más no vendieron en los últimos 60 días: su margen NO descuenta el envío.`:`⚠ ${e.requeridos} publicaciones pagan envío y todavía no se trajeron los envíos reales: el margen NO lo descuenta.`)
+    +` <button class="btn btn-sm" id="btn-cp-envios" onclick="cpTraerEnvios()">Traer envíos de 60 días</button> <span id="cp-envios-st"></span><br><span style="color:var(--text2)">Es el mismo botón de Precios y ofertas ML → «Actualizar costos de envío reales». Al terminar se vuelve a analizar el Excel (se pierden los cambios sin exportar).</span>`;
+}
+async function cpTraerEnvios(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const b=qs('btn-cp-envios'),st=qs('cp-envios-st');b.disabled=true;st.textContent=' Barriendo ventas de ambas cuentas...';
+  try{
+    const{job_id}=await cpPost('/ml-ofertas/costos-envio/run?dias=60',{method:'POST'});
+    for(let i=0;i<120;i++){
+      await new Promise(r=>setTimeout(r,3000));
+      const j=await cpPost('/ml-ofertas/costos-envio/status/'+job_id,{method:'GET'});
+      if(j.status==='error')throw new Error((j.log||[]).slice(-1)[0]||'falló el barrido');
+      if(j.status==='done'){st.textContent=' Listo, recalculando...';await cpSubir({files:[CP.file],value:''});return;}
+    }
+    throw new Error('el barrido tardó demasiado');
+  }catch(e){st.textContent=' ❌ '+e.message;b.disabled=false;}
 }
 // El TC cambió: se recalculan todas las filas (el costo en USD × TC) con su descuento actual.
 function cpOnTc(){if(!CP.data)return;const tc=cpTcActual();CP.filas.forEach(f=>{if(f.descuento_total_pct!=null&&f.calc)cpRecalcular(f,f.descuento_total_pct,CP.data.motor_ml,tc);});cpProgramarConfirmacion();cpRender();}

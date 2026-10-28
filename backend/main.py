@@ -577,6 +577,31 @@ def _campanas_objetivo(margen_objetivo: str | None):
     except Exception:
         raise HTTPException(status_code=422, detail=f"margen_objetivo no numérico: {margen_objetivo!r}")
 
+def _campanas_envios_reales(filas: list[dict], umbral) -> tuple[dict, dict]:
+    """Envío real (últimos 60 días de ventas) de las publicaciones que lo pagan el vendedor (precio ≥ umbral).
+    Usa el `shipping_id` que congela el barrido «Actualizar costos de envío reales»; sin barrido no hay dato."""
+    from concurrent.futures import ThreadPoolExecutor
+    from ml_full import MLFullClient
+    pedidos = [(f["ITEM_ID"], f.get("cuenta")) for f in filas
+               if f.get("ORIGINAL_PRICE") is not None and Decimal(str(f["ORIGINAL_PRICE"])) >= umbral]
+    est = {"requeridos": len(pedidos), "resueltos": 0, "sin_venta": 0, "barrido_hecho": bool(ml_ofertas._ultima_venta_cache)}
+    if not pedidos or not est["barrido_hecho"]:
+        return {}, est
+    ml = MLFullClient()
+    def una(p):
+        item, cuenta = p
+        try:
+            e = ml_ofertas._ultima_venta_cache.get(item)
+            r = ml_ofertas.costo_envio_real_item(ml, item, cuenta or (e or {}).get("cuenta")) if e else None
+            return item, (Decimal(str(r["costo_envio_real"])) if r else None)
+        except Exception:  # noqa: BLE001
+            return item, None
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        res = dict(ex.map(una, pedidos))
+    envios = {k: v for k, v in res.items() if v is not None}
+    est["resueltos"], est["sin_venta"] = len(envios), len(pedidos) - len(envios)
+    return envios, est
+
 def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: str | None, plan_objetivo: str = "contado",
                             cuenta: str | None = None) -> dict:
     from ml_auth import SELLERS
@@ -628,8 +653,11 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
     tc_valor = resolver_tc(tc)
     datos = _campanas_datos(datos_sku_fn, avisos)
     with sesion() as db:
-        r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
+        par = motor_precios.cargar_parametros(db, fecha)
+        envios, envios_estado = _campanas_envios_reales(filas, par.valor("ML", "umbral_envio_gratis"))
+        r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, par, envios=envios,
                                  margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
+    r["envios_estado"] = envios_estado
     resumen = campanas_ml_cuentas.resumen_cuentas(det, ids)
     if cuenta:
         resumen = {**resumen, "sugerida": cuenta, "elegida": True}

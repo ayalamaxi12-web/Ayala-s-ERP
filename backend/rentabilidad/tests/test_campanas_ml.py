@@ -294,3 +294,19 @@ def test_un_sku_con_espacio_propio_sigue_siendo_uno_solo(db_session):
     db_session.flush()
     r = _analizar(db_session, [_fila(SKU="PV-AB 1")], {"PV-AB1": DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None)})["filas"][0]
     assert r["sku"] == "PV-AB1" and "combo" not in r and r["margenes"]
+
+
+def test_envios_reales_toma_la_ultima_venta_y_avisa_si_falta_el_barrido(monkeypatch):
+    import main, ml_ofertas
+    from decimal import Decimal as D
+    filas = [{"ITEM_ID": "MLA1", "cuenta": "IT", "ORIGINAL_PRICE": 40000}, {"ITEM_ID": "MLA2", "cuenta": "IT", "ORIGINAL_PRICE": 40000},
+             {"ITEM_ID": "MLA3", "cuenta": "IT", "ORIGINAL_PRICE": 10000}]
+    monkeypatch.setattr(ml_ofertas, "_ultima_venta_cache", {})
+    envios, est = main._campanas_envios_reales(filas, D(33000))
+    assert envios == {} and est == {"requeridos": 2, "resueltos": 0, "sin_venta": 0, "barrido_hecho": False}
+    monkeypatch.setattr(ml_ofertas, "_ultima_venta_cache", {"MLA1": {"shipping_id": 9, "orden_id": 1, "fecha": "x", "cuenta": "IT"}})
+    monkeypatch.setattr(ml_ofertas, "costo_envio_real_item", lambda ml, item, cuenta: {"costo_envio_real": 8890.0})
+    import ml_full
+    monkeypatch.setattr(ml_full, "MLFullClient", lambda: object())
+    envios, est = main._campanas_envios_reales(filas, D(33000))
+    assert envios == {"MLA1": D("8890.0")} and est["sin_venta"] == 1 and est["barrido_hecho"]
