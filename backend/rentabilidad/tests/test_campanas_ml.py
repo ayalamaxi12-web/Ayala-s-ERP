@@ -241,3 +241,72 @@ def test_electrodomesticos_quedo_en_15_con_vigencia_nueva(db_session, par):
     from rentabilidad import seed
     seed.seed(db_session)       # idempotente: no duplica el ajuste
     assert db_session.query(C).filter(C.categoria == "Electrodomesticos").count() == 2
+
+
+# ── Combos y cantidades en el SKU de ML («INKCARTHP74XL INKCARTHP75XL», «X2 CB435A…») ──
+
+def test_descomponer_sku_cantidades_y_combos():
+    assert cm.descomponer_sku("PLANCHA-SUB-GORRA") == [("PLANCHA-SUB-GORRA", 1)]
+    assert cm.descomponer_sku("X2 CB435A-436A-CE285AUNIVCOMP") == [("CB435A-436A-CE285AUNIVCOMP", 2)]
+    assert cm.descomponer_sku("X10 AUTOR-80G-A4") == [("AUTOR-80G-A4", 10)] and cm.descomponer_sku("X2-CF230ACOMP") == [("CF230ACOMP", 2)]
+    assert cm.descomponer_sku("INKCARTHP74XL INKCARTHP75XL") == [("INKCARTHP74XL", 1), ("INKCARTHP75XL", 1)]
+    assert cm.descomponer_sku("EMERLIGHT-60LED, EMERLIGHT-60LED") == [("EMERLIGHT-60LED", 2)]      # repetido = cantidad
+    assert cm.descomponer_sku("") == []
+
+
+def _precio_pm(db, sku, web, pct="1.3"):
+    db.add(PricingSku(sku=sku, precio_web=d(web), pct_ml=d(pct), forma_pago_web="1", condicion_ml="contado",
+                      vigente_desde=date(2026, 9, 1), cargado_por="Sheet Laura"))
+
+
+def test_combo_suma_costo_y_precio_pm_de_sus_componentes(db_session):
+    _precio_pm(db_session, "AAA", "7000")
+    _precio_pm(db_session, "BBB", "3000")
+    db_session.flush()
+    datos = {"AAA": DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None), "BBB": DatosSku(d("3"), d("1.21"), "Veronica", "Insumo", None)}
+    solo = _analizar(db_session, [_fila(SKU="AAA")], datos)["filas"][0]
+    r = _analizar(db_session, [_fila(SKU="AAA BBB")], datos)["filas"][0]
+    assert r["combo"] == [{"sku": "AAA", "cantidad": 1}, {"sku": "BBB", "cantidad": 1}] and r["sku"] == "AAA + BBB"
+    assert r["calc"]["costo_usd"] == 5.0 and r["pm"] == "Laura"                          # 2 + 3 USD
+    assert r["precio_pm"] > solo["precio_pm"] and not any("Sin costo" in a for a in r["avisos"])
+    assert r["margenes"]["contado"]["margen"] != solo["margenes"]["contado"]["margen"]
+
+
+def test_sku_con_cantidad_multiplica_el_costo(db_session):
+    _precio_pm(db_session, "AAA", "7000")
+    db_session.flush()
+    datos = {"AAA": DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None)}
+    uno = _analizar(db_session, [_fila(SKU="AAA")], datos)["filas"][0]
+    dos = _analizar(db_session, [_fila(SKU="X2 AAA")], datos)["filas"][0]
+    assert dos["calc"]["costo_usd"] == 4.0 and dos["sku"] == "2×AAA"
+    assert dos["precio_pm"] == round(uno["precio_pm"] * 2, 2) or abs(dos["precio_pm"] - uno["precio_pm"] * 2) < 20   # el PM ML por unidad × 2 (redondeo a decena)
+
+
+def test_combo_con_un_componente_sin_costo_no_inventa_y_dice_cual(db_session):
+    _precio_pm(db_session, "AAA", "7000")
+    db_session.flush()
+    r = _analizar(db_session, [_fila(SKU="AAA BBB")], {"AAA": DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None)})["filas"][0]
+    assert r["margenes"] == {} and any("sin costo vigente en Ecom de BBB" in a for a in r["avisos"]) and any("sin precio en el PM de BBB" in a for a in r["avisos"])
+
+
+def test_un_sku_con_espacio_propio_sigue_siendo_uno_solo(db_session):
+    _precio_pm(db_session, "PV-AB 1", "7000")
+    db_session.flush()
+    r = _analizar(db_session, [_fila(SKU="PV-AB 1")], {"PV-AB1": DatosSku(d("2"), d("1.21"), "Laura", "Insumo", None)})["filas"][0]
+    assert r["sku"] == "PV-AB1" and "combo" not in r and r["margenes"]
+
+
+def test_envios_reales_toma_la_ultima_venta_y_avisa_si_falta_el_barrido(monkeypatch):
+    import main, ml_ofertas
+    from decimal import Decimal as D
+    filas = [{"ITEM_ID": "MLA1", "cuenta": "IT", "ORIGINAL_PRICE": 40000}, {"ITEM_ID": "MLA2", "cuenta": "IT", "ORIGINAL_PRICE": 40000},
+             {"ITEM_ID": "MLA3", "cuenta": "IT", "ORIGINAL_PRICE": 10000}]
+    monkeypatch.setattr(ml_ofertas, "_ultima_venta_cache", {})
+    envios, est = main._campanas_envios_reales(filas, D(33000))
+    assert envios == {} and est == {"requeridos": 2, "resueltos": 0, "sin_venta": 0, "barrido_hecho": False}
+    monkeypatch.setattr(ml_ofertas, "_ultima_venta_cache", {"MLA1": {"shipping_id": 9, "orden_id": 1, "fecha": "x", "cuenta": "IT"}})
+    monkeypatch.setattr(ml_ofertas, "costo_envio_real_item", lambda ml, item, cuenta: {"costo_envio_real": 8890.0})
+    import ml_full
+    monkeypatch.setattr(ml_full, "MLFullClient", lambda: object())
+    envios, est = main._campanas_envios_reales(filas, D(33000))
+    assert envios == {"MLA1": D("8890.0")} and est["sin_venta"] == 1 and est["barrido_hecho"]

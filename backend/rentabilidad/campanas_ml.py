@@ -11,6 +11,7 @@ paga $9.000; el vendedor pone 9,5% ($950) y ML 0,5% ($50).
 Solo cálculo: no escribe nada ni llama a ML."""
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -29,6 +30,59 @@ AVISOS_GENERALES = [
     "Primer tramo de costo fijo (lista < $16.000): se usa $1.330 de la tabla. El Recibís del Excel sugiere ~$60 más (¿$1.390?); a confirmar con una venta real de ese tramo.",
     "Envío real desde $33.000 de lista: todavía no se trae de ML por ítem; esos márgenes NO descuentan el envío y salen más altos que los reales.",
 ]
+
+
+# ── SKU de una publicación: simple, con cantidad («X2 CB435A…», «X10 AUTOR-80G-A4», «X2-CF230ACOMP») o combo («INKCARTHP74XL INKCARTHP75XL») ──
+_SEP_SKU = re.compile(r"[\s,;+]+")
+
+
+def descomponer_sku(texto) -> list[tuple[str, int]]:
+    """`[(sku normalizado, cantidad)]`. «X2 A» o «X2-A» = 2 unidades de A; «A B» (o «A, B») = un combo de A y B; un SKU repetido suma cantidades."""
+    comps: dict[str, int] = {}
+    pendiente = 1
+    for tok in _SEP_SKU.split(str(texto or "").strip()):
+        if not tok:
+            continue
+        m = re.fullmatch(r"[Xx](\d+)", tok)
+        if m:
+            pendiente = int(m.group(1)) or 1
+            continue
+        m = re.fullmatch(r"[Xx](\d+)[-_](.+)", tok)
+        cant, sku = (int(m.group(1)) or 1, m.group(2)) if m else (pendiente, tok)
+        pendiente = 1
+        sku = norm_sku(sku)
+        if sku:
+            comps[sku] = comps.get(sku, 0) + cant
+    return list(comps.items())
+
+
+def _es_combo(comps) -> bool:
+    return len(comps) > 1 or (len(comps) == 1 and comps[0][1] != 1)
+
+
+def _cruzar_combo(comps, precios, datos_fn, av):
+    """Precio PM, costo e IVA de un combo / una publicación con cantidad: la SUMA de sus componentes × cantidad. Si falta el precio o el costo de alguno, ese dato queda vacío
+    y se dice cuál (no se inventa). El IVA es el ponderado por costo (si los componentes tienen IVA distinto, se avisa)."""
+    ds = [(sku, cant, datos_fn(sku)) for sku, cant in comps]
+    for sku, _, d in ds:
+        if not d.costo_usd:
+            av.append(f"Combo: sin costo vigente en Ecom de {sku}")
+        elif not d.iva_factor:
+            av.append(f"Combo: sin alícuota de IVA de {sku}")
+    pms = [(sku, cant, precios.get(sku)) for sku, cant in comps]
+    for sku, _, pp in pms:
+        if pp is None:
+            av.append(f"Combo: sin precio en el PM de {sku}")
+    base = None if any(pp is None for _, _, pp in pms) else sum((precio_ml(pp.precio_web, pp.pct_ml) * cant for _, cant, pp in pms), Decimal(0))
+    completo = all(d.costo_usd and d.iva_factor for _, _, d in ds)
+    costo = sum((d.costo_usd * cant for _, cant, d in ds), Decimal(0)) if completo else None
+    iva = (sum((d.costo_usd * cant * d.iva_factor for _, cant, d in ds), Decimal(0)) / costo) if completo and costo else None
+    if completo and len({d.iva_factor for _, _, d in ds}) > 1:
+        av.append("Combo con IVA distinto en sus componentes: se usa el promedio ponderado por costo")
+    nombres = [(_pm_de(pp) if pp else None) or d.pm for (_, _, pp), (_, _, d) in zip(pms, ds)]
+    pm = " + ".join(dict.fromkeys(n for n in nombres if n)) or None
+    cat = next((d.categoria for _, _, d in ds if d.categoria), None)
+    return DatosSku(costo, iva, pm, cat, None), base, pm
 
 
 def comision_de(par: motor.ParametrosMotor, categoria: str | None, real=None, origen_real: str = "ml") -> tuple[Decimal, str]:
@@ -136,6 +190,12 @@ def analizar(
     out = []
     for f in filas:
         av, sku = [], norm_sku(f.get("SKU") or "")
+        combo = None
+        if sku and sku not in precios and not datos_fn(sku).costo_usd:     # un SKU con espacio propio («PV-AB 1») sigue siendo uno solo
+            comps = descomponer_sku(f.get("SKU"))
+            if _es_combo(comps) and any(c in precios or datos_fn(c).costo_usd for c, _ in comps):   # si no se conoce ninguno, es un SKU desconocido, no un combo
+                combo = comps
+                sku = " + ".join(s if c == 1 else f"{c}×{s}" for s, c in comps)
         o = precios_oferta(f["ORIGINAL_PRICE"], f.get("SELLER_PERCENTAGE"), f.get("SELLER_AMOUNT"),
                            f.get("MELI_PERCENTAGE"), f.get("MELI_AMOUNT"))  # montos de ML mandan: el % viene redondeado
         orig = _D(f["ORIGINAL_PRICE"]) if f.get("ORIGINAL_PRICE") else None
@@ -161,17 +221,24 @@ def analizar(
             av.append("Sin SKU: no se puede cruzar con el PM ni el costo")
             out.append(r)
             continue
-        p = precios.get(sku)
-        base = precio_ml(p.precio_web, p.pct_ml) if p else None
-        if p:
-            r["pm"], r["precio_pm"] = _pm_de(p), _n(base)
+        if combo:
+            datos, base, pm_combo = _cruzar_combo(combo, precios, datos_fn, av)
+            r["sku"], r["combo"] = sku, [{"sku": s, "cantidad": c} for s, c in combo]
+            r["pm"], r["precio_pm"] = pm_combo, _n(base)
         else:
-            av.append("Sin precio en el PM")
-        datos: DatosSku = datos_fn(sku)
-        if r["pm"] is None and datos.pm:
-            r["pm"] = datos.pm
+            p = precios.get(sku)
+            base = precio_ml(p.precio_web, p.pct_ml) if p else None
+            if p:
+                r["pm"], r["precio_pm"] = _pm_de(p), _n(base)
+            else:
+                av.append("Sin precio en el PM")
+            datos: DatosSku = datos_fn(sku)
+            if r["pm"] is None and datos.pm:
+                r["pm"] = datos.pm
         r["categoria"] = datos.categoria
-        if not datos.costo_usd:
+        if combo:
+            pass                       # los avisos de costo / IVA del combo ya salieron componente por componente
+        elif not datos.costo_usd:
             av.append("Sin costo vigente en Ecom")
         elif not datos.iva_factor:
             av.append("Sin alícuota de IVA")
@@ -195,7 +262,7 @@ def analizar(
             av.append("Sin descuento cargado: no hay margen de oferta")
         elif tiene_costo:
             if f["ITEM_ID"] not in envios and orig and orig >= umbral:
-                av.append("Envío no descontado: la publicación es de $33.000 o más y ML cobra el envío al vendedor; este margen NO lo descuenta (el envío real todavía no se trae de ML), así que sale más alto que el real")
+                av.append("Envío no descontado: la publicación es de $33.000 o más y ML cobra el envío al vendedor; este margen NO lo descuenta (no hay una venta de los últimos 60 días de esta publicación para tomar el envío real: apretá «Traer envíos de 60 días» arriba), así que sale más alto que el real")
             try:
                 for plan in PLANES:
                     d = margen_oferta(o["precio_vendedor"], o["precio_cliente"], plan, costo, datos.iva_factor, par, envio, orig, comision)
