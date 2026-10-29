@@ -124,13 +124,20 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
     if ventas and all(v.es_full is None for v in ventas):
         avisos.append("El dato de Full todavía no está guardado para este ciclo: aparece desde la próxima corrida diaria.")
 
+    fravega_dia_est = [v for v in del_dia if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA]
+    if fravega_dia_est:
+        avisos.append(
+            f"{len(fravega_dia_est)} venta(s) de Frávega del {dia} siguen con la comisión ESTIMADA: la corrida no pudo traer la real del Seller Center "
+            "(lo más probable: cookies FRAVEGA_SELLER_* vencidas en Railway). Renovalas y corré «Traer comisión y envío reales» en el módulo Frávega; "
+            "después volvé a bajar ese día al Sheet.")
+
     marketplaces = {}
     for clave, canal in MARKETPLACES.items():
         vs = [v for v in ventas if (v.canal_de_venta or "") == canal]
         bloque = _bloque(vs, dia, top)
         if clave == "fravega":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA)
-            bloque["nota"] = "Comisión estimada (15% + IVA 21%) hasta cargar la liquidación quincenal; después pasa a la real (también + IVA)."
+            bloque["nota"] = "Comisión estimada (15%, sin IVA extra) hasta traer la real de «Próxima liquidación» o cargar la liquidación quincenal."
         elif clave == "oncity":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_ONCITY)
             bloque["nota"] = "Canal manual en Ecom sin dato de comisión: se descuenta una comisión estimada (15% del Precio Final + IVA 21%)."
