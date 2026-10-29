@@ -369,6 +369,24 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .cr-resumen-t span{color:var(--texto-suave)}
 .cr-resumen-f{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
 .cr-resumen .cr-op input{width:90px}
+
+/* Ventanas flotantes: cada una carga el mismo ERP en un iframe (?solo=<página>), así conserva sus estilos y su estado. */
+body.solo .sidebar,body.solo .sidebar-overlay,body.solo .menu-toggle,body.solo .tb-brand,body.solo .tb-erp,body.solo .sb-flot{display:none!important}
+body.solo .app-body{margin-left:0!important}
+.sb-flot{margin-left:auto;border:0;background:transparent;color:inherit;opacity:.55;cursor:pointer;padding:2px 6px;border-radius:var(--r-control);font:inherit;line-height:1}
+.sidebar-item:hover .sb-flot,.sb-flot:focus-visible{opacity:1}
+.sidebar-item{display:flex;align-items:center}
+.vf{position:fixed;z-index:900;min-width:360px;min-height:240px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta);overflow:hidden;resize:both}
+.vf.vf-dock{top:0!important;right:0!important;left:auto!important;bottom:0;height:100vh!important;border-radius:0;resize:horizontal}
+.vf-cab{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--tinta);color:#fff;font:600 12px var(--fuente);cursor:move;user-select:none}
+.vf-cab span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vf-cab button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:var(--r-control);padding:2px 9px;cursor:pointer;font:inherit}
+.vf-cab button:hover{background:rgba(255,255,255,.28)}
+.vf iframe{flex:1;width:100%;border:0;background:var(--surface)}
+.vf.vf-min{min-height:0;height:auto!important;resize:none}.vf.vf-min iframe{display:none}
+.vf.vf-mover iframe,.vf.vf-redim iframe{pointer-events:none}
+body.vf-dock-activo .app-body{margin-right:var(--vf-dock-w,50vw)}
+@media(max-width:899px){.sb-flot{display:none}.vf{display:none}}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -1000,6 +1018,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
 </head>
 <body>
 <script>try{if(localStorage.getItem('erp_sidebar_oculta')==='1')document.body.classList.add('sb-oculta');}catch(e){}</script>
+<script>try{if(new URLSearchParams(location.search).get('solo'))document.body.classList.add('solo','sb-oculta');}catch(e){}</script>
 <header class="topbar">
   <button type="button" class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" aria-controls="sidebar" aria-expanded="true" aria-label="Ocultar el menú de módulos" title="Ocultar el menú de módulos"><span data-ico="menu" data-size="22" aria-hidden="true"></span></button>
   <a class="tb-brand" href="#" onclick="goPage('dashboard',document.querySelector('.sidebar-item[data-page=dashboard]'));return false;" aria-label="Global Electronics — ERP, ir al inicio">
@@ -2655,7 +2674,7 @@ function goPage(page,el){
   if(el)el.classList.add('active');
   document.body.dataset.page=page;document.body.dataset.modulo=MODULO_MK[page]||'global';
   if(PAGINAS_ESTILO_NUEVO.has(page))document.body.dataset.nuevo='1';else delete document.body.dataset.nuevo;
-  {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.trim():'';}
+  {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.replace('⧉','').trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
   qs('rent-query-bar').style.display=(page==='dashboard'&&VENTAS_EN_VIVO)?'block':'none';
@@ -8425,6 +8444,45 @@ function colapsableMontar(id,titulo,resumenFn){const el=qs(id);if(!el||el.datase
   pintar();resumir();}
 function ofmResumenParametros(){const o=OFM,n=v=>String(v).replace('.',',');return 'Criterios vigentes de ML · TC '+(o.tc?n(o.tc):'BNA auto')+' · Umbral '+n(o.umbral)+'%';}
 function compResumenParametros(el){return 'Criterios vigentes · TC '+((qs('ac-tc')||{}).value||'BNA auto');}
+
+// ── Ventanas flotantes (arrastrables, redimensionables, minimizables; «Dividir» la ancla a la derecha y achica la pantalla) ──
+const VF={z:900,max:3};
+function vfAbrir(page,titulo){
+  if(document.querySelectorAll('.vf').length>=VF.max){toast('Cerrá una ventana flotante antes de abrir otra','error');return;}
+  const n=document.querySelectorAll('.vf').length,w=document.createElement('div');w.className='vf';w.dataset.page=page;
+  w.style.cssText=`width:min(720px,60vw);height:min(560px,70vh);top:${70+n*28}px;left:${Math.max(20,innerWidth-760-n*28)}px;z-index:${++VF.z}`;
+  const u=location.pathname+'?solo='+encodeURIComponent(page);
+  w.innerHTML=`<div class="vf-cab"><span>${acEsc(titulo)}</span><button type="button" data-a="min" title="Minimizar">–</button><button type="button" data-a="dock" title="Dividir la pantalla: anclarla a la derecha">⧉</button><button type="button" data-a="x" title="Cerrar">✕</button></div><iframe src="${u}" title="${acEsc(titulo)}"></iframe>`;
+  document.body.appendChild(w);
+  w.addEventListener('mousedown',()=>{w.style.zIndex=++VF.z;});
+  const cab=w.querySelector('.vf-cab');
+  cab.addEventListener('mousedown',e=>{
+    if(e.target.closest('button')||w.classList.contains('vf-dock'))return;
+    const r=w.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;w.classList.add('vf-mover');
+    const mv=ev=>{w.style.left=Math.min(Math.max(0,ev.clientX-dx),innerWidth-120)+'px';w.style.top=Math.min(Math.max(0,ev.clientY-dy),innerHeight-40)+'px';};
+    const up=()=>{w.classList.remove('vf-mover');removeEventListener('mousemove',mv);removeEventListener('mouseup',up);};
+    addEventListener('mousemove',mv);addEventListener('mouseup',up);e.preventDefault();
+  });
+  w.addEventListener('mousedown',e=>{if(e.target===w)w.classList.add('vf-redim');});   // el borde de resize: el iframe no se come el arrastre
+  addEventListener('mouseup',()=>w.classList.remove('vf-redim'));
+  w.querySelector('[data-a=x]').onclick=()=>{w.remove();vfDockRefrescar();};
+  w.querySelector('[data-a=min]').onclick=()=>w.classList.toggle('vf-min');
+  w.querySelector('[data-a=dock]').onclick=()=>{
+    const d=!w.classList.contains('vf-dock');
+    document.querySelectorAll('.vf-dock').forEach(x=>x.classList.remove('vf-dock'));
+    if(d){w.classList.add('vf-dock');w.style.width='50vw';}
+    vfDockRefrescar();
+  };
+  if('ResizeObserver' in window)new ResizeObserver(()=>vfDockRefrescar()).observe(w);
+}
+function vfDockRefrescar(){const d=document.querySelector('.vf-dock');document.body.classList.toggle('vf-dock-activo',!!d);if(d)document.body.style.setProperty('--vf-dock-w',d.getBoundingClientRect().width+'px');window.dispatchEvent(new Event('resize'));}
+function vfMontarBotones(){
+  document.querySelectorAll('.sidebar-item[data-page]').forEach(a=>{
+    if(a.querySelector('.sb-flot'))return;
+    const b=document.createElement('button');b.type='button';b.className='sb-flot';b.textContent='⧉';b.title='Abrir en una ventana flotante (para ver dos módulos a la vez)';b.setAttribute('aria-label','Abrir '+a.textContent.trim()+' en una ventana flotante');
+    b.onclick=e=>{e.preventDefault();e.stopPropagation();vfAbrir(a.dataset.page,a.textContent.replace('⧉','').trim());};a.appendChild(b);
+  });
+}
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
   colapsableMontar('ofm-panel','Parámetros de margen',ofmResumenParametros);
@@ -8467,8 +8525,9 @@ function init(){
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
   const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;if(qs('backend-key-input'))qs('backend-key-input').value=getBackendKey();
   renderSkuTags();
+  vfMontarBotones();
   // Trigger initial page load
-  goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
+  {const solo=new URLSearchParams(location.search).get('solo');const pg=solo&&document.getElementById('page-'+solo)?solo:'dashboard';goPage(pg, document.querySelector('[data-page="'+pg+'"]'));}   // ?solo=<página>: la abre una ventana flotante (sin menú ni cabecera de marca)
   setTimeout(autoConnectML, 800);
   setTimeout(autoConnectPM, 800);
 }
