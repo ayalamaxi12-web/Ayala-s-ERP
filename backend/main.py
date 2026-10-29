@@ -3157,7 +3157,7 @@ def _ayala_core_motor_sync(
         desglose_m = {c: {k: float(v) for k, v in mercados_mod.desglose(
             precios[c], costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado, comision_pct=_mercado["par"]["comision_pct"],
             financiero_pct=_mercado["par"]["financiero"][c], iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
-            costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=envio_full,
+            costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=envio_full, iva_servicios=mercados_mod.iva_servicios(_mercado["mercado"]),
             costo_fijo_tramos=_mercado["par"].get("costo_fijo_tramos")).items()} for c in precios}
     # «Ver cuenta»: la cuenta línea por línea de cada condición (solo mostrar). Mercado Libre sin cambios usa los parámetros de siempre.
     if _mercado is None:
@@ -3171,7 +3171,8 @@ def _ayala_core_motor_sync(
     cuentas_m = {}
     for c, pr in precios.items():
         cu = mercados_mod.cuenta_paso_a_paso(pr, costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_usado, comision_pct=cp["comision"], financiero_pct=fin(c),
-                                             iibb_pct=cp["iibb"], cheque_pct=cp["cheque"], costo_orden=cp["orden"], envio_full=envio_full, costo_fijo_tramos=cp["tramos"])
+                                             iibb_pct=cp["iibb"], cheque_pct=cp["cheque"], costo_orden=cp["orden"], envio_full=envio_full, costo_fijo_tramos=cp["tramos"],
+                                             iva_servicios=mercados_mod.iva_servicios(_mercado["mercado"] if _mercado else "ml"))
         cuentas_m[c] = {"lineas": [{k: (float(v) if isinstance(v, Decimal) else v) for k, v in ln.items()} for ln in cu["lineas"]], "renta": float(cu["renta"]),
                         "renta_pct_con_iva": float(cu["renta_pct_con_iva"]), "renta_pct_sin_iva": float(cu["renta_pct_sin_iva"])}
     if item_info is not None:

@@ -251,6 +251,14 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
             "financiero": fin, "recargo_cuotas": recargo if mercado == "web" else None, "faltantes": faltantes, "avisos": avisos, "notas": notas, "desglose": desglose}
 
 
+# Mercados cuya comisión y envío se muestran YA CON IVA (Maxx, 2026-10-29): se restan tal cual, sin dividir por 1,21 como en Mercado Libre.
+IVA_SERVICIOS_POR_MERCADO = {"fravega": Decimal("1")}
+
+
+def iva_servicios(mercado: str) -> Decimal:
+    return IVA_SERVICIOS_POR_MERCADO.get(mercado, ayala_core._IVA_SERVICIOS_ML)
+
+
 def calcular_mercado(par: dict, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, renta_por_condicion: dict[str, Decimal],
                      envio_full: bool = False, costo_orden: Decimal = Decimal("0"), cheque_pct: Decimal = IMP_CHEQUE_PCT_DEFAULT,
                      iibb_pct: Decimal = IIBB_PCT_DEFAULT, renta_base: str = "con_iva") -> tuple[dict[str, Decimal], dict[str, str]]:
@@ -268,16 +276,16 @@ def calcular_mercado(par: dict, *, costo_sin_iva: Decimal, iva_factor: Decimal, 
         precios[c] = ayala_core.calcular_precio_condicion(
             costo_sin_iva=costo_sin_iva, iva_factor=iva_factor, envio_real=envio_real, financiero_pct=par["financiero"][c], renta_pct=renta,
             comision_pct=par["comision_pct"], iibb_pct=iibb_pct, imp_cheque_pct=cheque_pct, envio_full=envio_full, costo_orden=costo_orden, renta_base=renta_base,
-            costo_fijo_tramos=par.get("costo_fijo_tramos"))
+            costo_fijo_tramos=par.get("costo_fijo_tramos"), iva_servicios=iva_servicios(par.get("mercado", "")))
     return precios, errores
 
 
 def desglose(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, comision_pct: Decimal, financiero_pct: Decimal,
              iibb_pct: Decimal, cheque_pct: Decimal, costo_orden: Decimal = Decimal("0"), envio_full: bool = False,
-             costo_fijo_tramos=None) -> dict[str, Decimal]:
+             costo_fijo_tramos=None, iva_servicios: Decimal | None = None) -> dict[str, Decimal]:
     """De qué se compone el precio (los mismos conceptos y signos que el desglose de Mercado Libre de la pantalla, `ayalaCoreDesgloseDesdeP`): lo que se
     descuenta de la venta y lo que queda de renta en pesos. Solo para mostrar; el precio sale de `ayala_core.calcular_precio_condicion`."""
-    iva_serv = Decimal("1.21")
+    iva_serv = Decimal("1.21") if iva_servicios is None else iva_servicios
     comision = -(comision_pct / 100) * precio
     financiero = -(financiero_pct / 100) * precio
     envio = -envio_real
@@ -292,11 +300,12 @@ def desglose(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, en
 
 
 def cuenta_paso_a_paso(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, envio_real: Decimal, comision_pct: Decimal, financiero_pct: Decimal,
-                       iibb_pct: Decimal, cheque_pct: Decimal, costo_orden: Decimal = Decimal("0"), envio_full: bool = False, costo_fijo_tramos=None) -> dict:
+                       iibb_pct: Decimal, cheque_pct: Decimal, costo_orden: Decimal = Decimal("0"), envio_full: bool = False, costo_fijo_tramos=None, iva_servicios: Decimal | None = None) -> dict:
     """La cuenta de una condición, línea por línea y en el orden en que se resta (para «Ver cuenta»). Solo para mostrar: el precio sale de
     `ayala_core.calcular_precio_condicion`. Cada línea dice sobre qué base se calcula y con o sin IVA va el monto que se resta. La renta en pesos es la misma de `desglose`;
     se informa también como % del precio con IVA y del precio sin IVA (el % que se carga es de una u otra según la base elegida)."""
-    iva_serv = ayala_core._IVA_SERVICIOS_ML
+    iva_serv = ayala_core._IVA_SERVICIOS_ML if iva_servicios is None else iva_servicios
+    con_iva_incluido = iva_serv == 1
     sin_iva = precio / iva_factor
     comision = comision_pct / 100 * precio
     financiero = financiero_pct / 100 * precio
@@ -309,9 +318,9 @@ def cuenta_paso_a_paso(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: D
         {"clave": "precio", "monto": precio, "iva": "con IVA", "signo": 0},
         {"clave": "precio_sin_iva", "monto": sin_iva, "iva": "sin IVA", "signo": 0, "iva_factor": iva_factor},
         {"clave": "costo", "monto": costo_sin_iva, "iva": "sin IVA", "signo": -1},
-        {"clave": "comision", "pct": comision_pct, "sobre": "precio con IVA", "con_iva": comision, "monto": comision / iva_serv, "iva": "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
+        {"clave": "comision", "pct": comision_pct, "sobre": "precio con IVA", "con_iva": comision, "monto": comision / iva_serv, "iva": "se resta tal cual (el mercado ya lo muestra con IVA)" if con_iva_incluido else "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
         {"clave": "financiero", "pct": financiero_pct, "sobre": "precio con IVA", "con_iva": financiero, "monto": financiero, "iva": "se resta tal cual, sin dividir por IVA", "signo": -1},
-        {"clave": "envio", "con_iva": envio_real, "monto": envio_real / iva_serv, "iva": "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
+        {"clave": "envio", "con_iva": envio_real, "monto": envio_real / iva_serv, "iva": "se resta tal cual (el mercado ya lo muestra con IVA)" if con_iva_incluido else "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
         {"clave": "iibb", "pct": iibb_pct, "sobre": "precio sin IVA", "monto": iibb, "iva": "sin IVA", "signo": -1},
         {"clave": "cheque", "pct": cheque_pct, "sobre": "precio con IVA", "monto": cheque, "iva": "se resta tal cual (sobre el precio con IVA)", "signo": -1},
     ]

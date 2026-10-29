@@ -99,3 +99,18 @@ def test_endpoint_sin_iva_da_renta_x_pct_del_precio_sin_iva(cliente):
 def test_endpoint_rechaza_base_desconocida(cliente):
     assert cliente.get("/ayala-core/motor-lote", params={"renta_base": "x"}).status_code == 422
     assert cliente.get(f"/ayala-core/sku/{ac.SKUS_PILOTO[0]}/motor", params={"renta_base": "x"}).status_code == 422
+
+
+def test_frávega_comision_y_envio_se_restan_tal_cual_sin_dividir_por_1_21():
+    """Venta real del 27/10 (PLANCHA-SUB-PORTATIL, 6 cuotas): comisión 25,6 % del precio y envío 6.159, ambos con IVA ya incluido, renta 23,6 % sobre el precio sin IVA."""
+    iva = mk.iva_servicios("fravega")
+    assert iva == 1 and mk.iva_servicios("ml") == D("1.21")
+    kw = dict(costo_sin_iva=D("21060"), iva_factor=D("1.105"), envio_real=D("6159"), comision_pct=D("15"), financiero_pct=D("10.6"), iibb_pct=D("5"), cheque_pct=D("1.2"),
+              costo_orden=D("149.12"), iva_servicios=iva)
+    cu = mk.cuenta_paso_a_paso(D("72440"), **kw)
+    assert abs(cu["renta"] - D("15496.69")) < D("0.05")                                     # la rentabilidad del Sheet
+    assert abs(mk.desglose(D("72440"), **kw)["renta"] - cu["renta"]) < D("0.0001")
+    precio = ac.calcular_precio_condicion(costo_sin_iva=kw["costo_sin_iva"], iva_factor=kw["iva_factor"], envio_real=kw["envio_real"], financiero_pct=kw["financiero_pct"],
+                                          renta_pct=D("23"), comision_pct=D("15"), iibb_pct=D("5"), imp_cheque_pct=D("1.2"), costo_orden=D("149.12"), renta_base="sin_iva", iva_servicios=iva)
+    assert abs(precio - D("71348")) <= 1                                                     # con 23 % sale casi el precio al que se vendió (72.440 daba 23,6 %)
+    assert abs(mk.cuenta_paso_a_paso(precio, **kw)["renta_pct_sin_iva"] - D("23")) < D("0.01")
