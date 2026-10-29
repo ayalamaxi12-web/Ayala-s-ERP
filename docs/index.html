@@ -387,6 +387,9 @@ body.solo .app-body{margin-left:0!important}
 .vf.vf-mover iframe,.vf.vf-redim iframe{pointer-events:none}
 body.vf-dock-activo .app-body{margin-right:var(--vf-dock-w,50vw)}
 @media(max-width:899px){.sb-flot{display:none}.vf{display:none}}
+
+/* Clic sobre un SKU = copiarlo (todos los módulos); el cursor cambia cuando estás sobre uno. */
+html.sku-bajo-cursor,html.sku-bajo-cursor *{cursor:copy!important}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -8693,6 +8696,39 @@ function vfMontarBotones(){
     b.onclick=e=>{e.preventDefault();e.stopPropagation();vfAbrir(a.dataset.page,a.textContent.replace('⧉','').trim());};a.appendChild(b);
   });
 }
+// ── Clic sobre un SKU (o un MLA) lo copia al portapapeles, en cualquier módulo ──
+(function(){
+  const TOKEN=/[A-Za-z0-9._\-\/]/,SKU=/^(?=.*[A-Z])(?=.*[0-9\-])[A-Z0-9][A-Z0-9._\-\/]{3,59}$/;
+  const EXCLUIDOS='input,textarea,select,button,a,label,th,[contenteditable="true"],.toast';
+  function bajoPunto(x,y){
+    let n,o;
+    if(document.caretPositionFromPoint){const p=document.caretPositionFromPoint(x,y);if(!p)return null;n=p.offsetNode;o=p.offset;}
+    else if(document.caretRangeFromPoint){const r=document.caretRangeFromPoint(x,y);if(!r)return null;n=r.startContainer;o=r.startOffset;}
+    else return null;
+    if(!n||n.nodeType!==3)return null;
+    const t=n.textContent;let a=o,b=o;
+    while(a>0&&TOKEN.test(t[a-1]))a--;while(b<t.length&&TOKEN.test(t[b]))b++;
+    const tok=t.slice(a,b);if(!SKU.test(tok))return null;
+    // el puntero tiene que estar realmente sobre el texto (no en el hueco de la celda)
+    const r2=document.createRange();r2.setStart(n,a);r2.setEnd(n,b);const q=r2.getBoundingClientRect();
+    return x>=q.left&&x<=q.right&&y>=q.top&&y<=q.bottom?tok:null;
+  }
+  const valido=e=>!(e.target.closest&&e.target.closest(EXCLUIDOS));
+  let pend=false;
+  document.addEventListener('mousemove',e=>{
+    if(pend)return;pend=true;const x=e.clientX,y=e.clientY,ok=valido(e);
+    requestAnimationFrame(()=>{pend=false;document.documentElement.classList.toggle('sku-bajo-cursor',ok&&!!bajoPunto(x,y));});
+  },{passive:true});
+  document.addEventListener('click',e=>{
+    if(!valido(e))return;
+    const sel=window.getSelection&&window.getSelection();if(sel&&!sel.isCollapsed)return;   // si estabas seleccionando texto, no se pisa
+    const tok=bajoPunto(e.clientX,e.clientY);if(!tok)return;
+    const ok=()=>toast('Copiado: '+tok);
+    const respaldo=()=>{try{const t=document.createElement('textarea');t.value=tok;t.style.cssText='position:fixed;opacity:0';document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();ok();}catch(x){toast('No se pudo copiar '+tok,'error');}};
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(tok).then(ok,respaldo);else respaldo();
+  });
+})();
+
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
   colapsableMontar('ofm-panel','Parámetros de margen',ofmResumenParametros);
