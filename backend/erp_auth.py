@@ -8,6 +8,7 @@ Qué protege (ver `requiere_clave`):
   - `GET /ml-proxy` (lecturas con el token del servidor);
   - `GET /competencia/analisis` (datos de competencia: precios de rivales, no son públicos);
   - `GET /competencia/publicaciones-propias` (usa el token de nuestras cuentas de ML);
+  - `GET /fravega/catalogo` (costos y márgenes por SKU de Frávega);
   - `GET /proyeccion-2027/dashboard` y `/versiones` (márgenes y costos por SKU: datos sensibles) y `/transito` (pedidos a proveedores).
 
 Qué NO protege (sigue abierto):
@@ -30,7 +31,7 @@ import os
 
 HEADER_CLAVE = "x-erp-key"
 
-_RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy", "/competencia/analisis", "/competencia/publicaciones-propias", "/competencia/precio-ml", "/campanas/calendario", "/proyeccion-2027/dashboard", "/proyeccion-2027/versiones", "/proyeccion-2027/transito")
+_RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy", "/competencia/analisis", "/competencia/publicaciones-propias", "/competencia/precio-ml", "/campanas/calendario", "/proyeccion-2027/dashboard", "/proyeccion-2027/versiones", "/proyeccion-2027/transito", "/fravega/catalogo")
 _METODOS_ESCRITURA = ("POST", "PUT", "PATCH", "DELETE")
 
 _MAX_AVISADOS = 500
