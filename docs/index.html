@@ -8576,7 +8576,7 @@ function frvRender(){
     const dis=FRV.escritura?'':' disabled title="Escritura apagada (FRAVEGA_ESCRITURA)"';
     const color=marg==null?'var(--text3)':marg<obj?'var(--red)':'var(--green)';
     const desc=lista&&venta?Math.round((1-venta/lista)*1000)/10:null;
-    return `<tr data-id="${id}"><td><b>${acEsc(f.ref_id||'—')}</b>${f.activo?'':' <span style="color:var(--red)">· inactiva</span>'}<div style="font-size:10px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acEsc(f.titulo||'')}</div>${(f.avisos||[]).filter(Boolean).map(a=>`<div style="font-size:10px;color:var(--text3)">⚠ ${acEsc(a)}</div>`).join('')}</td>
+    return `<tr data-id="${id}"><td><b>${acEsc(f.ref_id||'—')}</b>${f.activo?'':' <span style="color:var(--red)">· inactiva</span>'}<div style="font-size:10px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acEsc(f.titulo||'')}</div>${frvUrl(f)?`<a href="${acEsc(frvUrl(f))}" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:var(--mod-texto)">Ver como cliente ↗</a>`:''}${(f.avisos||[]).filter(Boolean).map(a=>`<div style="font-size:10px;color:var(--text3)">⚠ ${acEsc(a)}</div>`).join('')}</td>
       <td>${acEsc(f.pm||'—')}</td><td style="text-align:right">${frvN(f.stock)}</td><td style="text-align:right">${frvN(f.stock_publicado)}</td>
       <td style="text-align:center">${f.ordenes_30} / ${f.ordenes_60} / ${f.ordenes_90}</td><td style="text-align:center">${f.dias_con_venta_60}</td>
       <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(lista,2)}" onchange="frvEdita('${id}','lista',this.value)"${dis}></td>
@@ -8588,6 +8588,8 @@ function frvRender(){
   }).join('')||'<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:20px">Sin publicaciones con ese filtro</td></tr>';
   qs('frv-pag').innerHTML=pag>1?`<button class="btn-xs" onclick="FRV.page=Math.max(1,FRV.page-1);frvRender()">‹</button> ${FRV.page} / ${pag} <button class="btn-xs" onclick="FRV.page=Math.min(${pag},FRV.page+1);frvRender()">›</button>`:'';
 }
+// Link público de la publicación (para verla como cliente, sin sesión del Seller Center): /p/<título-en-minúsculas>-<código de Frávega>
+function frvUrl(f){if(!f.sku_fravega)return '';const slug=String(f.titulo||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');return 'https://www.fravega.com/p/'+(slug?slug+'-':'')+f.sku_fravega;}
 let frvT={};
 function frvEdita(id,campo,txt){
   const f=FRV.filas.find(x=>x.id===id);if(!f)return;const e=FRV.edit[id]=FRV.edit[id]||{};
