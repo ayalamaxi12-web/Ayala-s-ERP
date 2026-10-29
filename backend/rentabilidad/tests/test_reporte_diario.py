@@ -120,3 +120,16 @@ def test_endpoint_con_token(ciclo, monkeypatch):
     r = c.get("/rentabilidad/reporte/ecom/diario?fecha=2026-09-27&top=3", headers={"X-Reporte-Token": "secreto"})
     assert r.status_code == 200 and r.json() == {"dia": "2026-09-27", "top": 3}
     assert c.get("/rentabilidad/reporte/ecom/diario?token=secreto&top=0").status_code == 422
+
+
+def test_avisa_si_las_ventas_de_fravega_del_dia_siguen_con_comision_estimada(ciclo):
+    ciclo.add(_venta("8", date(2026, 9, 27), "72440", "15000", skus_vendidos="PLANCHA-SUB-PORTATIL", canal_de_venta="Fravega",
+                     origen_comision="ESTIMADO_FRAVEGA", orden_externa="v2frvg-01"))
+    ciclo.flush()
+    av = reporte_diario(ciclo, date(2026, 9, 27))["avisos"]
+    assert len(av) == 1 and "Frávega" in av[0] and "ESTIMADA" in av[0] and "FRAVEGA_SELLER" in av[0]
+    # con la comisión real ya no avisa; las estimadas de días anteriores (esperan su liquidación) tampoco
+    v = ciclo.query(VentaEcom).filter_by(numero_orden="8").one()
+    v.origen_comision = "LIQUIDACION_FRAVEGA"
+    ciclo.flush()
+    assert reporte_diario(ciclo, date(2026, 9, 27))["avisos"] == []
