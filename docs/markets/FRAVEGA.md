@@ -76,3 +76,10 @@ Control: `totalProductos + totalComision + totalEnvio + totalFeeLogistico + tota
 - La liquidación quincenal (Excel) **manda siempre**: al cargarla borra las filas provisorias de sus órdenes y las sincronizaciones siguientes ya no las vuelven a cargar (nunca se suman).
 - `Devuelta` y órdenes sin comisión no se cargan (siguen estimadas hasta la liquidación, que trae las cancelaciones).
 - Si Frávega rechaza la sesión (401/403/redirección/HTML) el endpoint responde 502 con el aviso y no toca nada; sin variables, 503.
+
+### 7.6 Escritura de precios: lo confirmado en vivo (29/10/2026)
+- `PUT /api/v1/seller-center-service/api/v1/item/{id}/partial` con `{"price":{"list","sale","net"},"stock":{"quantity"},"active":true}`. **El portal manda siempre los tres bloques**, aunque se cambie solo el precio: sin `stock` y `active` Frávega responde 500 y no guarda. El ERP manda los valores actuales de stock y estado para no pisarlos.
+- La respuesta es 200 con `error:{message:"",fields:null}` y el **ítem anterior al cambio**: no sirve para verificar. Se verifica con un `GET /v2/item` aparte.
+- El cambio llega enseguida al Seller Center, pero la **publicación en la tienda tarda unos 10 minutos** en mostrar el precio nuevo (medido por Maxx). El ERP tolera la demora: si Frávega acepta y todavía muestra el anterior, queda «pendiente» y se relee con «Releer».
+- Cuotas (`POST /item/{id}/plan`): sin capturar en vivo todavía.
+- El listado (`GET /v2/item`) falla con 500 (error interno de su base) si se piden páginas de 100; el ERP pide de a 25 y reintenta con 10.
