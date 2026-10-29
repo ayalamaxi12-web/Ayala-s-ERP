@@ -192,3 +192,18 @@ def test_si_frávega_responde_500_pero_aplico_el_precio_se_informa_como_aplicado
     monkeypatch.setattr(fc, "releer_item", lambda *a, **k: antes)               # no se aplicó: error con lo que se releyó
     r = TestClient(main.app, raise_server_exceptions=False).post("/fravega/precio", json=cuerpo)
     assert r.status_code == 422 and "NO quedó aplicado" in r.json()["detail"]
+
+
+def test_si_frávega_acepta_pero_todavia_muestra_el_precio_anterior_queda_pendiente_sin_error(monkeypatch):
+    from fastapi.testclient import TestClient
+    import fravega_api
+    import main
+    monkeypatch.setenv("FRAVEGA_ESCRITURA", "1")
+    antes = fc.normalizar_item({**_item("a1", "SAFEBOX-KEYS"), "price": {"list": 100, "sale": 90, "net": 81.4}})
+    monkeypatch.setattr(fravega_api, "_items", lambda forzar=False: [antes])
+    monkeypatch.setattr(fravega_api.time, "sleep", lambda s: None)
+    monkeypatch.setattr(fc, "poner_precio", lambda *a, **k: None)                    # Frávega responde 200
+    monkeypatch.setattr(fc, "releer_item", lambda *a, **k: antes)                    # pero sigue mostrando el precio viejo
+    monkeypatch.setattr(main, "_registrar_historial_oferta_lote", lambda filas: None)
+    r = TestClient(main.app, raise_server_exceptions=False).post("/fravega/precio", json={"id": "a1", "ref_id": "SAFEBOX-KEYS", "lista": 100, "venta": 89, "operador": "Maxi A."})
+    assert r.status_code == 200 and r.json()["pendiente"] and not r.json()["verificado"] and "demorar" in r.json()["aviso"]
