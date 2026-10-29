@@ -39,3 +39,14 @@ Devoluciones, cancelaciones, órdenes con varios productos (`-01`, `-02`), cambi
 
 ## 6. Cómo reproducir (para verificar)
 Pasos y capturas: …
+
+## 7. Precios, ofertas, cuotas y campañas (para tener los módulos de Mercado Libre en este market)
+| Acción | ¿Se puede? | Cómo (pantalla / llamada) | Notas |
+|---|---|---|---|
+| Leer precio y stock de una publicación | | | |
+| Cambiar el precio | | | |
+| Precio tachado / oferta con vigencia | | | |
+| Elegir cuotas por publicación | | | |
+| Campañas del market (propuestas, Excel, alta por API) | | | |
+| Carga masiva por Excel | | | |
+| Mínimos y máximos de descuento | | | |
