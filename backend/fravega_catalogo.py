@@ -18,7 +18,7 @@ from typing import Callable
 from rentabilidad.fravega_seller import SesionFravegaVencida, cookies_desde_env
 
 URL_BASE = "https://seller-center.fravega.com/api/v1/seller-center-service/api"
-POR_PAGINA = 100
+POR_PAGINA = 25      # el portal pide de a 10; 100 hacía fallar a Frávega con un 500 de su base (mongo.CommandError)
 MAX_PAGINAS = 100
 
 
@@ -104,11 +104,11 @@ def _detalle(r) -> str:
 def traer_items(cookies: dict[str, str] | None = None, request_fn: Callable | None = None) -> list[dict]:
     cookies = cookies if cookies is not None else cookies_desde_env()
     out: list[dict] = []
-    tamanos = [POR_PAGINA, 50, 10]            # si Frávega rechaza un tamaño de página, se reintenta con uno más chico
+    tamanos = [POR_PAGINA, 10]                # si Frávega rechaza un tamaño de página (400/422/500), se reintenta con el que usa el portal
     pagina = 1
     while pagina <= MAX_PAGINAS:
         r = _pedir("GET", "/v2/item", cookies, {"page": pagina, "size": tamanos[0]}, None, request_fn)
-        if r.status_code in (400, 422) and len(tamanos) > 1 and pagina == 1:
+        if r.status_code in (400, 422, 500) and len(tamanos) > 1 and pagina == 1:
             tamanos.pop(0)
             continue
         if r.status_code != 200:
