@@ -58,12 +58,14 @@ def _pedir(metodo: str, ruta: str, cookies: dict[str, str], params: dict | None 
            request_fn: Callable | None = None):
     """Devuelve la respuesta (`.status_code`, `.json()`); levanta `SesionFravegaVencida` si Frávega no acepta la sesión."""
     pedir = request_fn or _pedir_real
-    r = None
+    estados = []
     for con_auth in (False, True):
         r = pedir(metodo, URL_BASE + ruta, params, cuerpo, _headers(cookies, con_auth))
         if r.status_code not in (301, 302, 303, 307, 308, 401, 403, 503):
             return r
-    raise SesionFravegaVencida("Frávega no aceptó la sesión del Seller Center (vencida o mal cargada): renová las cookies FRAVEGA_SELLER_* en Railway.")
+        estados.append(f"{'con' if con_auth else 'sin'} authorization: {r.status_code}")
+    raise SesionFravegaVencida("Frávega no aceptó la sesión del Seller Center (vencida o mal cargada): renová las cookies FRAVEGA_SELLER_* en Railway "
+                               f"({'; '.join(estados)}).")
 
 
 def _num(v) -> Decimal | None:
