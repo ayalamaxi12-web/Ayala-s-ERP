@@ -9,6 +9,7 @@ Autenticación: las mismas cookies de `rentabilidad.fravega_seller` (`FRAVEGA_SE
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import datetime, timezone
@@ -155,7 +156,7 @@ def poner_precio(item_id: str, lista: Decimal, venta: Decimal, neto: Decimal, co
     cookies = cookies if cookies is not None else cookies_desde_env()
     cuerpo = {"price": {"list": float(lista), "sale": float(venta), "net": float(neto)}}
     r = _pedir("PUT", f"/v1/item/{item_id}/partial", cookies, None, cuerpo, request_fn)
-    _revisar_escritura(r)
+    _revisar_escritura(r, cuerpo)
 
 
 def poner_plan(item_id: str, plan: dict, desde: datetime | None = None, cookies: dict[str, str] | None = None,
@@ -169,18 +170,20 @@ def poner_plan(item_id: str, plan: dict, desde: datetime | None = None, cookies:
     hasta = (plan.get("validity") or {}).get("expiration")
     cuerpo = {"plan": plan, "from": desde.strftime("%Y-%m-%dT%H:%M:%SZ"), "to": hasta}
     r = _pedir("POST", f"/v1/item/{item_id}/plan", cookies, None, cuerpo, request_fn)
-    _revisar_escritura(r)
+    _revisar_escritura(r, {"plan": {"_id": plan.get("_id"), "name": plan.get("name")}, "from": cuerpo["from"], "to": cuerpo["to"]})
 
 
-def _revisar_escritura(r) -> None:
+def _revisar_escritura(r, enviado: dict | None = None) -> None:
     if r.status_code in (200, 201, 204):
         return
     try:
         d = r.json()
     except ValueError:
         d = {}
-    campos = ((d.get("error") or {}).get("fields")) or {}
-    raise FravegaRechazo(f"Frávega rechazó el cambio ({r.status_code}): {d.get('message') or d.get('error') or 'sin detalle'}", campos)
+    d = d if isinstance(d, dict) else {}
+    campos = ((d.get("error") or {}).get("fields")) if isinstance(d.get("error"), dict) else None
+    texto = d.get("message") or d.get("error") or (getattr(r, "text", "") or "")[:300].replace("\n", " ") or "sin detalle"
+    raise FravegaRechazo(f"Frávega rechazó el cambio ({r.status_code}): {texto}" + (f" · enviado: {json.dumps(enviado, default=str)[:300]}" if enviado else ""), campos or {})
 
 
 def releer_item(item_id: str, cookies: dict[str, str] | None = None, request_fn: Callable | None = None) -> dict | None:

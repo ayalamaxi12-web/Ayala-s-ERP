@@ -157,3 +157,16 @@ def test_el_endpoint_devuelve_el_motivo_en_vez_de_un_500_sin_cors(monkeypatch):
     monkeypatch.setattr(fc, "traer_items", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Frávega respondió 404")))
     r = TestClient(main.app, raise_server_exceptions=False).get("/fravega/catalogo")
     assert r.status_code == 502 and "404" in r.json()["detail"]
+
+
+def test_un_rechazo_de_escritura_trae_la_respuesta_de_frávega_y_lo_que_se_envio(monkeypatch):
+    monkeypatch.setenv("FRAVEGA_ESCRITURA", "1")
+
+    class R500(R):
+        text = "internal error en la base"
+
+        def json(self):
+            raise ValueError
+    with pytest.raises(fc.FravegaRechazo) as e:
+        fc.poner_precio("a1", d("100"), d("90"), d("74"), COOK, lambda *a: R500(500))
+    assert "500" in str(e.value) and "internal error en la base" in str(e.value) and '"sale": 90.0' in str(e.value)
