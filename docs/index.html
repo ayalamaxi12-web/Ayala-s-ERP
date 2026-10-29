@@ -1598,8 +1598,8 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <label style="font-size:12px;color:var(--text2)">Margen objetivo % <input type="text" inputmode="decimal" id="frv-obj" class="campo-num" value="20" onchange="frvRender()" style="width:60px"></label>
       <span id="frv-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     </div>
-    <div class="table-wrap"><table id="frv-table">
-      <thead><tr><th>SKU · título</th><th>PM</th><th>Stock</th><th>Cobertura</th><th title="Órdenes de Frávega en 30 / 60 / 90 días">Órdenes 30/60/90</th><th title="Días distintos con venta en los últimos 60">Días con venta</th><th>Lista (tachado)</th><th>Venta</th><th>Desc.</th><th>Precio PM</th><th>Cuotas</th><th>Margen</th><th>Rent. $</th><th></th></tr></thead>
+    <div class="table-wrap"><table id="frv-table" style="font-size:12px">
+      <thead><tr><th>SKU · título</th><th>PM</th><th>Stock</th><th>Cobertura</th><th title="Órdenes de Frávega en 30 / 60 / 90 días">Órd. 30/60/90</th><th title="Días distintos con venta en los últimos 60">Días c/venta</th><th>Lista (tachado)</th><th>Venta</th><th>Desc.</th><th>Precio PM</th><th>Cuotas</th><th>Margen</th><th>Rent. $</th><th></th></tr></thead>
       <tbody id="frv-tbody"></tbody>
     </table><div class="pagination" id="frv-pag"></div></div>
   </div>
@@ -8531,9 +8531,9 @@ function frvRender(){
     return `<tr data-id="${id}"><td><b>${acEsc(f.ref_id||'—')}</b>${f.activo?'':' <span style="color:var(--red)">· inactiva</span>'}<div style="font-size:10px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acEsc(f.titulo||'')}</div>${(f.avisos||[]).filter(Boolean).map(a=>`<div style="font-size:10px;color:var(--text3)">⚠ ${acEsc(a)}</div>`).join('')}</td>
       <td>${acEsc(f.pm||'—')}</td><td style="text-align:right">${frvN(f.stock)}</td><td style="text-align:right">${f.dias_cobertura==null?'—':f.dias_cobertura+' d'}</td>
       <td style="text-align:center">${f.ordenes_30} / ${f.ordenes_60} / ${f.ordenes_90}</td><td style="text-align:center">${f.dias_con_venta_60}</td>
-      <td><input type="text" inputmode="decimal" class="campo-num" value="${frvN(lista,2)}" onchange="frvEdita('${id}','lista',this.value)"${dis}></td>
-      <td><input type="text" inputmode="decimal" class="campo-num" value="${frvN(venta,2)}" onchange="frvEdita('${id}','venta',this.value)"${dis}></td>
-      <td style="text-align:right">${desc==null?'—':desc+' %'}</td><td style="text-align:right">${frvN(f.precio_pm,2)}</td>
+      <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(lista,2)}" onchange="frvEdita('${id}','lista',this.value)"${dis}></td>
+      <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(venta,2)}" onchange="frvEdita('${id}','venta',this.value)"${dis}></td>
+      <td style="text-align:right;white-space:nowrap">${desc==null?'—':desc+' %'}</td><td style="text-align:right">${frvN(f.precio_pm,2)}</td>
       <td><select class="fi" onchange="frvEdita('${id}','plan_id',this.value)"${dis}><option value="">Sin plan</option>${FRV.planes.map(p=>`<option value="${acEsc(p.id)}"${p.id===planId?' selected':''}>${acEsc(p.cuotas)} · ${frvN(p.comision,1)} %</option>`).join('')}</select></td>
       <td style="text-align:right;color:${color};font-weight:600">${marg==null?'—':frvN(marg,1)+' %'}</td><td style="text-align:right">${frvN(rent,0)}</td>
       <td style="white-space:nowrap">${cambioP?`<button class="btn-xs" onclick="frvGuardarPrecio('${id}')">Guardar precio</button> `:''}${cambioPl?`<button class="btn-xs" onclick="frvGuardarPlan('${id}')">Guardar plan</button>`:''}<div style="font-size:10px;color:var(--text2)">${acEsc(FRV.msg[f.id]||'')}</div></td></tr>`;
