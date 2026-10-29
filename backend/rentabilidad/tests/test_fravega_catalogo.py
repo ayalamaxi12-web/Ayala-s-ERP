@@ -101,7 +101,7 @@ def test_margen_usa_el_motor_de_frávega_y_el_plan(db_session):
     assert r6["margen"] == pytest.approx(float(m.precio_a_margen(d("60000"), e, par).margen) * 100, abs=0.01)
     r12, _ = margen_fravega(d("60000"), datos, d("1500"), par, "12", None)
     assert r12["margen"] < r6["margen"]                                         # más cuotas, más comisión
-    assert margen_fravega(d("60000"), datos, d("1500"), par, None, None)[0] is None
+    assert margen_fravega(d("60000"), datos, d("1500"), par, "7", None)[0] is None                 # un plan que no existe no se inventa
     assert margen_fravega(d("60000"), DatosSku(None, None, None, None, None), d("1500"), par, "6", None)[1] == ["Sin costo vigente en Ecom"]
 
 
@@ -207,3 +207,13 @@ def test_si_frávega_acepta_pero_todavia_muestra_el_precio_anterior_queda_pendie
     monkeypatch.setattr(main, "_registrar_historial_oferta_lote", lambda filas: None)
     r = TestClient(main.app, raise_server_exceptions=False).post("/fravega/precio", json={"id": "a1", "ref_id": "SAFEBOX-KEYS", "lista": 100, "venta": 89, "operador": "Maxi A."})
     assert r.status_code == 200 and r.json()["pendiente"] and not r.json()["verificado"] and "demorar" in r.json()["aviso"]
+
+
+def test_sin_plan_es_venta_simple_solo_comision_base_y_da_mas_margen_que_con_cuotas(db_session):
+    par = m.cargar_parametros(db_session, date(2026, 10, 29))
+    datos = DatosSku(d("10"), d("1.105"), None, None, None)
+    simple, av = margen_fravega(d("60000"), datos, d("1500"), par, None, None)
+    assert simple is not None and "Sin cuotas" in av[0] and simple["cargos"].get("financiera", 0) == 0
+    c3, _ = margen_fravega(d("60000"), datos, d("1500"), par, "3", None)
+    assert simple["margen"] > c3["margen"]
+    assert margen_fravega(d("60000"), datos, d("1500"), par, "contado", None)[0]["margen"] == simple["margen"]
