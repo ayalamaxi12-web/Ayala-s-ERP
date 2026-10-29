@@ -130,3 +130,30 @@ def test_stock_general_y_ventas_solo_de_fravega(db_session):
                                        skus_vendidos="PLANCHA-SUB-GORRA", fecha_creacion=date(2026, 10, 21)), periodo="2026-10-21_2026-10-21")
     v = ventas_por_sku(db_session, hoy)["PLANCHA-SUB-GORRA"]
     assert v["ordenes_30"] == 1 and v["dias_con_venta_60"] == 1               # la de OnCity no cuenta
+
+
+def test_si_frávega_rechaza_el_tamano_de_pagina_se_reintenta_con_uno_mas_chico():
+    tamanos = []
+
+    def req(metodo, url, params, cuerpo, headers):
+        tamanos.append(params["size"])
+        return R(400) if params["size"] > 10 else R(200, {"items": [_item("a", "A")], "totalPages": 1})
+    assert [i["ref_id"] for i in fc.traer_items(COOK, req)] == ["A"] and tamanos == [100, 50, 10]
+
+
+def test_un_status_inesperado_dice_cual_fue_y_que_contestó_frávega():
+    class R404(R):
+        text = "no existe la ruta"
+    with pytest.raises(RuntimeError) as e:
+        fc.traer_items(COOK, lambda *a: R404(404))
+    assert "404" in str(e.value) and "no existe la ruta" in str(e.value)
+
+
+def test_el_endpoint_devuelve_el_motivo_en_vez_de_un_500_sin_cors(monkeypatch):
+    from fastapi.testclient import TestClient
+    import fravega_api
+    import main
+    monkeypatch.setattr(fravega_api, "_CACHE", {"t": 0.0, "items": []})
+    monkeypatch.setattr(fc, "traer_items", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Frávega respondió 404")))
+    r = TestClient(main.app, raise_server_exceptions=False).get("/fravega/catalogo")
+    assert r.status_code == 502 and "404" in r.json()["detail"]

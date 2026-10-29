@@ -96,13 +96,23 @@ def normalizar_item(it: dict) -> dict:
     }
 
 
+def _detalle(r) -> str:
+    t = (getattr(r, "text", "") or "")[:200].replace("\n", " ")
+    return f": {t}" if t else ""
+
+
 def traer_items(cookies: dict[str, str] | None = None, request_fn: Callable | None = None) -> list[dict]:
     cookies = cookies if cookies is not None else cookies_desde_env()
     out: list[dict] = []
-    for pagina in range(1, MAX_PAGINAS + 1):
-        r = _pedir("GET", "/v2/item", cookies, {"page": pagina, "size": POR_PAGINA}, None, request_fn)
+    tamanos = [POR_PAGINA, 50, 10]            # si Frávega rechaza un tamaño de página, se reintenta con uno más chico
+    pagina = 1
+    while pagina <= MAX_PAGINAS:
+        r = _pedir("GET", "/v2/item", cookies, {"page": pagina, "size": tamanos[0]}, None, request_fn)
+        if r.status_code in (400, 422) and len(tamanos) > 1 and pagina == 1:
+            tamanos.pop(0)
+            continue
         if r.status_code != 200:
-            raise RuntimeError(f"Frávega respondió {r.status_code} al pedir el listado de productos.")
+            raise RuntimeError(f"Frávega respondió {r.status_code} al pedir el listado de productos (página {pagina}){_detalle(r)}")
         try:
             d = r.json()
         except ValueError:
@@ -111,6 +121,7 @@ def traer_items(cookies: dict[str, str] | None = None, request_fn: Callable | No
         out.extend(normalizar_item(i) for i in lote)
         if not lote or pagina >= int(d.get("totalPages") or 1):
             break
+        pagina += 1
     return out
 
 

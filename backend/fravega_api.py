@@ -25,6 +25,8 @@ def _items(forzar: bool = False) -> list[dict]:
             raise HTTPException(status_code=409, detail=str(e))
         except SesionFravegaVencida as e:
             raise HTTPException(status_code=409, detail=str(e))
+        except Exception as e:  # noqa: BLE001 -- sin esto el navegador ve «Failed to fetch» (un 500 no lleva los headers CORS)
+            raise HTTPException(status_code=502, detail=f"No se pudo leer el listado de Frávega ({type(e).__name__}: {e})")
     return _CACHE["items"]
 
 
@@ -55,7 +57,14 @@ def _catalogo_sync(forzar: bool) -> dict:
 
 @router.get("/catalogo")
 async def catalogo(refrescar: bool = False):
-    return await run_in_threadpool(_catalogo_sync, refrescar)
+    try:
+        return await run_in_threadpool(_catalogo_sync, refrescar)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        import logging
+        logging.getLogger("fravega").exception("catálogo de Frávega")
+        raise HTTPException(status_code=500, detail=f"Falló armar la vista de Frávega ({type(e).__name__}: {e})")
 
 
 class _SimIn(BaseModel):
