@@ -57,7 +57,7 @@ def test_la_escritura_esta_apagada_por_defecto(monkeypatch):
     monkeypatch.delenv("FRAVEGA_ESCRITURA", raising=False)
     llamadas = []
     with pytest.raises(fc.EscrituraApagada):
-        fc.poner_precio("a", d("100"), d("90"), d("74"), COOK, lambda *a: llamadas.append(a) or R())
+        fc.poner_precio("a", d("100"), d("90"), d("74"), 5, True, COOK, lambda *a: llamadas.append(a) or R())
     with pytest.raises(fc.EscrituraApagada):
         fc.poner_plan("a", PLAN6, None, COOK, lambda *a: llamadas.append(a) or R())
     assert llamadas == []
@@ -70,13 +70,13 @@ def test_poner_precio_manda_lista_venta_y_neto_y_valida(monkeypatch):
     def req(metodo, url, params, cuerpo, headers):
         visto.update(metodo=metodo, url=url, cuerpo=cuerpo)
         return R(200)
-    fc.poner_precio("a1", d("100000"), d("90000"), d("74380.17"), COOK, req)
+    fc.poner_precio("a1", d("100000"), d("90000"), d("74380.17"), 124, True, COOK, req)
     assert visto["metodo"] == "PUT" and visto["url"].endswith("/v1/item/a1/partial")
-    assert visto["cuerpo"] == {"price": {"list": 100000.0, "sale": 90000.0, "net": 74380.17}}
+    assert visto["cuerpo"] == {"price": {"list": 100000.0, "sale": 90000.0, "net": 74380.17}, "stock": {"quantity": 124}, "active": True}   # como lo manda el portal (capturado en vivo)
     with pytest.raises(ValueError):
-        fc.poner_precio("a1", d("100"), d("200"), d("1"), COOK, req)           # venta > lista
+        fc.poner_precio("a1", d("100"), d("200"), d("1"), 5, True, COOK, req)           # venta > lista
     with pytest.raises(fc.FravegaRechazo) as e:
-        fc.poner_precio("a1", d("100"), d("90"), d("1"), COOK, lambda *a: R(409, {"error": {"fields": {"price": "x"}}}))
+        fc.poner_precio("a1", d("100"), d("90"), d("1"), 5, True, COOK, lambda *a: R(409, {"error": {"fields": {"price": "x"}}}))
     assert e.value.campos == {"price": "x"}
 
 
@@ -168,7 +168,7 @@ def test_un_rechazo_de_escritura_trae_la_respuesta_de_frávega_y_lo_que_se_envio
         def json(self):
             raise ValueError
     with pytest.raises(fc.FravegaRechazo) as e:
-        fc.poner_precio("a1", d("100"), d("90"), d("74"), COOK, lambda *a: R500(500))
+        fc.poner_precio("a1", d("100"), d("90"), d("74"), 5, True, COOK, lambda *a: R500(500))
     assert "500" in str(e.value) and "internal error en la base" in str(e.value) and '"sale": 90.0' in str(e.value)
 
 
