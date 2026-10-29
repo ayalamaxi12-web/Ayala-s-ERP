@@ -85,7 +85,12 @@ async def simular(b: _SimIn):
             par = motor.cargar_parametros(db, fecha)
             m, av = margen_fravega(Decimal(str(b.venta)), datos(sku), tc, par, b.cuotas, fee_historico_fravega(db).get(sku))
         return {"margen": m and m["margen"], "rentabilidad": m and m["rentabilidad"], "avisos": av}
-    return await run_in_threadpool(_hacer)
+    try:
+        return await run_in_threadpool(_hacer)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001 -- un 500 sin detalle llega al navegador como «Failed to fetch»
+        raise HTTPException(status_code=500, detail=f"No se pudo calcular el margen ({type(e).__name__}: {e})")
 
 
 class _PrecioIn(BaseModel):

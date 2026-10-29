@@ -8583,7 +8583,7 @@ function frvRender(){
   const op=(f)=>FRV.edit[f.id]||{};
   qs('frv-tbody').innerHTML=fs.slice((FRV.page-1)*por,FRV.page*por).map(f=>{
     const e=op(f),lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta,planId=e.plan_id!==undefined?e.plan_id:((f.plan||{}).id||'');
-    const sim=FRV.sim[f.id],marg=sim?sim.margen:f.margen,rent=sim?sim.rentabilidad:f.rentabilidad,id=acEsc(f.id);
+    const sinPlan=e.plan_id!==undefined&&e.plan_id==='',sim=FRV.sim[f.id],marg=sinPlan?null:(sim?sim.margen:f.margen),rent=sinPlan?null:(sim?sim.rentabilidad:f.rentabilidad),id=acEsc(f.id);
     const cambioP=(e.lista!=null&&e.lista!==f.lista)||(e.venta!=null&&e.venta!==f.venta),cambioPl=e.plan_id!==undefined&&e.plan_id!==((f.plan||{}).id||'');
     const dis=FRV.escritura?'':' disabled title="Escritura apagada (FRAVEGA_ESCRITURA)"';
     const color=marg==null?'var(--text3)':marg<obj?'var(--red)':'var(--green)';
@@ -8609,8 +8609,8 @@ function frvEdita(id,campo,txt){
   const lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta;
   if(venta>lista){toast('El precio de venta no puede superar al de lista (tachado)','error');}
   const plan=FRV.planes.find(p=>p.id===(e.plan_id!==undefined?e.plan_id:(f.plan||{}).id));
-  frvRender();clearTimeout(frvT[id]);
-  if(plan&&venta>0)frvT[id]=setTimeout(async()=>{try{FRV.sim[id]=await cpPost('/fravega/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref_id:f.ref_id,venta,cuotas:plan.cuotas})});frvRender();}catch(x){toast(x.message,'error');}},350);
+  if(!plan)delete FRV.sim[id];frvRender();clearTimeout(frvT[id]);
+  if(plan&&venta>0)frvT[id]=setTimeout(async()=>{try{const sm=await cpPost('/fravega/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref_id:f.ref_id,venta,cuotas:plan.cuotas})});FRV.sim[id]=sm;FRV.msg[id]=sm.margen==null?('⚠ Sin margen: '+((sm.avisos||[])[0]||'faltan datos')):'';frvRender();}catch(x){delete FRV.sim[id];FRV.msg[id]='❌ No se pudo calcular el margen: '+x.message;frvRender();}},350);
 }
 function frvOperador(){const o=qs('frv-operador').value;if(!o)toast('Elegí el operador primero','error');return o;}
 async function frvGuardarPrecio(id){
