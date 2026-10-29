@@ -369,6 +369,24 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .cr-resumen-t span{color:var(--texto-suave)}
 .cr-resumen-f{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
 .cr-resumen .cr-op input{width:90px}
+
+/* Ventanas flotantes: cada una carga el mismo ERP en un iframe (?solo=<página>), así conserva sus estilos y su estado. */
+body.solo .sidebar,body.solo .sidebar-overlay,body.solo .menu-toggle,body.solo .tb-brand,body.solo .tb-erp,body.solo .sb-flot{display:none!important}
+body.solo .app-body{margin-left:0!important}
+.sb-flot{margin-left:auto;border:0;background:transparent;color:inherit;opacity:.55;cursor:pointer;padding:2px 6px;border-radius:var(--r-control);font:inherit;line-height:1}
+.sidebar-item:hover .sb-flot,.sb-flot:focus-visible{opacity:1}
+.sidebar-item{display:flex;align-items:center}
+.vf{position:fixed;z-index:900;min-width:360px;min-height:240px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-tarjeta);box-shadow:var(--sombra-tarjeta);overflow:hidden;resize:both}
+.vf.vf-dock{top:0!important;right:0!important;left:auto!important;bottom:0;height:100vh!important;border-radius:0;resize:horizontal}
+.vf-cab{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--tinta);color:#fff;font:600 12px var(--fuente);cursor:move;user-select:none}
+.vf-cab span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vf-cab button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:var(--r-control);padding:2px 9px;cursor:pointer;font:inherit}
+.vf-cab button:hover{background:rgba(255,255,255,.28)}
+.vf iframe{flex:1;width:100%;border:0;background:var(--surface)}
+.vf.vf-min{min-height:0;height:auto!important;resize:none}.vf.vf-min iframe{display:none}
+.vf.vf-mover iframe,.vf.vf-redim iframe{pointer-events:none}
+body.vf-dock-activo .app-body{margin-right:var(--vf-dock-w,50vw)}
+@media(max-width:899px){.sb-flot{display:none}.vf{display:none}}
 </style>
 <style id="estetica-tokens">
 /* ══ ESTÉTICA 2026 — Fase 0: tokens y temas (docs/ESTETICA_ERP_GLOBAL.md). Un único bloque :root. Los componentes nuevos usan estas variables, nunca un hex suelto.
@@ -1000,6 +1018,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
 </head>
 <body>
 <script>try{if(localStorage.getItem('erp_sidebar_oculta')==='1')document.body.classList.add('sb-oculta');}catch(e){}</script>
+<script>try{if(new URLSearchParams(location.search).get('solo'))document.body.classList.add('solo','sb-oculta');}catch(e){}</script>
 <header class="topbar">
   <button type="button" class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" aria-controls="sidebar" aria-expanded="true" aria-label="Ocultar el menú de módulos" title="Ocultar el menú de módulos"><span data-ico="menu" data-size="22" aria-hidden="true"></span></button>
   <a class="tb-brand" href="#" onclick="goPage('dashboard',document.querySelector('.sidebar-item[data-page=dashboard]'));return false;" aria-label="Global Electronics — ERP, ir al inicio">
@@ -1506,6 +1525,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Cuenta<select id="cp-cuenta-pre" class="fi" onchange="cpGuardarCuentaPre()" title="Elegila antes de subir el Excel: no depende de la detección y se acelera"><option value="">Auto (detectar)</option><option value="IT">IT</option><option value="MT">MT</option></select></span>
     <button class="btn primary" id="btn-cp-subir" onclick="qs('cp-file').click()">📂 Subir Excel de campaña</button>
     <button class="btn" id="btn-cp-verif-ml" style="display:none" onclick="cpVerificarML()" title="Solo lectura: pregunta a ML cómo ve esta campaña y unas publicaciones de muestra">🔎 Verificar con ML</button>
+    <label style="font-size:12px;color:var(--text2)" title="Queda registrado en el historial de cada alta">Operador <select id="cp-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
@@ -2694,7 +2714,7 @@ function goPage(page,el){
   if(el)el.classList.add('active');
   document.body.dataset.page=page;document.body.dataset.modulo=MODULO_MK[page]||'global';
   if(PAGINAS_ESTILO_NUEVO.has(page))document.body.dataset.nuevo='1';else delete document.body.dataset.nuevo;
-  {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.trim():'';}
+  {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.replace('⧉','').trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
   qs('rent-query-bar').style.display=(page==='dashboard'&&VENTAS_EN_VIVO)?'block':'none';
@@ -2918,6 +2938,7 @@ async function cpPost(ruta,opts){
   if(r.status===401)throw new Error('Clave del backend inválida o ausente (Configuración → Clave del backend)');
   if(!r.ok)throw new Error(d.detail||('Error '+r.status));return d;
 }
+try{const _op=localStorage.getItem('ofm_operador');if(_op)setTimeout(()=>{const e=qs('cp-operador');if(e)e.value=_op;},0);}catch(e){}
 try{const _cp=localStorage.getItem('cp_cuenta_pre');if(_cp)setTimeout(()=>{const e=qs('cp-cuenta-pre');if(e)e.value=_cp;},0);}catch(e){}
 function cpGuardarCuentaPre(){try{localStorage.setItem('cp_cuenta_pre',qs('cp-cuenta-pre').value);}catch(e){}}
 function cpCuentaPre(){return qs('cp-cuenta-pre').value;}
@@ -2986,8 +3007,12 @@ function cpNumFiltro(id){const t=qs(id).value;if(String(t).trim()==='')return nu
 function cpFl(soloEdit){return {search:qs('cp-search').value,soloEdit,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan:cpPlan(),obj:cpObj(),
   pm:qs('cp-f-pm').value,cat:qs('cp-f-cat').value,part:qs('cp-f-part').value,pmin:cpNumFiltro('cp-f-pmin'),pmax:cpNumFiltro('cp-f-pmax')};}
 function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
+// «Matias» y «Matías» (o «veronica ») son la misma persona: se junta por nombre sin tildes ni mayúsculas y se muestra el que lleva tilde.
+const CP_PM_VISTOS={};
+function cpPmCanon(n){const k=String(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');const t=String(n).trim().replace(/\s+/g,' ');const v=CP_PM_VISTOS[k];if(!v||(t!==v&&/[\u00c0-\u00ff]/.test(t)&&!/[\u00c0-\u00ff]/.test(v)))CP_PM_VISTOS[k]=t;return CP_PM_VISTOS[k];}
 function cpArmarFiltros(){
   const llena=(id,vals,todas)=>{const el=qs(id),act=el.value;el.innerHTML=`<option value="">${todas}</option>`+[...new Set(vals.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>`<option value="${acEsc(v)}">${acEsc(v)}</option>`).join('');el.value=act;};
+  CP.filas.forEach(f=>{if(f.pm)cpPmCanon(f.pm);});CP.filas.forEach(f=>{if(f.pm)f.pm=cpPmCanon(f.pm);});
   llena('cp-f-pm',CP.filas.map(f=>f.pm),'Todos los PM');llena('cp-f-cat',CP.filas.map(f=>f.categoria),'Todas las categorías');
   ['cp-f-pmin','cp-f-pmax'].forEach(id=>{qs(id).value='';});qs('cp-f-part').value='';
 }
@@ -5424,7 +5449,7 @@ function ofmCfgLoad(){try{const o=JSON.parse(localStorage.getItem('ofm_cfg')||'n
 // reutiliza tal cual dentro de Ayala Core (Maxx: "quiero que sea igual
 // que como se ven en Ofertas ML"), que no tiene el campo `ofm-operador`
 // propio -- mismo localStorage `ofm_operador`, campo de input distinto.
-function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
+function ofmRequireOperador(){const op=qs('ofm-operador')?.value||qs('ac-operador')?.value||qs('cp-operador')?.value;if(!op){toast('Elegí el operador primero','error');return null;}return op;}
 function ofmRenderPanel(){
   qs('ofm-panel').innerHTML=`
     <div class="cr-resumen-t"><b>Criterios de precio vigentes</b> <span id="ofm-criterios-txt">${criteriosMlTexto()}</span></div>
@@ -8569,6 +8594,46 @@ marketPendienteMontar('megatone','Megatone','docs/markets/MEGATONE.md','Falta co
 marketPendienteMontar('oncity','OnCity','docs/markets/ONCITY.md','OnCity se carga en Ecom como canal manual (sin comisión real): hoy se estima y no informa fee logístico ni comisión financiera.');
 try{const _op=localStorage.getItem('ofm_operador');if(_op)setTimeout(()=>{const e=qs('frv-operador');if(e)e.value=_op;},0);}catch(e){}
 
+
+
+// ── Ventanas flotantes (arrastrables, redimensionables, minimizables; «Dividir» la ancla a la derecha y achica la pantalla) ──
+const VF={z:900,max:3};
+function vfAbrir(page,titulo){
+  if(document.querySelectorAll('.vf').length>=VF.max){toast('Cerrá una ventana flotante antes de abrir otra','error');return;}
+  const n=document.querySelectorAll('.vf').length,w=document.createElement('div');w.className='vf';w.dataset.page=page;
+  w.style.cssText=`width:min(720px,60vw);height:min(560px,70vh);top:${70+n*28}px;left:${Math.max(20,innerWidth-760-n*28)}px;z-index:${++VF.z}`;
+  const u=location.pathname+'?solo='+encodeURIComponent(page);
+  w.innerHTML=`<div class="vf-cab"><span>${acEsc(titulo)}</span><button type="button" data-a="min" title="Minimizar">–</button><button type="button" data-a="dock" title="Dividir la pantalla: anclarla a la derecha">⧉</button><button type="button" data-a="x" title="Cerrar">✕</button></div><iframe src="${u}" title="${acEsc(titulo)}"></iframe>`;
+  document.body.appendChild(w);
+  w.addEventListener('mousedown',()=>{w.style.zIndex=++VF.z;});
+  const cab=w.querySelector('.vf-cab');
+  cab.addEventListener('mousedown',e=>{
+    if(e.target.closest('button')||w.classList.contains('vf-dock'))return;
+    const r=w.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;w.classList.add('vf-mover');
+    const mv=ev=>{w.style.left=Math.min(Math.max(0,ev.clientX-dx),innerWidth-120)+'px';w.style.top=Math.min(Math.max(0,ev.clientY-dy),innerHeight-40)+'px';};
+    const up=()=>{w.classList.remove('vf-mover');removeEventListener('mousemove',mv);removeEventListener('mouseup',up);};
+    addEventListener('mousemove',mv);addEventListener('mouseup',up);e.preventDefault();
+  });
+  w.addEventListener('mousedown',e=>{if(e.target===w)w.classList.add('vf-redim');});   // el borde de resize: el iframe no se come el arrastre
+  addEventListener('mouseup',()=>w.classList.remove('vf-redim'));
+  w.querySelector('[data-a=x]').onclick=()=>{w.remove();vfDockRefrescar();};
+  w.querySelector('[data-a=min]').onclick=()=>w.classList.toggle('vf-min');
+  w.querySelector('[data-a=dock]').onclick=()=>{
+    const d=!w.classList.contains('vf-dock');
+    document.querySelectorAll('.vf-dock').forEach(x=>x.classList.remove('vf-dock'));
+    if(d){w.classList.add('vf-dock');w.style.width='50vw';}
+    vfDockRefrescar();
+  };
+  if('ResizeObserver' in window)new ResizeObserver(()=>vfDockRefrescar()).observe(w);
+}
+function vfDockRefrescar(){const d=document.querySelector('.vf-dock');document.body.classList.toggle('vf-dock-activo',!!d);if(d)document.body.style.setProperty('--vf-dock-w',d.getBoundingClientRect().width+'px');window.dispatchEvent(new Event('resize'));}
+function vfMontarBotones(){
+  document.querySelectorAll('.sidebar-item[data-page]').forEach(a=>{
+    if(a.querySelector('.sb-flot'))return;
+    const b=document.createElement('button');b.type='button';b.className='sb-flot';b.textContent='⧉';b.title='Abrir en una ventana flotante (para ver dos módulos a la vez)';b.setAttribute('aria-label','Abrir '+a.textContent.trim()+' en una ventana flotante');
+    b.onclick=e=>{e.preventDefault();e.stopPropagation();vfAbrir(a.dataset.page,a.textContent.replace('⧉','').trim());};a.appendChild(b);
+  });
+}
 function init(){
   loadStor();buildPMBlocks();renderRules();populateRuleFilter();
   colapsableMontar('ofm-panel','Parámetros de margen',ofmResumenParametros);
@@ -8611,8 +8676,9 @@ function init(){
   qs('shipping-threshold').value=S.shippingThreshold;qs('shipping-cost').value=S.shippingCost;
   const bu=localStorage.getItem('erp_backend_url')||'';if(bu&&qs('backend-url-input'))qs('backend-url-input').value=bu;if(qs('backend-key-input'))qs('backend-key-input').value=getBackendKey();
   renderSkuTags();
+  vfMontarBotones();
   // Trigger initial page load
-  goPage('dashboard', document.querySelector('[data-page="dashboard"]'));
+  {const solo=new URLSearchParams(location.search).get('solo');const pg=solo&&document.getElementById('page-'+solo)?solo:'dashboard';goPage(pg, document.querySelector('[data-page="'+pg+'"]'));}   // ?solo=<página>: la abre una ventana flotante (sin menú ni cabecera de marca)
   setTimeout(autoConnectML, 800);
   setTimeout(autoConnectPM, 800);
 }

@@ -139,7 +139,7 @@ def _venta(db, numero_orden):
 
 # IVA que Frávega factura aparte sobre comisión y fee: se suma al costo
 # (Maxx, 2026-09-29 — comisión completa, mismo criterio que ML/MP).
-IVA_CARGOS = Decimal("1.21")
+IVA_CARGOS = Decimal("1")  # fravega_iva_cargos = 0 desde el 2026-10-27: la comisión y el fee del Seller Center ya incluyen IVA
 
 
 def _rentabilidad(precio_sin_iva, precio_final, comision, envio, costo_usd):
@@ -166,10 +166,8 @@ def test_al_cargar_la_liquidacion_se_reemplaza_por_el_real_y_se_recalcula(db_ses
     assert venta.origen_comision == "LIQUIDACION_FRAVEGA"
     assert venta.comision_venta == Decimal("235766.5289") * IVA_CARGOS
     assert venta.costo_envio == Decimal("14639") * IVA_CARGOS
-    # 245.810,81 — el número del 01/06/2026 validado con Maxx, con comisión y
-    # fee sin IVA — menos el 21% de IVA sobre ambos que ahora se descuenta:
-    # 245.810,81 − 0,21 × (235.766,53 + 14.639) = 193.225,65
-    assert _cerca(venta.rentabilidad, Decimal("193225.65"), tol=Decimal("0.5"))
+    # 245.810,81 — el número del 01/06/2026 validado con Maxx: comisión y fee tal cual los trae la liquidación (sin sumarles IVA)
+    assert _cerca(venta.rentabilidad, Decimal("245810.81"), tol=Decimal("0.5"))
     assert _cerca(venta.rentabilidad_usd, venta.rentabilidad / TC)
     assert resultado.ventas_actualizadas == ["1387346"]
     assert ventas_fravega_estimadas(db_session) == []
@@ -348,9 +346,9 @@ def test_oncity_se_guarda_con_la_comision_estimada(db_session):
                          precio_sin_iva=Decimal("14447.11"), costo_sin_iva=Decimal("2.1"))
     _guardar(db_session, fila)
     venta = _venta(db_session, "1424588")
-    assert venta.comision_venta == Decimal("17481") * Decimal("0.15") * IVA_CARGOS
+    assert venta.comision_venta == Decimal("17481") * Decimal("0.15") * Decimal("1.21")   # OnCity sigue sumando su IVA (oncity_iva_cargos = 21 %)
     assert venta.origen_comision == "ESTIMADO_ONCITY"
-    assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15") * IVA_CARGOS, 0, "2.1"))
+    assert _cerca(venta.rentabilidad, _rentabilidad("14447.11", "17481", Decimal("2622.15") * Decimal("1.21"), 0, "2.1"))
 
 
 # ── «Próxima liquidación» del Seller Center (comisión y envío reales antes de la quincena) ──
@@ -372,7 +370,7 @@ def test_la_proxima_liquidacion_reemplaza_el_estimado_por_el_real_igual_que_la_q
     venta = _venta(db_session, "1387346")
     assert venta.origen_comision == "LIQUIDACION_FRAVEGA"
     assert venta.comision_venta == Decimal("235766.5289") * IVA_CARGOS and venta.costo_envio == Decimal("14639") * IVA_CARGOS
-    assert _cerca(venta.rentabilidad, Decimal("193225.65"), tol=Decimal("0.5"))     # mismo número que con la liquidación quincenal
+    assert _cerca(venta.rentabilidad, Decimal("245810.81"), tol=Decimal("0.5"))     # mismo número que con la liquidación quincenal
     assert r.ventas_actualizadas == ["1387346"] and ventas_fravega_estimadas(db_session) == []
 
 
@@ -447,3 +445,16 @@ def test_el_cierre_diario_corre_la_sincronizacion_de_fravega_antes_de_armar_el_c
     src = (Path(__file__).resolve().parents[2] / "scripts" / "ecom_diario.py").read_text(encoding="utf-8")
     assert 0 < src.index("sincronizar_proxima_liquidacion") < src.index("fetch = api._fetch_fn_con_cache")
     assert "no se pudo sincronizar Frávega" in src
+
+
+def test_el_iva_extra_de_fravega_es_cero_y_un_valor_viejo_de_la_base_se_corrige_una_sola_vez(db_session):
+    from rentabilidad import seed
+    from rentabilidad.models import ParametroTasa
+
+    assert db_session.get(ParametroTasa, "fravega_iva_cargos").valor == 0           # base nueva
+    db_session.get(ParametroTasa, "fravega_iva_cargos").valor = Decimal("0.21")      # base de producción: todavía tiene el 21 %
+    seed.seed(db_session)
+    assert db_session.get(ParametroTasa, "fravega_iva_cargos").valor == 0
+    db_session.get(ParametroTasa, "fravega_iva_cargos").valor = Decimal("0.105")     # un valor cambiado a mano después no se pisa
+    seed.seed(db_session)
+    assert db_session.get(ParametroTasa, "fravega_iva_cargos").valor == Decimal("0.105")
