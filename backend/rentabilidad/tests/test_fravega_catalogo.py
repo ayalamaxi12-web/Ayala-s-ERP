@@ -103,3 +103,30 @@ def test_margen_usa_el_motor_de_frávega_y_el_plan(db_session):
     assert r12["margen"] < r6["margen"]                                         # más cuotas, más comisión
     assert margen_fravega(d("60000"), datos, d("1500"), par, None, None)[0] is None
     assert margen_fravega(d("60000"), DatosSku(None, None, None, None, None), d("1500"), par, "6", None)[1] == ["Sin costo vigente en Ecom"]
+
+
+def test_el_iva_de_los_cargos_de_fravega_en_el_motor_es_0_desde_el_29_10(db_session):
+    assert m.cargar_parametros(db_session, date(2026, 10, 28)).valor("FRAVEGA", "iva_cargos") == d("0.21")
+    assert m.cargar_parametros(db_session, date(2026, 10, 29)).valor("FRAVEGA", "iva_cargos") == 0
+    assert m.cargar_parametros(db_session, date(2026, 10, 29)).valor("WEB", "iva_cargos") == d("0.21")   # los demás canales no se tocan
+
+
+def test_el_error_de_sesion_dice_que_status_devolvio_frávega():
+    with pytest.raises(SesionFravegaVencida) as e:
+        fc.traer_items(COOK, lambda *a: R(401))
+    assert "sin authorization: 401" in str(e.value) and "con authorization: 401" in str(e.value)
+
+
+def test_stock_general_y_ventas_solo_de_fravega(db_session):
+    from rentabilidad import config
+    from rentabilidad.fravega_vista import stock_general_por_sku, ventas_por_sku
+    from rentabilidad.models import VentaEcom
+    from rentabilidad.tests.test_fravega import _fila_fravega, _guardar
+    filas = [["SKU", "Stock"], ["PLANCHA-SUB-GORRA", "1.250"], ["OTRO", "-"], ["SANDMAK1P", "7"]]
+    assert stock_general_por_sku(lambda sid, tab: filas) == {"PLANCHA-SUB-GORRA": 1250, "SANDMAK1P": 7}
+    hoy = date(2026, 10, 29)
+    _guardar(db_session, _fila_fravega(numero_orden="1", orden_externa="FVG-a", skus_vendidos="PLANCHA-SUB-GORRA", fecha_creacion=date(2026, 10, 20)), periodo="2026-10-20_2026-10-20")
+    _guardar(db_session, _fila_fravega(numero_orden="2", orden_externa=None, canal_de_venta="OnCity", origen_comision="ESTIMADO_ONCITY",
+                                       skus_vendidos="PLANCHA-SUB-GORRA", fecha_creacion=date(2026, 10, 21)), periodo="2026-10-21_2026-10-21")
+    v = ventas_por_sku(db_session, hoy)["PLANCHA-SUB-GORRA"]
+    assert v["ordenes_30"] == 1 and v["dias_con_venta_60"] == 1               # la de OnCity no cuenta

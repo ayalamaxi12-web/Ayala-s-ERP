@@ -60,7 +60,28 @@ def ventas_por_sku(db: Session, hoy: date) -> dict[str, dict]:
     return out
 
 
-def construir_vista(db: Session, items: list[dict], datos_fn, tc: Decimal, par: motor.ParametrosMotor, hoy: date) -> list[dict]:
+def stock_general_por_sku(fetch_fn=None) -> dict[str, int]:
+    """Stock GENERAL de la empresa por SKU (pestaña Global): una sola lectura. No es el stock publicado en Frávega."""
+    from . import config, gsheets
+    filas = (fetch_fn or gsheets.leer_valores)(config.SHEET_GLOBAL_ID, config.TAB_GLOBAL) if config.SHEET_GLOBAL_ID or fetch_fn else None
+    if filas is None:
+        raise ValueError("Falta configurar 'RENT_SHEET_GLOBAL_ID' para leer el stock general.")
+    h = gsheets.encontrar_fila_headers(filas, ["sku", "stock"])
+    mapa = gsheets.mapa_columnas(filas[h])
+    i_sku, i_stock = gsheets.indice_columna(mapa, ["sku", "codigo"]), gsheets.indice_columna(mapa, ["stock"])
+    out: dict[str, int] = {}
+    for f in filas[h + 1:]:
+        sku, v = norm_sku(gsheets.valor(f, i_sku)), (gsheets.valor(f, i_stock) or "").replace(".", "").replace(",", ".").replace("$", "").strip()
+        if sku and v not in ("", "-"):
+            try:
+                out[sku] = int(float(v))
+            except ValueError:
+                continue
+    return out
+
+
+def construir_vista(db: Session, items: list[dict], datos_fn, tc: Decimal, par: motor.ParametrosMotor, hoy: date,
+                    stock_gral: dict[str, int] | None = None) -> list[dict]:
     precios_pm = vigentes(db, hoy)
     fees = fee_historico_fravega(db)
     ventas = ventas_por_sku(db, hoy)
@@ -72,7 +93,6 @@ def construir_vista(db: Session, items: list[dict], datos_fn, tc: Decimal, par: 
         cuotas = (it.get("plan") or {}).get("cuotas")
         m, av = (margen_fravega(it["venta"], datos, tc, par, cuotas, fees.get(sku)) if it.get("venta") else (None, []))
         v = ventas.get(sku) or {"ordenes_30": 0, "ordenes_60": 0, "ordenes_90": 0, "dias_con_venta_60": 0, "ultima_venta": None}
-        por_dia = v["ordenes_60"] / 60
         filas.append({
             **{k: (float(x) if isinstance(x, Decimal) else x) for k, x in it.items() if k != "_plan_completo"},
             "sku": sku, "pm": (_pm_de(pm_sku) if pm_sku else None) or datos.pm, "categoria": datos.categoria,
@@ -80,7 +100,7 @@ def construir_vista(db: Session, items: list[dict], datos_fn, tc: Decimal, par: 
             "costo": _n(datos.costo_usd * tc) if datos.costo_usd else None,
             "margen": m and m["margen"], "rentabilidad": m and m["rentabilidad"], "avisos": av + ([] if sku else ["Sin código de referencia"]),
             "fee_hist": _n(fees[sku]) if sku in fees else None,
-            **v, "dias_cobertura": round(it["stock"] / por_dia) if por_dia and it["stock"] else None,
+            **v, "stock_publicado": it["stock"], "stock": (stock_gral or {}).get(sku, it["stock"] if stock_gral is None else None),
             "descuento_pct": round(float((1 - it["venta"] / it["lista"]) * 100), 1) if it.get("lista") and it.get("venta") else None,
         })
     return filas
