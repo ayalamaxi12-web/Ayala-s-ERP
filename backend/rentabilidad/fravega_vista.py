@@ -28,14 +28,18 @@ def margen_fravega(precio: Decimal, datos: DatosSku, tc: Decimal, par: motor.Par
         return None, ["Sin costo vigente en Ecom"]
     if not datos.iva_factor:
         return None, ["Sin alícuota de IVA"]
-    if cuotas not in PLANES:
-        return None, ["Sin plan de cuotas conocido (3, 6, 9 o 12)"]
+    avisos = []
+    if cuotas in (None, "", "contado", "simple"):             # sin plan = venta simple: solo la comisión base, sin costo financiero
+        cuotas = "contado"
+        avisos.append("Sin cuotas: margen de venta simple (solo la comisión base)")
+    elif cuotas not in PLANES:
+        return None, ["Plan de cuotas desconocido (3, 6, 9 o 12)"]
     e = motor.EntradaMotor(canal="FRAVEGA", costo=datos.costo_usd * tc, iva_factor=datos.iva_factor, plan=cuotas, fee_logistico=fee)
     try:
         d = motor.precio_a_margen(Decimal(precio), e, par)
     except (motor.ParametroFaltante, ValueError) as ex:
         return None, [str(ex)]
-    return {"margen": _pct(d.margen), "rentabilidad": _n(d.rentabilidad), "cargos": {k: float(v) for k, v in d.cargos.items()}}, []
+    return {"margen": _pct(d.margen), "rentabilidad": _n(d.rentabilidad), "cargos": {k: float(v) for k, v in d.cargos.items()}}, avisos
 
 
 def ventas_por_sku(db: Session, hoy: date) -> dict[str, dict]:

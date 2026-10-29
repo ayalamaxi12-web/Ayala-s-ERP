@@ -8583,8 +8583,8 @@ function frvRender(){
   const op=(f)=>FRV.edit[f.id]||{};
   qs('frv-tbody').innerHTML=fs.slice((FRV.page-1)*por,FRV.page*por).map(f=>{
     const e=op(f),lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta,planId=e.plan_id!==undefined?e.plan_id:((f.plan||{}).id||'');
-    const sinPlan=e.plan_id!==undefined&&e.plan_id==='',sim=FRV.sim[f.id],marg=sinPlan?null:(sim?sim.margen:f.margen),rent=sinPlan?null:(sim?sim.rentabilidad:f.rentabilidad),id=acEsc(f.id);
-    const cambioP=(e.lista!=null&&e.lista!==f.lista)||(e.venta!=null&&e.venta!==f.venta),cambioPl=e.plan_id!==undefined&&e.plan_id!==((f.plan||{}).id||'');
+    const sim=FRV.sim[f.id],marg=sim?sim.margen:f.margen,rent=sim?sim.rentabilidad:f.rentabilidad,id=acEsc(f.id);
+    const cambioP=(e.lista!=null&&e.lista!==f.lista)||(e.venta!=null&&e.venta!==f.venta),cambioPl=!!e.plan_id&&e.plan_id!==((f.plan||{}).id||'');
     const dis=FRV.escritura?'':' disabled title="Escritura apagada (FRAVEGA_ESCRITURA)"';
     const color=marg==null?'var(--text3)':marg<obj?'var(--red)':'var(--green)';
     const desc=lista&&venta?Math.round((1-venta/lista)*1000)/10:null;
@@ -8594,7 +8594,7 @@ function frvRender(){
       <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(lista,2)}" onchange="frvEdita('${id}','lista',this.value)"${dis}></td>
       <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(venta,2)}" onchange="frvEdita('${id}','venta',this.value)"${dis}></td>
       <td style="text-align:right;white-space:nowrap">${desc==null?'—':desc+' %'}</td><td style="text-align:right">${frvN(f.precio_pm,2)}</td>
-      <td><select class="fi" onchange="frvEdita('${id}','plan_id',this.value)"${dis}><option value="">Sin plan</option>${FRV.planes.map(p=>`<option value="${acEsc(p.id)}"${p.id===planId?' selected':''}>${acEsc(p.cuotas)} · ${frvN(p.comision,1)} %</option>`).join('')}</select></td>
+      <td><select class="fi" onchange="frvEdita('${id}','plan_id',this.value)"${dis}><option value="">Simple (sin cuotas)</option>${FRV.planes.map(p=>`<option value="${acEsc(p.id)}"${p.id===planId?' selected':''}>${acEsc(p.cuotas)} · ${frvN(p.comision,1)} %</option>`).join('')}</select></td>
       <td style="text-align:right;color:${color};font-weight:600">${marg==null?'—':frvN(marg,1)+' %'}</td><td style="text-align:right">${frvN(rent,0)}</td>
       <td style="white-space:nowrap">${cambioP?`<button class="btn-xs" onclick="frvGuardarPrecio('${id}')">Guardar precio</button> `:''}${cambioPl?`<button class="btn-xs" onclick="frvGuardarPlan('${id}')">Guardar plan</button>`:''}<div style="font-size:10px;color:var(--text2)">${acEsc(FRV.msg[f.id]||'')}</div></td></tr>`;
   }).join('')||'<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:20px">Sin publicaciones con ese filtro</td></tr>';
@@ -8609,8 +8609,8 @@ function frvEdita(id,campo,txt){
   const lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta;
   if(venta>lista){toast('El precio de venta no puede superar al de lista (tachado)','error');}
   const plan=FRV.planes.find(p=>p.id===(e.plan_id!==undefined?e.plan_id:(f.plan||{}).id));
-  if(!plan)delete FRV.sim[id];frvRender();clearTimeout(frvT[id]);
-  if(plan&&venta>0)frvT[id]=setTimeout(async()=>{try{const sm=await cpPost('/fravega/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref_id:f.ref_id,venta,cuotas:plan.cuotas})});FRV.sim[id]=sm;FRV.msg[id]=sm.margen==null?('⚠ Sin margen: '+((sm.avisos||[])[0]||'faltan datos')):'';frvRender();}catch(x){delete FRV.sim[id];FRV.msg[id]='❌ No se pudo calcular el margen: '+x.message;frvRender();}},350);
+  frvRender();clearTimeout(frvT[id]);
+  if(venta>0)frvT[id]=setTimeout(async()=>{try{const sm=await cpPost('/fravega/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref_id:f.ref_id,venta,cuotas:plan?plan.cuotas:'contado'})});FRV.sim[id]=sm;FRV.msg[id]=sm.margen==null?('⚠ Sin margen: '+((sm.avisos||[])[0]||'faltan datos')):'';frvRender();}catch(x){delete FRV.sim[id];FRV.msg[id]='❌ No se pudo calcular el margen: '+x.message;frvRender();}},350);
 }
 function frvOperador(){const o=qs('frv-operador').value;if(!o)toast('Elegí el operador primero','error');return o;}
 async function frvGuardarPrecio(id){
