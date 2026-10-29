@@ -132,13 +132,13 @@ def test_stock_general_y_ventas_solo_de_fravega(db_session):
     assert v["ordenes_30"] == 1 and v["dias_con_venta_60"] == 1               # la de OnCity no cuenta
 
 
-def test_si_frávega_rechaza_el_tamano_de_pagina_se_reintenta_con_uno_mas_chico():
+def test_si_frávega_falla_con_un_tamano_de_pagina_se_reintenta_con_el_del_portal():
     tamanos = []
 
     def req(metodo, url, params, cuerpo, headers):
         tamanos.append(params["size"])
-        return R(400) if params["size"] > 10 else R(200, {"items": [_item("a", "A")], "totalPages": 1})
-    assert [i["ref_id"] for i in fc.traer_items(COOK, req)] == ["A"] and tamanos == [100, 50, 10]
+        return R(500) if params["size"] > 10 else R(200, {"items": [_item("a", "A")], "totalPages": 1})
+    assert [i["ref_id"] for i in fc.traer_items(COOK, req)] == ["A"] and tamanos == [25, 10]
 
 
 def test_un_status_inesperado_dice_cual_fue_y_que_contestó_frávega():
