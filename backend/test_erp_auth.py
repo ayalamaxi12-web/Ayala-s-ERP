@@ -52,6 +52,7 @@ def sin_clave(monkeypatch):
     ("GET", "/proyeccion-2027/dashboard"),
     ("GET", "/proyeccion-2027/versiones"),
     ("GET", "/proyeccion-2027/transito"),
+    ("GET", "/fravega/catalogo"),
     ("POST", "/proyeccion-2027/snapshot"),
 ])
 def test_rutas_protegidas(metodo, path):
