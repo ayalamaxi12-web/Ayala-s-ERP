@@ -1625,6 +1625,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="section-hdr">Frávega <span style="font-size:10px;font-weight:400;color:var(--text3)">(publicaciones del Seller Center con margen, stock y ventas; cambiá precio, tachado y cuotas desde acá)</span></div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
     <button class="btn primary" id="btn-frv-cargar" onclick="frvCargar(false)">Cargar publicaciones</button>
+    <button class="btn" id="btn-frv-sync" onclick="frvSyncComision()" title="Trae de «Próxima liquidación» del Seller Center la comisión y el envío REALES de cada orden y reemplaza los estimados en las ventas">Traer comisión y envío reales</button>
     <button class="btn" onclick="frvCargar(true)" title="Vuelve a leer el Seller Center (si no, se reutiliza la lectura de hace menos de 2 minutos)">Releer</button>
     <label style="font-size:12px;color:var(--text2)">Operador <select id="frv-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
     <span id="frv-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
@@ -8547,6 +8548,14 @@ async function frvCargar(refrescar){
     if(!d.escritura)t.unshift('La escritura en Frávega está apagada (solo lectura). Para poder guardar precios y cuotas, poné FRAVEGA_ESCRITURA=1 en las variables de Railway.');
     av.style.display=t.length?'':'none';av.innerHTML=t.map(x=>'⚠ '+acEsc(x)).join('<br>');
     qs('frv-wrap').style.display='';st.textContent=`${d.filas.length} publicaciones · TC ${d.tc}`;frvRender();
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+  finally{b.disabled=false;}
+}
+async function frvSyncComision(){
+  const st=qs('frv-status'),b=qs('btn-frv-sync');b.disabled=true;st.textContent='Trayendo la comisión y el envío reales de Frávega…';
+  try{
+    const r=await cpPost('/rentabilidad/fravega/proxima-liquidacion/sync',{method:'POST'});
+    st.innerHTML=`✅ ${r.ordenes_con_comision_real} órdenes con comisión real · ${r.ventas_actualizadas} ventas actualizadas · ${r.fravega_pendientes} siguen estimadas`+(r.sin_venta_en_ecom?` · ${r.sin_venta_en_ecom} sin venta en Ecom`:'');
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{b.disabled=false;}
 }
