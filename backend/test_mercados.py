@@ -159,7 +159,7 @@ def test_precio_de_otro_mercado_coincide_con_la_cuenta_hecha_a_mano(cliente):
     sku = ayala_core.SKUS_PILOTO[0]
     r = cliente.get("/ayala-core/motor-lote", params={"mercado": "fravega", "skus": sku, "envio_real": 8500, "renta_contado": 30, "renta_3": 30, "renta_6": 30, "renta_9": 30, "renta_12": 30}).json()["resultados"][0]
     esperado = ayala_core.calcular_precio_condicion(costo_sin_iva=D("12.5") * D("1450"), iva_factor=D("1.21"), envio_real=D("8500"), financiero_pct=D("6.8"), renta_pct=D("30"),
-                                                    comision_pct=D("15.5"), costo_orden=D("149.12"))
+                                                    comision_pct=D("15.5"), costo_orden=D("149.12"), iva_servicios=D("1"))   # Frávega muestra comisión y envío con IVA: se restan tal cual (Maxx, 29/10)
     assert r["precios"]["3"] == float(esperado)
 
 
