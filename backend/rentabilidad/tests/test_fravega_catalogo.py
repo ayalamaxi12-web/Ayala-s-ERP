@@ -170,3 +170,25 @@ def test_un_rechazo_de_escritura_trae_la_respuesta_de_frávega_y_lo_que_se_envio
     with pytest.raises(fc.FravegaRechazo) as e:
         fc.poner_precio("a1", d("100"), d("90"), d("74"), COOK, lambda *a: R500(500))
     assert "500" in str(e.value) and "internal error en la base" in str(e.value) and '"sale": 90.0' in str(e.value)
+
+
+def test_si_frávega_responde_500_pero_aplico_el_precio_se_informa_como_aplicado(monkeypatch):
+    from fastapi.testclient import TestClient
+    import fravega_api
+    import main
+    monkeypatch.setenv("FRAVEGA_ESCRITURA", "1")
+    antes = fc.normalizar_item({**_item("a1", "PLANCHA-SUB-GORRA"), "price": {"list": 100, "sale": 90, "net": 81.4}})
+    ahora = {**antes, "lista": d("100"), "venta": d("89")}
+    monkeypatch.setattr(fravega_api, "_CACHE", {"t": 9e12, "items": [antes]})
+    monkeypatch.setattr(fravega_api, "_items", lambda forzar=False: [antes])
+    def explota(*a, **k):
+        raise fc.FravegaRechazo("Frávega rechazó el cambio (500): sin detalle")
+    monkeypatch.setattr(fc, "poner_precio", explota)
+    monkeypatch.setattr(main, "_registrar_historial_oferta_lote", lambda filas: None)
+    cuerpo = {"id": "a1", "ref_id": "PLANCHA-SUB-GORRA", "lista": 100, "venta": 89, "operador": "Maxi A."}
+    monkeypatch.setattr(fc, "releer_item", lambda *a, **k: ahora)
+    r = TestClient(main.app, raise_server_exceptions=False).post("/fravega/precio", json=cuerpo)
+    assert r.status_code == 200 and r.json()["verificado"] and "quedó aplicado" in r.json()["aviso"]
+    monkeypatch.setattr(fc, "releer_item", lambda *a, **k: antes)               # no se aplicó: error con lo que se releyó
+    r = TestClient(main.app, raise_server_exceptions=False).post("/fravega/precio", json=cuerpo)
+    assert r.status_code == 422 and "NO quedó aplicado" in r.json()["detail"]

@@ -132,15 +132,23 @@ async def poner_precio(b: _PrecioIn):
         lista, venta = Decimal(str(b.lista)), Decimal(str(b.venta))
         ratio = (actual["neto"] / actual["venta"]) if actual.get("neto") and actual.get("venta") else Decimal(1) / Decimal("1.21")
         neto = (venta * ratio).quantize(Decimal("0.01"))
+        error_frávega = None
         try:
             fc.poner_precio(b.id, lista, venta, neto)
+        except fc.FravegaRechazo as e:
+            error_frávega = str(e)         # Frávega a veces responde 500 y aplica el cambio igual: se relee antes de dar nada por fallido
         except Exception as e:  # noqa: BLE001
             _errores(e)
         despues = fc.releer_item(b.id)
         ok = bool(despues and despues["venta"] == venta and despues["lista"] == lista)
+        if error_frávega and not ok:
+            actual_ahora = f"lista {despues['lista']} / venta {despues['venta']}" if despues else "no se pudo releer"
+            raise HTTPException(status_code=422, detail=f"{error_frávega} · Releído en Frávega: {actual_ahora} (el precio NO quedó aplicado).")
         _CACHE["t"] = 0
         aviso = _historial(main, {"Item ID": b.id, "SKU": b.ref_id, "Accion": "Precio Frávega", "Tipo/Promocion": f"lista {lista} / venta {venta}",
                                   "Precio Anterior": float(actual["venta"] or 0), "Precio Nuevo": float(venta), "Operador": b.operador})
+        if error_frávega and ok:
+            aviso = (aviso + " · " if aviso else "") + f"Frávega respondió con error pero el precio quedó aplicado y verificado ({error_frávega.split(' · ')[0]})."
         return {"ok": ok, "verificado": ok, "despues": despues and {"lista": float(despues["lista"] or 0), "venta": float(despues["venta"] or 0),
                                                                    "estado": despues["estado"], "estado_msg": despues["estado_msg"]}, "aviso": aviso}
     return await run_in_threadpool(_hacer)
@@ -165,12 +173,17 @@ async def poner_plan(b: _PlanIn):
         plan = next((p for p in fc.planes_en_uso(items) if p["_id"] == b.plan_id), None)
         if not actual or not plan:
             raise HTTPException(status_code=404, detail="No encuentro esa publicación o ese plan en el listado de Frávega.")
+        error_frávega = None
         try:
             fc.poner_plan(b.id, plan)
+        except fc.FravegaRechazo as e:
+            error_frávega = str(e)
         except Exception as e:  # noqa: BLE001
             _errores(e)
         despues = fc.releer_item(b.id)
         aplicado = bool(despues and (despues.get("plan") or {}).get("id") == b.plan_id)
+        if error_frávega and not aplicado:
+            raise HTTPException(status_code=422, detail=f"{error_frávega} · Releído en Frávega: el plan sigue siendo {((despues or {}).get('plan') or {}).get('nombre') or 'ninguno'} (puede demorar en impactar).")
         _CACHE["t"] = 0
         aviso = _historial(main, {"Item ID": b.id, "SKU": b.ref_id, "Accion": "Plan Frávega", "Tipo/Promocion": plan.get("name"),
                                   "Precio Anterior": (actual.get("plan") or {}).get("nombre") or "", "Operador": b.operador})
