@@ -1065,6 +1065,12 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
   </div>
   <div class="sidebar-section">
+    <div class="sidebar-section-label">Otros markets</div>
+    <a href="#" class="sidebar-item" data-page="fravega" onclick="goPage('fravega',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Frávega</a>
+    <a href="#" class="sidebar-item" data-page="megatone" onclick="goPage('megatone',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Megatone</a>
+    <a href="#" class="sidebar-item" data-page="oncity" onclick="goPage('oncity',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>OnCity</a>
+  </div>
+  <div class="sidebar-section">
     <div class="sidebar-section-label">Compras</div>
     <a href="#" class="sidebar-item" data-page="proyeccion" onclick="goPage('proyeccion',this);return false;"><span class="icon" data-ico="calendar" aria-hidden="true"></span>Proyección 2027</a>
   </div>
@@ -1568,6 +1574,40 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <div class="pagination" id="cp-pag"></div>
   </div>
 </div>
+
+<!-- FRÁVEGA -->
+<div id="page-fravega" class="page">
+  <div class="section-hdr">Frávega <span style="font-size:10px;font-weight:400;color:var(--text3)">(publicaciones del Seller Center con margen, stock y ventas; cambiá precio, tachado y cuotas desde acá)</span></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <button class="btn primary" id="btn-frv-cargar" onclick="frvCargar(false)">Cargar publicaciones</button>
+    <button class="btn" onclick="frvCargar(true)" title="Vuelve a leer el Seller Center (si no, se reutiliza la lectura de hace menos de 2 minutos)">Releer</button>
+    <label style="font-size:12px;color:var(--text2)">Operador <select id="frv-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
+    <span id="frv-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+  </div>
+  <div id="frv-aviso" style="display:none;margin-bottom:10px;padding:8px 12px;background:var(--aviso-fondo);border:1px solid var(--aviso-borde);border-radius:var(--r-recuadro);font-size:12px"></div>
+  <div id="frv-wrap" style="display:none">
+    <div id="frv-stats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <input type="text" id="frv-search" class="fi" placeholder="Buscar SKU o título…" oninput="FRV.page=1;frvRender()" style="min-width:200px">
+      <select id="frv-f-pm" class="fi" onchange="FRV.page=1;frvRender()" aria-label="Filtrar por PM"><option value="">Todos los PM</option></select>
+      <select id="frv-f-cat" class="fi" onchange="FRV.page=1;frvRender()" aria-label="Filtrar por categoría"><option value="">Todas las categorías</option></select>
+      <select id="frv-f-plan" class="fi" onchange="FRV.page=1;frvRender()" aria-label="Filtrar por plan"><option value="">Todos los planes</option></select>
+      <select id="frv-f-vista" class="fi" onchange="FRV.page=1;frvRender()" aria-label="Vistas rápidas">
+        <option value="">Todas</option><option value="activas">Solo activas</option><option value="margen">Margen bajo el objetivo</option><option value="sinstock">Sin stock</option>
+        <option value="sinventas">Sin ventas en 60 días</option><option value="pm">Precio distinto al del PM</option><option value="sinplan">Sin plan de cuotas</option></select>
+      <label style="font-size:12px;color:var(--text2)">Margen objetivo % <input type="text" inputmode="decimal" id="frv-obj" class="campo-num" value="20" onchange="frvRender()" style="width:60px"></label>
+      <span id="frv-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    </div>
+    <div class="table-wrap"><table id="frv-table" style="font-size:12px">
+      <thead><tr><th>SKU · título</th><th>PM</th><th>Stock</th><th>Cobertura</th><th title="Órdenes de Frávega en 30 / 60 / 90 días">Órd. 30/60/90</th><th title="Días distintos con venta en los últimos 60">Días c/venta</th><th>Lista (tachado)</th><th>Venta</th><th>Desc.</th><th>Precio PM</th><th>Cuotas</th><th>Margen</th><th>Rent. $</th><th></th></tr></thead>
+      <tbody id="frv-tbody"></tbody>
+    </table><div class="pagination" id="frv-pag"></div></div>
+  </div>
+</div>
+
+<!-- MEGATONE Y ONCITY: secciones listas, falta la ficha de cada API -->
+<div id="page-megatone" class="page"></div>
+<div id="page-oncity" class="page"></div>
 
 <!-- DISTRIBUCION -->
 <div id="page-intel-entidades" class="page">
@@ -2422,7 +2462,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
 const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['ventas-hoy','ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const PAGINAS_ESTILO_NUEVO=new Set(['ventas-hoy','ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','fravega','megatone','oncity','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -8444,6 +8484,117 @@ function colapsableMontar(id,titulo,resumenFn){const el=qs(id);if(!el||el.datase
   pintar();resumir();}
 function ofmResumenParametros(){const o=OFM,n=v=>String(v).replace('.',',');return 'Criterios vigentes de ML · TC '+(o.tc?n(o.tc):'BNA auto')+' · Umbral '+n(o.umbral)+'%';}
 function compResumenParametros(el){return 'Criterios vigentes · TC '+((qs('ac-tc')||{}).value||'BNA auto');}
+// ── Frávega: publicaciones del Seller Center con margen, stock y ventas; cambio de precio/tachado y cuotas (escribe en Frávega) ──
+const FRV={filas:[],planes:[],escritura:false,page:1,edit:{},sim:{},msg:{}};
+const frvN=(v,d=0)=>v==null?'—':Number(v).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});
+async function frvCargar(refrescar){
+  const st=qs('frv-status'),b=qs('btn-frv-cargar');b.disabled=true;st.textContent='Leyendo el Seller Center, cruzando con costos y ventas…';
+  try{
+    const d=await cpPost('/fravega/catalogo?refrescar='+(refrescar?'true':'false'),{method:'GET'});
+    FRV.filas=d.filas;FRV.planes=d.planes;FRV.escritura=d.escritura;FRV.edit={};FRV.sim={};FRV.msg={};FRV.page=1;
+    const llena=(id,vals,todas)=>{const el=qs(id),act=el.value;el.innerHTML=`<option value="">${todas}</option>`+[...new Set(vals.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'es')).map(v=>`<option value="${acEsc(v)}">${acEsc(v)}</option>`).join('');el.value=act;};
+    llena('frv-f-pm',d.filas.map(f=>f.pm),'Todos los PM');llena('frv-f-cat',d.filas.map(f=>f.categoria),'Todas las categorías');
+    qs('frv-f-plan').innerHTML='<option value="">Todos los planes</option>'+d.planes.map(p=>`<option value="${acEsc(p.id)}">${acEsc(p.cuotas)} cuotas · ${frvN(p.comision,1)} %</option>`).join('');
+    const av=qs('frv-aviso');const t=[...(d.avisos||[])];
+    if(!d.escritura)t.unshift('La escritura en Frávega está apagada (solo lectura). Para poder guardar precios y cuotas, poné FRAVEGA_ESCRITURA=1 en las variables de Railway.');
+    av.style.display=t.length?'':'none';av.innerHTML=t.map(x=>'⚠ '+acEsc(x)).join('<br>');
+    qs('frv-wrap').style.display='';st.textContent=`${d.filas.length} publicaciones · TC ${d.tc}`;frvRender();
+  }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
+  finally{b.disabled=false;}
+}
+function frvObj(){const v=parsePeso(qs('frv-obj').value);return isNaN(v)?20:v;}
+function frvFiltradas(){
+  const q=qs('frv-search').value.trim().toLowerCase(),pm=qs('frv-f-pm').value,cat=qs('frv-f-cat').value,pl=qs('frv-f-plan').value,vi=qs('frv-f-vista').value,obj=frvObj();
+  return FRV.filas.filter(f=>{
+    if(q&&!((f.ref_id||'').toLowerCase().includes(q)||(f.titulo||'').toLowerCase().includes(q)))return false;
+    if(pm&&f.pm!==pm)return false;if(cat&&f.categoria!==cat)return false;if(pl&&(f.plan||{}).id!==pl)return false;
+    if(vi==='activas'&&!f.activo)return false;if(vi==='margen'&&!(f.margen!=null&&f.margen<obj))return false;if(vi==='sinstock'&&f.stock>0)return false;
+    if(vi==='sinventas'&&f.ordenes_60>0)return false;if(vi==='pm'&&!(f.precio_pm!=null&&f.venta!=null&&Math.abs(f.precio_pm-f.venta)>=1))return false;if(vi==='sinplan'&&f.plan)return false;
+    return true;});
+}
+function frvRender(){
+  const fs=frvFiltradas(),por=25,pag=Math.max(1,Math.ceil(fs.length/por));FRV.page=Math.min(FRV.page,pag);
+  const obj=frvObj(),todas=FRV.filas;
+  const chip=(t,v,c)=>`<div style="padding:8px 14px;border-radius:var(--r-recuadro);background:var(--surface);box-shadow:var(--sombra-tarjeta);font-size:12px"><div style="color:var(--text3);font-size:10px">${t}</div><b style="font-size:16px;${c||''}">${v}</b></div>`;
+  qs('frv-stats').innerHTML=chip('Publicaciones',todas.length)+chip('Activas',todas.filter(f=>f.activo).length)+chip('Stock total',frvN(todas.reduce((s,f)=>s+f.stock,0)))
+    +chip('Margen bajo '+obj+' %',todas.filter(f=>f.margen!=null&&f.margen<obj).length,'color:var(--red)')+chip('Sin ventas 60 d',todas.filter(f=>!f.ordenes_60).length)
+    +chip('Precio ≠ PM',todas.filter(f=>f.precio_pm!=null&&f.venta!=null&&Math.abs(f.precio_pm-f.venta)>=1).length);
+  qs('frv-count').textContent=fs.length+' de '+todas.length;
+  const op=(f)=>FRV.edit[f.id]||{};
+  qs('frv-tbody').innerHTML=fs.slice((FRV.page-1)*por,FRV.page*por).map(f=>{
+    const e=op(f),lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta,planId=e.plan_id!==undefined?e.plan_id:((f.plan||{}).id||'');
+    const sim=FRV.sim[f.id],marg=sim?sim.margen:f.margen,rent=sim?sim.rentabilidad:f.rentabilidad,id=acEsc(f.id);
+    const cambioP=(e.lista!=null&&e.lista!==f.lista)||(e.venta!=null&&e.venta!==f.venta),cambioPl=e.plan_id!==undefined&&e.plan_id!==((f.plan||{}).id||'');
+    const dis=FRV.escritura?'':' disabled title="Escritura apagada (FRAVEGA_ESCRITURA)"';
+    const color=marg==null?'var(--text3)':marg<obj?'var(--red)':'var(--green)';
+    const desc=lista&&venta?Math.round((1-venta/lista)*1000)/10:null;
+    return `<tr data-id="${id}"><td><b>${acEsc(f.ref_id||'—')}</b>${f.activo?'':' <span style="color:var(--red)">· inactiva</span>'}<div style="font-size:10px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acEsc(f.titulo||'')}</div>${(f.avisos||[]).filter(Boolean).map(a=>`<div style="font-size:10px;color:var(--text3)">⚠ ${acEsc(a)}</div>`).join('')}</td>
+      <td>${acEsc(f.pm||'—')}</td><td style="text-align:right">${frvN(f.stock)}</td><td style="text-align:right">${f.dias_cobertura==null?'—':f.dias_cobertura+' d'}</td>
+      <td style="text-align:center">${f.ordenes_30} / ${f.ordenes_60} / ${f.ordenes_90}</td><td style="text-align:center">${f.dias_con_venta_60}</td>
+      <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(lista,2)}" onchange="frvEdita('${id}','lista',this.value)"${dis}></td>
+      <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(venta,2)}" onchange="frvEdita('${id}','venta',this.value)"${dis}></td>
+      <td style="text-align:right;white-space:nowrap">${desc==null?'—':desc+' %'}</td><td style="text-align:right">${frvN(f.precio_pm,2)}</td>
+      <td><select class="fi" onchange="frvEdita('${id}','plan_id',this.value)"${dis}><option value="">Sin plan</option>${FRV.planes.map(p=>`<option value="${acEsc(p.id)}"${p.id===planId?' selected':''}>${acEsc(p.cuotas)} · ${frvN(p.comision,1)} %</option>`).join('')}</select></td>
+      <td style="text-align:right;color:${color};font-weight:600">${marg==null?'—':frvN(marg,1)+' %'}</td><td style="text-align:right">${frvN(rent,0)}</td>
+      <td style="white-space:nowrap">${cambioP?`<button class="btn-xs" onclick="frvGuardarPrecio('${id}')">Guardar precio</button> `:''}${cambioPl?`<button class="btn-xs" onclick="frvGuardarPlan('${id}')">Guardar plan</button>`:''}<div style="font-size:10px;color:var(--text2)">${acEsc(FRV.msg[f.id]||'')}</div></td></tr>`;
+  }).join('')||'<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:20px">Sin publicaciones con ese filtro</td></tr>';
+  qs('frv-pag').innerHTML=pag>1?`<button class="btn-xs" onclick="FRV.page=Math.max(1,FRV.page-1);frvRender()">‹</button> ${FRV.page} / ${pag} <button class="btn-xs" onclick="FRV.page=Math.min(${pag},FRV.page+1);frvRender()">›</button>`:'';
+}
+let frvT={};
+function frvEdita(id,campo,txt){
+  const f=FRV.filas.find(x=>x.id===id);if(!f)return;const e=FRV.edit[id]=FRV.edit[id]||{};
+  if(campo==='plan_id')e.plan_id=txt;else{const v=parsePeso(txt);if(isNaN(v)||v<=0){toast('Poné un precio mayor a 0','error');frvRender();return;}e[campo]=v;}
+  const lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta;
+  if(venta>lista){toast('El precio de venta no puede superar al de lista (tachado)','error');}
+  const plan=FRV.planes.find(p=>p.id===(e.plan_id!==undefined?e.plan_id:(f.plan||{}).id));
+  frvRender();clearTimeout(frvT[id]);
+  if(plan&&venta>0)frvT[id]=setTimeout(async()=>{try{FRV.sim[id]=await cpPost('/fravega/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref_id:f.ref_id,venta,cuotas:plan.cuotas})});frvRender();}catch(x){toast(x.message,'error');}},350);
+}
+function frvOperador(){const o=qs('frv-operador').value;if(!o)toast('Elegí el operador primero','error');return o;}
+async function frvGuardarPrecio(id){
+  const f=FRV.filas.find(x=>x.id===id),e=FRV.edit[id]||{},o=frvOperador();if(!f||!o)return;
+  const lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta;
+  if(venta>lista){toast('El precio de venta no puede superar al de lista (tachado)','error');return;}
+  const s=FRV.sim[id];
+  if(!confirm(`Frávega — ${f.ref_id}\nLista (tachado): ${frvN(f.lista,2)} → ${frvN(lista,2)}\nVenta: ${frvN(f.venta,2)} → ${frvN(venta,2)}${s&&s.margen!=null?`\nMargen: ${frvN(s.margen,1)} %`:''}\n\nEsto ESCRIBE en Frávega. ¿Aplicar?`))return;
+  FRV.msg[id]='Guardando…';frvRender();
+  try{
+    const r=await cpPost('/fravega/precio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ref_id:f.ref_id,lista,venta,operador:o})});
+    if(r.despues){f.lista=r.despues.lista;f.venta=r.despues.venta;f.estado=r.despues.estado;}
+    delete FRV.edit[id];delete FRV.sim[id];FRV.msg[id]=r.verificado?'✓ Guardado y verificado en Frávega'+(r.despues&&r.despues.estado_msg&&r.despues.estado_msg!=='Ok'?' ('+r.despues.estado_msg+')':''):'⚠ Frávega respondió OK pero el precio releído no coincide: revisalo en el Seller Center';
+    if(r.aviso)toast(r.aviso,'error');
+  }catch(x){FRV.msg[id]='❌ '+x.message;toast(x.message,'error');}
+  frvRender();
+}
+async function frvGuardarPlan(id){
+  const f=FRV.filas.find(x=>x.id===id),e=FRV.edit[id]||{},o=frvOperador();if(!f||!o)return;
+  const p=FRV.planes.find(x=>x.id===e.plan_id);if(!p){toast('Elegí un plan','error');return;}
+  if(!confirm(`Frávega — ${f.ref_id}\nPlan: ${(f.plan||{}).nombre||'sin plan'} → ${p.nombre}\n\nEsto ESCRIBE en Frávega (puede demorar en impactar). ¿Aplicar?`))return;
+  FRV.msg[id]='Guardando…';frvRender();
+  try{
+    const r=await cpPost('/fravega/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ref_id:f.ref_id,plan_id:p.id,operador:o})});
+    if(r.aplicado){f.plan={...(f.plan||{}),id:p.id,nombre:p.nombre,cuotas:p.cuotas,comision:p.comision};delete FRV.edit[id];delete FRV.sim[id];}
+    FRV.msg[id]=r.aplicado?'✓ Plan aplicado y verificado':'⏳ '+(r.aviso||'Enviado: todavía no figura');
+  }catch(x){FRV.msg[id]='❌ '+x.message;toast(x.message,'error');}
+  frvRender();
+}
+// Megatone y OnCity: secciones preparadas; se completan cuando esté la ficha de su API (docs/markets/*.md)
+function marketPendienteMontar(pagina,nombre,ficha,nota){
+  const el=qs('page-'+pagina);if(!el)return;
+  const filas=[['Leer publicaciones, precio y stock'],['Cambiar el precio'],['Precio tachado / oferta'],['Elegir cuotas por publicación'],['Campañas del market'],['Carga masiva por Excel'],['Comisión y envío reales de cada venta']];
+  el.innerHTML=`<div class="section-hdr">${nombre} <span style="font-size:10px;font-weight:400;color:var(--text3)">(sección preparada: falta relevar la API del market)</span></div>
+    <div style="padding:14px 16px;border-radius:var(--r-tarjeta);background:var(--surface);box-shadow:var(--sombra-tarjeta);font-size:12px;line-height:1.7;max-width:780px">
+      <p style="margin:0 0 8px">Misma estructura que <b>Frávega</b>: publicaciones con margen, stock, ventas y días de venta, y cambio de precio, tachado y cuotas. Se activa cuando esté completa la ficha <code>${ficha}</code>.</p>
+      <p style="margin:0 0 10px;color:var(--text2)">${nota}</p>
+      <table style="width:100%"><thead><tr><th style="text-align:left">Función</th><th style="text-align:left">Estado</th></tr></thead><tbody>${filas.map(f=>`<tr><td>${f[0]}</td><td style="color:var(--text3)">Sin relevar</td></tr>`).join('')}</tbody></table>
+      <p style="margin:10px 0 0"><b>Para activarla:</b> pegá <code>docs/markets/PROMPT_CLAUDE_IN_CHROME_PRECIOS.md</code> en Claude in Chrome con la sesión de ${nombre} abierta y pasale la ficha completa a Claude.</p>
+    </div>`;
+}
+marketPendienteMontar('megatone','Megatone','docs/markets/MEGATONE.md','Falta confirmar además dónde guarda Ecom el número de orden de Megatone para cruzar la comisión y el envío reales.');
+marketPendienteMontar('oncity','OnCity','docs/markets/ONCITY.md','OnCity se carga en Ecom como canal manual (sin comisión real): hoy se estima y no informa fee logístico ni comisión financiera.');
+try{const _op=localStorage.getItem('ofm_operador');if(_op)setTimeout(()=>{const e=qs('frv-operador');if(e)e.value=_op;},0);}catch(e){}
+
+
 
 // ── Ventanas flotantes (arrastrables, redimensionables, minimizables; «Dividir» la ancla a la derecha y achica la pantalla) ──
 const VF={z:900,max:3};

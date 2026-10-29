@@ -47,6 +47,8 @@ app.include_router(rentabilidad_router)
 app.include_router(proyeccion_router)
 app.include_router(ml_full_foto_router)
 app.include_router(ml_ofertas_foto.router)
+import fravega_api
+app.include_router(fravega_api.router)
 app.include_router(transito_router)
 
 
