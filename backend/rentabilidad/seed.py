@@ -176,6 +176,12 @@ PRICING_TRAMOS = [
 ]
 
 
+# Cambios con vigencia (el valor anterior queda en el historial): (canal, clave, valor, vigente_desde, motivo)
+PRICING_PARAMETROS_CAMBIOS = [
+    ("FRAVEGA", "iva_cargos", "0", date(2026, 10, 29), "Frávega ya muestra comisión y fee con IVA: no se suma nada (Maxx, 2026-10-29, igual que ML)"),
+]
+
+
 def seed_pricing(db: Session) -> None:
     """Idempotente: comisiones, cuotas y tramos solo se cargan si la tabla
     está vacía — después, los cambios son filas nuevas con vigencia."""
@@ -185,6 +191,10 @@ def seed_pricing(db: Session) -> None:
     for canal, clave, valor, desc in PRICING_PARAMETROS:
         if (canal, clave) not in existentes:
             db.add(PricingParametro(canal=canal, clave=clave, valor=Decimal(valor), descripcion=desc, **_PRICING_ALTA))
+    con_vigencia = {(p.canal, p.clave, p.vigente_desde) for p in db.query(PricingParametro).all()}
+    for canal, clave, valor, desde, motivo in PRICING_PARAMETROS_CAMBIOS:
+        if (canal, clave, desde) not in con_vigencia:
+            db.add(PricingParametro(canal=canal, clave=clave, valor=Decimal(valor), descripcion=motivo, vigente_desde=desde, cargado_por="Maxx — cambio de criterio"))
     if db.query(PricingComisionCategoria).first() is None:
         for categoria, pct in PRICING_COMISION_ML:
             db.add(PricingComisionCategoria(canal="ML", categoria=categoria, pct=Decimal(pct), origen=_ORIGEN_ML, **_PRICING_ALTA))

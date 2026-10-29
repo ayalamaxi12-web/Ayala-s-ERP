@@ -37,12 +37,17 @@ def _contexto():
 
 
 def _catalogo_sync(forzar: bool) -> dict:
-    from rentabilidad.fravega_vista import construir_vista
+    from rentabilidad.fravega_vista import construir_vista, stock_general_por_sku
     items = _items(forzar)
     main, motor, datos, tc, fecha, avisos, sesion = _contexto()
     with sesion() as db:
         par = motor.cargar_parametros(db, fecha)
-        filas = construir_vista(db, items, datos, tc, par, date.today())
+        try:
+            stock_gral = stock_general_por_sku()
+        except Exception as e:  # noqa: BLE001
+            stock_gral = None
+            avisos.append(f"No se pudo leer el stock general ({type(e).__name__}: {e}): se muestra solo el publicado en Frávega.")
+        filas = construir_vista(db, items, datos, tc, par, date.today(), stock_gral)
     planes = [{"id": p["_id"], "nombre": p.get("name"), "cuotas": fc.cuotas_de_plan(p.get("name")), "comision": p.get("commission")}
               for p in fc.planes_en_uso(items)]
     return {"filas": filas, "planes": planes, "escritura": fc.escritura_habilitada(), "tc": float(tc), "avisos": avisos}

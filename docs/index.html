@@ -443,7 +443,52 @@ body.vf-dock-activo .app-body{margin-right:var(--vf-dock-w,50vw)}
   --mod-activo-fondo:var(--mk-ml);--mod-activo-texto:var(--mk-ml-tinta);--mod-activo-borde:var(--mk-ml-btn-borde);--mod-seg-fondo:var(--mk-ml-chip);
   --mod-franja-fondo:var(--mk-ml-franja);--mod-franja-borde:var(--mk-ml-franja-borde);--mod-resalte:var(--mk-ml-franja);--mod-check:var(--mk-ml-check);--mod-foco:var(--mk-ml-tinta);
 }
-/* [data-modulo="fravega"], [data-modulo="oncity"], [data-modulo="megatone"]: A DEFINIR — el color sale del logo oficial con docs/assets/logos/muestrear_color.py (ver la tabla en la guía). */
+[data-modulo="fravega"]{
+  --mod-acento:var(--mk-fravega-violeta);--mod-sobre-acento:#FFFFFF;--mod-primario:var(--mk-fravega-violeta);
+  --mod-barra:var(--mk-fravega-violeta);--mod-sobre-barra:#FFFFFF;--mod-barra-borde:#33007A;
+  --mod-encabezado:#EFE6FA;--mod-encabezado-texto:var(--mk-fravega-violeta);--mod-encabezado-borde:#D6C2EE;
+  --mod-segmento-activo:var(--mk-fravega-violeta);
+  --mod-texto:var(--mk-fravega-violeta);--mod-suave:#E6D8F6;--mod-suave-borde:#D6C2EE;--mod-suave-texto:#33007A;--mod-primario-hover:#33007A;
+  --mod-btn-fondo:var(--mk-fravega-violeta);--mod-btn-texto:#FFFFFF;--mod-btn-borde:#33007A;--mod-btn-hover:#33007A;
+  --mod-sec-borde:var(--mk-fravega-violeta);--mod-sec-texto:var(--mk-fravega-violeta);--mod-sec-hover:#F7F2FC;
+  --mod-activo-fondo:var(--mk-fravega-violeta);--mod-activo-texto:#FFFFFF;--mod-activo-borde:#33007A;--mod-seg-fondo:#E6D8F6;
+  --mod-franja-fondo:#F7F2FC;--mod-franja-borde:#D6C2EE;--mod-resalte:#F7F2FC;--mod-check:var(--mk-fravega-violeta);--mod-foco:var(--mk-fravega-violeta);
+}
+[data-modulo="oncity"]{
+  --mod-acento:var(--mk-oncity-azul);--mod-sobre-acento:#FFFFFF;--mod-primario:var(--mk-oncity-azul);
+  --mod-barra:var(--mk-oncity-azul);--mod-sobre-barra:#FFFFFF;--mod-barra-borde:#0541AF;
+  --mod-encabezado:#E7EFFC;--mod-encabezado-texto:var(--mk-oncity-azul);--mod-encabezado-borde:#C3D5F5;
+  --mod-segmento-activo:var(--mk-oncity-azul);
+  --mod-texto:var(--mk-oncity-azul);--mod-suave:#CDFBF5;--mod-suave-borde:#C3D5F5;--mod-suave-texto:#064FD3;--mod-primario-hover:#0541AF;
+  --mod-btn-fondo:var(--mk-oncity-azul);--mod-btn-texto:#FFFFFF;--mod-btn-borde:#0541AF;--mod-btn-hover:#0541AF;
+  --mod-sec-borde:var(--mk-oncity-azul);--mod-sec-texto:var(--mk-oncity-azul);--mod-sec-hover:#F2F6FE;
+  --mod-activo-fondo:var(--mk-oncity-azul);--mod-activo-texto:#FFFFFF;--mod-activo-borde:#0541AF;--mod-seg-fondo:#CDFBF5;
+  --mod-franja-fondo:#F2F6FE;--mod-franja-borde:#C3D5F5;--mod-resalte:#F2F6FE;--mod-check:var(--mk-oncity-azul);--mod-foco:var(--mk-oncity-azul);
+}
+[data-modulo="megatone"]{
+  --mod-acento:#E53308;--mod-sobre-acento:#FFFFFF;--mod-primario:#E31E25;
+  --mod-barra:#E53308;--mod-sobre-barra:#FFFFFF;--mod-barra-borde:#B8160D;
+  --mod-encabezado:#FDEDE8;--mod-encabezado-texto:#E31E25;--mod-encabezado-borde:#F5C4B5;
+  --mod-segmento-activo:#E53308;
+  --mod-texto:#E31E25;--mod-suave:#FBE0D8;--mod-suave-borde:#F5C4B5;--mod-suave-texto:#9A1A06;--mod-primario-hover:#B8160D;
+  --mod-btn-fondo:#E31E25;--mod-btn-texto:#FFFFFF;--mod-btn-borde:#B8160D;--mod-btn-hover:#B8160D;
+  --mod-sec-borde:#E31E25;--mod-sec-texto:#E31E25;--mod-sec-hover:#FFF5F2;
+  --mod-activo-fondo:#E53308;--mod-activo-texto:#FFFFFF;--mod-activo-borde:#B8160D;--mod-seg-fondo:#FBE0D8;
+  --mod-franja-fondo:#FFF5F2;--mod-franja-borde:#F5C4B5;--mod-resalte:#FFF5F2;--mod-check:#E31E25;--mod-foco:#E31E25;
+}
+/* Barra superior de Frávega, OnCity y Megatone: Global en blanco × logo del market (en una píldora blanca cuando el logo no se lee sobre el color de la barra). */
+body[data-modulo="fravega"] .tb-erp,body[data-modulo="oncity"] .tb-erp,body[data-modulo="megatone"] .tb-erp{display:none}
+body[data-modulo="fravega"] .tb-x,body[data-modulo="oncity"] .tb-x,body[data-modulo="megatone"] .tb-x{display:inline}
+body[data-modulo="fravega"] .tb-mk,body[data-modulo="oncity"] .tb-mk,body[data-modulo="megatone"] .tb-mk{display:inline-flex;align-items:center;gap:8px}
+.tb-mk.tb-mk-pildora{background:#fff;border-radius:var(--r-chip);padding:4px 14px}
+.tb-mk.tb-mk-pildora .tb-isotipo{height:24px}
+body[data-modulo="fravega"] .sidebar-item.active,body[data-modulo="oncity"] .sidebar-item.active,body[data-modulo="megatone"] .sidebar-item.active{background:var(--mod-acento);color:var(--mod-sobre-acento);font-weight:700}
+body[data-modulo="fravega"] .sidebar-item.active::after,body[data-modulo="oncity"] .sidebar-item.active::after,body[data-modulo="megatone"] .sidebar-item.active::after{display:none}
+body[data-modulo="fravega"] .page,body[data-modulo="fravega"] .page *{font-family:var(--fuente-mk-fravega)}
+body[data-modulo="oncity"] .page,body[data-modulo="oncity"] .page *{font-family:var(--fuente-mk-oncity)}
+body[data-modulo="megatone"] .page,body[data-modulo="megatone"] .page *{font-family:var(--fuente-mk-megatone)}
+[data-modulo="fravega"] .table-wrap tr:hover td,[data-modulo="oncity"] .table-wrap tr:hover td,[data-modulo="megatone"] .table-wrap tr:hover td{background:var(--mod-franja-fondo)}
+
 </style>
 <style id="estetica-fase1">
 /* ══ ESTÉTICA 2026 — Fase 1: barra superior, menú lateral y Análisis de Competencia (docs/ESTETICA_ERP_GLOBAL.md). Solo presentación. ══ */
@@ -458,7 +503,7 @@ body.vf-dock-activo .app-body{margin-right:var(--vf-dock-w,50vw)}
 .tb-erp{font-size:13px;font-weight:700;letter-spacing:.08em}
 .tb-modulo{margin-left:auto;font-size:13px;font-weight:600}
 .tb-isotipo{display:block;height:36px;width:auto}
-.tb-mk-texto{font-size:18px;font-weight:700;color:var(--mk-ml-tinta);line-height:1}
+.tb-mk-texto{font-size:18px;font-weight:700;color:var(--mod-sobre-barra);line-height:1}
 body[data-modulo="ml"] .tb-logo-blanco,body[data-modulo="ml"] .tb-erp{display:none}
 body[data-modulo="ml"] .tb-logo-tinta{display:block}
 body[data-modulo="ml"] .tb-x{display:inline}
@@ -1025,7 +1070,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <img class="tb-logo tb-logo-blanco" src="assets/logos/global-blanco.png" alt="Global" width="88" height="28">
     <img class="tb-logo tb-logo-tinta" src="assets/logos/global-tinta.png" alt="Global" width="88" height="28">
     <span class="tb-x" aria-hidden="true">×</span>
-    <span class="tb-mk"><img class="tb-isotipo" src="assets/logos/mercadolibre-isotipo.png" alt="" width="50" height="36"><span class="tb-mk-texto">Mercado Libre</span></span>
+    <span class="tb-mk" id="tb-mk"><img class="tb-isotipo" id="tb-mk-img" src="assets/logos/mercadolibre-isotipo.png" alt="" width="50" height="36"><span class="tb-mk-texto" id="tb-mk-txt">Mercado Libre</span></span>
   </a>
   <span class="tb-erp">ERP</span>
   <span id="tb-modulo" class="tb-modulo"></span>
@@ -1599,7 +1644,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <span id="frv-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     </div>
     <div class="table-wrap"><table id="frv-table" style="font-size:12px">
-      <thead><tr><th>SKU · título</th><th>PM</th><th>Stock</th><th>Cobertura</th><th title="Órdenes de Frávega en 30 / 60 / 90 días">Órd. 30/60/90</th><th title="Días distintos con venta en los últimos 60">Días c/venta</th><th>Lista (tachado)</th><th>Venta</th><th>Desc.</th><th>Precio PM</th><th>Cuotas</th><th>Margen</th><th>Rent. $</th><th></th></tr></thead>
+      <thead><tr><th>SKU · título</th><th>PM</th><th title="Stock general de la empresa (todos los canales)">Stock gral</th><th title="Cantidad publicada hoy en Frávega">Publicado</th><th title="Solo órdenes de Frávega, en 30 / 60 / 90 días">Órd. Frávega 30/60/90</th><th title="Días distintos con venta en Frávega en los últimos 60">Días c/venta</th><th>Lista (tachado)</th><th>Venta</th><th>Desc.</th><th>Precio PM</th><th>Cuotas</th><th>Margen</th><th>Rent. $</th><th></th></tr></thead>
       <tbody id="frv-tbody"></tbody>
     </table><div class="pagination" id="frv-pag"></div></div>
   </div>
@@ -2461,7 +2506,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 // ICONOS-FIN
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
-const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
+const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','fravega':'fravega','megatone':'megatone','oncity':'oncity'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
 const PAGINAS_ESTILO_NUEVO=new Set(['ventas-hoy','ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','fravega','megatone','oncity','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
@@ -2699,6 +2744,8 @@ async function criteriosVolver(i){
   try{await criteriosLlamar(`${getBackendUrl()}/criterios/volver-al-comun`,'POST',{mercado:f.mercado,concepto:f.concepto,operador});toast('Listo: usa el valor común');await criteriosCargar();}
   catch(e){toast('No se pudo: '+(e.message||e),'error');}
 }
+const TB_MARCA={ml:['assets/logos/mercadolibre-isotipo.png','Mercado Libre',false],fravega:['assets/logos/fravega.svg','',true],oncity:['assets/logos/oncity-blanco.png','',false],megatone:['assets/logos/megatone.png','',true]};
+function tbMarcaMercado(mk){const m=TB_MARCA[mk];if(!m)return;const i=qs('tb-mk-img'),t=qs('tb-mk-txt'),c=qs('tb-mk');if(!i)return;i.src=m[0];i.alt=m[1]||mk;t.textContent=m[1];t.style.display=m[1]?'':'none';c.classList.toggle('tb-mk-pildora',m[2]);}
 function goPage(page,el){
   // Módulos jubilados: el link viejo lleva a la pantalla nueva (Intel. Competitiva → Análisis de Competencia, vista Eventos).
   if(page==='intel-competitiva'){page='analisis-competencia';el=null;AC.modo='ev';}
@@ -2713,6 +2760,7 @@ function goPage(page,el){
   if(!el)el=document.querySelector('.sidebar-item[data-page="'+page+'"]');
   if(el)el.classList.add('active');
   document.body.dataset.page=page;document.body.dataset.modulo=MODULO_MK[page]||'global';
+  tbMarcaMercado(MODULO_MK[page]);
   if(PAGINAS_ESTILO_NUEVO.has(page))document.body.dataset.nuevo='1';else delete document.body.dataset.nuevo;
   {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.replace('⧉','').trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
@@ -8508,7 +8556,7 @@ function frvFiltradas(){
   return FRV.filas.filter(f=>{
     if(q&&!((f.ref_id||'').toLowerCase().includes(q)||(f.titulo||'').toLowerCase().includes(q)))return false;
     if(pm&&f.pm!==pm)return false;if(cat&&f.categoria!==cat)return false;if(pl&&(f.plan||{}).id!==pl)return false;
-    if(vi==='activas'&&!f.activo)return false;if(vi==='margen'&&!(f.margen!=null&&f.margen<obj))return false;if(vi==='sinstock'&&f.stock>0)return false;
+    if(vi==='activas'&&!f.activo)return false;if(vi==='margen'&&!(f.margen!=null&&f.margen<obj))return false;if(vi==='sinstock'&&(f.stock||0)>0)return false;
     if(vi==='sinventas'&&f.ordenes_60>0)return false;if(vi==='pm'&&!(f.precio_pm!=null&&f.venta!=null&&Math.abs(f.precio_pm-f.venta)>=1))return false;if(vi==='sinplan'&&f.plan)return false;
     return true;});
 }
@@ -8516,8 +8564,8 @@ function frvRender(){
   const fs=frvFiltradas(),por=25,pag=Math.max(1,Math.ceil(fs.length/por));FRV.page=Math.min(FRV.page,pag);
   const obj=frvObj(),todas=FRV.filas;
   const chip=(t,v,c)=>`<div style="padding:8px 14px;border-radius:var(--r-recuadro);background:var(--surface);box-shadow:var(--sombra-tarjeta);font-size:12px"><div style="color:var(--text3);font-size:10px">${t}</div><b style="font-size:16px;${c||''}">${v}</b></div>`;
-  qs('frv-stats').innerHTML=chip('Publicaciones',todas.length)+chip('Activas',todas.filter(f=>f.activo).length)+chip('Stock total',frvN(todas.reduce((s,f)=>s+f.stock,0)))
-    +chip('Margen bajo '+obj+' %',todas.filter(f=>f.margen!=null&&f.margen<obj).length,'color:var(--red)')+chip('Sin ventas 60 d',todas.filter(f=>!f.ordenes_60).length)
+  qs('frv-stats').innerHTML=chip('Publicaciones',todas.length)+chip('Activas',todas.filter(f=>f.activo).length)+chip('Stock gral total',frvN(todas.reduce((s,f)=>s+(f.stock||0),0)))
+    +chip('Margen bajo '+obj+' %',todas.filter(f=>f.margen!=null&&f.margen<obj).length,'color:var(--red)')+chip('Sin ventas Frávega 60 d',todas.filter(f=>!f.ordenes_60).length)
     +chip('Precio ≠ PM',todas.filter(f=>f.precio_pm!=null&&f.venta!=null&&Math.abs(f.precio_pm-f.venta)>=1).length);
   qs('frv-count').textContent=fs.length+' de '+todas.length;
   const op=(f)=>FRV.edit[f.id]||{};
@@ -8529,7 +8577,7 @@ function frvRender(){
     const color=marg==null?'var(--text3)':marg<obj?'var(--red)':'var(--green)';
     const desc=lista&&venta?Math.round((1-venta/lista)*1000)/10:null;
     return `<tr data-id="${id}"><td><b>${acEsc(f.ref_id||'—')}</b>${f.activo?'':' <span style="color:var(--red)">· inactiva</span>'}<div style="font-size:10px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acEsc(f.titulo||'')}</div>${(f.avisos||[]).filter(Boolean).map(a=>`<div style="font-size:10px;color:var(--text3)">⚠ ${acEsc(a)}</div>`).join('')}</td>
-      <td>${acEsc(f.pm||'—')}</td><td style="text-align:right">${frvN(f.stock)}</td><td style="text-align:right">${f.dias_cobertura==null?'—':f.dias_cobertura+' d'}</td>
+      <td>${acEsc(f.pm||'—')}</td><td style="text-align:right">${frvN(f.stock)}</td><td style="text-align:right">${frvN(f.stock_publicado)}</td>
       <td style="text-align:center">${f.ordenes_30} / ${f.ordenes_60} / ${f.ordenes_90}</td><td style="text-align:center">${f.dias_con_venta_60}</td>
       <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(lista,2)}" onchange="frvEdita('${id}','lista',this.value)"${dis}></td>
       <td><input type="text" inputmode="decimal" class="campo-num" style="width:96px" value="${frvN(venta,2)}" onchange="frvEdita('${id}','venta',this.value)"${dis}></td>
