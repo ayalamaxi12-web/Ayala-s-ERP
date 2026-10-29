@@ -8623,7 +8623,7 @@ async function frvGuardarPrecio(id){
   try{
     const r=await cpPost('/fravega/precio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ref_id:f.ref_id,lista,venta,operador:o})});
     if(r.despues){f.lista=r.despues.lista;f.venta=r.despues.venta;f.estado=r.despues.estado;}
-    delete FRV.edit[id];delete FRV.sim[id];FRV.msg[id]=r.verificado?'✓ Guardado y verificado en Frávega'+(r.despues&&r.despues.estado_msg&&r.despues.estado_msg!=='Ok'?' ('+r.despues.estado_msg+')':''):'⚠ Frávega respondió OK pero el precio releído no coincide: revisalo en el Seller Center';
+    delete FRV.edit[id];delete FRV.sim[id];FRV.msg[id]=r.pendiente?'⏳ Frávega aceptó el cambio pero todavía muestra el precio anterior (suele demorar): apretá Releer en unos minutos':r.verificado?'✓ Guardado y verificado en Frávega'+(r.despues&&r.despues.estado_msg&&r.despues.estado_msg!=='Ok'?' ('+r.despues.estado_msg+')':''):'⚠ Frávega respondió OK pero el precio releído no coincide: revisalo en el Seller Center';
     if(r.aviso)toast(r.aviso,'error');
   }catch(x){FRV.msg[id]='❌ '+x.message;toast(x.message,'error');}
   frvRender();

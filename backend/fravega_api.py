@@ -141,6 +141,12 @@ async def poner_precio(b: _PrecioIn):
             _errores(e)
         despues = fc.releer_item(b.id)
         ok = bool(despues and despues["venta"] == venta and despues["lista"] == lista)
+        for _ in range(3):                  # Frávega puede tardar unos segundos en reflejar el precio: se vuelve a leer antes de decir que no coincide
+            if ok or error_frávega:
+                break
+            time.sleep(2)
+            despues = fc.releer_item(b.id)
+            ok = bool(despues and despues["venta"] == venta and despues["lista"] == lista)
         if error_frávega and not ok:
             actual_ahora = f"lista {despues['lista']} / venta {despues['venta']}" if despues else "no se pudo releer"
             raise HTTPException(status_code=422, detail=f"{error_frávega} · Releído en Frávega: {actual_ahora} (el precio NO quedó aplicado).")
@@ -151,7 +157,10 @@ async def poner_precio(b: _PrecioIn):
             aviso = (aviso + " · " if aviso else "") + f"Ojo: el stock o el estado cambiaron (antes {actual['stock']} / {'activa' if actual['activo'] else 'inactiva'}, ahora {despues['stock']} / {'activa' if despues['activo'] else 'inactiva'})."
         if error_frávega and ok:
             aviso = (aviso + " · " if aviso else "") + f"Frávega respondió con error pero el precio quedó aplicado y verificado ({error_frávega.split(' · ')[0]})."
-        return {"ok": ok, "verificado": ok, "despues": despues and {"lista": float(despues["lista"] or 0), "venta": float(despues["venta"] or 0),
+        pendiente = not ok and not error_frávega
+        if pendiente:
+            aviso = (aviso + " · " if aviso else "") + "Frávega aceptó el cambio (200) pero todavía muestra el precio anterior: suele demorar. Apretá «Releer» en unos minutos."
+        return {"ok": ok, "verificado": ok, "pendiente": pendiente, "despues": despues and {"lista": float(despues["lista"] or 0), "venta": float(despues["venta"] or 0),
                                                                    "estado": despues["estado"], "estado_msg": despues["estado_msg"]}, "aviso": aviso}
     return await run_in_threadpool(_hacer)
 
