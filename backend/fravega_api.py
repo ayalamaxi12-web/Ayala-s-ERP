@@ -134,7 +134,7 @@ async def poner_precio(b: _PrecioIn):
         neto = (venta * ratio).quantize(Decimal("0.01"))
         error_frávega = None
         try:
-            fc.poner_precio(b.id, lista, venta, neto)
+            fc.poner_precio(b.id, lista, venta, neto, actual["stock"], actual["activo"])
         except fc.FravegaRechazo as e:
             error_frávega = str(e)         # Frávega a veces responde 500 y aplica el cambio igual: se relee antes de dar nada por fallido
         except Exception as e:  # noqa: BLE001
@@ -147,6 +147,8 @@ async def poner_precio(b: _PrecioIn):
         _CACHE["t"] = 0
         aviso = _historial(main, {"Item ID": b.id, "SKU": b.ref_id, "Accion": "Precio Frávega", "Tipo/Promocion": f"lista {lista} / venta {venta}",
                                   "Precio Anterior": float(actual["venta"] or 0), "Precio Nuevo": float(venta), "Operador": b.operador})
+        if ok and despues and (despues["stock"] != actual["stock"] or despues["activo"] != actual["activo"]):
+            aviso = (aviso + " · " if aviso else "") + f"Ojo: el stock o el estado cambiaron (antes {actual['stock']} / {'activa' if actual['activo'] else 'inactiva'}, ahora {despues['stock']} / {'activa' if despues['activo'] else 'inactiva'})."
         if error_frávega and ok:
             aviso = (aviso + " · " if aviso else "") + f"Frávega respondió con error pero el precio quedó aplicado y verificado ({error_frávega.split(' · ')[0]})."
         return {"ok": ok, "verificado": ok, "despues": despues and {"lista": float(despues["lista"] or 0), "venta": float(despues["venta"] or 0),

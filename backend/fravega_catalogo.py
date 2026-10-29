@@ -148,13 +148,15 @@ def validar_precios(lista: Decimal, venta: Decimal) -> None:
         raise ValueError("El precio de venta no puede superar al de lista (tachado).")
 
 
-def poner_precio(item_id: str, lista: Decimal, venta: Decimal, neto: Decimal, cookies: dict[str, str] | None = None,
+def poner_precio(item_id: str, lista: Decimal, venta: Decimal, neto: Decimal, stock: int, activo: bool, cookies: dict[str, str] | None = None,
                  request_fn: Callable | None = None) -> None:
-    """`PUT /v1/item/{id}/partial` con `{price:{list,sale,net}}` (botón «Editar valores» del portal). 409 = rechazo parcial."""
+    """`PUT /v1/item/{id}/partial` (botón «Editar valores» del portal). Capturado en vivo el 29/10 (SAFEBOX-KEYS): el portal manda SIEMPRE
+    `{price:{list,sale,net}, stock:{quantity}, active}` aunque cambie solo el precio; sin `stock` y `active` Frávega responde 500 y no guarda.
+    Por eso se mandan los valores ACTUALES de stock y encendido (así no se pisan). Responde 200 con el ítem ANTERIOR al cambio: se verifica con un GET."""
     _exigir_escritura()
     validar_precios(lista, venta)
     cookies = cookies if cookies is not None else cookies_desde_env()
-    cuerpo = {"price": {"list": float(lista), "sale": float(venta), "net": float(neto)}}
+    cuerpo = {"price": {"list": float(lista), "sale": float(venta), "net": float(neto)}, "stock": {"quantity": int(stock)}, "active": bool(activo)}
     r = _pedir("PUT", f"/v1/item/{item_id}/partial", cookies, None, cuerpo, request_fn)
     _revisar_escritura(r, cuerpo)
 
