@@ -147,15 +147,33 @@ def _rentabilidad(precio_sin_iva, precio_final, comision, envio, costo_usd):
     return q - comision - envio - v * Decimal("0.012") - q * Decimal("0.05") - Decimal("149.12") - Decimal(costo_usd) * TC
 
 
-def test_sin_liquidacion_fravega_se_guarda_con_la_comision_base_estimada(db_session):
+def test_sin_liquidacion_ni_historia_se_estima_con_base_mas_plan_de_6_cuotas_y_el_fee_por_defecto(db_session):
+    """Sin historial de órdenes liquidadas: 15 % de base + 10,6 % del plan de 6 cuotas y el fee logístico por defecto del motor (8.500)."""
     _guardar(db_session, _fila_fravega())
     venta = _venta(db_session, "1387346")
     assert venta.origen_comision == "ESTIMADO_FRAVEGA"
-    assert venta.comision_venta == Decimal("760537.19") * Decimal("0.15") * IVA_CARGOS
-    assert venta.costo_envio == 0
+    assert venta.comision_venta == Decimal("760537.19") * Decimal("0.256") * IVA_CARGOS
+    assert venta.costo_envio == Decimal("8500") * IVA_CARGOS
     assert venta.orden_externa == "v90781066frvg-01"
-    assert _cerca(venta.rentabilidad, _rentabilidad("688268.95", "760537.19", Decimal("114080.5785") * IVA_CARGOS, 0, "96.34"))
+    assert _cerca(venta.rentabilidad, _rentabilidad("688268.95", "760537.19", Decimal("760537.19") * Decimal("0.256") * IVA_CARGOS, Decimal("8500") * IVA_CARGOS, "96.34"))
     assert [v.numero_orden for v in ventas_fravega_estimadas(db_session)] == ["1387346"]
+
+
+def test_la_estimacion_usa_la_tasa_y_el_envio_del_sku_y_si_no_la_mediana_de_las_liquidadas(db_session):
+    """Dos órdenes del mismo SKU ya liquidadas (comisión 28,4 % y fee 6.159): la próxima orden de ese SKU se estima igual; otro SKU sin historia usa la mediana."""
+    from rentabilidad.persistencia import estimar_fravega
+    _guardar(db_session, _fila_fravega(numero_orden="1", orden_externa="v1frvg-01", skus_vendidos="SKU-A", precio_final=Decimal("100000"), precio_sin_iva=Decimal("82644.63")))
+    _guardar(db_session, _fila_fravega(numero_orden="2", orden_externa="v2frvg-01", skus_vendidos="SKU-A", precio_final=Decimal("50000"), precio_sin_iva=Decimal("41322.31")),
+             periodo="2026-06-02_2026-06-02")
+    for orden, comision in (("v1frvg-01", Decimal("28400")), ("v2frvg-01", Decimal("14200"))):
+        db_session.add(LiquidacionFravega(orden=orden, valor_sku=Decimal("1"), comision=comision, fee_logistico=Decimal("6159"),
+                                          liquidacion_desde=date(2026, 6, 1), liquidacion_hasta=date(2026, 6, 15), archivo="x"))
+    db_session.flush()
+    db_session.info.pop("_historico_fravega", None)
+    c, fee, origen = estimar_fravega(db_session, "sku-a", Decimal("80000"))
+    assert (c, fee, origen) == (Decimal("80000") * Decimal("0.284"), Decimal("6159"), "historial del SKU")
+    c2, fee2, origen2 = estimar_fravega(db_session, "SKU-NUEVO", Decimal("80000"))
+    assert origen2 == "mediana de las órdenes liquidadas" and c2 == Decimal("80000") * Decimal("0.284") and fee2 == Decimal("6159")
 
 
 def test_al_cargar_la_liquidacion_se_reemplaza_por_el_real_y_se_recalcula(db_session):

@@ -73,6 +73,7 @@ from .models import (
     LiquidacionFravega,
     MotivoExclusion,
     ParametroTasa,
+    PricingParametro,
     SkuExcluido,
     VentaEcom,
     VentaTactica,
@@ -375,7 +376,66 @@ class ComisionFravega:
     observacion: str | None
 
 
-def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decimal) -> ComisionFravega:
+def _historico_fravega(db: Session) -> dict:
+    """Lo que Frávega realmente cobró en las órdenes ya liquidadas: por SKU la tasa efectiva de comisión (comisión ÷ Precio Final, que incluye el plan de
+    cuotas del SKU: 15 % de base + 6,8 / 10,6 / 13,7 / 16,6 %) y el fee logístico; más las medianas generales para los SKU sin historia. Se calcula una vez
+    por sesión (`db.info`)."""
+    cache = db.info.get("_historico_fravega")
+    if cache is not None:
+        return cache
+    from statistics import median
+    from .pricing_pm import norm_sku
+
+    de_orden = {v.orden_externa: (norm_sku(v.skus_vendidos), v.precio_final)
+                for v in db.query(VentaEcom).filter(VentaEcom.orden_externa.isnot(None)).all() if v.skus_vendidos and "," not in v.skus_vendidos}
+    por_orden: dict[str, list[Decimal]] = {}
+    for f in db.query(LiquidacionFravega).all():
+        acum = por_orden.setdefault(f.orden, [Decimal(0), Decimal(0)])
+        acum[0] += f.comision
+        acum[1] += f.fee_logistico
+    tasas: dict[str, list[Decimal]] = {}
+    fees: dict[str, list[Decimal]] = {}
+    for orden, (comision, fee) in por_orden.items():
+        if orden not in de_orden:
+            continue
+        sku, pf = de_orden[orden]
+        if comision > 0 and pf and pf > 0:
+            tasas.setdefault(sku, []).append(comision / pf)
+        if fee > 0:
+            fees.setdefault(sku, []).append(fee)
+    media = lambda xs: sum(xs, Decimal(0)) / len(xs)
+    todas_tasas, todos_fees = [t for xs in tasas.values() for t in xs], [x for xs in fees.values() for x in xs]
+    cache = {"tasa_sku": {k: media(v) for k, v in tasas.items()}, "fee_sku": {k: media(v) for k, v in fees.items()},
+             "tasa_general": Decimal(str(median(todas_tasas))) if todas_tasas else None, "fee_general": Decimal(str(median(todos_fees))) if todos_fees else None}
+    db.info["_historico_fravega"] = cache
+    return cache
+
+
+def estimar_fravega(db: Session, sku: str | None, precio_final: Decimal) -> tuple[Decimal, Decimal, str]:
+    """Comisión y fee logístico ESTIMADOS (sin IVA extra) de una orden de Frávega que todavía no tiene la liquidación real, con el plan y el envío de ese SKU
+    (aprobado por Maxx, 2026-10-30). Orden de preferencia: historia del SKU → mediana de todas las órdenes liquidadas → 15 % de base + plan de 6 cuotas
+    (`fravega_plan_default`) y el fee logístico por defecto del motor. Devuelve (comisión, fee, de dónde salió)."""
+    from .pricing_pm import norm_sku
+
+    h = _historico_fravega(db)
+    clave = norm_sku(sku) if sku else ""
+    if clave in h["tasa_sku"]:
+        tasa, origen = h["tasa_sku"][clave], "historial del SKU"
+    elif h["tasa_general"] is not None:
+        tasa, origen = h["tasa_general"], "mediana de las órdenes liquidadas"
+    else:
+        tasa, origen = _tasa(db, "fravega_comision_base") + _tasa(db, "fravega_plan_default"), "base + plan de 6 cuotas"
+    if clave in h["fee_sku"]:
+        fee = h["fee_sku"][clave]
+    elif h["fee_general"] is not None:
+        fee = h["fee_general"]
+    else:
+        par = db.query(PricingParametro).filter_by(canal="FRAVEGA", clave="fee_logistico_default").order_by(PricingParametro.vigente_desde.desc()).first()
+        fee = par.valor if par else Decimal(0)
+    return precio_final * tasa, fee, origen
+
+
+def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decimal, sku: str | None = None) -> ComisionFravega:
     """Única regla de comisión/fee de Frávega — la usan tanto el armado de
     filas (`resolver_comision_fravega`) como la carga de una liquidación
     sobre ventas ya guardadas (`aplicar_liquidacion_fravega`), para que
@@ -405,9 +465,8 @@ def comision_fravega(db: Session, orden_externa: str | None, precio_final: Decim
         observacion = OBSERVACION_FRAVEGA_SIN_ORDEN
     else:
         observacion = None
-    return ComisionFravega(
-        precio_final * _tasa(db, "fravega_comision_base") * mas_iva, Decimal(0), ORIGEN_COMISION_ESTIMADO_FRAVEGA, observacion,
-    )
+    comision_est, fee_est, _origen = estimar_fravega(db, sku, precio_final)
+    return ComisionFravega(comision_est * mas_iva, fee_est * mas_iva, ORIGEN_COMISION_ESTIMADO_FRAVEGA, observacion)
 
 
 def _tasa(db: Session, nombre: str) -> Decimal:
@@ -431,7 +490,7 @@ def resolver_comision_fravega(db: Session, fila: FilaEcom) -> FilaEcom:
         return replace(fila, comision_venta=fila.precio_final * _tasa(db, "oncity_comision_estimada") * mas_iva)
     if fila.origen_comision not in (ORIGEN_COMISION_ESTIMADO_FRAVEGA, ORIGEN_COMISION_LIQUIDACION_FRAVEGA):
         return fila
-    c = comision_fravega(db, fila.orden_externa, fila.precio_final)
+    c = comision_fravega(db, fila.orden_externa, fila.precio_final, _primer_sku(fila.skus_vendidos) if "," not in fila.skus_vendidos else None)
     return replace(
         fila, comision_venta=c.comision, costo_envio=c.costo_envio,
         origen_comision=c.origen, observacion=c.observacion or fila.observacion,
@@ -693,7 +752,7 @@ def _reaplicar_ventas(db: Session, ordenes: list[str], resultado: "ResultadoLiqu
     con_venta = set()
     for venta in ventas:
         con_venta.add(venta.orden_externa)
-        c = comision_fravega(db, venta.orden_externa, venta.precio_final)
+        c = comision_fravega(db, venta.orden_externa, venta.precio_final, venta.skus_vendidos if venta.skus_vendidos and "," not in venta.skus_vendidos else None)
         venta.comision_venta, venta.costo_envio = c.comision, c.costo_envio
         venta.origen_comision, venta.observacion = c.origen, c.observacion
         if venta.rentabilidad is not None:  # las incidencias de costo no se calculan
