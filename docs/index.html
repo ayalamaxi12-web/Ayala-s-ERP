@@ -8584,7 +8584,7 @@ function frvRender(){
   qs('frv-tbody').innerHTML=fs.slice((FRV.page-1)*por,FRV.page*por).map(f=>{
     const e=op(f),lista=e.lista!=null?e.lista:f.lista,venta=e.venta!=null?e.venta:f.venta,planId=e.plan_id!==undefined?e.plan_id:((f.plan||{}).id||'');
     const sim=FRV.sim[f.id],marg=sim?sim.margen:f.margen,rent=sim?sim.rentabilidad:f.rentabilidad,id=acEsc(f.id);
-    const cambioP=(e.lista!=null&&e.lista!==f.lista)||(e.venta!=null&&e.venta!==f.venta),cambioPl=!!e.plan_id&&e.plan_id!==((f.plan||{}).id||'');
+    const cambioP=(e.lista!=null&&e.lista!==f.lista)||(e.venta!=null&&e.venta!==f.venta),cambioPl=e.plan_id!==undefined&&e.plan_id!==((f.plan||{}).id||''),sacaPlan=cambioPl&&!e.plan_id&&!!f.plan;
     const dis=FRV.escritura?'':' disabled title="Escritura apagada (FRAVEGA_ESCRITURA)"';
     const color=marg==null?'var(--text3)':marg<obj?'var(--red)':'var(--green)';
     const desc=lista&&venta?Math.round((1-venta/lista)*1000)/10:null;
@@ -8596,7 +8596,7 @@ function frvRender(){
       <td style="text-align:right;white-space:nowrap">${desc==null?'—':desc+' %'}</td><td style="text-align:right">${frvN(f.precio_pm,2)}</td>
       <td><select class="fi" onchange="frvEdita('${id}','plan_id',this.value)"${dis}><option value="">Simple (sin cuotas)</option>${FRV.planes.map(p=>`<option value="${acEsc(p.id)}"${p.id===planId?' selected':''}>${acEsc(p.cuotas)} · ${frvN(p.comision,1)} %</option>`).join('')}</select></td>
       <td style="text-align:right;color:${color};font-weight:600">${marg==null?'—':frvN(marg,1)+' %'}</td><td style="text-align:right">${frvN(rent,0)}</td>
-      <td style="white-space:nowrap">${cambioP?`<button class="btn-xs" onclick="frvGuardarPrecio('${id}')">Guardar precio</button> `:''}${cambioPl?`<button class="btn-xs" onclick="frvGuardarPlan('${id}')">Guardar plan</button>`:''}<div style="font-size:10px;color:var(--text2)">${acEsc(FRV.msg[f.id]||'')}</div></td></tr>`;
+      <td style="white-space:nowrap">${cambioP?`<button class="btn-xs" onclick="frvGuardarPrecio('${id}')">Guardar precio</button> `:''}${cambioPl&&(e.plan_id||sacaPlan)?`<button class="btn-xs" onclick="frvGuardarPlan('${id}')">${sacaPlan?'Sacar plan':'Guardar plan'}</button>`:''}<div style="font-size:10px;color:var(--text2)">${acEsc(FRV.msg[f.id]||'')}</div></td></tr>`;
   }).join('')||'<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:20px">Sin publicaciones con ese filtro</td></tr>';
   qs('frv-pag').innerHTML=pag>1?`<button class="btn-xs" onclick="FRV.page=Math.max(1,FRV.page-1);frvRender()">‹</button> ${FRV.page} / ${pag} <button class="btn-xs" onclick="FRV.page=Math.min(${pag},FRV.page+1);frvRender()">›</button>`:'';
 }
@@ -8630,13 +8630,18 @@ async function frvGuardarPrecio(id){
 }
 async function frvGuardarPlan(id){
   const f=FRV.filas.find(x=>x.id===id),e=FRV.edit[id]||{},o=frvOperador();if(!f||!o)return;
-  const p=FRV.planes.find(x=>x.id===e.plan_id);if(!p){toast('Elegí un plan','error');return;}
-  if(!confirm(`Frávega — ${f.ref_id}\nPlan: ${(f.plan||{}).nombre||'sin plan'} → ${p.nombre}\n\nEsto ESCRIBE en Frávega (puede demorar en impactar). ¿Aplicar?`))return;
+  const sacar=!e.plan_id,p=sacar?null:FRV.planes.find(x=>x.id===e.plan_id);
+  if(!sacar&&!p){toast('Elegí un plan','error');return;}
+  if(sacar&&!f.plan){toast('Esa publicación no tiene plan para sacar','error');return;}
+  const hasta=(f.plan||{}).hasta?new Date(f.plan.hasta).toLocaleDateString('es-AR'):'';
+  const txt=sacar?`Frávega — ${f.ref_id}\nSACAR el plan: ${f.plan.nombre}\n\nNo lo borra: Frávega le corta la vigencia al próximo día hábil a las 10:00 y el cambio pide aprobación. Desde ese momento la publicación deja de ofrecer cuotas.\n\nEsto ESCRIBE en Frávega. ¿Sacar el plan?`
+    :`Frávega — ${f.ref_id}\nPlan: ${(f.plan||{}).nombre||'sin plan'} → ${p.nombre}\n\n${f.plan?'Mantiene el inicio del plan actual (Frávega no deja cambiarlo mientras está activo).':'Empieza el próximo día hábil a las 10:00.'} Termina el ${new Date((p.hasta)||'2027-05-31').toLocaleDateString('es-AR')}. El cambio pide aprobación de Frávega y puede demorar.\n\nEsto ESCRIBE en Frávega. ¿Aplicar?`;
+  if(!confirm(txt))return;
   FRV.msg[id]='Guardando…';frvRender();
   try{
-    const r=await cpPost('/fravega/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ref_id:f.ref_id,plan_id:p.id,operador:o})});
-    if(r.aplicado){f.plan={...(f.plan||{}),id:p.id,nombre:p.nombre,cuotas:p.cuotas,comision:p.comision};delete FRV.edit[id];delete FRV.sim[id];}
-    FRV.msg[id]=r.aplicado?'✓ Plan aplicado y verificado':'⏳ '+(r.aviso||'Enviado: todavía no figura');
+    const r=await cpPost('/fravega/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ref_id:f.ref_id,plan_id:sacar?'':p.id,operador:o})});
+    if(r.aplicado){f.plan=sacar?{...f.plan,hasta:(r.plan||{}).hasta}:{...(f.plan||{}),id:p.id,nombre:p.nombre,cuotas:p.cuotas,comision:p.comision,desde:(r.plan||{}).desde,hasta:(r.plan||{}).hasta};delete FRV.edit[id];delete FRV.sim[id];}
+    FRV.msg[id]=r.aplicado?(sacar?'✓ Plan sacado (pendiente de aprobación): ':'✓ Plan enviado (pendiente de aprobación): ')+(r.aviso||''):'⏳ '+(r.aviso||'Enviado: todavía no figura');
   }catch(x){FRV.msg[id]='❌ '+x.message;toast(x.message,'error');}
   frvRender();
 }

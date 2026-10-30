@@ -161,18 +161,58 @@ def poner_precio(item_id: str, lista: Decimal, venta: Decimal, neto: Decimal, st
     _revisar_escritura(r, cuerpo)
 
 
+HORA_INICIO_UTC = 13          # 10:00 de Argentina: el portal solo deja elegir horas entre las 10:00 y las 15:00
+_FMT = "%Y-%m-%dT%H:%M:%S.000Z"
+
+
+def siguiente_dia_habil(desde: datetime | None = None, saltar: int = 0) -> datetime:
+    """Próximo día hábil (lunes a viernes) a las 10:00 de Argentina, en UTC. Frávega rechaza un inicio en sábado, domingo o feriado
+    (`to_date_holiday_error`): los feriados no se conocen acá, por eso `poner_plan` reintenta con el siguiente si Frávega lo rechaza."""
+    from datetime import timedelta
+
+    ahora = (desde or datetime.now(timezone.utc)).astimezone(timezone(timedelta(hours=-3)))
+    d = ahora.date()
+    n = 0
+    while True:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            if n == saltar:
+                return datetime(d.year, d.month, d.day, HORA_INICIO_UTC, tzinfo=timezone.utc)
+            n += 1
+
+
 def poner_plan(item_id: str, plan: dict, desde: datetime | None = None, cookies: dict[str, str] | None = None,
-               request_fn: Callable | None = None) -> None:
-    """`POST /v1/item/{id}/plan` con el plan completo y su vigencia (paso «Financiación» de Editar producto)."""
+               request_fn: Callable | None = None) -> str:
+    """`POST /v1/item/{id}/plan` con el plan completo y su vigencia (capturado en vivo el 30/10 con PLANCHA-SUB-GORRA: `from`/`to` en UTC, `from`
+    en día hábil). Si `desde` es None se usa el próximo día hábil y, si Frávega rechaza el feriado, el siguiente (hasta 5). Si la publicación ya tiene
+    el plan activo, el portal no deja cambiar el inicio: pasá `desde` con el inicio actual. Devuelve el `from` aceptado. Pide aprobación de Frávega."""
     _exigir_escritura()
     if not plan or not plan.get("_id"):
         raise ValueError("Falta el plan (objeto completo de Frávega).")
     cookies = cookies if cookies is not None else cookies_desde_env()
-    desde = desde or datetime.now(timezone.utc)
     hasta = (plan.get("validity") or {}).get("expiration")
-    cuerpo = {"plan": plan, "from": desde.strftime("%Y-%m-%dT%H:%M:%SZ"), "to": hasta}
+    intentos = 1 if desde is not None else 5
+    for n in range(intentos):
+        inicio = desde if desde is not None else siguiente_dia_habil(saltar=n)
+        cuerpo = {"plan": plan, "from": inicio.strftime(_FMT), "to": hasta}
+        r = _pedir("POST", f"/v1/item/{item_id}/plan", cookies, None, cuerpo, request_fn)
+        try:
+            _revisar_escritura(r, {"plan": {"_id": plan.get("_id"), "name": plan.get("name")}, "from": cuerpo["from"], "to": cuerpo["to"]})
+            return cuerpo["from"]
+        except FravegaRechazo as e:
+            if "holiday" not in str(e).lower() or n == intentos - 1:
+                raise
+    raise FravegaRechazo("Frávega no aceptó ninguna fecha de inicio hábil.")
+
+
+def sacar_plan(item_id: str, cookies: dict[str, str] | None = None, request_fn: Callable | None = None) -> None:
+    """Saca el plan: `POST /v1/item/{id}/plan` con `{plan:null, from:null, to:null}` (capturado en vivo el 30/10). NO borra la asociación: Frávega le
+    corta la vigencia al día siguiente a las 10:00 y el cambio pide aprobación."""
+    _exigir_escritura()
+    cookies = cookies if cookies is not None else cookies_desde_env()
+    cuerpo = {"plan": None, "from": None, "to": None}
     r = _pedir("POST", f"/v1/item/{item_id}/plan", cookies, None, cuerpo, request_fn)
-    _revisar_escritura(r, {"plan": {"_id": plan.get("_id"), "name": plan.get("name")}, "from": cuerpo["from"], "to": cuerpo["to"]})
+    _revisar_escritura(r, cuerpo)
 
 
 def _revisar_escritura(r, enviado: dict | None = None) -> None:

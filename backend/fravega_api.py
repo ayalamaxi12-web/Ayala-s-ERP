@@ -50,7 +50,7 @@ def _catalogo_sync(forzar: bool) -> dict:
             stock_gral = None
             avisos.append(f"No se pudo leer el stock general ({type(e).__name__}: {e}): se muestra solo el publicado en Frávega.")
         filas = construir_vista(db, items, datos, tc, par, date.today(), stock_gral)
-    planes = [{"id": p["_id"], "nombre": p.get("name"), "cuotas": fc.cuotas_de_plan(p.get("name")), "comision": p.get("commission")}
+    planes = [{"id": p["_id"], "nombre": p.get("name"), "cuotas": fc.cuotas_de_plan(p.get("name")), "comision": p.get("commission"), "hasta": (p.get("validity") or {}).get("expiration")}
               for p in fc.planes_en_uso(items)]
     return {"filas": filas, "planes": planes, "escritura": fc.escritura_habilitada(), "tc": float(tc), "avisos": avisos}
 
@@ -173,35 +173,70 @@ async def poner_precio(b: _PrecioIn):
 class _PlanIn(BaseModel):
     id: str
     ref_id: str
-    plan_id: str
+    plan_id: str = ""         # vacío = sacar el plan
     operador: str
+
+
+def _inicio_actual(actual: dict):
+    """Inicio del plan que la publicación ya tiene, si está activo: el portal no deja cambiarlo («La fecha de inicio no puede ser modificada»)."""
+    from datetime import datetime as _dt, timezone as _tz
+    desde = ((actual.get("plan") or {}).get("desde"))
+    try:
+        ini = _dt.fromisoformat(str(desde).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return ini if ini <= _dt.now(_tz.utc) else None
 
 
 @router.post("/plan")
 async def poner_plan(b: _PlanIn):
-    """Asigna un plan de cuotas a UNA publicación. Frávega lo puede demorar: se relee y se informa. Escribe en Frávega."""
+    """Asigna (o saca, con `plan_id` vacío) el plan de cuotas de UNA publicación. Frávega lo hace pasar por aprobación y puede demorar: se relee y se
+    informa. Escribe en Frávega."""
     _exigir(b.operador)
 
     def _hacer():
         import main
         items = _items(True)
         actual = next((i for i in items if i["id"] == b.id), None)
-        plan = next((p for p in fc.planes_en_uso(items) if p["_id"] == b.plan_id), None)
-        if not actual or not plan:
-            raise HTTPException(status_code=404, detail="No encuentro esa publicación o ese plan en el listado de Frávega.")
+        if not actual:
+            raise HTTPException(status_code=404, detail="No encuentro esa publicación en el listado de Frávega.")
+        antes = actual.get("plan") or {}
+        sacar = not b.plan_id
+        plan = None
+        if not sacar:
+            plan = next((p for p in fc.planes_en_uso(items) if p["_id"] == b.plan_id), None)
+            if not plan:
+                raise HTTPException(status_code=404, detail="No encuentro ese plan en el listado de Frávega.")
+            if antes.get("id") == b.plan_id and _inicio_actual(actual):
+                raise HTTPException(status_code=422, detail="Esa publicación ya tiene ese plan activo.")
+        elif not antes:
+            raise HTTPException(status_code=422, detail="Esa publicación no tiene plan para sacar.")
         error_frávega = None
+        inicio = None
         try:
-            fc.poner_plan(b.id, plan)
+            if sacar:
+                fc.sacar_plan(b.id)
+            else:
+                inicio = fc.poner_plan(b.id, plan, _inicio_actual(actual))
         except fc.FravegaRechazo as e:
             error_frávega = str(e)
         except Exception as e:  # noqa: BLE001
             _errores(e)
         despues = fc.releer_item(b.id)
-        aplicado = bool(despues and (despues.get("plan") or {}).get("id") == b.plan_id)
+        dp = (despues or {}).get("plan") or {}
+        if sacar:
+            aplicado = bool(despues and dp.get("hasta") and dp.get("hasta") != antes.get("hasta"))
+        else:
+            aplicado = bool(despues and dp.get("id") == b.plan_id)
         if error_frávega and not aplicado:
-            raise HTTPException(status_code=422, detail=f"{error_frávega} · Releído en Frávega: el plan sigue siendo {((despues or {}).get('plan') or {}).get('nombre') or 'ninguno'} (puede demorar en impactar).")
+            raise HTTPException(status_code=422, detail=f"{error_frávega} · Releído en Frávega: plan {dp.get('nombre') or 'ninguno'} hasta {dp.get('hasta') or '—'}.")
         _CACHE["t"] = 0
-        aviso = _historial(main, {"Item ID": b.id, "SKU": b.ref_id, "Accion": "Plan Frávega", "Tipo/Promocion": plan.get("name"),
-                                  "Precio Anterior": (actual.get("plan") or {}).get("nombre") or "", "Operador": b.operador})
-        return {"ok": True, "aplicado": aplicado, "aviso": aviso or (None if aplicado else "Frávega recibió el cambio pero todavía figura el plan anterior: puede demorar en impactar.")}
+        aviso = _historial(main, {"Item ID": b.id, "SKU": b.ref_id, "Accion": "Sacar plan Frávega" if sacar else "Plan Frávega",
+                                  "Tipo/Promocion": (antes.get("nombre") or "") if sacar else plan.get("name"),
+                                  "Precio Anterior": "" if sacar else (antes.get("nombre") or ""), "Operador": b.operador})
+        nota = ("Frávega lo recibió y lo manda a aprobación. " + ("La vigencia del plan termina " + str(dp.get("hasta")) + "." if sacar else
+                f"Inicio {inicio or antes.get('desde')}; puede demorar en impactar en la tienda.")) if aplicado else \
+               "Frávega recibió el cambio pero todavía muestra el plan anterior: puede demorar. Apretá Releer en unos minutos."
+        return {"ok": True, "aplicado": aplicado, "sacar": sacar, "aviso": " · ".join(x for x in (nota, aviso) if x),
+                "plan": {"nombre": dp.get("nombre"), "desde": dp.get("desde"), "hasta": dp.get("hasta")}}
     return await run_in_threadpool(_hacer)
