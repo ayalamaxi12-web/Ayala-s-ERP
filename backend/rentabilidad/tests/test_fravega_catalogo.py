@@ -85,6 +85,7 @@ def test_poner_plan_manda_el_plan_completo_con_su_vigencia(monkeypatch):
     visto = {}
     fc.poner_plan("a1", PLAN6, None, COOK, lambda m_, u, p, c, h: visto.update(u=u, c=c) or R(200))
     assert visto["u"].endswith("/v1/item/a1/plan") and visto["c"]["plan"]["_id"] == "p6" and visto["c"]["to"] == "2027-05-31T18:00:00.000Z"
+    assert visto["c"]["from"].endswith("T13:00:00.000Z")                                   # 10:00 de Argentina, día hábil
 
 
 def test_planes_en_uso_sin_repetidos_ordenados_por_cuotas():
@@ -217,3 +218,73 @@ def test_sin_plan_es_venta_simple_solo_comision_base_y_da_mas_margen_que_con_cuo
     c3, _ = margen_fravega(d("60000"), datos, d("1500"), par, "3", None)
     assert simple["margen"] > c3["margen"]
     assert margen_fravega(d("60000"), datos, d("1500"), par, "contado", None)[0]["margen"] == simple["margen"]
+
+
+def test_siguiente_dia_habil_salta_sabado_y_domingo():
+    from datetime import datetime, timezone
+    viernes = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
+    assert fc.siguiente_dia_habil(viernes) == datetime(2026, 11, 2, 13, 0, tzinfo=timezone.utc)          # lunes 10:00 AR
+    assert fc.siguiente_dia_habil(viernes, saltar=1) == datetime(2026, 11, 3, 13, 0, tzinfo=timezone.utc)
+    assert fc.siguiente_dia_habil(datetime(2026, 10, 28, 15, 0, tzinfo=timezone.utc)) == datetime(2026, 10, 29, 13, 0, tzinfo=timezone.utc)
+
+
+def test_poner_plan_reintenta_con_el_dia_habil_siguiente_si_frávega_rechaza_el_feriado(monkeypatch):
+    monkeypatch.setenv("FRAVEGA_ESCRITURA", "1")
+    froms = []
+
+    def req(m_, u, p, c, h):
+        froms.append(c["from"])
+        return R(422, {"code": "validation", "error": [{"field": "validityFrom", "message": "to_date_holiday_error"}]}) if len(froms) == 1 else R(200)
+    ok = fc.poner_plan("a1", PLAN6, None, COOK, req)
+    assert len(froms) == 2 and froms[0] != froms[1] and ok == froms[1]
+    # con un inicio dado (plan activo: el portal no deja cambiarlo) no se reintenta ni se cambia la fecha
+    from datetime import datetime, timezone
+    froms.clear()
+    with pytest.raises(fc.FravegaRechazo):
+        fc.poner_plan("a1", PLAN6, datetime(2026, 9, 17, 18, 0, tzinfo=timezone.utc), COOK, lambda *a: froms.append(a[3]["from"]) or R(422, {"error": [{"message": "to_date_holiday_error"}]}))
+    assert froms == ["2026-09-17T18:00:00.000Z"]
+
+
+def test_sacar_plan_manda_plan_from_y_to_nulos(monkeypatch):
+    monkeypatch.setenv("FRAVEGA_ESCRITURA", "1")
+    visto = {}
+    fc.sacar_plan("a1", COOK, lambda m_, u, p, c, h: visto.update(m=m_, u=u, c=c) or R(200))
+    assert visto["m"] == "POST" and visto["u"].endswith("/v1/item/a1/plan") and visto["c"] == {"plan": None, "from": None, "to": None}
+    monkeypatch.delenv("FRAVEGA_ESCRITURA")
+    with pytest.raises(fc.EscrituraApagada):
+        fc.sacar_plan("a1", COOK, lambda *a: R(200))
+
+
+def _api_plan(monkeypatch, item, despues, accion):
+    from fastapi.testclient import TestClient
+    import fravega_api
+    import main
+    monkeypatch.setenv("FRAVEGA_ESCRITURA", "1")
+    monkeypatch.setattr(fravega_api, "_items", lambda forzar=False: [item])
+    monkeypatch.setattr(fc, "releer_item", lambda *a, **k: despues)
+    monkeypatch.setattr(main, "_registrar_historial_oferta_lote", lambda filas: None)
+    return TestClient(main.app, raise_server_exceptions=False), accion
+
+
+def test_endpoint_sacar_plan_informa_que_la_vigencia_se_corto(monkeypatch):
+    item = fc.normalizar_item(_item("a1", "PLANCHA-SUB-GORRA"))
+    despues = {**item, "plan": {**item["plan"], "hasta": "2026-10-31T13:00:00Z"}}
+    cli, llamadas = _api_plan(monkeypatch, item, despues, [])
+    monkeypatch.setattr(fc, "sacar_plan", lambda *a, **k: llamadas.append("sacar"))
+    r = cli.post("/fravega/plan", json={"id": "a1", "ref_id": "PLANCHA-SUB-GORRA", "plan_id": "", "operador": "Maxi A."})
+    assert r.status_code == 200 and r.json()["sacar"] and r.json()["aplicado"] and llamadas == ["sacar"] and "aprobación" in r.json()["aviso"]
+
+
+def test_endpoint_asignar_usa_el_inicio_actual_si_el_plan_esta_activo(monkeypatch):
+    p12 = {"_id": "p12", "name": "IMPORTADOS: 12 cuotas sin interés", "commission": 16.6, "validity": {"expiration": "2027-05-31T18:00:00.000Z"}}
+    item = fc.normalizar_item(_item("a1", "PLANCHA-SUB-GORRA"))
+    otro = fc.normalizar_item(_item("b", "OTRO", p12))
+    despues = {**item, "plan": {**otro["plan"]}}
+    cli, usado = _api_plan(monkeypatch, item, despues, {})
+    monkeypatch.setattr(__import__("fravega_api"), "_items", lambda forzar=False: [item, otro])
+    monkeypatch.setattr(fc, "poner_plan", lambda i, plan, desde=None, *a, **k: usado.update(desde=desde) or "x")
+    r = cli.post("/fravega/plan", json={"id": "a1", "ref_id": "PLANCHA-SUB-GORRA", "plan_id": "p12", "operador": "Maxi A."})
+    assert r.status_code == 200 and r.json()["aplicado"]
+    assert usado["desde"] is not None and usado["desde"].isoformat().startswith("2026-10-02")         # el inicio del plan que ya tenía
+    r = cli.post("/fravega/plan", json={"id": "a1", "ref_id": "PLANCHA-SUB-GORRA", "plan_id": "p6", "operador": "Maxi A."})
+    assert r.status_code == 422 and "ya tiene ese plan" in r.json()["detail"]
