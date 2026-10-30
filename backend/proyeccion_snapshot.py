@@ -64,6 +64,23 @@ def validar_payload(d) -> list[str]:
     return errs
 
 
+def clases_por_sku(db) -> tuple[dict[str, str], dict]:
+    """SKU normalizado → clase (REY, MEDIO, REVENTAR, COLA, PREVENTA) del ÚLTIMO snapshot, y de cuándo es. Se usa desde otros módulos (Campañas ML): no sirve
+    el snapshot entero, solo sus clases. Devuelve ({}, {}) si todavía no hay snapshot o no trae esas columnas."""
+    from rentabilidad.pricing_pm import norm_sku
+
+    f = db.query(ProyeccionSnapshot).order_by(ProyeccionSnapshot.id.desc()).first()
+    if f is None:
+        return {}, {}
+    sk = (f.payload or {}).get("skus") or {}
+    cols = [str(c).strip().lower() for c in sk.get("cols") or []]
+    if "sku" not in cols or "clase" not in cols:
+        return {}, {"version": f.id, "generado": f.generado}
+    i, j = cols.index("sku"), cols.index("clase")
+    out = {norm_sku(r[i]): str(r[j]).strip().upper() for r in sk.get("rows") or [] if len(r) > max(i, j) and r[i] and r[j]}
+    return out, {"version": f.id, "generado": f.generado, "subido_en": f.subido_en.isoformat()}
+
+
 @router.get("/dashboard")
 def dashboard(request: Request, version: int | None = None):
     _exigir_clave(request)

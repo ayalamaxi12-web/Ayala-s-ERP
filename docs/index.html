@@ -1597,6 +1597,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <select id="cp-sort" class="fi" onchange="cpSortSel(this.value)" title="También podés hacer clic en el encabezado de cada columna"><option value="excel">Orden del Excel</option><option value="margen_asc">Menor margen primero</option><option value="margen_desc">Mayor margen primero</option><option value="sku">SKU A-Z</option><option value="col">Por columna (clic en el encabezado)</option></select>
       <select id="cp-f-pm" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por PM"><option value="">Todos los PM</option></select>
       <select id="cp-f-cat" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por categoría"><option value="">Todas las categorías</option></select>
+      <select id="cp-f-clase" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por clase de SKU" title="Clase del SKU según la última foto de Proyección 2027" style="display:none"><option value="">Todas las clases</option></select>
       <select id="cp-f-part" class="fi" onchange="CP.page=1;cpRender()" aria-label="Filtrar por participación" style="display:none"><option value="">Participen o no</option><option value="si">Solo las que participan</option><option value="no">Solo las que NO participan</option></select>
       <span style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--text2)">Precio final<input type="text" inputmode="numeric" id="cp-f-pmin" placeholder="desde" oninput="CP.page=1;cpRender()" class="campo-num" style="width:78px"><input type="text" inputmode="numeric" id="cp-f-pmax" placeholder="hasta" oninput="CP.page=1;cpRender()" class="campo-num" style="width:78px"></span>
       <span id="cp-count" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
@@ -2889,6 +2890,7 @@ function cpFiltrar(filas,fl,orig){
     if(fl.soloBajo){const m=cpMargen(f,fl.plan);if(m==null||m>=fl.obj)return false;}
     if(fl.pm&&(f.pm||'')!==fl.pm)return false;
     if(fl.cat&&(f.categoria||'')!==fl.cat)return false;
+    if(fl.clase&&(f.clase||'')!==fl.clase)return false;
     if(fl.part==='si'&&!f.participa)return false;
     if(fl.part==='no'&&f.participa)return false;
     if(fl.pmin!=null&&!(f.precio_cliente>=fl.pmin))return false;
@@ -3057,7 +3059,7 @@ function cpKey(ev,fila){
 }
 function cpNumFiltro(id){const t=qs(id).value;if(String(t).trim()==='')return null;const v=parsePeso(t);return v>0?v:null;}
 function cpFl(soloEdit){return {search:qs('cp-search').value,soloEdit,soloMod:qs('cp-solo-mod').checked,soloAviso:qs('cp-solo-aviso').checked,soloBajo:qs('cp-solo-bajo').checked,plan:cpPlan(),obj:cpObj(),
-  pm:qs('cp-f-pm').value,cat:qs('cp-f-cat').value,part:qs('cp-f-part').value,pmin:cpNumFiltro('cp-f-pmin'),pmax:cpNumFiltro('cp-f-pmax')};}
+  pm:qs('cp-f-pm').value,cat:qs('cp-f-cat').value,clase:qs('cp-f-clase').value,part:qs('cp-f-part').value,pmin:cpNumFiltro('cp-f-pmin'),pmax:cpNumFiltro('cp-f-pmax')};}
 function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
 // «Matias» y «Matías» (o «veronica ») son la misma persona: se junta por nombre sin tildes ni mayúsculas y se muestra el que lleva tilde.
 const CP_PM_VISTOS={};
@@ -3066,6 +3068,7 @@ function cpArmarFiltros(){
   const llena=(id,vals,todas)=>{const el=qs(id),act=el.value;el.innerHTML=`<option value="">${todas}</option>`+[...new Set(vals.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>`<option value="${acEsc(v)}">${acEsc(v)}</option>`).join('');el.value=act;};
   CP.filas.forEach(f=>{if(f.pm)cpPmCanon(f.pm);});CP.filas.forEach(f=>{if(f.pm)f.pm=cpPmCanon(f.pm);});
   llena('cp-f-pm',CP.filas.map(f=>f.pm),'Todos los PM');llena('cp-f-cat',CP.filas.map(f=>f.categoria),'Todas las categorías');
+  {const cl=['REY','MEDIO','REVENTAR','COLA','PREVENTA'],hay=new Set(CP.filas.map(f=>f.clase).filter(Boolean)),el=qs('cp-f-clase'),act=el.value,ci=CP.data&&CP.data.clases_info||{};el.style.display=hay.size?'':'none';el.innerHTML='<option value="">Todas las clases'+(ci.generado?' (foto '+acEsc(String(ci.generado).slice(0,10))+')':'')+'</option>'+[...cl.filter(c=>hay.has(c)),...[...hay].filter(c=>!cl.includes(c)).sort()].map(c=>`<option value="${acEsc(c)}">${acEsc(c)}</option>`).join('');el.value=act;}
   ['cp-f-pmin','cp-f-pmax'].forEach(id=>{qs(id).value='';});qs('cp-f-part').value='';
 }
 // Participación y precio final (campañas con propuestas de ML)
@@ -3251,7 +3254,7 @@ function cpRender(){
     const cuentaChip=f.cuenta&&ef&&f.cuenta!==ef?` <span style="color:var(--yellow)" title="Esta publicación es de la cuenta ${f.cuenta}, no de ${ef}">⚠${f.cuenta}</span>`:'';
     const avisos=cpOrdenarAvisos((f.avisos||[]).filter(a=>!(prop&&(/^ML pide el descuento TOTAL/.test(a)||/^Celda no editable/.test(a)))));
     const partTd=prop?`<td style="text-align:center;vertical-align:top"><input type="checkbox" ${f.participa?'checked':''} onchange="cpParticipa(${f.fila},this.checked)" aria-label="Participar con ${acEsc(f.item_id)}" style="width:18px;height:18px">${f._ml?`<div title="${acEsc(f._ml.mensaje||'')}" style="font-size:9px;margin-top:2px;color:${f._ml.estado==='ok'?'var(--ok)':f._ml.estado==='error'?'var(--error)':'var(--atencion)'}">${f._ml.estado==='ok'?'✓ en ML':f._ml.estado==='error'?'✗ ML':'?'}</div>`:''}</td>`:'';
-    return `<tr style="${mod?'background:var(--mod-resalte);':''}${prop&&!f.participa?'opacity:.5':''}">${partTd}<td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
+    return `<tr style="${mod?'background:var(--mod-resalte);':''}${prop&&!f.participa?'opacity:.5':''}">${partTd}<td style="vertical-align:top"><b style="font-family:'DM Mono',monospace">${acEsc(f.item_id)}</b>${cuentaChip}<div style="font-size:9px;color:var(--text2)" title="${acEsc(f.titulo||'')}">${f.clase?`<span class="cp-clase" style="font-size:9px;font-weight:700;padding:0 6px;border-radius:var(--r-chip);background:var(--mod-suave);color:var(--mod-suave-texto);margin-right:4px" title="Clase del SKU en Proyección 2027">${acEsc(f.clase)}</span>`:''}${f.sku?acEsc(f.sku)+(f.sku_origen==='ml'?' <span title="SKU tomado de la publicación en ML (el Excel venía vacío)" style="color:var(--text3)">·ML</span>':''):'<span style="color:var(--yellow)">sin SKU</span>'}</div></td>`
       +`<td style="font-size:10px;color:var(--text2)">${acEsc(f.pm||'—')}</td><td style="font-family:'DM Mono',monospace">${f.precio_original?fmt$(f.precio_original):'—'}${f.comision_pct!=null?`<div style="font-size:8px;color:${f.comision_origen==='ml'?'var(--text3)':'var(--yellow)'}" title="${f.comision_origen==='ml'?'Comisión REAL de esta publicación, leída de ML (Cargo por vender)':f.comision_origen==='categoria'?'No se pudo leer la real de ML: se usa la de la categoría de la tabla (puede no coincidir)':'No se pudo leer la real de ML y la categoría no está cargada: se usa la general'}">com ${f.comision_pct}%${f.comision_origen==='ml'?' ✓ML':' (tabla)'}</div>`:''}</td><td>${pctCel}</td>`
       +(simple?'':`<td style="font-family:'DM Mono',monospace;color:var(--text2)">${f.meli_pct?Math.round(f.meli_pct*1000)/1000+'%':'—'}</td>`)
       +`<td style="font-family:'DM Mono',monospace">${f.precio_cliente!=null?fmt$(f.precio_cliente):'—'}${f._conf===false?' <span title="Vista previa calculada en el navegador: el backend la está confirmando" style="color:var(--yellow)">≈</span>':''}${f.meli_monto?`<div style="font-size:8px;color:var(--text3)">yo ${fmt$(f.precio_vendedor)} + ML ${fmt$(f.meli_monto)}</div>`:''}</td>`

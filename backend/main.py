@@ -660,6 +660,21 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
         r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, par, envios=envios,
                                  margen_objetivo=objetivo, plan_objetivo=plan_objetivo)
     r["envios_estado"] = envios_estado
+    # Clase del SKU (REY, MEDIO, REVENTAR, COLA, PREVENTA) del último snapshot de Proyección 2027, para filtrar en pantalla.
+    try:
+        import proyeccion_snapshot
+        with sesion() as db:
+            clases, info = proyeccion_snapshot.clases_por_sku(db)
+    except Exception as e:  # noqa: BLE001
+        clases, info = {}, {}
+        avisos.append(f"No se pudo leer la clase de los SKU de Proyección ({type(e).__name__}: {e}).")
+    from rentabilidad.pricing_pm import norm_sku as _norm
+    for fila in r["filas"]:
+        comps = [c["sku"] for c in (fila.get("combo") or [])] or [fila.get("sku") or ""]
+        fila["clase"] = next((clases[_norm(c)] for c in comps if _norm(c) in clases), None)
+    r["clases_info"] = info
+    if not clases:
+        avisos.append("No hay clases de SKU: todavía no se cargó una foto de Proyección 2027 (sin eso no se puede filtrar por clase).")
     resumen = campanas_ml_cuentas.resumen_cuentas(det, ids)
     if cuenta:
         resumen = {**resumen, "sugerida": cuenta, "elegida": True}
