@@ -47,7 +47,8 @@ def ciclo(db_session):
 
 def test_ayer_y_acumulado(ciclo):
     r = reporte_diario(ciclo, date(2026, 9, 27))
-    assert r["periodo"] == PERIODO and r["avisos"] == []
+    assert r["periodo"] == PERIODO
+    assert len(r["avisos"]) == 1 and "Frávega" in r["avisos"][0]          # la orden 4 (26/09) sigue con comisión estimada: ya debería estar la real
     ayer, acum = r["general"]["ayer"], r["general"]["acumulado_ciclo"]
     assert ayer["ordenes"] == 4 and ayer["facturacion"] == 54450.0 and ayer["rentabilidad"] == 2500.0
     assert acum["ordenes"] == 5 and acum["facturacion"] == 114950.0
@@ -122,14 +123,20 @@ def test_endpoint_con_token(ciclo, monkeypatch):
     assert c.get("/rentabilidad/reporte/ecom/diario?token=secreto&top=0").status_code == 422
 
 
-def test_avisa_si_las_ventas_de_fravega_del_dia_siguen_con_comision_estimada(ciclo):
+def test_avisa_si_las_ventas_de_fravega_de_los_ultimos_7_dias_siguen_con_comision_estimada(ciclo):
+    # la de AYER (27) todavía no tiene la real: es lo normal, no avisa
     ciclo.add(_venta("8", date(2026, 9, 27), "72440", "15000", skus_vendidos="PLANCHA-SUB-PORTATIL", canal_de_venta="Fravega",
                      origen_comision="ESTIMADO_FRAVEGA", orden_externa="v2frvg-01"))
     ciclo.flush()
+    assert len(reporte_diario(ciclo, date(2026, 9, 27))["avisos"]) == 1          # solo cuenta la del 26 (fixture)
+    # una del 25 sigue estimada: ya debería estar la real → avisa (la 4 del 26 también cuenta)
+    ciclo.add(_venta("9", date(2026, 9, 25), "50000", "9000", skus_vendidos="SANDMAK1P", canal_de_venta="Fravega",
+                     origen_comision="ESTIMADO_FRAVEGA", orden_externa="v3frvg-01"))
+    ciclo.flush()
     av = reporte_diario(ciclo, date(2026, 9, 27))["avisos"]
-    assert len(av) == 1 and "Frávega" in av[0] and "ESTIMADA" in av[0] and "FRAVEGA_SELLER" in av[0]
-    # con la comisión real ya no avisa; las estimadas de días anteriores (esperan su liquidación) tampoco
-    v = ciclo.query(VentaEcom).filter_by(numero_orden="8").one()
-    v.origen_comision = "LIQUIDACION_FRAVEGA"
+    assert len(av) == 1 and "2 venta(s)" in av[0] and "del 2026-09-25" in av[0] and "FRAVEGA_SELLER" in av[0]
+    # con la comisión real ya no avisa
+    for n in ("4", "9"):
+        ciclo.query(VentaEcom).filter_by(numero_orden=n).one().origen_comision = "LIQUIDACION_FRAVEGA"
     ciclo.flush()
     assert reporte_diario(ciclo, date(2026, 9, 27))["avisos"] == []

@@ -16,7 +16,7 @@ Definiciones (las mismas del informe de rentabilidad y de la pantalla):
   rentabilidad, y se listan en alertas.
 """
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -124,12 +124,17 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
     if ventas and all(v.es_full is None for v in ventas):
         avisos.append("El dato de Full todavía no está guardado para este ciclo: aparece desde la próxima corrida diaria.")
 
-    fravega_dia_est = [v for v in del_dia if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA]
-    if fravega_dia_est:
+    # Las órdenes de AYER (`dia`) normalmente todavía no tienen la comisión real: Frávega las factura después. Se avisa por las de los 6 días anteriores
+    # (ya debería estar la real): lo más probable es que las cookies del Seller Center hayan vencido y el cierre no pudo sincronizar.
+    desde_aviso = dia - timedelta(days=6)
+    fravega_viejas = [v for v in ventas if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA and v.fecha_creacion_venta
+                      and desde_aviso <= v.fecha_creacion_venta < dia]
+    if fravega_viejas:
+        mas_vieja = min(v.fecha_creacion_venta for v in fravega_viejas)
         avisos.append(
-            f"{len(fravega_dia_est)} venta(s) de Frávega del {dia} siguen con la comisión ESTIMADA: la corrida no pudo traer la real del Seller Center "
-            "(lo más probable: cookies FRAVEGA_SELLER_* vencidas en Railway). Renovalas y corré «Traer comisión y envío reales» en el módulo Frávega; "
-            "después volvé a bajar ese día al Sheet.")
+            f"{len(fravega_viejas)} venta(s) de Frávega de los últimos 7 días (la más vieja, del {mas_vieja}) siguen con la comisión ESTIMADA: ya debería estar la real. "
+            "Lo más probable es que las cookies FRAVEGA_SELLER_* estén vencidas en Railway: renovalas y corré «Traer comisión y envío reales» en el módulo Frávega; "
+            "después volvé a bajar esos días al Sheet.")
 
     marketplaces = {}
     for clave, canal in MARKETPLACES.items():
@@ -137,7 +142,7 @@ def reporte_diario(db: Session, dia: date | None = None, top: int = 5) -> dict:
         bloque = _bloque(vs, dia, top)
         if clave == "fravega":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA)
-            bloque["nota"] = "Comisión estimada (15%, sin IVA extra) hasta traer la real de «Próxima liquidación» o cargar la liquidación quincenal."
+            bloque["nota"] = "Comisión y envío estimados con el plan y el envío histórico de cada SKU (sin IVA extra) hasta traer la real de «Próxima liquidación» o cargar la liquidación quincenal."
         elif clave == "oncity":
             bloque["comision_estimada_ordenes"] = sum(1 for v in vs if v.origen_comision == ORIGEN_COMISION_ESTIMADO_ONCITY)
             bloque["nota"] = "Canal manual en Ecom sin dato de comisión: se descuenta una comisión estimada (15% del Precio Final + IVA 21%)."
