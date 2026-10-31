@@ -24,12 +24,6 @@ def test_clasificar_liquidar_manda_el_rey_es_la_clase_y_el_precio_no_lo_define()
     assert ci.clasificar(True, True) == "liquidar" and ci.clasificar(False, True) == "rey" and ci.clasificar(False, False) == "medio"
 
 
-def test_una_fila_por_sku_la_publicacion_que_mas_vendio_y_si_empatan_las_dos():
-    c = lambda sku, cuenta, mla, v: {"sku_norm": sku, "cuenta": cuenta, "mla_id": mla, "ventas_ult_90d_unid": v}
-    r = ci.elegir_publicaciones([c("A", "IT", "MLA1", 5), c("A", "MT", "MLA2", 9), c("B", "IT", "MLA3", 0), c("B", "MT", "MLA4", 0), c("C", "IT", "MLA5", 1)])
-    assert sorted(x["mla_id"] for x in r) == ["MLA2", "MLA3", "MLA4", "MLA5"]
-
-
 def _fila(sku, grupo, costo, stock, origen="ecom"):
     return {"sku": sku, "titulo": "t", "cuenta": "GROUP", "mla_id": "MLA", "grupo": grupo, "costo": costo, "precio_actual": 1.0, "margen_actual_pct": 10.0,
             "stock_disponible": stock, "ventas_ytd_unid": 0, "ventas_ult_90d_unid": 0, "ticket_alto": "no", "link_rey": "", "link_media": "", "link_barato": "", "stock_origen": origen}
@@ -151,19 +145,36 @@ def test_con_excel_solo_se_miran_las_publicaciones_de_la_campana(db_session, mon
     assert pedidas == ["MLA1"] and [f["mla_id"] for f in r["filas"]] == ["MLA1"] and r["conteos"]["origen"] == "Excel de la campaña"
 
 
-def test_un_sku_con_muchas_publicaciones_de_una_cuenta_queda_en_una_sola_fila_la_que_mas_vendio():
+def test_entran_todas_las_publicaciones_y_se_marca_la_principal_de_cada_sku():
     c = lambda mla, cuenta, v90, vm90, vmytd=0, sku="A": {"sku_norm": sku, "cuenta": cuenta, "mla_id": mla, "ventas_ult_90d_unid": v90, "ventas_mla_90d": vm90, "ventas_mla_ytd": vmytd}
-    # 4 publicaciones del mismo SKU en la misma cuenta: queda la que más vendió ella misma (no las 4 por empatar a nivel SKU)
     r = ci.elegir_publicaciones([c("MLA10", "IT", 9, 1), c("MLA11", "IT", 9, 6), c("MLA12", "IT", 9, 6, 20), c("MLA13", "IT", 9, 0)])
-    assert [x["mla_id"] for x in r] == ["MLA12"] and r[0]["publicaciones_del_sku"] == 4
-    # sin ventas por publicación: desempata la de menor MLA (estable)
+    assert len(r) == 4 and all(x["publicaciones_del_sku"] == 4 for x in r)                               # ninguna se descarta
+    assert [x["mla_id"] for x in r if x["publicacion_principal"] == "si"] == ["MLA12"]                    # la que más vendió ella misma
     r = ci.elegir_publicaciones([c("MLA9", "IT", 0, 0), c("MLA3", "IT", 0, 0)])
-    assert [x["mla_id"] for x in r] == ["MLA3"]
-    # entre cuentas: gana la que más vendió el SKU; si empatan, una por cuenta
+    assert [x["mla_id"] for x in r if x["publicacion_principal"] == "si"] == ["MLA3"]                     # empate: la de menor MLA
     r = ci.elegir_publicaciones([c("MLA1", "IT", 5, 5), c("MLA2", "MT", 8, 8), c("MLA3", "IT", 5, 1)])
-    assert [x["mla_id"] for x in r] == ["MLA2"]
+    assert len(r) == 3 and [x["mla_id"] for x in r if x["publicacion_principal"] == "si"] == ["MLA2"]
     r = ci.elegir_publicaciones([c("MLA1", "IT", 4, 4), c("MLA2", "MT", 4, 4), c("MLA3", "IT", 4, 0)])
-    assert sorted(x["mla_id"] for x in r) == ["MLA1", "MLA2"]
+    assert sorted(x["mla_id"] for x in r if x["publicacion_principal"] == "si") == ["MLA1", "MLA2"]      # empate entre cuentas: las dos principales
+
+
+def test_una_publicacion_vinculada_a_variantes_toma_el_stock_de_la_variante_por_color():
+    class Fp:
+        item_sku = {"VINILO": 1}
+        variantes = [{"atributos": {"Color": "Negro"}, "sku": "VINILO-NEGRO", "qty": 1, "parent_sku": "VINILO"},
+                     {"atributos": {"Color": "Blanco"}, "sku": "VINILO-BLANCO", "qty": 1, "parent_sku": "VINILO"}]
+
+    class E(_Ecom):
+        def factor_pack(self, mla):
+            return Fp()
+    e = E({"VINILO": {"variants": [{"sku": "VINILO-NEGRO", "variantWarehouses": [{"warehouse_id": "PITEC", "warehouse_qty": 3}, {"warehouse_id": "FULL", "warehouse_qty": 9}]},
+                                    {"sku": "VINILO-BLANCO", "variantWarehouses": [{"warehouse_id": "PITEC", "warehouse_qty": 0}, {"warehouse_id": "FULL", "warehouse_qty": 2}]}]}})
+    assert ci.stock_por_variantes(e, "MLA1", ["Negro"]) == {"propio": 3, "full": 9, "sku_costo": "VINILO-NEGRO", "variantes": ["VINILO-NEGRO"]}
+    assert ci.stock_por_variantes(e, "MLA1", ["blanco"])["propio"] == 0 and ci.stock_por_variantes(e, "MLA1", ["blanco"])["full"] == 2
+    assert ci.stock_por_variantes(e, "MLA1", ["Negro", "Blanco"])["propio"] == 3                          # una publicación con dos colores suma las dos variantes
+    assert ci.stock_por_variantes(e, "MLA1", ["Rojo"]) is None and ci.stock_por_variantes(e, "MLA1", []) is None   # sin color y con varias variantes, no se adivina
+    assert ci.colores_de_item({"variations": [{"attribute_combinations": [{"id": "COLOR", "value_name": "Negro"}]}], "attributes": []}) == ["Negro"]
+    assert ci.colores_de_item({"attributes": [{"id": "COLOR", "value_name": "Rojo"}]}) == ["Rojo"]
 
 
 def test_las_ventas_tambien_se_cuentan_por_publicacion_mla(db_session):
@@ -196,3 +207,46 @@ def test_las_descartadas_dicen_por_que_quedaron_afuera(db_session, monkeypatch):
     assert ("SIN-ECOM", "el SKU no se") in motivos and ("SIN-STOCK", "sin stock di") in motivos and ("A-OK", "SIN COSTO en") in motivos
     csv_txt = ci.descartadas_a_csv(r["descartadas"])
     assert csv_txt.startswith("sku,mla_id,cuenta,titulo,motivo") and "SIN-ECOM" in csv_txt
+
+
+def test_el_envio_sale_del_historial_de_ventas_de_ml_y_si_no_se_estima(db_session):
+    def v(orden, dia, skus, usuario, envio, mla, precio=1, categoria=None):
+        return VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden=orden, skus_vendidos=skus, fecha_creacion_venta=dia, costo_sin_iva=Decimal(1), comision_venta=Decimal(0),
+                         costo_envio=Decimal(envio), precio_final=Decimal(precio), precio_sin_iva=Decimal(1), tc=Decimal(1500), usuario_integracion=usuario, unidades=1, item_ml=mla,
+                         categoria=categoria)
+    G, A = "GLOBALELECTRONICSGROUP", "GLOBALELECTRONICSARG"
+    db_session.add_all([v("1", date(2026, 10, 20), "SKU-A", G, 6000, "MLA1", categoria="Cat1"), v("2", date(2026, 10, 25), "SKU-A", G, 8000, "MLA1", categoria="Cat1"),
+                        v("3", date(2026, 2, 1), "SKU-A", G, 1000, "MLA1"), v("4", date(2026, 2, 1), "SKU-B", A, 5000, "MLA9", categoria="Cat1"),
+                        v("5", date(2026, 10, 20), "SKU-C", G, 0, "MLA7", precio=90000),          # solo ventas ≥ $33.000 con envío 0: Full o similar
+                        v("6", date(2026, 10, 20), "SKU-D", G, 0, "MLA6", precio=10000),          # envío 0 por ser barato: no prueba nada
+                        v("7", date(2026, 10, 20), "SKU-A,SKU-B", G, 99999, "MLA8")])
+    db_session.flush()
+    e = ci.envios_historicos(db_session, HOY)
+    assert e["real"][("MLA", "MLA1")] == Decimal(7000)          # promedio de los de 90 días (6000 y 8000), no el de febrero
+    assert e["real"][("SKU-B", "MT")] == Decimal(5000)          # sin ventas en 90 días: el promedio del año
+    assert ("MLA", "MLA8") not in e["real"] and ("SKU-D", "IT") not in e["ceros"] and ("SKU-C", "IT") in e["ceros"]
+    assert e["categoria"]["Cat1"] == Decimal(6000)              # mediana de 6000, 8000 y 5000
+    assert e["general"] == Decimal(5500)                        # mediana de todos los envíos > 0: 1000, 5000, 6000 y 8000
+    f = lambda mla, sku, cuenta, cat=None: ci.envio_de_publicacion(e, mla, sku, cuenta, cat)
+    assert f("MLA1", "SKU-A", "IT") == (Decimal(7000), "historial de la publicación")
+    assert f("MLA55", "SKU-A", "IT")[1] == "historial del SKU" and f("MLA55", "SKU-B", "IT") == (Decimal(5000), "historial del SKU en otra cuenta")
+    assert f("MLA77", "SKU-C", "IT") == (Decimal(0), "historial: ventas sin envío pagado (Full o similar)")
+    assert f("MLA55", "SKU-Z", "IT", "Cat1")[1] == "ESTIMADO: mediana de la categoría" and f("MLA55", "SKU-Z", "IT", "Otra")[1] == "ESTIMADO: mediana general"
+    assert ci.envio_de_publicacion({"real": {}, "ceros": set(), "categoria": {}, "general": None}, "M", "S", "IT") == (None, "sin dato")
+
+
+def test_el_margen_descuenta_el_envio_del_historial_en_publicaciones_de_33000_o_mas(db_session, monkeypatch):
+    import campanas_ml_comision
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", lambda items, **k: ({}, []))
+    par = m.cargar_parametros(db_session, HOY)
+    datos = lambda sku: DatosSku(d("10"), d("1.21"), None, None, None)
+    ecom = _Ecom({"PLANCHA-SUB-5EN1": _prod(PITEC=5)})
+    sin = ci.generar(_ML(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA1"], "MT": []})["filas"][0]
+    assert sin["envio_origen"] == "sin dato" and sin["envio_costo"] is None
+    db_session.add(VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden="1", skus_vendidos="PLANCHA-SUB-5EN1", fecha_creacion_venta=date(2026, 10, 20), costo_sin_iva=Decimal(1),
+                             comision_venta=Decimal(0), costo_envio=Decimal(9000), precio_final=Decimal(1), precio_sin_iva=Decimal(1), tc=Decimal(1500),
+                             usuario_integracion="GLOBALELECTRONICSGROUP", unidades=1, item_ml="MLA1"))
+    db_session.flush()
+    con = ci.generar(_ML(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA1"], "MT": []})["filas"][0]
+    assert con["envio_costo"] == 9000.0 and con["envio_origen"] == "historial de la publicación"
+    assert con["margen_actual_pct"] < sin["margen_actual_pct"]            # precio 200.000 ≥ $33.000: ahora descuenta el envío

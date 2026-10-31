@@ -3731,7 +3731,7 @@ async def cyber_input_status(job_id: str):
     if not j:
         return {"status": "not_found"}
     r = j.get("result")
-    return {"status": j["status"], "log": j["log"], "progress": j["progress"],
+    return {"status": j["status"], "log": j["log"], "progress": j["progress"], "cuentas": (r["conteos"].get("cuentas") if r else None),
             "resumen": r["resumen"] if r else None, "avisos": r["avisos"] if r else None}
 
 
