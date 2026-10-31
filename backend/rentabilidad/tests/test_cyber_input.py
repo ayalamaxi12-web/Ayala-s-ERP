@@ -169,7 +169,7 @@ def test_una_publicacion_vinculada_a_variantes_toma_el_stock_de_la_variante_por_
             return Fp()
     e = E({"VINILO": {"variants": [{"sku": "VINILO-NEGRO", "variantWarehouses": [{"warehouse_id": "PITEC", "warehouse_qty": 3}, {"warehouse_id": "FULL", "warehouse_qty": 9}]},
                                     {"sku": "VINILO-BLANCO", "variantWarehouses": [{"warehouse_id": "PITEC", "warehouse_qty": 0}, {"warehouse_id": "FULL", "warehouse_qty": 2}]}]}})
-    assert ci.stock_por_variantes(e, "MLA1", ["Negro"]) == {"propio": 3, "full": 9, "sku_costo": "VINILO-NEGRO", "variantes": ["VINILO-NEGRO"]}
+    assert ci.stock_por_variantes(e, "MLA1", ["Negro"]) == {"propio": 3, "full": 9, "sku_costo": "VINILO-NEGRO", "componentes": [("VINILO-NEGRO", 1)], "variantes": ["VINILO-NEGRO"]}
     assert ci.stock_por_variantes(e, "MLA1", ["blanco"])["propio"] == 0 and ci.stock_por_variantes(e, "MLA1", ["blanco"])["full"] == 2
     assert ci.stock_por_variantes(e, "MLA1", ["Negro", "Blanco"])["propio"] == 3                          # una publicación con dos colores suma las dos variantes
     assert ci.stock_por_variantes(e, "MLA1", ["Rojo"]) is None and ci.stock_por_variantes(e, "MLA1", []) is None   # sin color y con varias variantes, no se adivina
@@ -250,3 +250,45 @@ def test_el_margen_descuenta_el_envio_del_historial_en_publicaciones_de_33000_o_
     con = ci.generar(_ML(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA1"], "MT": []})["filas"][0]
     assert con["envio_costo"] == 9000.0 and con["envio_origen"] == "historial de la publicación"
     assert con["margen_actual_pct"] < sin["margen_actual_pct"]            # precio 200.000 ≥ $33.000: ahora descuenta el envío
+
+
+def test_una_publicacion_vinculada_a_un_producto_de_ecom_con_otro_sku_manda_la_vinculacion():
+    """Caso real: SKU de ML «ENV-INKCARTHP667XLC» (o un kit con typos) que en Ecom es otro producto: se usa el SKU de la vinculación y su cantidad por venta."""
+    class Fp:
+        item_sku = {"INKCARTHP667XLC": 2}
+        variantes = []
+
+    class E(_Ecom):
+        def factor_pack(self, mla):
+            return Fp()
+    e = E({"INKCARTHP667XLC": _prod(PITEC=11, FULL=5)})
+    r = ci.stock_por_variantes(e, "MLA1", [])
+    assert r["propio"] == 5 and r["full"] == 2 and r["componentes"] == [("INKCARTHP667XLC", 2)] and r["sku_costo"] == "INKCARTHP667XLC"     # 11 // 2 y 5 // 2
+    e2 = E({})                                                                                   # el SKU de la vinculación tampoco está en Ecom: no se inventa
+    assert ci.stock_por_variantes(e2, "MLA1", []) is None
+
+
+def test_el_costo_cae_al_de_la_variante_en_ecom_y_dice_de_donde_salio():
+    class C:
+        def graphql(self, q, v):
+            return {"products": {"readBySku": {"variants": [{"sku": v["sku"], "cost": 12.5}]}}}
+
+    class E(_Ecom):
+        _cliente = C()
+    tc = d("1500")
+    sin_vigente = lambda sku: DatosSku(None, d("1.105") if sku == "A" else None, None, None, None)
+    assert ci.costo_y_iva("A", sin_vigente, tc, E({})) == (d("12.5") * tc, d("1.105"), "Ecom (costo de la variante)")
+    c, i, o = ci.costo_y_iva("B", sin_vigente, tc, E({}))
+    assert c == d("12.5") * tc and i == d("1.21") and "IVA 21 % supuesto" in o
+    vigente = lambda sku: DatosSku(d("10"), d("1.21"), None, None, None)
+    assert ci.costo_y_iva("A", vigente, tc, E({})) == (d("15000"), d("1.21"), "vigente")
+    assert ci.costo_y_iva("A", sin_vigente, tc, None) == (None, None, "sin costo")                  # sin Ecom y sin vigente: queda vacío
+    # componentes de la vinculación: suma costo × cantidad
+    c, i, o = ci.costo_y_iva("ENV-X", vigente, tc, E({}), componentes=[("X", 2), ("Y", 1)])
+    assert c == d("45000") and o == "vigente"
+
+
+def test_un_kit_con_separadores_sueltos_se_descompone_en_sus_skus():
+    from rentabilidad.campanas_ml import descomponer_sku
+    assert descomponer_sku("CF360XCOMP - CF361XCOMP - CF362XCOM") == [("CF360XCOMP", 1), ("CF361XCOMP", 1), ("CF362XCOM", 1)]
+    assert descomponer_sku("MOU+TEC-KL151") == [("MOU", 1), ("TEC-KL151", 1)]
