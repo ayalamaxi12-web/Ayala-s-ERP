@@ -3651,3 +3651,77 @@ async def ayala_core_aplicar_precio(item_id: str, request: Request, background_t
         "Operador": body.get("operador", ""), "Origen": body.get("origen") or "Ayala Core",
     })
     return r
+
+
+# ── Insumo del Cyber 2026 (`cyber_2026_input.csv`): solo lectura. Ver `cyber_input.py`. ──
+import cyber_input
+_CYBER_JOBS: dict[str, dict] = {}
+
+
+def _cyber_job(job_id: str) -> None:
+    from ml_full import EcomFullAdapter, MLFullClient
+    from rentabilidad.db import sesion
+    from rentabilidad.ingesta_ecom_api import EcomApiClient
+    import proyeccion_snapshot
+    j = _CYBER_JOBS[job_id]
+
+    def prog(a, t, label):
+        j["progress"] = {"current": a, "total": t, "label": label}
+    try:
+        motor_precios, datos_sku_fn, resolver_tc, fecha = _campanas_contexto(None)
+        avisos0: list = []
+        datos = _campanas_datos(datos_sku_fn, avisos0)
+        gs = get_gs()
+        try:
+            refs = gs.open_by_key(SPREADSHEET_ID).worksheet("Referencias_Mercado").get_all_values()
+        except Exception as e:  # noqa: BLE001
+            refs = []
+            avisos0.append(f"No se pudieron leer los links de competidores (Referencias_Mercado: {type(e).__name__}): salen vacíos.")
+        with sesion() as db:
+            alertas, _info = proyeccion_snapshot.datos_por_sku(db)
+            par = motor_precios.cargar_parametros(db, fecha)
+            r = cyber_input.generar(MLFullClient(), EcomFullAdapter(EcomApiClient()), db, datos, resolver_tc(None), par, date.today(), alertas,
+                                    cyber_input.links_de_competidores(refs), progreso=prog)
+        r["avisos"] = avisos0 + r["avisos"]
+        j.update(status="done", progress=None, result=r)
+        j["log"].append(f"Listo: {len(r['filas'])} SKU con stock disponible.")
+    except Exception as e:  # noqa: BLE001
+        j.update(status="error", progress=None)
+        j["log"].append(f"Error: {type(e).__name__}: {e}")
+
+
+@app.post("/cyber/input/run")
+async def cyber_input_run(background_tasks: BackgroundTasks):
+    """Arma el insumo del Cyber en segundo plano (tarda varios minutos: publicaciones de ML, stock de Ecom y ventas del año). Solo lectura."""
+    if any(j["status"] == "running" for j in _CYBER_JOBS.values()):
+        raise HTTPException(status_code=409, detail="Ya hay un insumo del Cyber armándose: esperá a que termine.")
+    job_id = f"cyber_{int(time.time())}"
+    _CYBER_JOBS[job_id] = {"status": "running", "log": ["Armando el insumo del Cyber (ML, Ecom, ventas)..."], "progress": None, "result": None}
+    background_tasks.add_task(_cyber_job, job_id)
+    return {"job_id": job_id, "status": "started"}
+
+
+@app.get("/cyber/input/status/{job_id}")
+async def cyber_input_status(job_id: str):
+    j = _CYBER_JOBS.get(job_id)
+    if not j:
+        return {"status": "not_found"}
+    r = j.get("result")
+    return {"status": j["status"], "log": j["log"], "progress": j["progress"],
+            "resumen": r["resumen"] if r else None, "avisos": r["avisos"] if r else None}
+
+
+@app.get("/cyber/input/csv")
+async def cyber_input_csv(job_id: str):
+    r = (_CYBER_JOBS.get(job_id) or {}).get("result")
+    if not r:
+        raise HTTPException(status_code=404, detail="Ese insumo no existe o todavía no terminó.")
+    return Response(cyber_input.a_csv(r["filas"]), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="cyber_2026_input.csv"'})
+
+
+@app.get("/cyber/input/reglas")
+async def cyber_input_reglas(job_id: str | None = None):
+    """Reglas de precio del Cyber como parámetros (`cyber_2026_reglas.json`) y, si se pasa el insumo, su resumen por grupo."""
+    r = (_CYBER_JOBS.get(job_id or "") or {}).get("result")
+    return {"reglas": cyber_input.REGLAS, "resumen": r["resumen"] if r else None, "columnas": cyber_input.COLUMNAS}

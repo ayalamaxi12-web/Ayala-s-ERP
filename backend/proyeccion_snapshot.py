@@ -64,6 +64,28 @@ def validar_payload(d) -> list[str]:
     return errs
 
 
+def datos_por_sku(db) -> tuple[dict[str, dict], dict]:
+    """SKU normalizado → {clase, alerta} del último snapshot (columnas `clase` y `alerta` de `skus`; la alerta puede faltar)."""
+    from rentabilidad.pricing_pm import norm_sku
+
+    f = db.query(ProyeccionSnapshot).order_by(ProyeccionSnapshot.id.desc()).first()
+    if f is None:
+        return {}, {}
+    sk = (f.payload or {}).get("skus") or {}
+    cols = [str(c).strip().lower() for c in sk.get("cols") or []]
+    if "sku" not in cols:
+        return {}, {"version": f.id, "generado": f.generado}
+    i = cols.index("sku")
+    j = cols.index("clase") if "clase" in cols else None
+    k = cols.index("alerta") if "alerta" in cols else None
+    out = {}
+    for r in sk.get("rows") or []:
+        if len(r) > i and r[i]:
+            out[norm_sku(r[i])] = {"clase": str(r[j]).strip().upper() if j is not None and len(r) > j and r[j] else "",
+                                   "alerta": str(r[k]).strip().upper() if k is not None and len(r) > k and r[k] else ""}
+    return out, {"version": f.id, "generado": f.generado}
+
+
 @router.get("/dashboard")
 def dashboard(request: Request, version: int | None = None):
     _exigir_clave(request)
