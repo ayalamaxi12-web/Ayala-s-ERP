@@ -66,3 +66,15 @@ def test_precios_otra_cuenta_toma_el_mas_alto_y_ignora_no_participa():
     cp.guardar_precios(ss, "MT", [fila("A", 90), fila("B", 200, "no_participa")])
     assert cp.precios_otra_cuenta(ss, "IT") == {"A": 90.0}
     assert cp.precios_otra_cuenta(ss, "MT") == {}
+
+
+def test_respaldo_de_costo_desde_ecom_para_campanas(monkeypatch):
+    from decimal import Decimal
+    import cyber_input
+    from rentabilidad.pricing_pm import DatosSku
+    monkeypatch.setattr(cyber_input, "costo_usd_de_ecom", lambda ecom, sku: Decimal("5") if sku == "ABC" else None)
+    datos = {"ABC": DatosSku(None, None, "Nati", "cat", None), "VIG": DatosSku(Decimal("3"), Decimal("1.105"), None, None, None), "SIN": DatosSku(None, None, None, None, None)}
+    f = cyber_input.datos_con_respaldo_ecom(lambda s: datos[s], object())
+    assert f("ABC").costo_usd == Decimal("5") and f("ABC").iva_factor == Decimal("1.21") and f("ABC").pm == "Nati"
+    assert f("VIG").costo_usd == Decimal("3") and f("VIG").iva_factor == Decimal("1.105")
+    assert f("SIN").costo_usd is None

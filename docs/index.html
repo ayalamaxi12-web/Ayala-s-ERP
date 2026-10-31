@@ -3069,7 +3069,7 @@ function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
 const CP_PM_VISTOS={};
 function cpPmCanon(n){const k=String(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');const t=String(n).trim().replace(/\s+/g,' ');const v=CP_PM_VISTOS[k];if(!v||(t!==v&&/[\u00c0-\u00ff]/.test(t)&&!/[\u00c0-\u00ff]/.test(v)))CP_PM_VISTOS[k]=t;return CP_PM_VISTOS[k];}
 // ── Reglas de precio del Cyber 2026 (Maxx, 2026-10-31): parten de la propuesta de ML, respetan el piso de margen del grupo (medido en 3 cuotas) y el rango que ML permite ──
-function cyberReglas(){return {ticketAlto:150000,plan:'3',puntosExtra:5,sinCostoPct:10,medio:{piso:10,alt:8,ticketAlto:5},rey:{piso:20,alt:18}};}
+function cyberReglas(){return {ticketAlto:150000,plan:'3',puntosExtra:5,sinCostoPct:10,bajaMaxPmPct:3,medio:{piso:10,alt:8,ticketAlto:5},rey:{piso:20,alt:18}};}
 function cyberGrupo(clase){const c=String(clase||'').toUpperCase();return c==='REVENTAR'?'liquidar':c==='REY'?'rey':'medio';}
 function cyberMargenA(f,M,tc,plan,p){const T=(1-p/f.precio_original)*100,r=cpMargenLocal(f.calc,f.precio_original,f.meli_monto||0,T,M,plan,tc);return r?r.margen:null;}
 // Menor precio entero en [lo,hi] con margen ≥ obj (%); null si ni el más alto llega. El margen crece con el precio (el costo fijo y el envío dependen del precio de lista), por eso alcanza una búsqueda binaria.
@@ -3107,6 +3107,9 @@ function cyberDecidirPrecio(f,ctx){
     const lista=grupo==='rey'?[[R.rey.piso,null],[R.rey.alt,'piso_alt']]:orig>=R.ticketAlto?[[R.medio.ticketAlto,null]]:[[R.medio.piso,null],[R.medio.alt,'piso_alt']];
     let el=null;
     for(const [obj,marca] of lista){const pf=cyberPrecioParaMargen(f,ctx.M,ctx.tc,R.plan,obj,lo,hi);if(pf!=null){el={obj,marca,pf};break;}}
+    if(!el&&pm>0){   // no llega al piso: entra igual, pero sin bajar más de 3 % del precio del PM (rige también para los reyes), dentro del rango de ML
+      const q=Math.min(Math.max(Math.round(pm*(1-R.bajaMaxPmPct/100)),lo),hi);
+      return sal(q,'piso_pm',regla+'. No llega al piso de '+lista[lista.length-1][0]+' %: se toma PM −'+R.bajaMaxPmPct+' % ($'+Math.round(pm*(1-R.bajaMaxPmPct/100))+')'+(q!==Math.round(pm*(1-R.bajaMaxPmPct/100))?' ajustado al rango de ML':''),{piso:lista[lista.length-1][0]});}
     if(!el)return sal(p0,'no_participa',regla+'. Ni al precio más alto que ML permite se llega al piso de '+lista[lista.length-1][0]+' %: no participa'+(grupo==='rey'?' (requiere el OK de Maxx)':''),{piso:lista[0][0]});
     piso=el.obj;
     if(el.pf>p0){p0=el.pf;estado='sube_a_piso';regla+=' · subido al piso de '+piso+' %';}
@@ -3137,8 +3140,8 @@ async function cpAplicarCyber(){
       f.participa=d.participa;cont[d.estado]=(cont[d.estado]||0)+1;
     });
     cpProgramarConfirmacion();cpRender();
-    const rot={ok:'Propuesta de ML / regla base',tope_ml:'Al máximo descuento que ML permite',sube_a_piso:'Subidos al piso de margen',piso_alt:'Con piso alternativo (8 % / 18 %)',sin_costo:'Sin costo en Ecom: precio −10 %',no_participa:'NO participan (revisar)'};
-    const rev=filas.filter(f=>['no_participa','piso_alt','sin_costo'].includes(f._cyber.estado));
+    const rot={ok:'Propuesta de ML / regla base',tope_ml:'Al máximo descuento que ML permite',sube_a_piso:'Subidos al piso de margen',piso_alt:'Con piso alternativo (8 % / 18 %)',piso_pm:'No llegan al piso: PM −3 %',sin_costo:'Sin costo en Ecom: precio −10 %',no_participa:'NO participan (revisar)'};
+    const rev=filas.filter(f=>['no_participa','piso_alt','piso_pm','sin_costo'].includes(f._cyber.estado));
     const g=await cpPost('/cyber/precios/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,filas:filas.map(f=>({sku:f.sku||'',mla:f.item_id,grupo:f._cyber.grupo,precio:f._cyber.precio,margen3:f._cyber.margen,estado:f._cyber.estado,regla:f._cyber.regla,precio_actual:f.precio_original,precio_pm:f.precio_pm||null,propuesta_ml:f._prop,ml_min:f._cyber.rango?f._cyber.rango.min:null,ml_max:f._cyber.rango?f._cyber.rango.max:null}))})});
     cpPanel('<b>Reglas del Cyber aplicadas</b> (cuenta '+acEsc(cu==='IT'?'Group':'Arg')+'): '+Object.entries(cont).map(([k,v])=>acEsc(rot[k]||k)+': <b>'+v+'</b>').join(' · ')+'<br>Guardadas '+g.guardadas+' filas en «Cyber_Precios».'
       +((r.avisos||[]).map(a=>'<br><span style="color:var(--aviso-texto)">⚠ '+acEsc(a)+'</span>').join(''))

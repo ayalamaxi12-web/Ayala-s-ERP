@@ -573,6 +573,21 @@ def _campanas_datos(datos_sku_fn, avisos: list, ttl: int = 300):
     avisos.extend(av)
     return datos
 
+_CAMP_ECOM = {"c": None}
+
+
+def _campanas_datos_con_respaldo(datos):
+    """Costo de respaldo desde Ecom para los SKU sin costo vigente (ver cyber_input.datos_con_respaldo_ecom). Si Ecom no responde, queda como estaba."""
+    try:
+        if _CAMP_ECOM["c"] is None:
+            from ml_full import EcomFullAdapter
+            from rentabilidad.ingesta_ecom_api import EcomApiClient
+            _CAMP_ECOM["c"] = EcomFullAdapter(EcomApiClient())
+        return cyber_input.datos_con_respaldo_ecom(datos, _CAMP_ECOM["c"])
+    except Exception:  # noqa: BLE001
+        return datos
+
+
 def _campanas_objetivo(margen_objetivo: str | None):
     try:
         return Decimal(margen_objetivo) / 100 if margen_objetivo else None
@@ -653,7 +668,7 @@ def _campanas_analizar_sync(contenido: bytes, tc: str | None, margen_objetivo: s
         if otras:
             avisos.append(f"Elegiste la cuenta {cuenta}, pero {len(otras)} publicaciones son de la otra cuenta (ej. {otras[0]}): revisalas.")
     tc_valor = resolver_tc(tc)
-    datos = _campanas_datos(datos_sku_fn, avisos)
+    datos = _campanas_datos_con_respaldo(_campanas_datos(datos_sku_fn, avisos))
     with sesion() as db:
         par = motor_precios.cargar_parametros(db, fecha)
         envios, envios_estado = _campanas_envios_reales(filas, par.valor("ML", "umbral_envio_gratis"))
@@ -720,7 +735,7 @@ def _campanas_simular_sync(body: "_SimularIn") -> dict:
     filas = [fila(f) for f in body.filas if f.get("item_id") and f.get("precio_original")]
     avisos = []
     tc_valor, objetivo = resolver_tc(body.tc), _campanas_objetivo(body.margen_objetivo)
-    datos = _campanas_datos(datos_sku_fn, avisos)
+    datos = _campanas_datos_con_respaldo(_campanas_datos(datos_sku_fn, avisos))
     with sesion() as db:
         r = campanas_ml.analizar(db, filas, fecha, tc_valor, datos, motor_precios.cargar_parametros(db, fecha),
                                  margen_objetivo=objetivo, plan_objetivo=body.plan_objetivo)
