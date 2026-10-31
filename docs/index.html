@@ -1578,6 +1578,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <select id="cyber-cuenta" class="fi" title="Cuenta del Excel de la campaña. «Detectar» la saca de ML; si no la reconoce, elegila a mano" aria-label="Cuenta del Excel del Cyber"><option value="">Cuenta: detectar</option><option value="IT">GROUP</option><option value="MT">ARG</option></select>
     <button class="btn" id="btn-cyber-input" onclick="qs('cyber-file').click()" title="Elegí el/los Excel de la campaña del Cyber (uno por cuenta o uno solo): el ERP arma el CSV solo con las publicaciones que pueden participar (GROUP y ARG), una fila por SKU con stock disponible. Solo lectura; tarda varios minutos">⬇ Insumo Cyber (CSV)</button><span id="cyber-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     <button class="btn" id="btn-cp-cyber" style="display:none" onclick="cpAplicarCyber()" title="Calcula el precio de cada publicación con las reglas del Cyber (propuesta de ML, pisos de margen en 3 cuotas, rango de ML, mismo precio en las dos cuentas) y lo guarda en Cyber_Precios. No escribe en Mercado Libre">⚙ Aplicar reglas del Cyber</button>
+    <button class="btn" id="btn-cp-csv-sel" style="display:none" onclick="cpCsvSeleccion()" title="Baja un CSV con las publicaciones que hoy están tildadas «Participa»: precio final, descuento, margen en 3 cuotas y la regla del Cyber que se aplicó. Solo lectura">⬇ CSV de lo seleccionado</button>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
@@ -3013,7 +3014,7 @@ async function cpSubir(inp){
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     cpArmarFiltros();cpEnvioPanel(d.envios_estado);
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
-    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-cyber').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
+    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-cyber').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-csv-sel').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{qs('btn-cp-subir').disabled=false;}
@@ -3118,6 +3119,17 @@ function cyberDecidirPrecio(f,ctx){
   // 5) Mismo precio en las dos cuentas: si el SKU ya tiene precio en la otra, se toma el más alto (dentro del rango de ML)
   if(ctx.otro>0){const q=Math.min(Math.max(Math.round(ctx.otro),lo),hi);if(q>p0){p0=q;regla+=' · igualado al precio de la otra cuenta ($'+Math.round(ctx.otro)+')';}}
   return sal(p0,estado,regla,{piso});
+}
+// CSV de las filas tildadas «Participa» (lo que se ve en pantalla, con el precio final y la regla del Cyber). Separador «;» y coma decimal para abrirlo directo en Excel.
+function cpCsvSeleccion(){
+  const fs=CP.filas.filter(f=>f.participa);if(!fs.length){toast('No hay publicaciones tildadas «Participa»','error');return;}
+  const n=x=>x==null||x===''||isNaN(x)?'':String(Math.round(Number(x)*100)/100).replace('.',','),q=x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"';
+  const cab=['SKU','MLA','Cuenta','Clase','Grupo Cyber','Precio publicación','Propuesta ML','Precio final','Descuento %','Precio PM','Dif vs PM %','Margen 3 cuotas %','Margen contado %','Estado Cyber','Regla','Ya en ML'];
+  const filas=fs.map(f=>{const c=f._cyber||{},m3=f.margenes&&f.margenes['3'],mc=f.margenes&&f.margenes.contado;
+    return [q(f.sku),q(f.item_id),q(f.cuenta||cpCuentaEfectiva()||''),q(f.clase||''),q(c.grupo||''),n(f.precio_original),n(f._prop),n(f.precio_cliente),n(f.descuento_total_pct),n(f.precio_pm),n(f.dif_vs_pm_pct),n(m3&&m3.margen),n(mc&&mc.margen),q(c.estado||''),q(c.regla||''),q(f._ml&&f._ml.estado==='ok'?'sí':'')].join(';');});
+  const blob=new Blob(['\ufeff'+[cab.join(';'),...filas].join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='cyber_seleccion_'+(cpCuentaEfectiva()==='IT'?'GROUP':cpCuentaEfectiva()==='MT'?'ARG':'cuenta')+'.csv';a.click();
+  toast(fs.length+' publicaciones en el CSV');
 }
 // «Aplicar reglas del Cyber»: lee de ML el rango permitido (solo lectura), decide el precio de cada publicación con cyberDecidirPrecio y lo deja en la tabla; no escribe en ML. Guarda la lista en la pestaña Cyber_Precios.
 async function cpAplicarCyber(){
