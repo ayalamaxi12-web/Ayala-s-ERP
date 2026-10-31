@@ -3658,7 +3658,7 @@ import cyber_input
 _CYBER_JOBS: dict[str, dict] = {}
 
 
-def _cyber_job(job_id: str) -> None:
+def _cyber_job(job_id: str, excels: list[bytes] | None = None) -> None:
     from ml_full import EcomFullAdapter, MLFullClient
     from rentabilidad.db import sesion
     from rentabilidad.ingesta_ecom_api import EcomApiClient
@@ -3677,11 +3677,18 @@ def _cyber_job(job_id: str) -> None:
         except Exception as e:  # noqa: BLE001
             refs = []
             avisos0.append(f"No se pudieron leer los links de competidores (Referencias_Mercado: {type(e).__name__}): salen vacíos.")
+        ids_por_cuenta = None
+        if excels:
+            ids_por_cuenta, info_x = cyber_input.ids_desde_excels(excels)
+            j["log"].append(f"Excel de la campaña: {info_x['publicaciones_en_excel']} publicaciones ({len(ids_por_cuenta['IT'])} GROUP, {len(ids_por_cuenta['MT'])} ARG).")
+            avisos0 += info_x["avisos"]
+            if info_x["sin_cuenta"]:
+                avisos0.append(f"{info_x['sin_cuenta']} publicaciones del Excel no se encontraron en ML (ni GROUP ni ARG): quedan afuera.")
         with sesion() as db:
             alertas, _info = proyeccion_snapshot.datos_por_sku(db)
             par = motor_precios.cargar_parametros(db, fecha)
             r = cyber_input.generar(MLFullClient(), EcomFullAdapter(EcomApiClient()), db, datos, resolver_tc(None), par, date.today(), alertas,
-                                    cyber_input.links_de_competidores(refs), progreso=prog)
+                                    cyber_input.links_de_competidores(refs), progreso=prog, ids_por_cuenta=ids_por_cuenta)
         r["avisos"] = avisos0 + r["avisos"]
         j.update(status="done", progress=None, result=r)
         j["log"].append(f"Listo: {len(r['filas'])} SKU con stock disponible.")
@@ -3691,13 +3698,15 @@ def _cyber_job(job_id: str) -> None:
 
 
 @app.post("/cyber/input/run")
-async def cyber_input_run(background_tasks: BackgroundTasks):
-    """Arma el insumo del Cyber en segundo plano (tarda varios minutos: publicaciones de ML, stock de Ecom y ventas del año). Solo lectura."""
+async def cyber_input_run(background_tasks: BackgroundTasks, archivos: list[UploadFile] = File(default=[])):
+    """Arma el insumo del Cyber en segundo plano (tarda varios minutos: publicaciones de ML, stock de Ecom y ventas del año). Solo lectura. Con el/los Excel de la
+    campaña (`archivos`, uno por cuenta o uno solo) mira solo las publicaciones que pueden participar; sin Excel, todas las activas de GROUP y ARG."""
     if any(j["status"] == "running" for j in _CYBER_JOBS.values()):
         raise HTTPException(status_code=409, detail="Ya hay un insumo del Cyber armándose: esperá a que termine.")
     job_id = f"cyber_{int(time.time())}"
     _CYBER_JOBS[job_id] = {"status": "running", "log": ["Armando el insumo del Cyber (ML, Ecom, ventas)..."], "progress": None, "result": None}
-    background_tasks.add_task(_cyber_job, job_id)
+    excels = [await a.read() for a in archivos if a.filename]
+    background_tasks.add_task(_cyber_job, job_id, excels or None)
     return {"job_id": job_id, "status": "started"}
 
 

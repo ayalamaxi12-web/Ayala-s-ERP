@@ -4,7 +4,7 @@ Solo lectura: no escribe en ML, Ecom ni Sheets. El CSV lo consume después el mo
 como parámetros, no están "cocinadas" acá.
 
 Fuentes:
-  - publicaciones activas, precio y título: API de ML (por cuenta);
+  - publicaciones: las del Excel de la campaña de ML (las que pueden participar; la cuenta sale del ITEM_ID); precio y título: API de ML;
   - ventas (YTD y últimos 90 días): `venta_ecom` del ERP (unidades por orden, cuenta por `usuario_integracion` GROUP / ARG);
   - stock disponible: Ecom por depósito. Se toma el depósito NO Full que más tiene; si ahí no hay y Full sí, se usa Full (`stock_origen` = "full": SKU
     que hay que empujar fuerte porque solo queda stock en Full);
@@ -184,8 +184,36 @@ def costo_y_iva(sku: str, datos_fn, tc: Decimal) -> tuple[Decimal | None, Decima
     return total, iva
 
 
+def ids_desde_excels(contenidos: list[bytes], leer_fn=None, detectar_fn=None) -> tuple[dict[str, list[str]], dict]:
+    """Publicaciones que pueden participar según el/los Excel de la campaña de ML (uno por cuenta o uno solo): cuenta de cada una por su ITEM_ID.
+    Devuelve ({'IT': [...], 'MT': [...]}, info con campañas, filas leídas y publicaciones sin cuenta detectada)."""
+    if leer_fn is None:
+        import campanas_ml_xlsx
+        leer_fn = campanas_ml_xlsx.leer_promociones
+    if detectar_fn is None:
+        import campanas_ml_cuentas
+        detectar_fn = campanas_ml_cuentas.detectar
+    ids: list[str] = []
+    campanas: list[str] = []
+    for c in contenidos:
+        leido = leer_fn(c)
+        campanas.append(str(leido.get("campana") or ""))
+        ids += [f["ITEM_ID"] for f in leido["filas"] if f.get("ITEM_ID")]
+    ids = list(dict.fromkeys(ids))
+    det, avisos = detectar_fn(ids)
+    por_cuenta: dict[str, list[str]] = {"IT": [], "MT": []}
+    sin_cuenta = 0
+    for i in ids:
+        cuenta = (det.get(i) or {}).get("cuenta")
+        if cuenta in por_cuenta:
+            por_cuenta[cuenta].append(i)
+        else:
+            sin_cuenta += 1
+    return por_cuenta, {"campanas": campanas, "publicaciones_en_excel": len(ids), "sin_cuenta": sin_cuenta, "avisos": list(avisos)}
+
+
 def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[str, dict], links: dict[str, dict[str, str]],
-            reglas: dict = REGLAS, progreso=None) -> dict:
+            reglas: dict = REGLAS, progreso=None, ids_por_cuenta: dict[str, list[str]] | None = None) -> dict:
     """Arma el insumo completo: {filas, resumen, reglas, avisos, conteos}. `alertas`: SKU → {clase, alerta} de la foto de Proyección; `links`: de
     `links_de_competidores`."""
     import campanas_ml_comision
@@ -198,7 +226,8 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     candidatas: list[dict] = []
     sin_sku = 0
     for cuenta in CUENTA_NOMBRE:
-        ids = ml.items_activos(cuenta)
+        # Con el Excel de la campaña solo se miran las publicaciones que pueden participar (no todas las activas de la cuenta).
+        ids = list(ids_por_cuenta.get(cuenta, [])) if ids_por_cuenta is not None else ml.items_activos(cuenta)
         headers = {"Authorization": f"Bearer {ml._token(cuenta)}"}
         for i in range(0, len(ids), 20):
             prog(i, len(ids), f"Publicaciones de ML ({CUENTA_NOMBRE[cuenta]})")
@@ -290,4 +319,5 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
         avisos.append("No hay foto de Proyección 2027 cargada: los grupos «liquidar» y «rey» quedan vacíos (todo sale como «medio»).")
     filas = ordenar(filas)
     return {"filas": filas, "resumen": resumen(filas), "reglas": reglas, "avisos": avisos,
-            "conteos": {"publicaciones_activas": len(candidatas), "con_stock": len(filas), "hoy": hoy.isoformat()}}
+            "conteos": {"publicaciones_activas": len(candidatas), "con_stock": len(filas), "hoy": hoy.isoformat(),
+                        "origen": "Excel de la campaña" if ids_por_cuenta is not None else "todas las publicaciones activas"}}

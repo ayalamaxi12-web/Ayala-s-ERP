@@ -122,3 +122,30 @@ def test_generar_arma_filas_grupos_y_stock_origen(db_session, monkeypatch):
     assert len(liq) == 2 and {f["cuenta"] for f in liq} == {"GROUP", "ARG"} and all(f["grupo"] == "liquidar" and f["ticket_alto"] == "no" for f in liq)   # empate: las dos cuentas
     assert [f["grupo"] for f in r["filas"]] == ["liquidar", "liquidar", "rey"] and r["resumen"]["rey"]["stock_solo_full"] == 1
     assert rey["costo"] == 15000.0 and rey["margen_actual_pct"] is not None and r["reglas"]["grupos"]["rey"]["piso_margen_pct"] == 20
+
+
+def test_los_ids_salen_del_excel_de_la_campana_y_la_cuenta_de_cada_publicacion():
+    leidos = {b"x1": {"campana": "Cyber GROUP", "filas": [{"ITEM_ID": "MLA1"}, {"ITEM_ID": "MLA2"}, {"ITEM_ID": ""}]},
+              b"x2": {"campana": "Cyber ARG", "filas": [{"ITEM_ID": "MLA2"}, {"ITEM_ID": "MLA3"}, {"ITEM_ID": "MLA9"}]}}
+    cuentas = {"MLA1": {"cuenta": "IT"}, "MLA2": {"cuenta": "IT"}, "MLA3": {"cuenta": "MT"}}
+    por_cuenta, info = ci.ids_desde_excels([b"x1", b"x2"], leer_fn=lambda c: leidos[c], detectar_fn=lambda ids: (cuentas, []))
+    assert por_cuenta == {"IT": ["MLA1", "MLA2"], "MT": ["MLA3"]}
+    assert info["publicaciones_en_excel"] == 4 and info["sin_cuenta"] == 1 and info["campanas"] == ["Cyber GROUP", "Cyber ARG"]
+
+
+def test_con_excel_solo_se_miran_las_publicaciones_de_la_campana(db_session, monkeypatch):
+    import campanas_ml_comision
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", lambda items, **k: ({}, []))
+    pedidas = []
+
+    class ML(_ML):
+        def items_activos(self, cuenta):
+            raise AssertionError("con Excel no se barren todas las publicaciones activas")
+
+        def _get(self, url, params, headers):
+            pedidas.extend(params["ids"].split(","))
+            return super()._get(url, params, headers)
+    par = m.cargar_parametros(db_session, HOY)
+    r = ci.generar(ML(), _Ecom({"PLANCHA-SUB-5EN1": _prod(PITEC=5)}), db_session, lambda sku: DatosSku(d("10"), d("1.21"), None, None, None), d("1500"), par, HOY, {}, {},
+                   ids_por_cuenta={"IT": ["MLA1"], "MT": []})
+    assert pedidas == ["MLA1"] and [f["mla_id"] for f in r["filas"]] == ["MLA1"] and r["conteos"]["origen"] == "Excel de la campaña"
