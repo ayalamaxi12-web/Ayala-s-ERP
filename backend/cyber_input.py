@@ -36,7 +36,7 @@ REGLAS = {
 }
 
 COLUMNAS = ["sku", "titulo", "cuenta", "mla_id", "grupo", "costo", "precio_actual", "margen_actual_pct", "stock_disponible", "ventas_ytd_unid",
-            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante", "envio_costo", "envio_origen", "costo_origen"]
+            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante", "envio_costo", "envio_origen", "costo_origen", "precio_tachado", "envio_gratis", "envio_pct_del_precio", "revisar_envio_gratis"]
 ORDEN_GRUPO = {"liquidar": 0, "rey": 1, "medio": 2}
 
 
@@ -348,7 +348,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             prog(i, len(ids), f"Publicaciones de ML ({CUENTA_NOMBRE[cuenta]})")
             d = ml._get("https://api.mercadolibre.com/items", {
                 "ids": ",".join(ids[i:i + 20]),
-                "attributes": "id,title,price,available_quantity,seller_custom_field,attributes,status,category_id,listing_type_id,date_created,variations"}, headers)
+                "attributes": "id,title,price,available_quantity,seller_custom_field,attributes,status,category_id,listing_type_id,date_created,variations,original_price,shipping"}, headers)
             for e in (d or []):
                 it = e.get("body") if isinstance(e, dict) and "body" in e else e
                 if not it or it.get("status") not in (None, "active"):
@@ -367,7 +367,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
                 except ValueError:
                     dias_pub = None
                 candidatas.append({"sku": sku, "dias_publicada": dias_pub, "colores": colores_de_item(it), "sku_norm": norm_sku(sku), "titulo": it.get("title", ""), "cuenta": cuenta, "mla_id": it["id"],
-                                   "precio_actual": float(it.get("price") or 0), "categoria_ml": it.get("category_id"), "tipo_ml": it.get("listing_type_id"),
+                                   "precio_actual": float(it.get("price") or 0), "tachado": float(it.get("original_price") or 0), "envio_gratis": bool((it.get("shipping") or {}).get("free_shipping")), "categoria_ml": it.get("category_id"), "tipo_ml": it.get("listing_type_id"),
                                    "ventas_ytd_unid": v["ytd"], "ventas_ult_90d_unid": v["d90"], "ventas_mla_ytd": vm["ytd"], "ventas_mla_90d": vm["d90"]})
     if sin_sku:
         avisos.append(f"{sin_sku} publicaciones activas sin SKU: no entran al insumo.")
@@ -425,11 +425,13 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             comision, _ = campanas_ml.comision_de(par, None, real)
             cat = (datos_fn(c["sku_norm"]).categoria if c["sku_norm"] else None) or None
             envio, envio_origen = envio_de_publicacion(envios, c["mla_id"], c["sku_norm"], c["cuenta"], cat)
+            # El envío aplica si la publicación ofrece envío gratis o si su precio de LISTA (el tachado, si hay) llega a $33.000: ML define el umbral por el precio de lista.
+            lista = max(precio, Decimal(str(c.get("tachado") or 0)), Decimal(str(umbral_envio)) if c.get("envio_gratis") else Decimal(0))
             try:
-                margen = round(float(campanas_ml.margen_oferta(precio, precio, "contado", costo, iva, par, envio or Decimal(0), precio, comision).margen) * 100, 1)
+                margen = round(float(campanas_ml.margen_oferta(precio, precio, "contado", costo, iva, par, envio or Decimal(0), lista, comision).margen) * 100, 1)
             except Exception:  # noqa: BLE001
                 margen = None
-            if precio >= umbral_envio and (envio is None or envio_origen.startswith("ESTIMADO")):
+            if lista >= umbral_envio and (envio is None or envio_origen.startswith("ESTIMADO")):
                 sin_envio_real += 1
         else:
             sin_costo += 1
@@ -450,6 +452,9 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             "link_rey": l.get("Rey", ""), "link_media": l.get("Media", ""), "link_barato": l.get("Barato", ""), "stock_origen": c["stock_origen"],
             "publicaciones_del_sku": c.get("publicaciones_del_sku", 1), "publicacion_principal": c.get("publicacion_principal", "si"), "dias_publicada": c.get("dias_publicada"), "stock_variante": c.get("stock_variante", ""),
             "envio_costo": None if envio is None else round(float(envio), 2), "envio_origen": envio_origen, "costo_origen": costo_origen,
+            "precio_tachado": c.get("tachado") or None, "envio_gratis": "si" if c.get("envio_gratis") else "no",
+            "envio_pct_del_precio": round(float(envio) / c["precio_actual"] * 100, 1) if envio and c["precio_actual"] else None,
+            "revisar_envio_gratis": "si" if c.get("envio_gratis") and c["precio_actual"] < umbral_envio else "no",
         })
     if sin_costo:
         avisos.append(f"{sin_costo} SKU sin costo vigente en Ecom: costo y margen quedan vacíos.")

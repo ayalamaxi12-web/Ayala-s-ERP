@@ -292,3 +292,30 @@ def test_un_kit_con_separadores_sueltos_se_descompone_en_sus_skus():
     from rentabilidad.campanas_ml import descomponer_sku
     assert descomponer_sku("CF360XCOMP - CF361XCOMP - CF362XCOM") == [("CF360XCOMP", 1), ("CF361XCOMP", 1), ("CF362XCOM", 1)]
     assert descomponer_sku("MOU+TEC-KL151") == [("MOU", 1), ("TEC-KL151", 1)]
+
+
+def test_envio_gratis_bajo_33000_se_marca_para_revisar_y_el_envio_aplica_por_el_precio_de_lista(db_session, monkeypatch):
+    import campanas_ml_comision
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", lambda items, **k: ({}, []))
+
+    class ML3(_ML):
+        def items_activos(self, cuenta):
+            return {"IT": ["MLA1", "MLA2", "MLA3"], "MT": []}[cuenta]
+
+        def _get(self, url, params, headers):
+            datos = {"MLA1": ("SKU-A", 30000, 40000, True), "MLA2": ("SKU-B", 30000, 0, False), "MLA3": ("SKU-C", 50000, 0, True)}
+            return [{"body": {"id": i, "title": i, "price": datos[i][1], "original_price": datos[i][2] or None, "shipping": {"free_shipping": datos[i][3]},
+                              "seller_custom_field": datos[i][0], "status": "active", "category_id": "C", "listing_type_id": "g"}} for i in params["ids"].split(",")]
+    db_session.add(VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden="1", skus_vendidos="SKU-A", fecha_creacion_venta=date(2026, 10, 20), costo_sin_iva=Decimal(1), comision_venta=Decimal(0),
+                             costo_envio=Decimal(6000), precio_final=Decimal(1), precio_sin_iva=Decimal(1), tc=Decimal(1500), usuario_integracion="GLOBALELECTRONICSGROUP", unidades=1))
+    db_session.flush()
+    par = m.cargar_parametros(db_session, HOY)
+    datos = lambda sku: DatosSku(d("5"), d("1.21"), None, None, None)
+    ecom = _Ecom({k: _prod(PITEC=5) for k in ("SKU-A", "SKU-B", "SKU-C")})
+    r = {f["sku"]: f for f in ci.generar(ML3(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA1", "MLA2", "MLA3"], "MT": []})["filas"]}
+    a, b, c = r["SKU-A"], r["SKU-B"], r["SKU-C"]
+    assert a["precio_tachado"] == 40000 and a["envio_gratis"] == "si" and a["revisar_envio_gratis"] == "si"      # $30.000 con tachado $40.000 y envío gratis: a revisar
+    assert a["envio_pct_del_precio"] == 20.0                                                                    # 6.000 sobre 30.000: lo que pesa el envío
+    assert b["envio_gratis"] == "no" and b["revisar_envio_gratis"] == "no" and c["revisar_envio_gratis"] == "no"   # sin envío gratis, o ya sobre $33.000: nada que revisar
+    sin_envio = ci.generar(ML3(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA2"], "MT": []})["filas"][0]
+    assert a["margen_actual_pct"] < sin_envio["margen_actual_pct"]        # A descuenta el envío aunque su precio sea < $33.000 (mismo precio que B, que no lo paga)
