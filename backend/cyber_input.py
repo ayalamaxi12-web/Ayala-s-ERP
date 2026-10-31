@@ -8,8 +8,8 @@ Fuentes:
   - ventas (YTD y últimos 90 días): `venta_ecom` del ERP (unidades por orden, cuenta por `usuario_integracion` GROUP / ARG);
   - stock disponible: Ecom por depósito. Se toma el depósito NO Full que más tiene; si ahí no hay y Full sí, se usa Full (`stock_origen` = "full": SKU
     que hay que empujar fuerte porque solo queda stock en Full);
-  - costo y margen: costo vigente de Ecom × TC, margen de la cuenta de ML a ese precio (contado: comisión real de la publicación, cargos, envío real si
-    se conoce); renta % sobre el precio sin IVA, como en el resto del ERP;
+  - costo y margen: costo vigente de Ecom × TC, margen de la ML a ese precio (contado: comisión real de la publicación, cargos y el envío que ese SKU tuvo en
+    las ventas de ML: promedio de 90 días, o del año); renta % sobre el precio sin IVA, como en el resto del ERP;
   - grupo `liquidar`: alerta «LIQUIDAR» (REVENTAR) de la última foto de Proyección 2027; grupo `rey`: clase REY de esa misma foto (Pareto del margen anual);
   - links de competidores: `Referencias_Mercado` (Rol_Competidor Rey / Media / Barato).
 """
@@ -36,7 +36,7 @@ REGLAS = {
 }
 
 COLUMNAS = ["sku", "titulo", "cuenta", "mla_id", "grupo", "costo", "precio_actual", "margen_actual_pct", "stock_disponible", "ventas_ytd_unid",
-            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante"]
+            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante", "envio_costo", "envio_origen"]
 ORDEN_GRUPO = {"liquidar": 0, "rey": 1, "medio": 2}
 
 
@@ -72,6 +72,37 @@ def ventas_por_sku_y_cuenta(db, hoy: date) -> dict[tuple[str, str], dict]:
             if v.fecha_creacion_venta >= d90:
                 acum["d90"] += u
     return out
+
+
+def envios_historicos(db, hoy: date) -> dict:
+    """Costo de envío que realmente pagó el vendedor en las órdenes de ML ya guardadas (`venta_ecom.costo_envio`: cargo de envío menos lo que pagó el comprador;
+    coincide con la planilla). Promedio de las órdenes con envío > 0 de los últimos 90 días y, si no hay, del año. Claves: ("MLA", mla), (sku, cuenta) y (sku, "*") (el
+    mismo SKU en cualquier cuenta). Las órdenes con varios SKU no cuentan."""
+    from rentabilidad.models import VentaEcom
+    from rentabilidad.pricing_pm import norm_sku
+
+    d90 = hoy - timedelta(days=90)
+    acum: dict[tuple, dict[str, list]] = {}
+    q = db.query(VentaEcom).filter(VentaEcom.excluido.is_(False), VentaEcom.fecha_creacion_venta >= date(hoy.year, 1, 1), VentaEcom.costo_envio > 0)
+    for v in q.all():
+        cuenta = cuenta_de_usuario(v.usuario_integracion)
+        if not cuenta or not v.skus_vendidos or "," in v.skus_vendidos:
+            continue
+        sku = norm_sku(v.skus_vendidos)
+        for k in ([("MLA", v.item_ml)] if v.item_ml else []) + [(sku, cuenta), (sku, "*")]:
+            a = acum.setdefault(k, {"ytd": [], "d90": []})
+            a["ytd"].append(v.costo_envio)
+            if v.fecha_creacion_venta >= d90:
+                a["d90"].append(v.costo_envio)
+    return {k: (sum(a["d90"], Decimal(0)) / len(a["d90"]) if a["d90"] else sum(a["ytd"], Decimal(0)) / len(a["ytd"])) for k, a in acum.items()}
+
+
+def envio_de_publicacion(envios: dict, mla: str, sku_norm: str, cuenta: str) -> tuple[Decimal | None, str]:
+    """(costo de envío, de dónde sale): la propia publicación, el SKU en esa cuenta o el SKU en la otra cuenta. (None, 'sin dato') si nunca tuvo envío pagado."""
+    for k, origen in ((("MLA", mla), "historial de la publicación"), ((sku_norm, cuenta), "historial del SKU"), ((sku_norm, "*"), "historial del SKU en otra cuenta")):
+        if k in envios:
+            return envios[k], origen
+    return None, "sin dato"
 
 
 def stock_de_ecom(ecom, sku: str) -> tuple[int | None, int | None]:
@@ -240,6 +271,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     descartadas: list[dict] = []
     prog = progreso or (lambda *a: None)
     ventas = ventas_por_sku_y_cuenta(db, hoy)
+    envios = envios_historicos(db, hoy)
     candidatas: list[dict] = []
     sin_sku = 0
     for cuenta in CUENTA_NOMBRE:
@@ -325,16 +357,19 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
         if costo is not None and precio > 0:
             real = (coms.get(c["mla_id"]) or {}).get("pct")
             comision, _ = campanas_ml.comision_de(par, None, real)
+            envio, envio_origen = envio_de_publicacion(envios, c["mla_id"], c["sku_norm"], c["cuenta"])
             try:
-                margen = round(float(campanas_ml.margen_oferta(precio, precio, "contado", costo, iva, par, Decimal(0), precio, comision).margen) * 100, 1)
+                margen = round(float(campanas_ml.margen_oferta(precio, precio, "contado", costo, iva, par, envio or Decimal(0), precio, comision).margen) * 100, 1)
             except Exception:  # noqa: BLE001
                 margen = None
-            if precio >= umbral_envio:
+            if precio >= umbral_envio and envio is None:
                 sin_envio_real += 1
         else:
             sin_costo += 1
             descartadas.append({"sku": c["sku"], "mla_id": c["mla_id"], "cuenta": CUENTA_NOMBRE[c["cuenta"]], "titulo": c["titulo"],
                                 "motivo": "SIN COSTO en Ecom: queda en el CSV sin costo ni margen (¿el SKU de ML no coincide con el de Ecom?)"})
+        if costo is None:
+            envio, envio_origen = envio_de_publicacion(envios, c["mla_id"], c["sku_norm"], c["cuenta"])
         al = alertas.get(c["sku_norm"]) or {}
         liquidar = (al.get("alerta") or "").upper() == "LIQUIDAR" or (al.get("clase") or "").upper() == "REVENTAR"
         es_rey = (al.get("clase") or "").upper() == "REY"
@@ -347,11 +382,12 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             "ticket_alto": "si" if c["precio_actual"] >= reglas["ticket_alto_desde"] else "no",
             "link_rey": l.get("Rey", ""), "link_media": l.get("Media", ""), "link_barato": l.get("Barato", ""), "stock_origen": c["stock_origen"],
             "publicaciones_del_sku": c.get("publicaciones_del_sku", 1), "publicacion_principal": c.get("publicacion_principal", "si"), "dias_publicada": c.get("dias_publicada"), "stock_variante": c.get("stock_variante", ""),
+            "envio_costo": None if envio is None else round(float(envio), 2), "envio_origen": envio_origen,
         })
     if sin_costo:
         avisos.append(f"{sin_costo} SKU sin costo vigente en Ecom: costo y margen quedan vacíos.")
     if sin_envio_real:
-        avisos.append(f"{sin_envio_real} publicaciones de $33.000 o más: el margen actual NO descuenta el envío real (usa 0).")
+        avisos.append(f"{sin_envio_real} publicaciones de $33.000 o más sin ningún envío en el historial de ventas de ML: su margen no descuenta envío (nunca vendieron con envío pagado por vos).")
     if not alertas:
         avisos.append("No hay foto de Proyección 2027 cargada: los grupos «liquidar» y «rey» quedan vacíos (todo sale como «medio»).")
     filas = ordenar(filas)

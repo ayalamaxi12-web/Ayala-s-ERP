@@ -207,3 +207,38 @@ def test_las_descartadas_dicen_por_que_quedaron_afuera(db_session, monkeypatch):
     assert ("SIN-ECOM", "el SKU no se") in motivos and ("SIN-STOCK", "sin stock di") in motivos and ("A-OK", "SIN COSTO en") in motivos
     csv_txt = ci.descartadas_a_csv(r["descartadas"])
     assert csv_txt.startswith("sku,mla_id,cuenta,titulo,motivo") and "SIN-ECOM" in csv_txt
+
+
+def test_el_envio_sale_del_historial_de_ventas_de_ml_90_dias_y_si_no_el_anio(db_session):
+    def v(orden, dia, skus, usuario, envio, mla):
+        return VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden=orden, skus_vendidos=skus, fecha_creacion_venta=dia, costo_sin_iva=Decimal(1), comision_venta=Decimal(0),
+                         costo_envio=Decimal(envio), precio_final=Decimal(1), precio_sin_iva=Decimal(1), tc=Decimal(1500), usuario_integracion=usuario, unidades=1, item_ml=mla)
+    db_session.add_all([v("1", date(2026, 10, 20), "SKU-A", "GLOBALELECTRONICSGROUP", 6000, "MLA1"), v("2", date(2026, 10, 25), "SKU-A", "GLOBALELECTRONICSGROUP", 8000, "MLA1"),
+                        v("3", date(2026, 2, 1), "SKU-A", "GLOBALELECTRONICSGROUP", 1000, "MLA1"), v("4", date(2026, 2, 1), "SKU-B", "GLOBALELECTRONICSARG", 5000, "MLA9"),
+                        v("5", date(2026, 10, 20), "SKU-C", "GLOBALELECTRONICSGROUP", 0, "MLA7"), v("6", date(2026, 10, 20), "SKU-A,SKU-B", "GLOBALELECTRONICSGROUP", 99999, "MLA8")])
+    db_session.flush()
+    e = ci.envios_historicos(db_session, HOY)
+    assert e[("MLA", "MLA1")] == Decimal(7000)                  # promedio de los de 90 días (6000 y 8000), no el de febrero
+    assert e[("SKU-B", "MT")] == Decimal(5000)                  # sin ventas en 90 días: el promedio del año
+    assert ("SKU-C", "IT") not in e and ("MLA", "MLA8") not in e         # envío 0 y órdenes con varios SKU no cuentan
+    assert ci.envio_de_publicacion(e, "MLA1", "SKU-A", "IT") == (Decimal(7000), "historial de la publicación")
+    assert ci.envio_de_publicacion(e, "MLA55", "SKU-A", "IT")[1] == "historial del SKU"                  # otra publicación del mismo SKU
+    assert ci.envio_de_publicacion(e, "MLA55", "SKU-B", "IT") == (Decimal(5000), "historial del SKU en otra cuenta")
+    assert ci.envio_de_publicacion(e, "MLA55", "SKU-Z", "IT") == (None, "sin dato")
+
+
+def test_el_margen_descuenta_el_envio_del_historial_en_publicaciones_de_33000_o_mas(db_session, monkeypatch):
+    import campanas_ml_comision
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", lambda items, **k: ({}, []))
+    par = m.cargar_parametros(db_session, HOY)
+    datos = lambda sku: DatosSku(d("10"), d("1.21"), None, None, None)
+    ecom = _Ecom({"PLANCHA-SUB-5EN1": _prod(PITEC=5)})
+    sin = ci.generar(_ML(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA1"], "MT": []})["filas"][0]
+    assert sin["envio_origen"] == "sin dato" and sin["envio_costo"] is None
+    db_session.add(VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden="1", skus_vendidos="PLANCHA-SUB-5EN1", fecha_creacion_venta=date(2026, 10, 20), costo_sin_iva=Decimal(1),
+                             comision_venta=Decimal(0), costo_envio=Decimal(9000), precio_final=Decimal(1), precio_sin_iva=Decimal(1), tc=Decimal(1500),
+                             usuario_integracion="GLOBALELECTRONICSGROUP", unidades=1, item_ml="MLA1"))
+    db_session.flush()
+    con = ci.generar(_ML(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA1"], "MT": []})["filas"][0]
+    assert con["envio_costo"] == 9000.0 and con["envio_origen"] == "historial de la publicación"
+    assert con["margen_actual_pct"] < sin["margen_actual_pct"]            # precio 200.000 ≥ $33.000: ahora descuenta el envío
