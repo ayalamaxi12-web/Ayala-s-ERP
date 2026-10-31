@@ -316,6 +316,23 @@ def costo_y_iva(sku: str, datos_fn, tc: Decimal, ecom=None, componentes: list[tu
     return total, iva, origen
 
 
+def datos_con_respaldo_ecom(datos_fn, ecom, tc: Decimal | None = None):
+    """Envuelve `datos_fn(sku) -> DatosSku` (Campañas ML): si el SKU no tiene costo vigente, usa el costo de la variante en Ecom (IVA 21 % supuesto si falta la alícuota),
+    igual que el insumo del Cyber. Sin respaldo, esas filas no tenían margen y el Cyber les aplicaba −10 % a ciegas. `tc` no se usa (el costo sigue en USD)."""
+    from dataclasses import replace
+    from rentabilidad.pricing_pm import norm_sku
+
+    def f(sku):
+        d = datos_fn(sku)
+        if d.costo_usd:
+            return d if d.iva_factor else replace(d, iva_factor=Decimal("1.21"), aviso_iva="IVA 21 % supuesto (sin alícuota cargada)")
+        usd = costo_usd_de_ecom(ecom, norm_sku(sku)) if sku else None
+        if not usd:
+            return d
+        return replace(d, costo_usd=usd, iva_factor=d.iva_factor or Decimal("1.21"), aviso_iva=d.aviso_iva or "Costo de la variante en Ecom (sin costo vigente); IVA 21 % supuesto")
+    return f
+
+
 def ids_desde_excels(contenidos: list[bytes], leer_fn=None, detectar_fn=None, cuenta: str | None = None) -> tuple[dict[str, list[str]], dict]:
     """Publicaciones que pueden participar según el/los Excel de la campaña de ML. La cuenta de cada una se detecta por su ITEM_ID (el `seller_id` que devuelve ML); si
     se pasa `cuenta` (IT = GROUP, MT = ARG) manda esa, sin depender de la detección (como en Campañas ML). Devuelve ({'IT': [...], 'MT': [...]}, info con campañas, filas leídas,

@@ -86,3 +86,15 @@ def test_mismo_precio_en_las_dos_cuentas_se_toma_el_mas_alto_dentro_del_rango():
     assert r['precio'] == 85000 and 'igualado' in r['regla']
     assert decidir(fila(prop=80000, costo=20000), otro=70000)['precio'] == 80000                    # el de la otra cuenta es más bajo: queda el propio
     assert decidir(fila(prop=80000, costo=20000), rango={'min': 50000, 'max': 82000}, otro=95000)['precio'] == 82000   # respeta el máximo de ML
+
+
+def test_si_no_llega_al_piso_entra_con_pm_menos_3_por_ciento_tambien_los_reyes():
+    for clase in ('REY', 'MEDIO'):
+        r = decidir(fila(prop=70000, costo=90000, clase=clase, pm_=100000), rango={'min': 50000, 'max': 100000})
+        assert r['estado'] == 'piso_pm' and r['precio'] == 97000 and r['participa'], clase
+
+
+def test_pm_menos_3_respeta_el_rango_de_ml_y_sin_pm_sigue_sin_participar():
+    r = decidir(fila(prop=70000, costo=90000, clase='REY', pm_=100000), rango={'min': 50000, 'max': 90000})
+    assert r['estado'] == 'piso_pm' and r['precio'] == 90000 and 'ajustado al rango' in r['regla']
+    assert decidir(fila(prop=70000, costo=90000, clase='REY', pm_=None), rango={'min': 50000, 'max': 100000})['estado'] == 'no_participa'
