@@ -36,7 +36,7 @@ REGLAS = {
 }
 
 COLUMNAS = ["sku", "titulo", "cuenta", "mla_id", "grupo", "costo", "precio_actual", "margen_actual_pct", "stock_disponible", "ventas_ytd_unid",
-            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen"]
+            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku"]
 ORDEN_GRUPO = {"liquidar": 0, "rey": 1, "medio": 2}
 
 
@@ -64,11 +64,13 @@ def ventas_por_sku_y_cuenta(db, hoy: date) -> dict[tuple[str, str], dict]:
         cuenta = cuenta_de_usuario(v.usuario_integracion)
         if not cuenta or not v.skus_vendidos or "," in v.skus_vendidos:
             continue
-        acum = out.setdefault((norm_sku(v.skus_vendidos), cuenta), {"ytd": 0, "d90": 0})
         u = int(v.unidades or 1)
-        acum["ytd"] += u
-        if v.fecha_creacion_venta >= d90:
-            acum["d90"] += u
+        claves = [(norm_sku(v.skus_vendidos), cuenta)] + ([("MLA", v.item_ml)] if v.item_ml else [])     # por SKU y cuenta, y por publicación (MLA)
+        for k in claves:
+            acum = out.setdefault(k, {"ytd": 0, "d90": 0})
+            acum["ytd"] += u
+            if v.fecha_creacion_venta >= d90:
+                acum["d90"] += u
     return out
 
 
@@ -107,15 +109,29 @@ def clasificar(es_liquidar: bool, es_rey: bool) -> str:
 
 
 def elegir_publicaciones(candidatas: list[dict]) -> list[dict]:
-    """Una fila por SKU: entre sus publicaciones (de las dos cuentas), la que más vendió en los últimos 90 días; si empatan, quedan todas las empatadas."""
+    """Una fila por SKU. Un SKU puede tener muchas publicaciones (hasta decenas, y packs «X2 …» con el mismo SKU base): dentro de cada cuenta queda la que más
+    vendió (por publicación, 90 días y después el año; si siguen empatadas, la de menor MLA, para que sea estable). Entre las dos cuentas queda la que más vendió el SKU
+    en 90 días; si empatan, quedan las dos (una por cuenta). `publicaciones_del_sku` = cuántas publicaciones tenía el SKU en el Excel."""
     por_sku: dict[str, list[dict]] = {}
     for c in candidatas:
         por_sku.setdefault(c["sku_norm"], []).append(c)
     out = []
     for lista in por_sku.values():
-        mejor = max(c["ventas_ult_90d_unid"] for c in lista)
-        out.extend(c for c in lista if c["ventas_ult_90d_unid"] == mejor)
+        por_cuenta: dict[str, dict] = {}
+        for c in lista:
+            clave = lambda x: (x.get("ventas_mla_90d", 0), x.get("ventas_mla_ytd", 0), -_orden_mla(x["mla_id"]))
+            if c["cuenta"] not in por_cuenta or clave(c) > clave(por_cuenta[c["cuenta"]]):
+                por_cuenta[c["cuenta"]] = c
+        mejor = max(c["ventas_ult_90d_unid"] for c in por_cuenta.values())
+        for c in por_cuenta.values():
+            if c["ventas_ult_90d_unid"] == mejor:
+                out.append({**c, "publicaciones_del_sku": len(lista)})
     return out
+
+
+def _orden_mla(mla: str) -> int:
+    digitos = "".join(ch for ch in str(mla) if ch.isdigit())
+    return int(digitos) if digitos else 0
 
 
 def ordenar(filas: list[dict]) -> list[dict]:
@@ -221,6 +237,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     from rentabilidad.pricing_pm import norm_sku
 
     avisos: list[str] = []
+    descartadas: list[dict] = []
     prog = progreso or (lambda *a: None)
     ventas = ventas_por_sku_y_cuenta(db, hoy)
     candidatas: list[dict] = []
@@ -242,11 +259,13 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
                 sku = _sku_de_item(it)
                 if not sku:
                     sin_sku += 1
+                    descartadas.append({"sku": "", "mla_id": it["id"], "cuenta": CUENTA_NOMBRE[cuenta], "titulo": it.get("title", ""), "motivo": "publicación activa sin SKU"})
                     continue
                 v = ventas.get((norm_sku(sku), cuenta), {"ytd": 0, "d90": 0})
+                vm = ventas.get(("MLA", it["id"]), {"ytd": 0, "d90": 0})
                 candidatas.append({"sku": sku, "sku_norm": norm_sku(sku), "titulo": it.get("title", ""), "cuenta": cuenta, "mla_id": it["id"],
                                    "precio_actual": float(it.get("price") or 0), "categoria_ml": it.get("category_id"), "tipo_ml": it.get("listing_type_id"),
-                                   "ventas_ytd_unid": v["ytd"], "ventas_ult_90d_unid": v["d90"]})
+                                   "ventas_ytd_unid": v["ytd"], "ventas_ult_90d_unid": v["d90"], "ventas_mla_ytd": vm["ytd"], "ventas_mla_90d": vm["d90"]})
     if sin_sku:
         avisos.append(f"{sin_sku} publicaciones activas sin SKU: no entran al insumo.")
     elegidas = elegir_publicaciones(candidatas)
@@ -265,12 +284,14 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
         propio, full = cache_stock.get(c["sku"], (None, None))
         if propio is None:
             sin_ecom += 1
+            descartadas.append({"sku": c["sku"], "mla_id": c["mla_id"], "cuenta": CUENTA_NOMBRE[c["cuenta"]], "titulo": c["titulo"], "motivo": "el SKU no se encontró en Ecom (sin stock conocido)"})
             continue
         if propio > 0:
             c["stock_disponible"], c["stock_origen"] = propio, "ecom"
         elif full and full > 0:
             c["stock_disponible"], c["stock_origen"] = full, "full"
         else:
+            descartadas.append({"sku": c["sku"], "mla_id": c["mla_id"], "cuenta": CUENTA_NOMBRE[c["cuenta"]], "titulo": c["titulo"], "motivo": "sin stock disponible en Ecom ni en Full"})
             continue
         con_stock.append(c)
     if sin_ecom:
@@ -299,6 +320,8 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
                 sin_envio_real += 1
         else:
             sin_costo += 1
+            descartadas.append({"sku": c["sku"], "mla_id": c["mla_id"], "cuenta": CUENTA_NOMBRE[c["cuenta"]], "titulo": c["titulo"],
+                                "motivo": "SIN COSTO en Ecom: queda en el CSV sin costo ni margen (¿el SKU de ML no coincide con el de Ecom?)"})
         al = alertas.get(c["sku_norm"]) or {}
         liquidar = (al.get("alerta") or "").upper() == "LIQUIDAR" or (al.get("clase") or "").upper() == "REVENTAR"
         es_rey = (al.get("clase") or "").upper() == "REY"
@@ -310,6 +333,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             "stock_disponible": c["stock_disponible"], "ventas_ytd_unid": c["ventas_ytd_unid"], "ventas_ult_90d_unid": c["ventas_ult_90d_unid"],
             "ticket_alto": "si" if c["precio_actual"] >= reglas["ticket_alto_desde"] else "no",
             "link_rey": l.get("Rey", ""), "link_media": l.get("Media", ""), "link_barato": l.get("Barato", ""), "stock_origen": c["stock_origen"],
+            "publicaciones_del_sku": c.get("publicaciones_del_sku", 1),
         })
     if sin_costo:
         avisos.append(f"{sin_costo} SKU sin costo vigente en Ecom: costo y margen quedan vacíos.")
@@ -318,6 +342,15 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     if not alertas:
         avisos.append("No hay foto de Proyección 2027 cargada: los grupos «liquidar» y «rey» quedan vacíos (todo sale como «medio»).")
     filas = ordenar(filas)
-    return {"filas": filas, "resumen": resumen(filas), "reglas": reglas, "avisos": avisos,
+    return {"filas": filas, "resumen": resumen(filas), "reglas": reglas, "avisos": avisos, "descartadas": descartadas,
             "conteos": {"publicaciones_activas": len(candidatas), "con_stock": len(filas), "hoy": hoy.isoformat(),
                         "origen": "Excel de la campaña" if ids_por_cuenta is not None else "todas las publicaciones activas"}}
+
+
+def descartadas_a_csv(filas: list[dict]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(["sku", "mla_id", "cuenta", "titulo", "motivo"])
+    for f in sorted(filas, key=lambda x: (x["motivo"], x["sku"])):
+        w.writerow([f["sku"], f["mla_id"], f["cuenta"], f["titulo"], f["motivo"]])
+    return buf.getvalue()

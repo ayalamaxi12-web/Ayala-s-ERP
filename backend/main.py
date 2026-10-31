@@ -3744,6 +3744,16 @@ async def cyber_input_csv(job_id: str):
                     headers={"Content-Disposition": 'attachment; filename="cyber_2026_input.csv"'})
 
 
+@app.get("/cyber/input/descartadas")
+async def cyber_input_descartadas(job_id: str):
+    """Qué publicaciones quedaron afuera del insumo (o sin costo) y por qué: sin SKU, SKU no encontrado en Ecom, sin stock."""
+    r = (_CYBER_JOBS.get(job_id) or {}).get("result")
+    if not r:
+        raise HTTPException(status_code=404, detail="Ese insumo no existe o todavía no terminó.")
+    return Response(cyber_input.descartadas_a_csv(r["descartadas"]), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="cyber_2026_descartadas.csv"'})
+
+
 @app.get("/cyber/input/reglas")
 async def cyber_input_reglas(job_id: str | None = None):
     """Reglas de precio del Cyber como parámetros (`cyber_2026_reglas.json`) y, si se pasa el insumo, su resumen por grupo."""

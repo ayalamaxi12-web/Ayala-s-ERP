@@ -3084,6 +3084,7 @@ async function cyberInsumo(inp){
       if(j.status==='done'){
         await bajar('/cyber/input/csv?job_id='+job_id,'cyber_2026_input.csv','csv');
         await bajar('/cyber/input/reglas?job_id='+job_id,'cyber_2026_reglas.json','json');
+        await bajar('/cyber/input/descartadas?job_id='+job_id,'cyber_2026_descartadas.csv','csv');
         const r=j.resumen||{},f=g=>g?`${g.skus} SKU · ${fmt$(g.plata_en_stock)}${g.stock_solo_full?' ('+g.stock_solo_full+' solo en Full)':''}`:'—';
         st.innerHTML=`✅ Liquidar: ${f(r.liquidar)} · Rey: ${f(r.rey)} · Medio: ${f(r.medio)} · Total ${r.total?r.total.skus:0} SKU`+((j.avisos||[]).length?'<br>⚠ '+j.avisos.map(acEsc).join('<br>⚠ '):'');
         return;
