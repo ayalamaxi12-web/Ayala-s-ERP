@@ -209,22 +209,30 @@ def test_las_descartadas_dicen_por_que_quedaron_afuera(db_session, monkeypatch):
     assert csv_txt.startswith("sku,mla_id,cuenta,titulo,motivo") and "SIN-ECOM" in csv_txt
 
 
-def test_el_envio_sale_del_historial_de_ventas_de_ml_90_dias_y_si_no_el_anio(db_session):
-    def v(orden, dia, skus, usuario, envio, mla):
+def test_el_envio_sale_del_historial_de_ventas_de_ml_y_si_no_se_estima(db_session):
+    def v(orden, dia, skus, usuario, envio, mla, precio=1, categoria=None):
         return VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden=orden, skus_vendidos=skus, fecha_creacion_venta=dia, costo_sin_iva=Decimal(1), comision_venta=Decimal(0),
-                         costo_envio=Decimal(envio), precio_final=Decimal(1), precio_sin_iva=Decimal(1), tc=Decimal(1500), usuario_integracion=usuario, unidades=1, item_ml=mla)
-    db_session.add_all([v("1", date(2026, 10, 20), "SKU-A", "GLOBALELECTRONICSGROUP", 6000, "MLA1"), v("2", date(2026, 10, 25), "SKU-A", "GLOBALELECTRONICSGROUP", 8000, "MLA1"),
-                        v("3", date(2026, 2, 1), "SKU-A", "GLOBALELECTRONICSGROUP", 1000, "MLA1"), v("4", date(2026, 2, 1), "SKU-B", "GLOBALELECTRONICSARG", 5000, "MLA9"),
-                        v("5", date(2026, 10, 20), "SKU-C", "GLOBALELECTRONICSGROUP", 0, "MLA7"), v("6", date(2026, 10, 20), "SKU-A,SKU-B", "GLOBALELECTRONICSGROUP", 99999, "MLA8")])
+                         costo_envio=Decimal(envio), precio_final=Decimal(precio), precio_sin_iva=Decimal(1), tc=Decimal(1500), usuario_integracion=usuario, unidades=1, item_ml=mla,
+                         categoria=categoria)
+    G, A = "GLOBALELECTRONICSGROUP", "GLOBALELECTRONICSARG"
+    db_session.add_all([v("1", date(2026, 10, 20), "SKU-A", G, 6000, "MLA1", categoria="Cat1"), v("2", date(2026, 10, 25), "SKU-A", G, 8000, "MLA1", categoria="Cat1"),
+                        v("3", date(2026, 2, 1), "SKU-A", G, 1000, "MLA1"), v("4", date(2026, 2, 1), "SKU-B", A, 5000, "MLA9", categoria="Cat1"),
+                        v("5", date(2026, 10, 20), "SKU-C", G, 0, "MLA7", precio=90000),          # solo ventas ≥ $33.000 con envío 0: Full o similar
+                        v("6", date(2026, 10, 20), "SKU-D", G, 0, "MLA6", precio=10000),          # envío 0 por ser barato: no prueba nada
+                        v("7", date(2026, 10, 20), "SKU-A,SKU-B", G, 99999, "MLA8")])
     db_session.flush()
     e = ci.envios_historicos(db_session, HOY)
-    assert e[("MLA", "MLA1")] == Decimal(7000)                  # promedio de los de 90 días (6000 y 8000), no el de febrero
-    assert e[("SKU-B", "MT")] == Decimal(5000)                  # sin ventas en 90 días: el promedio del año
-    assert ("SKU-C", "IT") not in e and ("MLA", "MLA8") not in e         # envío 0 y órdenes con varios SKU no cuentan
-    assert ci.envio_de_publicacion(e, "MLA1", "SKU-A", "IT") == (Decimal(7000), "historial de la publicación")
-    assert ci.envio_de_publicacion(e, "MLA55", "SKU-A", "IT")[1] == "historial del SKU"                  # otra publicación del mismo SKU
-    assert ci.envio_de_publicacion(e, "MLA55", "SKU-B", "IT") == (Decimal(5000), "historial del SKU en otra cuenta")
-    assert ci.envio_de_publicacion(e, "MLA55", "SKU-Z", "IT") == (None, "sin dato")
+    assert e["real"][("MLA", "MLA1")] == Decimal(7000)          # promedio de los de 90 días (6000 y 8000), no el de febrero
+    assert e["real"][("SKU-B", "MT")] == Decimal(5000)          # sin ventas en 90 días: el promedio del año
+    assert ("MLA", "MLA8") not in e["real"] and ("SKU-D", "IT") not in e["ceros"] and ("SKU-C", "IT") in e["ceros"]
+    assert e["categoria"]["Cat1"] == Decimal(6000)              # mediana de 6000, 8000 y 5000
+    assert e["general"] == Decimal(5500)                        # mediana de todos los envíos > 0: 1000, 5000, 6000 y 8000
+    f = lambda mla, sku, cuenta, cat=None: ci.envio_de_publicacion(e, mla, sku, cuenta, cat)
+    assert f("MLA1", "SKU-A", "IT") == (Decimal(7000), "historial de la publicación")
+    assert f("MLA55", "SKU-A", "IT")[1] == "historial del SKU" and f("MLA55", "SKU-B", "IT") == (Decimal(5000), "historial del SKU en otra cuenta")
+    assert f("MLA77", "SKU-C", "IT") == (Decimal(0), "historial: ventas sin envío pagado (Full o similar)")
+    assert f("MLA55", "SKU-Z", "IT", "Cat1")[1] == "ESTIMADO: mediana de la categoría" and f("MLA55", "SKU-Z", "IT", "Otra")[1] == "ESTIMADO: mediana general"
+    assert ci.envio_de_publicacion({"real": {}, "ceros": set(), "categoria": {}, "general": None}, "M", "S", "IT") == (None, "sin dato")
 
 
 def test_el_margen_descuenta_el_envio_del_historial_en_publicaciones_de_33000_o_mas(db_session, monkeypatch):

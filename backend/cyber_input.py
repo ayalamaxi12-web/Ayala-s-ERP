@@ -74,34 +74,64 @@ def ventas_por_sku_y_cuenta(db, hoy: date) -> dict[tuple[str, str], dict]:
     return out
 
 
+UMBRAL_ENVIO_ML = 33000      # desde este precio el envío lo paga el vendedor
+
+
 def envios_historicos(db, hoy: date) -> dict:
     """Costo de envío que realmente pagó el vendedor en las órdenes de ML ya guardadas (`venta_ecom.costo_envio`: cargo de envío menos lo que pagó el comprador;
-    coincide con la planilla). Promedio de las órdenes con envío > 0 de los últimos 90 días y, si no hay, del año. Claves: ("MLA", mla), (sku, cuenta) y (sku, "*") (el
-    mismo SKU en cualquier cuenta). Las órdenes con varios SKU no cuentan."""
+    coincide con el «Nuevo reporte de facturación»). Devuelve:
+      - `real`: promedio del envío de las órdenes con envío > 0 (últimos 90 días y, si no hay, el año), por ("MLA", mla), (sku, cuenta) y (sku, "*") (el mismo SKU en
+        cualquier cuenta);
+      - `ceros`: las mismas claves de SKU que solo tuvieron órdenes de $33.000 o más con envío 0 (Full o similar: ML no les cobró envío);
+      - `categoria`: mediana del envío por categoría y `general`: mediana de todas, para estimar los SKU que nunca vendieron con envío pagado.
+    Las órdenes con varios SKU no cuentan."""
+    from statistics import median
+
     from rentabilidad.models import VentaEcom
     from rentabilidad.pricing_pm import norm_sku
 
     d90 = hoy - timedelta(days=90)
     acum: dict[tuple, dict[str, list]] = {}
-    q = db.query(VentaEcom).filter(VentaEcom.excluido.is_(False), VentaEcom.fecha_creacion_venta >= date(hoy.year, 1, 1), VentaEcom.costo_envio > 0)
+    ceros: set[tuple] = set()
+    por_cat: dict[str, list] = {}
+    todos: list = []
+    q = db.query(VentaEcom).filter(VentaEcom.excluido.is_(False), VentaEcom.fecha_creacion_venta >= date(hoy.year, 1, 1))
     for v in q.all():
         cuenta = cuenta_de_usuario(v.usuario_integracion)
         if not cuenta or not v.skus_vendidos or "," in v.skus_vendidos:
             continue
         sku = norm_sku(v.skus_vendidos)
-        for k in ([("MLA", v.item_ml)] if v.item_ml else []) + [(sku, cuenta), (sku, "*")]:
-            a = acum.setdefault(k, {"ytd": [], "d90": []})
-            a["ytd"].append(v.costo_envio)
-            if v.fecha_creacion_venta >= d90:
-                a["d90"].append(v.costo_envio)
-    return {k: (sum(a["d90"], Decimal(0)) / len(a["d90"]) if a["d90"] else sum(a["ytd"], Decimal(0)) / len(a["ytd"])) for k, a in acum.items()}
+        claves = ([("MLA", v.item_ml)] if v.item_ml else []) + [(sku, cuenta), (sku, "*")]
+        if v.costo_envio and v.costo_envio > 0:
+            for k in claves:
+                a = acum.setdefault(k, {"ytd": [], "d90": []})
+                a["ytd"].append(v.costo_envio)
+                if v.fecha_creacion_venta >= d90:
+                    a["d90"].append(v.costo_envio)
+            todos.append(v.costo_envio)
+            if v.categoria:
+                por_cat.setdefault(v.categoria, []).append(v.costo_envio)
+        elif v.precio_final and v.precio_final >= UMBRAL_ENVIO_ML:
+            ceros.update(claves)
+    real = {k: (sum(a["d90"], Decimal(0)) / len(a["d90"]) if a["d90"] else sum(a["ytd"], Decimal(0)) / len(a["ytd"])) for k, a in acum.items()}
+    return {"real": real, "ceros": {k for k in ceros if k not in real},
+            "categoria": {c: Decimal(str(median(v))) for c, v in por_cat.items()}, "general": Decimal(str(median(todos))) if todos else None}
 
 
-def envio_de_publicacion(envios: dict, mla: str, sku_norm: str, cuenta: str) -> tuple[Decimal | None, str]:
-    """(costo de envío, de dónde sale): la propia publicación, el SKU en esa cuenta o el SKU en la otra cuenta. (None, 'sin dato') si nunca tuvo envío pagado."""
+def envio_de_publicacion(envios: dict, mla: str, sku_norm: str, cuenta: str, categoria: str | None = None) -> tuple[Decimal | None, str]:
+    """(costo de envío, de dónde sale), en este orden: historial de la propia publicación; del SKU en esa cuenta; del SKU en la otra; 0 si el SKU solo vendió a $33.000 o más
+    sin que ML le cobrara envío (Full o similar); y, si nunca vendió con envío, un ESTIMADO: la mediana de su categoría y, sin categoría, la mediana general. (None, 'sin dato')
+    si ni eso."""
+    real, ceros = envios["real"], envios["ceros"]
     for k, origen in ((("MLA", mla), "historial de la publicación"), ((sku_norm, cuenta), "historial del SKU"), ((sku_norm, "*"), "historial del SKU en otra cuenta")):
-        if k in envios:
-            return envios[k], origen
+        if k in real:
+            return real[k], origen
+    if (sku_norm, cuenta) in ceros or (sku_norm, "*") in ceros or ("MLA", mla) in ceros:
+        return Decimal(0), "historial: ventas sin envío pagado (Full o similar)"
+    if categoria and categoria in envios["categoria"]:
+        return envios["categoria"][categoria], "ESTIMADO: mediana de la categoría"
+    if envios["general"] is not None:
+        return envios["general"], "ESTIMADO: mediana general"
     return None, "sin dato"
 
 
@@ -357,12 +387,13 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
         if costo is not None and precio > 0:
             real = (coms.get(c["mla_id"]) or {}).get("pct")
             comision, _ = campanas_ml.comision_de(par, None, real)
-            envio, envio_origen = envio_de_publicacion(envios, c["mla_id"], c["sku_norm"], c["cuenta"])
+            cat = (datos_fn(c["sku_norm"]).categoria if c["sku_norm"] else None) or None
+            envio, envio_origen = envio_de_publicacion(envios, c["mla_id"], c["sku_norm"], c["cuenta"], cat)
             try:
                 margen = round(float(campanas_ml.margen_oferta(precio, precio, "contado", costo, iva, par, envio or Decimal(0), precio, comision).margen) * 100, 1)
             except Exception:  # noqa: BLE001
                 margen = None
-            if precio >= umbral_envio and envio is None:
+            if precio >= umbral_envio and (envio is None or envio_origen.startswith("ESTIMADO")):
                 sin_envio_real += 1
         else:
             sin_costo += 1
@@ -387,7 +418,8 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     if sin_costo:
         avisos.append(f"{sin_costo} SKU sin costo vigente en Ecom: costo y margen quedan vacíos.")
     if sin_envio_real:
-        avisos.append(f"{sin_envio_real} publicaciones de $33.000 o más sin ningún envío en el historial de ventas de ML: su margen no descuenta envío (nunca vendieron con envío pagado por vos).")
+        avisos.append(f"{sin_envio_real} publicaciones de $33.000 o más sin envío propio en el historial de ventas de ML (nunca vendieron con envío pagado): su envío es un ESTIMADO "
+                      "por categoría (columna envio_origen) o falta; el margen de esas es aproximado.")
     if not alertas:
         avisos.append("No hay foto de Proyección 2027 cargada: los grupos «liquidar» y «rey» quedan vacíos (todo sale como «medio»).")
     filas = ordenar(filas)
