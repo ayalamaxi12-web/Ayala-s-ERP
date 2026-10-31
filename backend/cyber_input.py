@@ -316,9 +316,10 @@ def costo_y_iva(sku: str, datos_fn, tc: Decimal, ecom=None, componentes: list[tu
     return total, iva, origen
 
 
-def ids_desde_excels(contenidos: list[bytes], leer_fn=None, detectar_fn=None) -> tuple[dict[str, list[str]], dict]:
-    """Publicaciones que pueden participar según el/los Excel de la campaña de ML (uno por cuenta o uno solo): cuenta de cada una por su ITEM_ID.
-    Devuelve ({'IT': [...], 'MT': [...]}, info con campañas, filas leídas y publicaciones sin cuenta detectada)."""
+def ids_desde_excels(contenidos: list[bytes], leer_fn=None, detectar_fn=None, cuenta: str | None = None) -> tuple[dict[str, list[str]], dict]:
+    """Publicaciones que pueden participar según el/los Excel de la campaña de ML. La cuenta de cada una se detecta por su ITEM_ID (el `seller_id` que devuelve ML); si
+    se pasa `cuenta` (IT = GROUP, MT = ARG) manda esa, sin depender de la detección (como en Campañas ML). Devuelve ({'IT': [...], 'MT': [...]}, info con campañas, filas leídas,
+    publicaciones sin cuenta y, si la detección no reconoce al vendedor, de qué vendedores son)."""
     if leer_fn is None:
         import campanas_ml_xlsx
         leer_fn = campanas_ml_xlsx.leer_promociones
@@ -332,16 +333,34 @@ def ids_desde_excels(contenidos: list[bytes], leer_fn=None, detectar_fn=None) ->
         campanas.append(str(leido.get("campana") or ""))
         ids += [f["ITEM_ID"] for f in leido["filas"] if f.get("ITEM_ID")]
     ids = list(dict.fromkeys(ids))
-    det, avisos = detectar_fn(ids)
+    try:
+        det, avisos = detectar_fn(ids)
+    except Exception as e:  # noqa: BLE001
+        det, avisos = {}, [f"No se pudo detectar la cuenta de las publicaciones ({type(e).__name__})."]
     por_cuenta: dict[str, list[str]] = {"IT": [], "MT": []}
     sin_cuenta = 0
+    if cuenta in por_cuenta:
+        por_cuenta[cuenta] = list(ids)
+        otras = sum(1 for i in ids if (det.get(i) or {}).get("cuenta") not in (None, cuenta))
+        if otras:
+            avisos.append(f"Elegiste {CUENTA_NOMBRE[cuenta]}, pero {otras} publicaciones del Excel son de la otra cuenta según ML: revisá que subiste el Excel correcto.")
+    else:
+        for i in ids:
+            c = (det.get(i) or {}).get("cuenta")
+            if c in por_cuenta:
+                por_cuenta[c].append(i)
+            else:
+                sin_cuenta += 1
+    desconocidos: dict[str, int] = {}
     for i in ids:
-        cuenta = (det.get(i) or {}).get("cuenta")
-        if cuenta in por_cuenta:
-            por_cuenta[cuenta].append(i)
-        else:
-            sin_cuenta += 1
-    return por_cuenta, {"campanas": campanas, "publicaciones_en_excel": len(ids), "sin_cuenta": sin_cuenta, "avisos": list(avisos)}
+        d = det.get(i) or {}
+        if d.get("cuenta") is None and d.get("seller_id"):
+            desconocidos[d["seller_id"]] = desconocidos.get(d["seller_id"], 0) + 1
+    if desconocidos:
+        from ml_auth import SELLERS
+        avisos.append("ML dice que esas publicaciones son del vendedor " + ", ".join(f"{sid} ({n})" for sid, n in sorted(desconocidos.items(), key=lambda x: -x[1]))
+                      + f", que no es GROUP ({SELLERS.get('IT')}) ni ARG ({SELLERS.get('MT')}): elegí la cuenta a mano o avisame para corregir el id del vendedor.")
+    return por_cuenta, {"campanas": campanas, "publicaciones_en_excel": len(ids), "sin_cuenta": sin_cuenta, "avisos": list(avisos), "cuenta_manual": cuenta}
 
 
 def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[str, dict], links: dict[str, dict[str, str]],

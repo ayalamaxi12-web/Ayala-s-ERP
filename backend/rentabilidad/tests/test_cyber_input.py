@@ -328,3 +328,23 @@ def test_un_sku_de_ml_con_guion_de_mas_se_busca_tambien_sin_el_guion_en_ecom():
     assert ci.stock_con_alias(e, "INKHP940XL-COMP") == (8, 1, "INKHP940XLCOMP")
     assert ci.stock_con_alias(e, "INKHP940XLCOMP") == (8, 1, "INKHP940XLCOMP")             # el SKU tal cual manda si existe
     assert ci.stock_con_alias(e, "NO-EXISTE-COMP") == (None, None, "NO-EXISTE-COMP")
+
+
+def test_la_cuenta_elegida_a_mano_manda_sobre_la_deteccion_y_si_no_se_reconoce_el_vendedor_se_dice_cual_es():
+    leidos = {b"x": {"campana": "Cyber ARG", "filas": [{"ITEM_ID": "MLA1"}, {"ITEM_ID": "MLA2"}, {"ITEM_ID": "MLA3"}]}}
+    # ML devuelve un vendedor que no es ni GROUP ni ARG: sin elegir cuenta, todo queda afuera y el aviso dice de quién son
+    raros = {i: {"seller_id": "999111", "cuenta": None} for i in ("MLA1", "MLA2", "MLA3")}
+    por_cuenta, info = ci.ids_desde_excels([b"x"], leer_fn=lambda c: leidos[c], detectar_fn=lambda ids: (raros, []))
+    assert por_cuenta == {"IT": [], "MT": []} and info["sin_cuenta"] == 3 and any("999111 (3)" in a for a in info["avisos"])
+    # eligiendo ARG a mano entran las tres, sin depender de la detección
+    por_cuenta, info = ci.ids_desde_excels([b"x"], leer_fn=lambda c: leidos[c], detectar_fn=lambda ids: (raros, []), cuenta="MT")
+    assert por_cuenta == {"IT": [], "MT": ["MLA1", "MLA2", "MLA3"]} and info["sin_cuenta"] == 0 and info["cuenta_manual"] == "MT"
+    # si la detección dice que son de la otra cuenta, entra igual pero avisa
+    de_it = {i: {"seller_id": "115764017", "cuenta": "IT"} for i in ("MLA1", "MLA2", "MLA3")}
+    por_cuenta, info = ci.ids_desde_excels([b"x"], leer_fn=lambda c: leidos[c], detectar_fn=lambda ids: (de_it, []), cuenta="MT")
+    assert len(por_cuenta["MT"]) == 3 and any("de la otra cuenta" in a for a in info["avisos"])
+    # una detección que explota no tira el insumo
+    def falla(ids):
+        raise RuntimeError("ML caído")
+    por_cuenta, info = ci.ids_desde_excels([b"x"], leer_fn=lambda c: leidos[c], detectar_fn=falla, cuenta="IT")
+    assert len(por_cuenta["IT"]) == 3 and any("No se pudo detectar" in a for a in info["avisos"])

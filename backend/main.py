@@ -3673,7 +3673,7 @@ import cyber_input
 _CYBER_JOBS: dict[str, dict] = {}
 
 
-def _cyber_job(job_id: str, excels: list[bytes] | None = None) -> None:
+def _cyber_job(job_id: str, excels: list[bytes] | None = None, cuenta: str | None = None) -> None:
     from ml_full import EcomFullAdapter, MLFullClient
     from rentabilidad.db import sesion
     from rentabilidad.ingesta_ecom_api import EcomApiClient
@@ -3694,7 +3694,7 @@ def _cyber_job(job_id: str, excels: list[bytes] | None = None) -> None:
             avisos0.append(f"No se pudieron leer los links de competidores (Referencias_Mercado: {type(e).__name__}): salen vacíos.")
         ids_por_cuenta = None
         if excels:
-            ids_por_cuenta, info_x = cyber_input.ids_desde_excels(excels)
+            ids_por_cuenta, info_x = cyber_input.ids_desde_excels(excels, cuenta=cuenta)
             j["log"].append(f"Excel de la campaña: {info_x['publicaciones_en_excel']} publicaciones ({len(ids_por_cuenta['IT'])} GROUP, {len(ids_por_cuenta['MT'])} ARG).")
             avisos0 += info_x["avisos"]
             if info_x["sin_cuenta"]:
@@ -3713,15 +3713,17 @@ def _cyber_job(job_id: str, excels: list[bytes] | None = None) -> None:
 
 
 @app.post("/cyber/input/run")
-async def cyber_input_run(background_tasks: BackgroundTasks, archivos: list[UploadFile] = File(default=[])):
+async def cyber_input_run(background_tasks: BackgroundTasks, archivos: list[UploadFile] = File(default=[]), cuenta: str | None = Form(default=None)):
     """Arma el insumo del Cyber en segundo plano (tarda varios minutos: publicaciones de ML, stock de Ecom y ventas del año). Solo lectura. Con el/los Excel de la
     campaña (`archivos`, uno por cuenta o uno solo) mira solo las publicaciones que pueden participar; sin Excel, todas las activas de GROUP y ARG."""
     if any(j["status"] == "running" for j in _CYBER_JOBS.values()):
         raise HTTPException(status_code=409, detail="Ya hay un insumo del Cyber armándose: esperá a que termine.")
     job_id = f"cyber_{int(time.time())}"
     _CYBER_JOBS[job_id] = {"status": "running", "log": ["Armando el insumo del Cyber (ML, Ecom, ventas)..."], "progress": None, "result": None}
+    if cuenta and cuenta not in ml_ofertas.SELLERS:
+        raise HTTPException(status_code=422, detail=f"Cuenta inválida: {cuenta!r} (IT = GROUP o MT = ARG).")
     excels = [await a.read() for a in archivos if a.filename]
-    background_tasks.add_task(_cyber_job, job_id, excels or None)
+    background_tasks.add_task(_cyber_job, job_id, excels or None, cuenta or None)
     return {"job_id": job_id, "status": "started"}
 
 

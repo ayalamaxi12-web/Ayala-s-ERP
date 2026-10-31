@@ -1575,6 +1575,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <button class="btn" id="btn-cp-verif-ml" style="display:none" onclick="cpVerificarML()" title="Solo lectura: pregunta a ML cómo ve esta campaña y unas publicaciones de muestra">🔎 Verificar con ML</button>
     <label style="font-size:12px;color:var(--text2)" title="Queda registrado en el historial de cada alta">Operador <select id="cp-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
     <input type="file" id="cyber-file" accept=".xlsx" multiple style="display:none" onchange="cyberInsumo(this)">
+    <select id="cyber-cuenta" class="fi" title="Cuenta del Excel de la campaña. «Detectar» la saca de ML; si no la reconoce, elegila a mano" aria-label="Cuenta del Excel del Cyber"><option value="">Cuenta: detectar</option><option value="IT">GROUP</option><option value="MT">ARG</option></select>
     <button class="btn" id="btn-cyber-input" onclick="qs('cyber-file').click()" title="Elegí el/los Excel de la campaña del Cyber (uno por cuenta o uno solo): el ERP arma el CSV solo con las publicaciones que pueden participar (GROUP y ARG), una fila por SKU con stock disponible. Solo lectura; tarda varios minutos">⬇ Insumo Cyber (CSV)</button><span id="cyber-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
@@ -3075,6 +3076,7 @@ async function cyberInsumo(inp){
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);};
   try{
     const fd=new FormData();archivos.forEach(a=>fd.append('archivos',a));
+    if(qs('cyber-cuenta').value)fd.append('cuenta',qs('cyber-cuenta').value);
     const{job_id}=await cpPost('/cyber/input/run',{method:'POST',body:fd});
     for(let i=0;i<400;i++){
       await new Promise(r=>setTimeout(r,4000));
