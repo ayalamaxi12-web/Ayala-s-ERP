@@ -149,3 +149,50 @@ def test_con_excel_solo_se_miran_las_publicaciones_de_la_campana(db_session, mon
     r = ci.generar(ML(), _Ecom({"PLANCHA-SUB-5EN1": _prod(PITEC=5)}), db_session, lambda sku: DatosSku(d("10"), d("1.21"), None, None, None), d("1500"), par, HOY, {}, {},
                    ids_por_cuenta={"IT": ["MLA1"], "MT": []})
     assert pedidas == ["MLA1"] and [f["mla_id"] for f in r["filas"]] == ["MLA1"] and r["conteos"]["origen"] == "Excel de la campaña"
+
+
+def test_un_sku_con_muchas_publicaciones_de_una_cuenta_queda_en_una_sola_fila_la_que_mas_vendio():
+    c = lambda mla, cuenta, v90, vm90, vmytd=0, sku="A": {"sku_norm": sku, "cuenta": cuenta, "mla_id": mla, "ventas_ult_90d_unid": v90, "ventas_mla_90d": vm90, "ventas_mla_ytd": vmytd}
+    # 4 publicaciones del mismo SKU en la misma cuenta: queda la que más vendió ella misma (no las 4 por empatar a nivel SKU)
+    r = ci.elegir_publicaciones([c("MLA10", "IT", 9, 1), c("MLA11", "IT", 9, 6), c("MLA12", "IT", 9, 6, 20), c("MLA13", "IT", 9, 0)])
+    assert [x["mla_id"] for x in r] == ["MLA12"] and r[0]["publicaciones_del_sku"] == 4
+    # sin ventas por publicación: desempata la de menor MLA (estable)
+    r = ci.elegir_publicaciones([c("MLA9", "IT", 0, 0), c("MLA3", "IT", 0, 0)])
+    assert [x["mla_id"] for x in r] == ["MLA3"]
+    # entre cuentas: gana la que más vendió el SKU; si empatan, una por cuenta
+    r = ci.elegir_publicaciones([c("MLA1", "IT", 5, 5), c("MLA2", "MT", 8, 8), c("MLA3", "IT", 5, 1)])
+    assert [x["mla_id"] for x in r] == ["MLA2"]
+    r = ci.elegir_publicaciones([c("MLA1", "IT", 4, 4), c("MLA2", "MT", 4, 4), c("MLA3", "IT", 4, 0)])
+    assert sorted(x["mla_id"] for x in r) == ["MLA1", "MLA2"]
+
+
+def test_las_ventas_tambien_se_cuentan_por_publicacion_mla(db_session):
+    def v(orden, mla, unidades):
+        return VentaEcom(periodo="2026-10-01_2026-10-31", numero_orden=orden, skus_vendidos="SKU-A", fecha_creacion_venta=date(2026, 10, 20), costo_sin_iva=Decimal(1),
+                         comision_venta=Decimal(0), costo_envio=Decimal(0), precio_final=Decimal(1), precio_sin_iva=Decimal(1), tc=Decimal(1500),
+                         usuario_integracion="GLOBALELECTRONICSGROUP", unidades=unidades, item_ml=mla)
+    db_session.add_all([v("1", "MLA1", 3), v("2", "MLA2", 5), v("3", "MLA1", 1)])
+    db_session.flush()
+    r = ci.ventas_por_sku_y_cuenta(db_session, HOY)
+    assert r[("MLA", "MLA1")] == {"ytd": 4, "d90": 4} and r[("MLA", "MLA2")]["d90"] == 5 and r[("SKU-A", "IT")]["d90"] == 9
+
+
+def test_las_descartadas_dicen_por_que_quedaron_afuera(db_session, monkeypatch):
+    import campanas_ml_comision
+    monkeypatch.setattr(campanas_ml_comision, "comisiones", lambda items, **k: ({}, []))
+    class ML2(_ML):
+        def items_activos(self, cuenta):
+            return {"IT": ["MLA1", "MLA2", "MLA4"], "MT": []}[cuenta]
+
+        def _get(self, url, params, headers):
+            datos = {"MLA1": ("A-OK", 100), "MLA2": ("SIN-ECOM", 100), "MLA4": ("SIN-STOCK", 100)}
+            return [{"body": {"id": i, "title": f"T {i}", "price": datos[i][1], "seller_custom_field": datos[i][0], "status": "active", "category_id": "C", "listing_type_id": "g"}}
+                    for i in params["ids"].split(",")]
+    par = m.cargar_parametros(db_session, HOY)
+    ecom = _Ecom({"A-OK": _prod(PITEC=5), "SIN-STOCK": _prod(PITEC=0, FULL=0)})
+    datos = lambda sku: DatosSku(None if sku == "A-OK" else d("10"), d("1.21"), None, None, None)
+    r = ci.generar(ML2(), ecom, db_session, datos, d("1500"), par, HOY, {}, {})
+    motivos = {(x["sku"], x["motivo"][:12]) for x in r["descartadas"]}
+    assert ("SIN-ECOM", "el SKU no se") in motivos and ("SIN-STOCK", "sin stock di") in motivos and ("A-OK", "SIN COSTO en") in motivos
+    csv_txt = ci.descartadas_a_csv(r["descartadas"])
+    assert csv_txt.startswith("sku,mla_id,cuenta,titulo,motivo") and "SIN-ECOM" in csv_txt

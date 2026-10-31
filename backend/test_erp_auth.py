@@ -55,6 +55,7 @@ def sin_clave(monkeypatch):
     ("GET", "/fravega/catalogo"),
     ("GET", "/cyber/input/csv"),
     ("GET", "/cyber/input/reglas"),
+    ("GET", "/cyber/input/descartadas"),
     ("POST", "/cyber/input/run"),
     ("POST", "/proyeccion-2027/snapshot"),
 ])
