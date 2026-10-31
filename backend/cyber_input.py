@@ -243,6 +243,25 @@ def links_de_competidores(filas_refs: list[list[str]]) -> dict[str, dict[str, st
 _Q_COSTO_VARIANTE = "query($sku: String!) { products { readBySku(sku: $sku) { variants { sku cost } } } }"
 
 
+def alias_de_sku(sku: str) -> list[str]:
+    """Otras formas en que Ecom puede escribir un SKU de ML con guiones de más (`INKHP940XL-COMP` → `INKHP940XLCOMP`): sin el guion antes del sufijo y sin ningún guion."""
+    import re
+    a = re.sub(r"-(COMP|ORIG|GEN|UNIVCOMP)$", r"\1", sku, flags=re.I)
+    return [x for x in dict.fromkeys([a, sku.replace("-", "")]) if x and x != sku]
+
+
+def stock_con_alias(ecom, sku: str) -> tuple[int | None, int | None, str]:
+    """(stock propio, stock Full, SKU de Ecom usado): el SKU tal cual y, solo si no está, sus alias. (None, None, sku) si no aparece de ninguna forma."""
+    propio, full = stock_de_ecom(ecom, sku)
+    if propio is not None:
+        return propio, full, sku
+    for alt in alias_de_sku(sku):
+        propio, full = stock_de_ecom(ecom, alt)
+        if propio is not None:
+            return propio, full, alt
+    return None, None, sku
+
+
 def costo_usd_de_ecom(ecom, sku: str) -> Decimal | None:
     """Costo (USD, sin IVA) de la variante en Ecom (`Variant.cost`: el mismo que usa el reporte de facturación). Respaldo cuando no hay costo vigente. None si falla o es 0."""
     cache = ecom.__dict__.setdefault("_cyber_costos", {})
@@ -373,12 +392,16 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
         avisos.append(f"{sin_sku} publicaciones activas sin SKU: no entran al insumo.")
     elegidas = elegir_publicaciones(candidatas)
     cache_stock: dict[str, tuple[int | None, int | None]] = {}
+    alias_usado: dict[str, str] = {}
     filas, sin_ecom, sin_costo = [], 0, 0
     skus = sorted({c["sku"] for c in elegidas})
     for k, sku in enumerate(skus):
         prog(k, len(skus), "Stock en Ecom")
         try:
-            cache_stock[sku] = stock_de_ecom(ecom, sku)
+            propio_s, full_s, usado = stock_con_alias(ecom, sku)
+            cache_stock[sku] = (propio_s, full_s)
+            if usado != sku:
+                alias_usado[sku] = usado
         except Exception as e:  # noqa: BLE001
             cache_stock[sku] = (None, None)
             avisos.append(f"No se pudo leer el stock de {sku} en Ecom ({type(e).__name__}).")
@@ -386,6 +409,9 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     for c in elegidas:
         propio, full = cache_stock.get(c["sku"], (None, None))
         c["stock_variante"] = ""
+        if c["sku"] in alias_usado:
+            c["sku_costo"] = alias_usado[c["sku"]]
+            c["stock_variante"] = "SKU en Ecom: " + alias_usado[c["sku"]]
         if propio is None:        # el SKU no existe tal cual en Ecom: puede ser una variante (color); se resuelve por la vinculación de la publicación
             try:
                 var = stock_por_variantes(ecom, c["mla_id"], c.get("colores") or [])

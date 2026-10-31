@@ -319,3 +319,12 @@ def test_envio_gratis_bajo_33000_se_marca_para_revisar_y_el_envio_aplica_por_el_
     assert b["envio_gratis"] == "no" and b["revisar_envio_gratis"] == "no" and c["revisar_envio_gratis"] == "no"   # sin envío gratis, o ya sobre $33.000: nada que revisar
     sin_envio = ci.generar(ML3(), ecom, db_session, datos, d("1500"), par, HOY, {}, {}, ids_por_cuenta={"IT": ["MLA2"], "MT": []})["filas"][0]
     assert a["margen_actual_pct"] < sin_envio["margen_actual_pct"]        # A descuenta el envío aunque su precio sea < $33.000 (mismo precio que B, que no lo paga)
+
+
+def test_un_sku_de_ml_con_guion_de_mas_se_busca_tambien_sin_el_guion_en_ecom():
+    assert ci.alias_de_sku("INKHP940XL-COMP")[0] == "INKHP940XLCOMP" and "INKHP950XLK951XLCOMP" in ci.alias_de_sku("INKHP950XLK-951XL-COMP")
+    assert ci.alias_de_sku("CF228ACOMP") == []                          # sin guiones: no hay alias
+    e = _Ecom({"INKHP940XLCOMP": _prod(PITEC=8, FULL=1)})
+    assert ci.stock_con_alias(e, "INKHP940XL-COMP") == (8, 1, "INKHP940XLCOMP")
+    assert ci.stock_con_alias(e, "INKHP940XLCOMP") == (8, 1, "INKHP940XLCOMP")             # el SKU tal cual manda si existe
+    assert ci.stock_con_alias(e, "NO-EXISTE-COMP") == (None, None, "NO-EXISTE-COMP")
