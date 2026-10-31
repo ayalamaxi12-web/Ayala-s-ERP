@@ -64,9 +64,8 @@ def validar_payload(d) -> list[str]:
     return errs
 
 
-def clases_por_sku(db) -> tuple[dict[str, str], dict]:
-    """SKU normalizado → clase (REY, MEDIO, REVENTAR, COLA, PREVENTA) del ÚLTIMO snapshot, y de cuándo es. Se usa desde otros módulos (Campañas ML): no sirve
-    el snapshot entero, solo sus clases. Devuelve ({}, {}) si todavía no hay snapshot o no trae esas columnas."""
+def datos_por_sku(db) -> tuple[dict[str, dict], dict]:
+    """SKU normalizado → {clase, alerta} del último snapshot (columnas `clase` y `alerta` de `skus`; la alerta puede faltar)."""
     from rentabilidad.pricing_pm import norm_sku
 
     f = db.query(ProyeccionSnapshot).order_by(ProyeccionSnapshot.id.desc()).first()
@@ -74,11 +73,24 @@ def clases_por_sku(db) -> tuple[dict[str, str], dict]:
         return {}, {}
     sk = (f.payload or {}).get("skus") or {}
     cols = [str(c).strip().lower() for c in sk.get("cols") or []]
-    if "sku" not in cols or "clase" not in cols:
+    if "sku" not in cols:
         return {}, {"version": f.id, "generado": f.generado}
-    i, j = cols.index("sku"), cols.index("clase")
-    out = {norm_sku(r[i]): str(r[j]).strip().upper() for r in sk.get("rows") or [] if len(r) > max(i, j) and r[i] and r[j]}
-    return out, {"version": f.id, "generado": f.generado, "subido_en": f.subido_en.isoformat()}
+    i = cols.index("sku")
+    j = cols.index("clase") if "clase" in cols else None
+    k = cols.index("alerta") if "alerta" in cols else None
+    out = {}
+    for r in sk.get("rows") or []:
+        if len(r) > i and r[i]:
+            out[norm_sku(r[i])] = {"clase": str(r[j]).strip().upper() if j is not None and len(r) > j and r[j] else "",
+                                   "alerta": str(r[k]).strip().upper() if k is not None and len(r) > k and r[k] else ""}
+    return out, {"version": f.id, "generado": f.generado}
+
+
+def clases_por_sku(db) -> tuple[dict[str, str], dict]:
+    """SKU normalizado → clase (REY, MEDIO, REVENTAR, COLA, PREVENTA) del ÚLTIMO snapshot y de cuándo es (para el filtro de Campañas ML). ({}, {}) si todavía
+    no hay snapshot; sin la columna `clase`, ({}, info)."""
+    datos, info = datos_por_sku(db)
+    return {k: v["clase"] for k, v in datos.items() if v["clase"]}, info
 
 
 @router.get("/dashboard")
