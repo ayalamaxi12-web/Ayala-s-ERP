@@ -166,3 +166,18 @@ def test_transito_no_exime_las_claves_obligatorias(cliente):
 
 def test_snapshot_sin_transito_sigue_valido():
     assert "transito" not in payload_sintetico() and ps.validar_payload(payload_sintetico()) == []
+
+
+
+def test_clases_por_sku_del_ultimo_snapshot(cliente):
+    with ps._db.sesion() as db:
+        assert ps.clases_por_sku(db) == ({}, {})                       # sin snapshot: vacío, no explota
+    assert cliente.post("/proyeccion-2027/snapshot", json=payload_sintetico(), headers=H).status_code == 200
+    with ps._db.sesion() as db:
+        clases, info = ps.clases_por_sku(db)
+    assert clases == {"SKU-A": "REY", "SKU-B": "MEDIO"} and info["version"] == 1 and info["generado"] == "2000-01-01"
+    d = payload_sintetico()
+    d["skus"] = {"cols": ["sku", "pm"], "rows": [["SKU-A", "Laura"]]}   # un snapshot sin la columna clase no rompe nada
+    cliente.post("/proyeccion-2027/snapshot", json=d, headers=H)
+    with ps._db.sesion() as db:
+        assert ps.clases_por_sku(db)[0] == {}

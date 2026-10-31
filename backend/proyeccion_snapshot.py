@@ -86,6 +86,13 @@ def datos_por_sku(db) -> tuple[dict[str, dict], dict]:
     return out, {"version": f.id, "generado": f.generado}
 
 
+def clases_por_sku(db) -> tuple[dict[str, str], dict]:
+    """SKU normalizado → clase (REY, MEDIO, REVENTAR, COLA, PREVENTA) del ÚLTIMO snapshot y de cuándo es (para el filtro de Campañas ML). ({}, {}) si todavía
+    no hay snapshot; sin la columna `clase`, ({}, info)."""
+    datos, info = datos_por_sku(db)
+    return {k: v["clase"] for k, v in datos.items() if v["clase"]}, info
+
+
 @router.get("/dashboard")
 def dashboard(request: Request, version: int | None = None):
     _exigir_clave(request)
