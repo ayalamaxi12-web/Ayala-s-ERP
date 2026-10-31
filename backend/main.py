@@ -788,6 +788,45 @@ async def campanas_ml_ml_diagnostico(request: Request):
     return {"job_id": job_id}
 
 
+@app.post("/campanas-ml/cyber/rangos")
+async def campanas_ml_cyber_rangos(request: Request):
+    """SOLO LECTURA: el rango de precio que ML permite en la campaña para cada publicación y el envío histórico de su SKU. Alimenta «Aplicar reglas del Cyber»."""
+    import cyber_precios
+    from rentabilidad.db import sesion
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    items = [{"item_id": str(i["item_id"]), "promo_id": str(i["promo_id"]), "sku": i.get("sku") or "", "categoria": i.get("categoria")} for i in (b.get("items") or []) if i.get("item_id") and i.get("promo_id")]
+    if not items:
+        raise HTTPException(status_code=422, detail="No hay publicaciones con campaña para consultar.")
+
+    def hacer(prog):
+        with sesion() as db:
+            envios = cyber_input.envios_historicos(db, date.today())
+        return cyber_precios.rangos_y_envios(ml_ofertas.MLOfertasClient(), cuenta, items, envios, prog)
+    job_id = f"mlcamp_r_{int(time.time() * 1000)}"
+    ml_campanas_participar.lanzar(job_id, hacer)
+    return {"job_id": job_id}
+
+
+@app.get("/cyber/precios/otra-cuenta")
+async def cyber_precios_otra_cuenta(cuenta: str):
+    """Precios del Cyber ya definidos para esos SKU en la OTRA cuenta (mismo precio en GROUP y ARG)."""
+    import cyber_precios
+    cuenta = _cuenta_valida(cuenta)
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return {"precios": await run_in_threadpool(cyber_precios.precios_otra_cuenta, ss, cuenta)}
+
+
+@app.post("/cyber/precios/guardar")
+async def cyber_precios_guardar(request: Request):
+    """Guarda en la pestaña `Cyber_Precios` del Sheet del ERP los precios definidos de esa cuenta (la lista oficial del Cyber, que usa el monitoreo)."""
+    import cyber_precios
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return await run_in_threadpool(cyber_precios.guardar_precios, ss, cuenta, [f for f in (b.get("filas") or []) if isinstance(f, dict)])
+
+
 @app.post("/campanas-ml/ml/participar")
 async def campanas_ml_ml_participar(request: Request):
     """ESCRIBE en Mercado Libre: suma las publicaciones a la campaña (card del evento). `solo_probar=true` hace UNA sola y la verifica."""

@@ -1577,6 +1577,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <input type="file" id="cyber-file" accept=".xlsx" multiple style="display:none" onchange="cyberInsumo(this)">
     <select id="cyber-cuenta" class="fi" title="Cuenta del Excel de la campaña. «Detectar» la saca de ML; si no la reconoce, elegila a mano" aria-label="Cuenta del Excel del Cyber"><option value="">Cuenta: detectar</option><option value="IT">GROUP</option><option value="MT">ARG</option></select>
     <button class="btn" id="btn-cyber-input" onclick="qs('cyber-file').click()" title="Elegí el/los Excel de la campaña del Cyber (uno por cuenta o uno solo): el ERP arma el CSV solo con las publicaciones que pueden participar (GROUP y ARG), una fila por SKU con stock disponible. Solo lectura; tarda varios minutos">⬇ Insumo Cyber (CSV)</button><span id="cyber-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    <button class="btn" id="btn-cp-cyber" style="display:none" onclick="cpAplicarCyber()" title="Calcula el precio de cada publicación con las reglas del Cyber (propuesta de ML, pisos de margen en 3 cuotas, rango de ML, mismo precio en las dos cuentas) y lo guarda en Cyber_Precios. No escribe en Mercado Libre">⚙ Aplicar reglas del Cyber</button>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
@@ -3012,7 +3013,7 @@ async function cpSubir(inp){
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     cpArmarFiltros();cpEnvioPanel(d.envios_estado);
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
-    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
+    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-cyber').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{qs('btn-cp-subir').disabled=false;}
@@ -3067,6 +3068,85 @@ function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
 // «Matias» y «Matías» (o «veronica ») son la misma persona: se junta por nombre sin tildes ni mayúsculas y se muestra el que lleva tilde.
 const CP_PM_VISTOS={};
 function cpPmCanon(n){const k=String(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');const t=String(n).trim().replace(/\s+/g,' ');const v=CP_PM_VISTOS[k];if(!v||(t!==v&&/[\u00c0-\u00ff]/.test(t)&&!/[\u00c0-\u00ff]/.test(v)))CP_PM_VISTOS[k]=t;return CP_PM_VISTOS[k];}
+// ── Reglas de precio del Cyber 2026 (Maxx, 2026-10-31): parten de la propuesta de ML, respetan el piso de margen del grupo (medido en 3 cuotas) y el rango que ML permite ──
+function cyberReglas(){return {ticketAlto:150000,plan:'3',puntosExtra:5,sinCostoPct:10,medio:{piso:10,alt:8,ticketAlto:5},rey:{piso:20,alt:18}};}
+function cyberGrupo(clase){const c=String(clase||'').toUpperCase();return c==='REVENTAR'?'liquidar':c==='REY'?'rey':'medio';}
+function cyberMargenA(f,M,tc,plan,p){const T=(1-p/f.precio_original)*100,r=cpMargenLocal(f.calc,f.precio_original,f.meli_monto||0,T,M,plan,tc);return r?r.margen:null;}
+// Menor precio entero en [lo,hi] con margen ≥ obj (%); null si ni el más alto llega. El margen crece con el precio (el costo fijo y el envío dependen del precio de lista), por eso alcanza una búsqueda binaria.
+function cyberPrecioParaMargen(f,M,tc,plan,obj,lo,hi){
+  const mg=p=>{const m=cyberMargenA(f,M,tc,plan,p);return m==null?-Infinity:m;};
+  lo=Math.ceil(lo);hi=Math.floor(hi);if(!(hi>=lo)||mg(hi)<obj)return null;
+  let a=lo,b=hi;while(a<b){const m=Math.floor((a+b)/2);if(mg(m)>=obj)b=m;else a=m+1;}
+  return a;
+}
+// Precio del Cyber de UNA fila de Campañas (modo propuestas). ctx={M,tc,rango:{min,max}|null,otro:precio en la otra cuenta|null}. -> {precio,estado,regla,grupo,participa,margen,piso}
+function cyberDecidirPrecio(f,ctx){
+  const R=cyberReglas(),orig=f.precio_original,grupo=cyberGrupo(f.clase),rg=ctx.rango||{};
+  const min=Number(rg.min)>0?Number(rg.min):null,max=Number(rg.max)>0?Number(rg.max):null;
+  const lo=Math.max(min||1,1),hi=Math.min(max||orig,orig);
+  const sal=(precio,estado,regla,extra)=>{const o=Object.assign({precio,estado,regla,grupo,participa:estado!=='no_participa',margen:null,piso:null},extra||{});
+    if(o.precio!=null&&f.calc){const m=cyberMargenA(f,ctx.M,ctx.tc,R.plan,o.precio);o.margen=m==null?null:Math.round(m*10)/10;}return o;};
+  // 1) Sin costo (no se encontró en Ecom): el precio actual menos 10 %, sin medir margen
+  if(!f.calc){let p=Math.round(orig*(1-R.sinCostoPct/100)),nota='Sin costo en Ecom: precio actual −'+R.sinCostoPct+' %';
+    if(min&&p<min){p=Math.ceil(min);nota+=' (al máximo descuento que ML permite)';}if(max&&p>max)p=Math.floor(max);
+    return sal(p,'sin_costo',nota);}
+  // 2) Precio base: la propuesta de ML; si la publicación está MÁS CARA que el PM, el precio del PM con el descuento sugerido por ML + 5 puntos
+  const ml=f._prop>0?f._prop:f.precio_cliente,mlPct=orig>0&&ml>0?Math.max((1-ml/orig)*100,0):0,pm=f.precio_pm;
+  let p0,regla;
+  if(pm>0&&orig>pm){const pct=mlPct+R.puntosExtra;p0=Math.round(pm*(1-pct/100));regla='Publicación sobre el PM: PM $'+Math.round(pm)+' − '+pct.toFixed(1)+' % (ML '+mlPct.toFixed(1)+' % + '+R.puntosExtra+')';}
+  else{p0=ml;regla='Propuesta de ML';}
+  // 3) Rango que ML permite: liquidar y medio van al máximo descuento permitido sin pedir permiso; el rey no (se revisa)
+  let estado='ok';
+  if(min&&p0<min){
+    if(grupo==='rey')return sal(Math.ceil(min),'no_participa',regla+'. Para un rey, ese precio queda bajo lo que ML permite (mín $'+Math.round(min)+'): revisalo vos');
+    p0=Math.ceil(min);estado='tope_ml';regla+=' · al máximo descuento que ML permite';}
+  if(max&&p0>max)p0=Math.floor(max);
+  // 4) Piso de margen (3 cuotas): rey 20 % (18 % si el 20 no se alcanza); medio 10 % (8 % si no se alcanza; 5 % si el precio de lista es de $150.000 o más); liquidar sin piso
+  let piso=null;
+  if(grupo!=='liquidar'){
+    const lista=grupo==='rey'?[[R.rey.piso,null],[R.rey.alt,'piso_alt']]:orig>=R.ticketAlto?[[R.medio.ticketAlto,null]]:[[R.medio.piso,null],[R.medio.alt,'piso_alt']];
+    let el=null;
+    for(const [obj,marca] of lista){const pf=cyberPrecioParaMargen(f,ctx.M,ctx.tc,R.plan,obj,lo,hi);if(pf!=null){el={obj,marca,pf};break;}}
+    if(!el)return sal(p0,'no_participa',regla+'. Ni al precio más alto que ML permite se llega al piso de '+lista[lista.length-1][0]+' %: no participa'+(grupo==='rey'?' (requiere el OK de Maxx)':''),{piso:lista[0][0]});
+    piso=el.obj;
+    if(el.pf>p0){p0=el.pf;estado='sube_a_piso';regla+=' · subido al piso de '+piso+' %';}
+    if(el.marca){estado='piso_alt';regla+=' · piso de '+piso+' % (el de '+lista[0][0]+' % no se alcanzaba)';}
+  }
+  // 5) Mismo precio en las dos cuentas: si el SKU ya tiene precio en la otra, se toma el más alto (dentro del rango de ML)
+  if(ctx.otro>0){const q=Math.min(Math.max(Math.round(ctx.otro),lo),hi);if(q>p0){p0=q;regla+=' · igualado al precio de la otra cuenta ($'+Math.round(ctx.otro)+')';}}
+  return sal(p0,estado,regla,{piso});
+}
+// «Aplicar reglas del Cyber»: lee de ML el rango permitido (solo lectura), decide el precio de cada publicación con cyberDecidirPrecio y lo deja en la tabla; no escribe en ML. Guarda la lista en la pestaña Cyber_Precios.
+async function cpAplicarCyber(){
+  const cu=cpCuentaEfectiva();if(!cu){toast('No pude detectar la cuenta (IT/MT): elegila arriba','error');return;}
+  const filas=CP.filas.filter(f=>f.editable&&f.precio_original>0&&f.promo_id);if(!filas.length){toast('No hay filas editables con campaña','error');return;}
+  if(!confirm('Se calculan los precios del Cyber para '+filas.length+' publicaciones (cuenta '+(cu==='IT'?'Group':'Arg')+') con las reglas de Maxx y se guardan en la pestaña «Cyber_Precios». No escribe en Mercado Libre. ¿Seguimos?'))return;
+  const btn=qs('btn-cp-cyber');btn.disabled=true;
+  try{
+    const j=await cpPost('/campanas-ml/cyber/rangos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,items:filas.map(f=>({item_id:f.item_id,promo_id:f.promo_id,sku:f.sku||'',categoria:f.categoria||null}))})});
+    const r=await cpEsperarML(j.job_id,'Rangos de precio en ML');
+    const otra=(await cpPost('/cyber/precios/otra-cuenta?cuenta='+cu,{})).precios||{};
+    const M=CP.data.motor_ml,tc=cpTcActual(),cont={};
+    filas.forEach(f=>{
+      const rg=(r.rangos||{})[f.item_id]||null,en=(r.envios||{})[f.item_id];
+      if(f.calc&&en&&en.envio!=null)f.calc.envio=en.envio;
+      if(f._prop==null)f._prop=f.precio_cliente;
+      const d=cyberDecidirPrecio(f,{M,tc,rango:rg,otro:otra[String(f.sku||'').replace(/[\u200b\u00a0\ufeff\u00ad\s]/g,'').toUpperCase()]||null});
+      f._cyber=Object.assign({},d,{rango:rg});
+      if(d.precio>0&&d.precio<=f.precio_original){const T=(1-d.precio/f.precio_original)*100;if(T<=80&&Math.abs(d.precio-f.precio_cliente)>0.004){cpRecalcular(f,T,M,tc);f.precio_cliente=cpR2(d.precio);}}
+      f.participa=d.participa;cont[d.estado]=(cont[d.estado]||0)+1;
+    });
+    cpProgramarConfirmacion();cpRender();
+    const rot={ok:'Propuesta de ML / regla base',tope_ml:'Al máximo descuento que ML permite',sube_a_piso:'Subidos al piso de margen',piso_alt:'Con piso alternativo (8 % / 18 %)',sin_costo:'Sin costo en Ecom: precio −10 %',no_participa:'NO participan (revisar)'};
+    const rev=filas.filter(f=>['no_participa','piso_alt','sin_costo'].includes(f._cyber.estado));
+    const g=await cpPost('/cyber/precios/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,filas:filas.map(f=>({sku:f.sku||'',mla:f.item_id,grupo:f._cyber.grupo,precio:f._cyber.precio,margen3:f._cyber.margen,estado:f._cyber.estado,regla:f._cyber.regla,precio_actual:f.precio_original,precio_pm:f.precio_pm||null,propuesta_ml:f._prop,ml_min:f._cyber.rango?f._cyber.rango.min:null,ml_max:f._cyber.rango?f._cyber.rango.max:null}))})});
+    cpPanel('<b>Reglas del Cyber aplicadas</b> (cuenta '+acEsc(cu==='IT'?'Group':'Arg')+'): '+Object.entries(cont).map(([k,v])=>acEsc(rot[k]||k)+': <b>'+v+'</b>').join(' · ')+'<br>Guardadas '+g.guardadas+' filas en «Cyber_Precios».'
+      +((r.avisos||[]).map(a=>'<br><span style="color:var(--aviso-texto)">⚠ '+acEsc(a)+'</span>').join(''))
+      +(rev.length?'<br><b>Para revisar ('+rev.length+'):</b>'+rev.slice(0,40).map(f=>'<br>• '+acEsc(f.sku||f.item_id)+' '+acEsc(f.item_id)+' — '+acEsc(f._cyber.regla)).join('')+(rev.length>40?'<br>… y '+(rev.length-40)+' más':''):''));
+    qs('cp-status').textContent='Reglas aplicadas. Revisá las marcadas y después «Participar en ML» (prueba con UNA primero).';
+  }catch(e){cpPanel('<span style="color:var(--error-texto)">'+acEsc(e.message)+'</span>');qs('cp-status').textContent='❌ '+e.message;}
+  finally{btn.disabled=false;}
+}
 // Insumo del Cyber 2026: arma el CSV en el backend (segundo plano, solo lectura), lo baja con las reglas de precio como parámetros y muestra el resumen por grupo.
 async function cyberInsumo(inp){
   const archivos=[...(inp&&inp.files||[])];if(inp)inp.value='';if(!archivos.length)return;
