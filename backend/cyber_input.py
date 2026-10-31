@@ -36,7 +36,7 @@ REGLAS = {
 }
 
 COLUMNAS = ["sku", "titulo", "cuenta", "mla_id", "grupo", "costo", "precio_actual", "margen_actual_pct", "stock_disponible", "ventas_ytd_unid",
-            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante", "envio_costo", "envio_origen"]
+            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante", "envio_costo", "envio_origen", "costo_origen"]
 ORDEN_GRUPO = {"liquidar": 0, "rey": 1, "medio": 2}
 
 
@@ -240,25 +240,61 @@ def links_de_competidores(filas_refs: list[list[str]]) -> dict[str, dict[str, st
     return out
 
 
-def costo_y_iva(sku: str, datos_fn, tc: Decimal) -> tuple[Decimal | None, Decimal | None]:
-    """Costo en pesos (sin IVA) e IVA del SKU; un pack o kit suma el costo de sus componentes (igual que Campañas ML). (None, None) si falta el dato."""
+_Q_COSTO_VARIANTE = "query($sku: String!) { products { readBySku(sku: $sku) { variants { sku cost } } } }"
+
+
+def costo_usd_de_ecom(ecom, sku: str) -> Decimal | None:
+    """Costo (USD, sin IVA) de la variante en Ecom (`Variant.cost`: el mismo que usa el reporte de facturación). Respaldo cuando no hay costo vigente. None si falla o es 0."""
+    cache = ecom.__dict__.setdefault("_cyber_costos", {})
+    if sku in cache:
+        return cache[sku]
+    costo = None
+    try:
+        data = ecom._cliente.graphql(_Q_COSTO_VARIANTE, {"sku": sku})
+        variantes = ((data.get("products") or {}).get("readBySku") or {}).get("variants") or []
+        propia = [v for v in variantes if str(v.get("sku")) == sku] or variantes
+        valores = [Decimal(str(v["cost"])) for v in propia if v.get("cost") not in (None, "", 0, "0")]
+        costo = valores[0] if valores and valores[0] > 0 else None
+    except Exception:  # noqa: BLE001
+        costo = None
+    cache[sku] = costo
+    return costo
+
+
+def costo_y_iva(sku: str, datos_fn, tc: Decimal, ecom=None, componentes: list[tuple[str, int]] | None = None) -> tuple[Decimal | None, Decimal | None, str]:
+    """Costo en pesos (sin IVA), IVA y de dónde sale: el costo vigente; si falta, el de Ecom (IVA 21 % supuesto si tampoco hay alícuota). Un pack o kit suma el costo de sus
+    componentes (los de la vinculación con Ecom si se pasan, si no los que salen del texto del SKU). (None, None, 'sin costo') si falta el dato."""
     from rentabilidad.campanas_ml import descomponer_sku
     from rentabilidad.pricing_pm import norm_sku
 
-    d = datos_fn(norm_sku(sku))
-    if d.costo_usd and d.iva_factor:
-        return d.costo_usd * tc, d.iva_factor
-    total, iva = Decimal(0), None
-    comps = descomponer_sku(sku)
+    def uno(s: str) -> tuple[Decimal | None, Decimal | None, str]:
+        d = datos_fn(norm_sku(s))
+        if d.costo_usd and d.iva_factor:
+            return d.costo_usd * tc, d.iva_factor, "vigente"
+        usd = d.costo_usd or (costo_usd_de_ecom(ecom, s) if ecom is not None else None)
+        if usd:
+            if d.iva_factor:
+                return usd * tc, d.iva_factor, "Ecom (costo de la variante)"
+            return usd * tc, Decimal("1.21"), "Ecom (costo de la variante; IVA 21 % supuesto)"
+        return None, None, "sin costo"
+
+    comps = componentes or descomponer_sku(sku)
+    if not componentes:
+        c, i, o = uno(sku)
+        if c is not None:
+            return c, i, o
     if not comps:
-        return None, None
-    for c, n in comps:
-        dc = datos_fn(norm_sku(c))
-        if not (dc.costo_usd and dc.iva_factor):
-            return None, None
-        total += dc.costo_usd * tc * n
-        iva = iva or dc.iva_factor
-    return total, iva
+        return None, None, "sin costo"
+    total, iva, origen = Decimal(0), None, "vigente"
+    for s, n in comps:
+        c, i, o = uno(s)
+        if c is None:
+            return None, None, "sin costo"
+        total += c * n
+        iva = iva or i
+        if o != "vigente":
+            origen = o
+    return total, iva, origen
 
 
 def ids_desde_excels(contenidos: list[bytes], leer_fn=None, detectar_fn=None) -> tuple[dict[str, list[str]], dict]:
@@ -356,7 +392,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             except Exception:  # noqa: BLE001
                 var = None
             if var:
-                propio, full, c["sku_costo"], c["stock_variante"] = var["propio"], var["full"], var["sku_costo"], "/".join(var["variantes"])[:60]
+                propio, full, c["sku_costo"], c["stock_variante"], c["componentes"] = var["propio"], var["full"], var["sku_costo"], "/".join(var["variantes"])[:60], var["componentes"]
         if propio is None:
             sin_ecom += 1
             descartadas.append({"sku": c["sku"], "mla_id": c["mla_id"], "cuenta": CUENTA_NOMBRE[c["cuenta"]], "titulo": c["titulo"], "motivo": "el SKU no se encontró en Ecom (sin stock conocido)"})
@@ -381,7 +417,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     umbral_envio = par.valor("ML", "umbral_envio_gratis")
     sin_envio_real = 0
     for c in con_stock:
-        costo, iva = costo_y_iva(c.get("sku_costo") or c["sku"], datos_fn, tc)
+        costo, iva, costo_origen = costo_y_iva(c.get("sku_costo") or c["sku"], datos_fn, tc, ecom, c.get("componentes"))
         precio = Decimal(str(c["precio_actual"]))
         margen = None
         if costo is not None and precio > 0:
@@ -413,7 +449,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             "ticket_alto": "si" if c["precio_actual"] >= reglas["ticket_alto_desde"] else "no",
             "link_rey": l.get("Rey", ""), "link_media": l.get("Media", ""), "link_barato": l.get("Barato", ""), "stock_origen": c["stock_origen"],
             "publicaciones_del_sku": c.get("publicaciones_del_sku", 1), "publicacion_principal": c.get("publicacion_principal", "si"), "dias_publicada": c.get("dias_publicada"), "stock_variante": c.get("stock_variante", ""),
-            "envio_costo": None if envio is None else round(float(envio), 2), "envio_origen": envio_origen,
+            "envio_costo": None if envio is None else round(float(envio), 2), "envio_origen": envio_origen, "costo_origen": costo_origen,
         })
     if sin_costo:
         avisos.append(f"{sin_costo} SKU sin costo vigente en Ecom: costo y margen quedan vacíos.")
@@ -461,6 +497,14 @@ def stock_por_variantes(ecom, mla_id: str, colores: list[str]) -> dict | None:
     propio (depósito no Full que más tiene) y el de Full de esas variantes, sumadas si la publicación junta varios colores. `sku_costo` = SKU de la primera
     variante, para tomar su costo (las variantes tienen el mismo costo o varían por centavos). None si no se pudo resolver."""
     fp = ecom.factor_pack(mla_id)
+    if fp and not fp.variantes and fp.item_sku:
+        # Publicación vinculada a un producto de Ecom cuyo SKU no coincide con el de ML (prefijo «ENV-», kits, errores de tipeo): manda la vinculación. `qty` = unidades por venta.
+        comps = [(sku, int(q or 1)) for sku, q in fp.item_sku.items()]
+        partes = [(stock_de_ecom(ecom, sku), q) for sku, q in comps]
+        if any(p[0] is None for p, _ in partes):
+            return None
+        return {"propio": min(p[0] // q for p, q in partes), "full": min(p[1] // q for p, q in partes), "sku_costo": comps[0][0], "componentes": comps,
+                "variantes": [sku for sku, _ in comps]}
     if not fp or not fp.variantes:
         return None
     buscados = {_txt(c) for c in colores}
@@ -481,4 +525,5 @@ def stock_por_variantes(ecom, mla_id: str, colores: list[str]) -> dict | None:
                 por_dep[wh.get("warehouse_id")] = por_dep.get(wh.get("warehouse_id"), 0) + (wh.get("warehouse_qty") or 0)
             full_t += por_dep.pop(full_id, 0)
             propio_t += max(por_dep.values()) if por_dep else 0
-    return {"propio": propio_t, "full": full_t, "sku_costo": elegidas[0]["sku"], "variantes": [v["sku"] for v in elegidas]}
+    return {"propio": propio_t, "full": full_t, "sku_costo": elegidas[0]["sku"], "componentes": [(elegidas[0]["sku"], int(elegidas[0].get("qty") or 1))],
+            "variantes": [v["sku"] for v in elegidas]}

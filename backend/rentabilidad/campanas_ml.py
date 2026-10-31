@@ -41,7 +41,7 @@ def descomponer_sku(texto) -> list[tuple[str, int]]:
     comps: dict[str, int] = {}
     pendiente = 1
     for tok in _SEP_SKU.split(str(texto or "").strip()):
-        if not tok:
+        if not tok or not re.search(r"[A-Za-z0-9]", tok):      # separadores sueltos como « - »
             continue
         m = re.fullmatch(r"[Xx](\d+)", tok)
         if m:
