@@ -1574,7 +1574,8 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <button class="btn primary" id="btn-cp-subir" onclick="qs('cp-file').click()">📂 Subir Excel de campaña</button>
     <button class="btn" id="btn-cp-verif-ml" style="display:none" onclick="cpVerificarML()" title="Solo lectura: pregunta a ML cómo ve esta campaña y unas publicaciones de muestra">🔎 Verificar con ML</button>
     <label style="font-size:12px;color:var(--text2)" title="Queda registrado en el historial de cada alta">Operador <select id="cp-operador" class="fi" onchange="try{localStorage.setItem('ofm_operador',this.value)}catch(e){}"><option value="">Elegir…</option><option>Natalia</option><option>Maxi A.</option><option>Maxi I.</option><option>Macarena</option></select></label>
-    <button class="btn" id="btn-cyber-input" onclick="cyberInsumo()" title="Arma el CSV del Cyber 2026 desde el ERP: solo Mercado Libre (GROUP y ARG), una fila por SKU con stock disponible. Solo lectura; tarda varios minutos">⬇ Insumo Cyber (CSV)</button><span id="cyber-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
+    <input type="file" id="cyber-file" accept=".xlsx" multiple style="display:none" onchange="cyberInsumo(this)">
+    <button class="btn" id="btn-cyber-input" onclick="qs('cyber-file').click()" title="Elegí el/los Excel de la campaña del Cyber (uno por cuenta o uno solo): el ERP arma el CSV solo con las publicaciones que pueden participar (GROUP y ARG), una fila por SKU con stock disponible. Solo lectura; tarda varios minutos">⬇ Insumo Cyber (CSV)</button><span id="cyber-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
@@ -3066,13 +3067,15 @@ function cpFiltradasEditables(){return cpFiltrar(CP.filas,cpFl(true),CP.orig);}
 const CP_PM_VISTOS={};
 function cpPmCanon(n){const k=String(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');const t=String(n).trim().replace(/\s+/g,' ');const v=CP_PM_VISTOS[k];if(!v||(t!==v&&/[\u00c0-\u00ff]/.test(t)&&!/[\u00c0-\u00ff]/.test(v)))CP_PM_VISTOS[k]=t;return CP_PM_VISTOS[k];}
 // Insumo del Cyber 2026: arma el CSV en el backend (segundo plano, solo lectura), lo baja con las reglas de precio como parámetros y muestra el resumen por grupo.
-async function cyberInsumo(){
-  const b=qs('btn-cyber-input'),st=qs('cyber-status');b.disabled=true;st.textContent='Armando el insumo (ML, Ecom y ventas): puede tardar varios minutos…';
+async function cyberInsumo(inp){
+  const archivos=[...(inp&&inp.files||[])];if(inp)inp.value='';if(!archivos.length)return;
+  const b=qs('btn-cyber-input'),st=qs('cyber-status');b.disabled=true;st.textContent='Armando el insumo con '+archivos.length+' Excel (ML, Ecom y ventas): puede tardar varios minutos…';
   const bajar=async(ruta,nombre,tipo)=>{const bu=getBackendUrl().replace(/\/$/,''),r=await fetch(bu+ruta);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
     const blob=new Blob([tipo==='json'?JSON.stringify(await r.json(),null,2):await r.text()],{type:tipo==='json'?'application/json':'text/csv;charset=utf-8'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);};
   try{
-    const{job_id}=await cpPost('/cyber/input/run',{method:'POST'});
+    const fd=new FormData();archivos.forEach(a=>fd.append('archivos',a));
+    const{job_id}=await cpPost('/cyber/input/run',{method:'POST',body:fd});
     for(let i=0;i<400;i++){
       await new Promise(r=>setTimeout(r,4000));
       const j=await cpPost('/cyber/input/status/'+job_id,{method:'GET'});
