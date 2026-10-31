@@ -36,7 +36,7 @@ REGLAS = {
 }
 
 COLUMNAS = ["sku", "titulo", "cuenta", "mla_id", "grupo", "costo", "precio_actual", "margen_actual_pct", "stock_disponible", "ventas_ytd_unid",
-            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku"]
+            "ventas_ult_90d_unid", "ticket_alto", "link_rey", "link_media", "link_barato", "stock_origen", "publicaciones_del_sku", "publicacion_principal", "dias_publicada", "stock_variante"]
 ORDEN_GRUPO = {"liquidar": 0, "rey": 1, "medio": 2}
 
 
@@ -109,23 +109,23 @@ def clasificar(es_liquidar: bool, es_rey: bool) -> str:
 
 
 def elegir_publicaciones(candidatas: list[dict]) -> list[dict]:
-    """Una fila por SKU. Un SKU puede tener muchas publicaciones (hasta decenas, y packs «X2 …» con el mismo SKU base): dentro de cada cuenta queda la que más
-    vendió (por publicación, 90 días y después el año; si siguen empatadas, la de menor MLA, para que sea estable). Entre las dos cuentas queda la que más vendió el SKU
-    en 90 días; si empatan, quedan las dos (una por cuenta). `publicaciones_del_sku` = cuántas publicaciones tenía el SKU en el Excel."""
+    """Entra TODA publicación del Excel de la campaña (si está disponible para entrar al Cyber, entra; Maxx, 2026-10-31): packs y combos nuevos incluidos. Lo que
+    se calcula es cuál es la **principal** de cada SKU (`publicacion_principal` = si/no), para que el motor sepa cuál manda cuando un SKU tiene varias publicaciones:
+    la que más vendió en cada cuenta (por publicación, 90 días y después el año; si siguen empatadas, la de menor MLA, que es estable); y entre cuentas, la que más
+    vendió el SKU en 90 días, o las dos si empatan. `publicaciones_del_sku` = cuántas publicaciones tiene el SKU en el Excel."""
     por_sku: dict[str, list[dict]] = {}
     for c in candidatas:
         por_sku.setdefault(c["sku_norm"], []).append(c)
+    clave = lambda x: (x.get("ventas_mla_90d", 0), x.get("ventas_mla_ytd", 0), -_orden_mla(x["mla_id"]))
     out = []
     for lista in por_sku.values():
         por_cuenta: dict[str, dict] = {}
         for c in lista:
-            clave = lambda x: (x.get("ventas_mla_90d", 0), x.get("ventas_mla_ytd", 0), -_orden_mla(x["mla_id"]))
             if c["cuenta"] not in por_cuenta or clave(c) > clave(por_cuenta[c["cuenta"]]):
                 por_cuenta[c["cuenta"]] = c
         mejor = max(c["ventas_ult_90d_unid"] for c in por_cuenta.values())
-        for c in por_cuenta.values():
-            if c["ventas_ult_90d_unid"] == mejor:
-                out.append({**c, "publicaciones_del_sku": len(lista)})
+        principales = {c["mla_id"] for c in por_cuenta.values() if c["ventas_ult_90d_unid"] == mejor}
+        out.extend({**c, "publicaciones_del_sku": len(lista), "publicacion_principal": "si" if c["mla_id"] in principales else "no"} for c in lista)
     return out
 
 
@@ -250,7 +250,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             prog(i, len(ids), f"Publicaciones de ML ({CUENTA_NOMBRE[cuenta]})")
             d = ml._get("https://api.mercadolibre.com/items", {
                 "ids": ",".join(ids[i:i + 20]),
-                "attributes": "id,title,price,available_quantity,seller_custom_field,attributes,status,category_id,listing_type_id"}, headers)
+                "attributes": "id,title,price,available_quantity,seller_custom_field,attributes,status,category_id,listing_type_id,date_created,variations"}, headers)
             for e in (d or []):
                 it = e.get("body") if isinstance(e, dict) and "body" in e else e
                 if not it or it.get("status") not in (None, "active"):
@@ -263,7 +263,12 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
                     continue
                 v = ventas.get((norm_sku(sku), cuenta), {"ytd": 0, "d90": 0})
                 vm = ventas.get(("MLA", it["id"]), {"ytd": 0, "d90": 0})
-                candidatas.append({"sku": sku, "sku_norm": norm_sku(sku), "titulo": it.get("title", ""), "cuenta": cuenta, "mla_id": it["id"],
+                dc = str(it.get("date_created") or "")[:10]
+                try:
+                    dias_pub = (hoy - date.fromisoformat(dc)).days if dc else None
+                except ValueError:
+                    dias_pub = None
+                candidatas.append({"sku": sku, "dias_publicada": dias_pub, "colores": colores_de_item(it), "sku_norm": norm_sku(sku), "titulo": it.get("title", ""), "cuenta": cuenta, "mla_id": it["id"],
                                    "precio_actual": float(it.get("price") or 0), "categoria_ml": it.get("category_id"), "tipo_ml": it.get("listing_type_id"),
                                    "ventas_ytd_unid": v["ytd"], "ventas_ult_90d_unid": v["d90"], "ventas_mla_ytd": vm["ytd"], "ventas_mla_90d": vm["d90"]})
     if sin_sku:
@@ -282,6 +287,14 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     con_stock = []
     for c in elegidas:
         propio, full = cache_stock.get(c["sku"], (None, None))
+        c["stock_variante"] = ""
+        if propio is None:        # el SKU no existe tal cual en Ecom: puede ser una variante (color); se resuelve por la vinculación de la publicación
+            try:
+                var = stock_por_variantes(ecom, c["mla_id"], c.get("colores") or [])
+            except Exception:  # noqa: BLE001
+                var = None
+            if var:
+                propio, full, c["sku_costo"], c["stock_variante"] = var["propio"], var["full"], var["sku_costo"], "/".join(var["variantes"])[:60]
         if propio is None:
             sin_ecom += 1
             descartadas.append({"sku": c["sku"], "mla_id": c["mla_id"], "cuenta": CUENTA_NOMBRE[c["cuenta"]], "titulo": c["titulo"], "motivo": "el SKU no se encontró en Ecom (sin stock conocido)"})
@@ -306,7 +319,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     umbral_envio = par.valor("ML", "umbral_envio_gratis")
     sin_envio_real = 0
     for c in con_stock:
-        costo, iva = costo_y_iva(c["sku"], datos_fn, tc)
+        costo, iva = costo_y_iva(c.get("sku_costo") or c["sku"], datos_fn, tc)
         precio = Decimal(str(c["precio_actual"]))
         margen = None
         if costo is not None and precio > 0:
@@ -333,7 +346,7 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
             "stock_disponible": c["stock_disponible"], "ventas_ytd_unid": c["ventas_ytd_unid"], "ventas_ult_90d_unid": c["ventas_ult_90d_unid"],
             "ticket_alto": "si" if c["precio_actual"] >= reglas["ticket_alto_desde"] else "no",
             "link_rey": l.get("Rey", ""), "link_media": l.get("Media", ""), "link_barato": l.get("Barato", ""), "stock_origen": c["stock_origen"],
-            "publicaciones_del_sku": c.get("publicaciones_del_sku", 1),
+            "publicaciones_del_sku": c.get("publicaciones_del_sku", 1), "publicacion_principal": c.get("publicacion_principal", "si"), "dias_publicada": c.get("dias_publicada"), "stock_variante": c.get("stock_variante", ""),
         })
     if sin_costo:
         avisos.append(f"{sin_costo} SKU sin costo vigente en Ecom: costo y margen quedan vacíos.")
@@ -344,7 +357,8 @@ def generar(ml, ecom, db, datos_fn, tc: Decimal, par, hoy: date, alertas: dict[s
     filas = ordenar(filas)
     return {"filas": filas, "resumen": resumen(filas), "reglas": reglas, "avisos": avisos, "descartadas": descartadas,
             "conteos": {"publicaciones_activas": len(candidatas), "con_stock": len(filas), "hoy": hoy.isoformat(),
-                        "origen": "Excel de la campaña" if ids_por_cuenta is not None else "todas las publicaciones activas"}}
+                        "origen": "Excel de la campaña" if ids_por_cuenta is not None else "todas las publicaciones activas",
+                        "cuentas": sorted({f["cuenta"] for f in filas})}}
 
 
 def descartadas_a_csv(filas: list[dict]) -> str:
@@ -354,3 +368,49 @@ def descartadas_a_csv(filas: list[dict]) -> str:
     for f in sorted(filas, key=lambda x: (x["motivo"], x["sku"])):
         w.writerow([f["sku"], f["mla_id"], f["cuenta"], f["titulo"], f["motivo"]])
     return buf.getvalue()
+
+
+def _txt(x) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", str(x or "").lower()) if unicodedata.category(c) != "Mn").strip()
+
+
+def colores_de_item(item: dict) -> list[str]:
+    """Colores de una publicación de ML: los de cada variación (`attribute_combinations`) o, si no tiene variaciones, el atributo COLOR del ítem."""
+    out: list[str] = []
+    for var in item.get("variations") or []:
+        for a in var.get("attribute_combinations") or []:
+            if a.get("id") == "COLOR" and a.get("value_name"):
+                out.append(a["value_name"])
+    if not out:
+        out = [a["value_name"] for a in (item.get("attributes") or []) if a.get("id") == "COLOR" and a.get("value_name")]
+    return list(dict.fromkeys(out))
+
+
+def stock_por_variantes(ecom, mla_id: str, colores: list[str]) -> dict | None:
+    """Publicación cuyo SKU no existe tal cual en Ecom (suele ser una variante: color, talle): se resuelve por la vinculación de la publicación
+    (`factor_pack`). Se eligen las variantes de Ecom cuyo atributo coincide con el color de la publicación (sin color, la única variante vinculada); el stock es el
+    propio (depósito no Full que más tiene) y el de Full de esas variantes, sumadas si la publicación junta varios colores. `sku_costo` = SKU de la primera
+    variante, para tomar su costo (las variantes tienen el mismo costo o varían por centavos). None si no se pudo resolver."""
+    fp = ecom.factor_pack(mla_id)
+    if not fp or not fp.variantes:
+        return None
+    buscados = {_txt(c) for c in colores}
+    elegidas = [v for v in fp.variantes if buscados and any(_txt(o) in buscados for o in v["atributos"].values())]
+    if not elegidas and not buscados and len(fp.variantes) == 1:
+        elegidas = list(fp.variantes)
+    if not elegidas:
+        return None
+    full_id = ecom.warehouse_full_id()
+    propio_t = full_t = 0
+    for v in elegidas:
+        p = ecom._producto_por_sku(v["parent_sku"]) if v.get("parent_sku") else None
+        for var in (p or {}).get("variants") or []:
+            if var.get("sku") != v["sku"]:
+                continue
+            por_dep: dict[str, int] = {}
+            for wh in var.get("variantWarehouses") or []:
+                por_dep[wh.get("warehouse_id")] = por_dep.get(wh.get("warehouse_id"), 0) + (wh.get("warehouse_qty") or 0)
+            full_t += por_dep.pop(full_id, 0)
+            propio_t += max(por_dep.values()) if por_dep else 0
+    return {"propio": propio_t, "full": full_t, "sku_costo": elegidas[0]["sku"], "variantes": [v["sku"] for v in elegidas]}
