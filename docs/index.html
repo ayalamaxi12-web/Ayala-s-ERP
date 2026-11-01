@@ -3012,7 +3012,7 @@ async function cpSubir(inp){
     const d=await cpPost('/campanas-ml/analizar'+cpQuery(),{method:'POST',body:fd});
     CP.avisosAbiertos=new Set();CP.data=d;CP.filas=d.filas;CP.orig={};CP.base={};CP.cuentaManual=null;CP.page=1;CP.nombre=file.name;CP.file=file;
     CP.modo=d.filas.some(f=>/propuesta/i.test((f.accion||'')+' '+(f.estado||'')))?'propuestas':'normal';
-    d.filas.forEach(f=>{f.participa=!/no aplicar/i.test(f.accion||'');f._part0=f.participa;f._prop=(typeof f.precio_final_ml==='number'&&f.precio_final_ml>0)?f.precio_final_ml:f.precio_cliente;});
+    cpMlRestaurar(d.filas);d.filas.forEach(f=>{f.participa=!/no aplicar/i.test(f.accion||'');f._part0=f.participa;f._prop=(typeof f.precio_final_ml==='number'&&f.precio_final_ml>0)?f.precio_final_ml:f.precio_cliente;});
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     cpArmarFiltros();cpEnvioPanel(d.envios_estado);
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
@@ -3251,9 +3251,13 @@ async function cpVerificarML(){
   }catch(e){cpPanel('<span style="color:var(--error-texto)">No se pudo verificar: '+acEsc(e.message)+'</span>');qs('cp-status').textContent='❌ '+e.message;}
   finally{btn.disabled=false;}
 }
+// Lo que ya entró (o ya tenía oferta) en ML se recuerda en este navegador, así el filtro «Estado en ML» sigue sirviendo después de recargar o de volver a subir el Excel.
+function cpMlLeer(){try{return JSON.parse(localStorage.getItem('cp_ml_estado')||'{}');}catch(e){return {};}}
+function cpMlGuardar(f){if(!f._ml||!['ok','ya_tiene'].includes(f._ml.estado))return;try{const o=cpMlLeer();o[f.item_id+'|'+f.promo_id]=[f._ml.estado,f._ml.mensaje||''];localStorage.setItem('cp_ml_estado',JSON.stringify(o));}catch(e){}}
+function cpMlRestaurar(filas){const o=cpMlLeer();let n=0;filas.forEach(f=>{const v=o[f.item_id+'|'+f.promo_id];if(v&&!f._ml){f._ml={item_id:f.item_id,estado:v[0],mensaje:v[1]};n++;}});return n;}
 async function cpParticiparPromo(pid,cu,op,filas){
   // 1) prueba con UNA (verificada en ML)  2) el resto, si la prueba quedó confirmada. Devuelve false si no hay que seguir.
-  const aplicar=r=>{(r.resultados||[]).forEach(x=>{const f=CP.filas.find(y=>y.item_id===x.item_id&&y.promo_id===pid);if(f)f._ml=x;});cpRender();};
+  const aplicar=r=>{(r.resultados||[]).forEach(x=>{const f=CP.filas.find(y=>y.item_id===x.item_id&&y.promo_id===pid);if(f){f._ml=x;cpMlGuardar(f);}});cpRender();};
   if(!confirm(`PRIMERO una prueba: se suma UNA publicación (${filas[0].item_id}) a la campaña ${pid} en Mercado Libre y se verifica que ML la muestre adentro.\nEsto escribe en Mercado Libre. ¿Seguimos?`))return false;
   let j=await cpPost('/campanas-ml/ml/participar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,promotion_id:pid,filas,solo_probar:true,operador:op})});
   let r=await cpEsperarML(j.job_id,'Probando con una');
