@@ -113,3 +113,16 @@ def test_campana_que_pide_offer_id_lo_toma_de_las_promociones_del_item_y_reinten
     ml = ML(CAMP, {}, resp)
     r = mp.participar(ml, "IT", PID, [{"item_id": "MLA9"}], solo_probar=True)
     assert r["resultados"][0]["estado"] == "ok" and len(ml.posts) == 2 and ml.posts[1][1]["offer_id"] == "OFFER-123" and "offer_id" not in ml.posts[0][1]
+
+
+def test_error_con_otro_texto_pero_ya_adentro_segun_ml_no_corta_la_corrida():
+    ml = _ML(CAMP, {f"MLA{n}": "started" for n in range(1, 8)}, lambda i: {"message": "algo distinto", "error": "bad_request", "status": 400, "cause": []} if int(i[3:]) <= 7 else {"status": "started"})
+    r = mp.participar(ml, "IT", PID, [{"item_id": f"MLA{n}"} for n in range(1, 10)])
+    assert [x["estado"] for x in r["resultados"]] == ["ya_tiene"] * 7 + ["ok", "ok"]
+
+
+def test_error_real_con_publicacion_candidata_sigue_contando_y_corta():
+    ml = _ML(CAMP, {f"MLA{n}": "candidate" for n in range(8)}, lambda i: {"message": "no candidata", "error": "bad_request", "status": 400, "cause": []})
+    r = mp.participar(ml, "IT", PID, [{"item_id": f"MLA{n}"} for n in range(8)])
+    est = [x["estado"] for x in r["resultados"]]
+    assert est[:5] == ["error"] * 5 and est[5:] == ["pendiente"] * 3

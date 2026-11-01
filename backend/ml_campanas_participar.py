@@ -77,6 +77,9 @@ def _es_error(d: dict) -> str | None:
     return None
 
 
+ESTADOS_YA_ADENTRO = {"started", "pending"}   # estados de ML en que la publicación ya está dentro de la campaña (`candidate` = todavía no)
+
+
 def participar_una(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, tipo: str, item_id: str, deal_price: float | None = None) -> dict:
     body = {"promotion_id": promotion_id, "promotion_type": tipo}
     if deal_price is not None:
@@ -140,7 +143,14 @@ def participar(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: li
                               "Tipo/Promocion": f"{tipo} ({nombre})", "Precio Anterior": "", "Precio Nuevo": (f.get("deal_price") if (tipo in TIPOS_CON_PRECIO or f.get("cambiado")) else None) or "propuesta de ML",
                               "Operador": operador, "Origen": "Campañas ML"})
         else:
-            if "OFFER_ALREADY_EXISTS" in str(r.get("error")) or "OFFER_ALREADY_EXISTS" in str(r.get("respuesta")):
+            ya = "OFFER_ALREADY_EXISTS" in str(r.get("error")) or "OFFER_ALREADY_EXISTS" in str(r.get("respuesta"))
+            if not ya:
+                # ML puede responder con otro texto cuando la publicación ya está en ESTA campaña: se le pregunta (lectura) antes de contarlo como fallo.
+                try:
+                    ya = _verificar(ml, cuenta, promotion_id, f["item_id"]) in ESTADOS_YA_ADENTRO
+                except Exception:  # noqa: BLE001
+                    ya = False
+            if ya:
                 # La publicación ya tiene una oferta en esa campaña (o una propia): no es un fallo de la corrida ni corta las siguientes. No se pisa nada.
                 resultados.append({"item_id": f["item_id"], "estado": "ya_tiene", "mensaje": "ML dice que esta publicación ya tiene una oferta (OFFER_ALREADY_EXISTS): no se tocó. Revisala en ML si el precio no es el que querés."})
                 continue
