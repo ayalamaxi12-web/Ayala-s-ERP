@@ -87,3 +87,29 @@ def test_historial_una_sola_vez_con_las_que_entraron():
     anotado = []
     mp.participar(ml, "IT", PID, [{"item_id": "MLA1", "sku": "S1"}, {"item_id": "MLA2"}], historial_cb=anotado.append, operador="Natalia")
     assert len(anotado) == 1 and len(anotado[0]) == 1 and anotado[0][0]["Item ID"] == "MLA1" and anotado[0][0]["Origen"] == "Campañas ML" and anotado[0][0]["Fecha"]
+
+
+def test_oferta_ya_existente_no_corta_la_corrida_ni_cuenta_como_fallo():
+    def resp(item):
+        if item in ("MLA1", "MLA2", "MLA3", "MLA4", "MLA5", "MLA6"):
+            return {"message": "Errors: OFFER_ALREADY_EXISTS - Offer already exists", "error": "bad_request", "status": 400, "cause": []}
+        return {"status": "candidate"}
+    ml = _ML(CAMP, {}, resp)
+    r = mp.participar(ml, "IT", PID, [{"item_id": f"MLA{n}"} for n in range(1, 9)])
+    est = [x["estado"] for x in r["resultados"]]
+    assert est == ["ya_tiene"] * 6 + ["ok", "ok"] and len(ml.posts) == 8
+
+
+def test_campana_que_pide_offer_id_lo_toma_de_las_promociones_del_item_y_reintenta():
+    llamadas = []
+
+    def resp(item):
+        llamadas.append(item)
+        return {"message": "Offer id is required", "error": "bad_request", "status": 400, "cause": []} if len(llamadas) == 1 else {"status": "started"}
+
+    class ML(_ML):
+        def promociones_item(self, item_id, cuenta):
+            return [{"id": PID, "type": "SMART", "status": "candidate", "offer_id": "OFFER-123"}]
+    ml = ML(CAMP, {}, resp)
+    r = mp.participar(ml, "IT", PID, [{"item_id": "MLA9"}], solo_probar=True)
+    assert r["resultados"][0]["estado"] == "ok" and len(ml.posts) == 2 and ml.posts[1][1]["offer_id"] == "OFFER-123" and "offer_id" not in ml.posts[0][1]
