@@ -91,8 +91,7 @@ def participar_una(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, tipo:
         # Campañas donde ML ya generó una oferta candidata para la publicación (ej. SMART): hay que mandar su `offer_id`, que sale de la propia lista de promociones del ítem.
         for p in ml.promociones_item(item_id, cuenta):
             if _id_promo(p) == promotion_id and (p.get("offer_id") or p.get("ref_id")):
-                body["offer_id"] = p.get("offer_id") or p.get("ref_id")
-                d = ml._post(url, headers, body)
+                d = ml._post(url, headers, {**body, "offer_id": p.get("offer_id") or p.get("ref_id")})
                 err = _es_error(d)
                 break
     return {"ok": False, "error": err, "respuesta": d} if err else {"ok": True, "respuesta": d}
