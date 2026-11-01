@@ -175,6 +175,30 @@ def participar(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: li
             "verificadas_por_muestreo": [{"item_id": x["item_id"], "estado_en_ml": x.get("verificado")} for x in ok if "verificado" in x] if not solo_probar else []}
 
 
+def estados_en_campana(ml: MLOfertasClient, cuenta: str, items: list[dict], progreso_cb=None, workers: int = 6) -> dict:
+    """SOLO LECTURA. `items`: [{item_id, promo_id}]. Para cada una, el estado que ML le da en esa campaña (`started`, `pending`, `candidate`…) o None si no figura.
+    Con eso la pantalla marca las que YA están adentro y deja como pendientes solo las que faltan."""
+    from concurrent.futures import ThreadPoolExecutor
+    hechos = [0]
+
+    def uno(it):
+        try:
+            est, err = _verificar(ml, cuenta, it["promo_id"], it["item_id"]), None
+        except Exception as e:  # noqa: BLE001
+            est, err = None, type(e).__name__
+        hechos[0] += 1
+        if progreso_cb:
+            progreso_cb(hechos[0], len(items), "Estado en ML")
+        return it["item_id"], it["promo_id"], est, err
+
+    out, errores = [], 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for item_id, promo_id, est, err in ex.map(uno, items):
+            errores += 1 if err else 0
+            out.append({"item_id": item_id, "promo_id": promo_id, "estado": est, "dentro": est in ESTADOS_YA_ADENTRO, "error": err})
+    return {"estados": out, "errores": errores}
+
+
 def _job(job_id: str, fn: Callable[[Callable], dict]) -> None:
     _jobs[job_id] = {"status": "running", "progress": None, "result": None, "log": []}
 

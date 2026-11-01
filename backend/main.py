@@ -857,6 +857,19 @@ async def campanas_ml_ml_participar(request: Request):
     return {"job_id": job_id, "total": 1 if b.get("solo_probar") else len(filas)}
 
 
+@app.post("/campanas-ml/ml/estados")
+async def campanas_ml_ml_estados(request: Request):
+    """SOLO LECTURA: qué publicaciones ya están dentro de la campaña según ML (para marcar las que faltan subir)."""
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    items = [{"item_id": str(i["item_id"]), "promo_id": str(i["promo_id"])} for i in (b.get("items") or []) if i.get("item_id") and i.get("promo_id")]
+    if not items:
+        raise HTTPException(status_code=422, detail="No hay publicaciones con campaña para consultar.")
+    job_id = f"mlcamp_e_{int(time.time() * 1000)}"
+    ml_campanas_participar.lanzar(job_id, lambda prog: ml_campanas_participar.estados_en_campana(ml_ofertas.MLOfertasClient(), cuenta, items, prog))
+    return {"job_id": job_id}
+
+
 @app.get("/campanas-ml/ml/status/{job_id}")
 async def campanas_ml_ml_status(job_id: str):
     return ml_campanas_participar.estado_job(job_id) or {"status": "not_found"}
