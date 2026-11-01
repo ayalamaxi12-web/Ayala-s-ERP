@@ -57,6 +57,8 @@ def sin_clave(monkeypatch):
     ("GET", "/cyber/input/reglas"),
     ("GET", "/cyber/input/descartadas"),
     ("GET", "/cyber/precios/otra-cuenta"),
+    ("GET", "/cyber/monitoreo/dia"),
+    ("POST", "/cyber/monitoreo/publicar"),
     ("POST", "/cyber/precios/guardar"),
     ("POST", "/campanas-ml/cyber/rangos"),
     ("POST", "/cyber/input/run"),
