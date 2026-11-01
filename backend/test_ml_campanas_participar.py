@@ -126,3 +126,15 @@ def test_error_real_con_publicacion_candidata_sigue_contando_y_corta():
     r = mp.participar(ml, "IT", PID, [{"item_id": f"MLA{n}"} for n in range(8)])
     est = [x["estado"] for x in r["resultados"]]
     assert est[:5] == ["error"] * 5 and est[5:] == ["pendiente"] * 3
+
+
+def test_estados_en_campana_marca_las_que_ya_estan_adentro_y_no_corta_por_un_error():
+    class ML(_ML):
+        def promociones_item(self, item_id, cuenta):
+            if item_id == "MLA3":
+                raise RuntimeError("boom")
+            return super().promociones_item(item_id, cuenta)
+    ml = ML(CAMP, {"MLA1": "started", "MLA2": "candidate"}, lambda i: {})
+    r = mp.estados_en_campana(ml, "IT", [{"item_id": f"MLA{n}", "promo_id": PID} for n in (1, 2, 3, 4)], workers=1)
+    por = {x["item_id"]: x for x in r["estados"]}
+    assert por["MLA1"]["dentro"] and not por["MLA2"]["dentro"] and por["MLA3"]["error"] and not por["MLA4"]["dentro"] and r["errores"] == 1

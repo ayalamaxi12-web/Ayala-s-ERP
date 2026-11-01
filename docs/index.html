@@ -1579,6 +1579,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <button class="btn" id="btn-cyber-input" onclick="qs('cyber-file').click()" title="Elegí el/los Excel de la campaña del Cyber (uno por cuenta o uno solo): el ERP arma el CSV solo con las publicaciones que pueden participar (GROUP y ARG), una fila por SKU con stock disponible. Solo lectura; tarda varios minutos">⬇ Insumo Cyber (CSV)</button><span id="cyber-status" style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace"></span>
     <button class="btn" id="btn-cp-cyber" style="display:none" onclick="cpAplicarCyber()" title="Calcula el precio de cada publicación con las reglas del Cyber (propuesta de ML, pisos de margen en 3 cuotas, rango de ML, mismo precio en las dos cuentas) y lo guarda en Cyber_Precios. No escribe en Mercado Libre">⚙ Aplicar reglas del Cyber</button>
     <button class="btn" id="btn-cp-csv-sel" style="display:none" onclick="cpCsvSeleccion()" title="Baja un CSV con las publicaciones que hoy están tildadas «Participa»: precio final, descuento, margen en 3 cuotas y la regla del Cyber que se aplicó. Solo lectura">⬇ CSV de lo seleccionado</button>
+    <button class="btn" id="btn-cp-marcar" style="display:none" onclick="cpMarcarEnML()" title="Solo lectura: le pregunta a ML qué publicaciones ya están dentro de la campaña y las marca. Después el filtro «Estado en ML → Sin subir todavía» deja solo las que faltan">🔍 Marcar las que ya están en ML</button>
     <button class="btn primary" id="btn-cp-part-ml" style="display:none" onclick="cpParticiparML()" title="Suma a la campaña del evento (la card) las publicaciones que marcaste «Participa». Escribe en Mercado Libre">▶ Participar en ML</button>
     <button class="btn primary" id="btn-cp-export-ml" style="display:none" onclick="cpExportarML()" title="Descarga el MISMO Excel de ML con tu decisión: «Aplicar propuesta» / «No aplicar» y el precio final de las filas que cambiaste. Es el que se sube a Mercado Libre">⬇ Excel para subir a ML</button>
     <button class="btn" id="btn-cp-export" style="display:none" onclick="cpExportar()" title="Descarga el MISMO Excel con la hoja nueva ERP Análisis (todas las filas) y la columna VALOR A COPIAR; los números salen del backend">⬇ Exportar Excel con ERP Análisis</button>
@@ -3016,7 +3017,7 @@ async function cpSubir(inp){
     d.filas.forEach(f=>{CP.orig[f.fila]=f.descuento_total_pct;CP.base[f.fila]=JSON.stringify(f);f._conf=true;f._v=0;});CP.difMax=0;CP.divergencias=0;CP.errorConf=null;
     cpArmarFiltros();cpEnvioPanel(d.envios_estado);
     st.textContent=`${d.campana||file.name} · ${d.filas.length} filas · TC ${d.tc}`;
-    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-cyber').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-csv-sel').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
+    ['cp-stats','cp-table-wrap'].forEach(id=>qs(id).style.display='');qs('btn-cp-export').style.display='';qs('btn-cp-export-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-verif-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-part-ml').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-cyber').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-csv-sel').style.display=cpEsPropuestas()?'':'none';qs('btn-cp-marcar').style.display=cpEsPropuestas()?'':'none';qs('cp-ml-panel').style.display='none';qs('cp-filtros').style.display='';qs('cp-cuenta').style.display='flex';
     cpRender();
   }catch(e){st.textContent='❌ '+e.message;toast(e.message,'error');}
   finally{qs('btn-cp-subir').disabled=false;}
@@ -3255,6 +3256,25 @@ async function cpVerificarML(){
 function cpMlLeer(){try{return JSON.parse(localStorage.getItem('cp_ml_estado')||'{}');}catch(e){return {};}}
 function cpMlGuardar(f){if(!f._ml||!['ok','ya_tiene'].includes(f._ml.estado))return;try{const o=cpMlLeer();o[f.item_id+'|'+f.promo_id]=[f._ml.estado,f._ml.mensaje||''];localStorage.setItem('cp_ml_estado',JSON.stringify(o));}catch(e){}}
 function cpMlRestaurar(filas){const o=cpMlLeer();let n=0;filas.forEach(f=>{const v=o[f.item_id+'|'+f.promo_id];if(v&&!f._ml){f._ml={item_id:f.item_id,estado:v[0],mensaje:v[1]};n++;}});return n;}
+// Solo lectura: marca en pantalla (y recuerda) las publicaciones que ML ya tiene dentro de la campaña; las demás tildadas quedan como «sin subir».
+async function cpMarcarEnML(){
+  const cu=cpCuentaEfectiva();if(!cu){toast('No pude detectar la cuenta (IT/MT): elegila arriba','error');return;}
+  const fs=CP.filas.filter(f=>f.promo_id&&f.item_id);if(!fs.length){toast('El Excel no trae el identificador de la campaña','error');return;}
+  const btn=qs('btn-cp-marcar');btn.disabled=true;
+  try{
+    const j=await cpPost('/campanas-ml/ml/estados',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:cu,items:fs.map(f=>({item_id:f.item_id,promo_id:f.promo_id}))})});
+    const r=await cpEsperarML(j.job_id,'Preguntándole a ML');
+    const por={};(r.estados||[]).forEach(x=>{por[x.item_id+'|'+x.promo_id]=x;});let dentro=0,fuera=0;
+    fs.forEach(f=>{const x=por[f.item_id+'|'+f.promo_id];if(!x||x.error)return;
+      if(x.dentro){f._ml={item_id:f.item_id,estado:'ya_tiene',mensaje:'ML ya la tiene dentro de la campaña ('+x.estado+')'};cpMlGuardar(f);dentro++;}
+      else{if(f._ml&&f._ml.estado==='ya_tiene')f._ml=null;fuera++;}});
+    cpRender();
+    const pend=fs.filter(f=>f.participa&&!(f._ml&&['ok','ya_tiene'].includes(f._ml.estado))).length;
+    cpPanel('<b>Estado en ML:</b> '+dentro+' ya están dentro de la campaña · '+fuera+' todavía no'+(r.errores?' · ⚠ '+r.errores+' consultas fallaron (esas quedan sin marcar)':'')+'.<br>Tildadas y sin subir: <b>'+pend+'</b>. Filtrá «Estado en ML → Sin subir todavía» para verlas; «Participar en ML» manda solo esas.');
+    qs('cp-status').textContent='Listo: '+pend+' tildadas pendientes de subir.';
+  }catch(e){cpPanel('<span style="color:var(--error-texto)">'+acEsc(e.message)+'</span>');qs('cp-status').textContent='❌ '+e.message;}
+  finally{btn.disabled=false;}
+}
 async function cpParticiparPromo(pid,cu,op,filas){
   // 1) prueba con UNA (verificada en ML)  2) el resto, si la prueba quedó confirmada. Devuelve false si no hay que seguir.
   const aplicar=r=>{(r.resultados||[]).forEach(x=>{const f=CP.filas.find(y=>y.item_id===x.item_id&&y.promo_id===pid);if(f){f._ml=x;cpMlGuardar(f);}});cpRender();};
