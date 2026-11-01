@@ -823,6 +823,67 @@ async def campanas_ml_cyber_rangos(request: Request):
     return {"job_id": job_id}
 
 
+def _cyber_monitoreo_calcular(fecha_txt: str | None, inicio_txt: str | None, fin_txt: str | None, con_stock: bool = True) -> dict:
+    """Arma el monitoreo del Cyber para un día (por defecto, ayer en hora argentina). Solo lectura."""
+    import cyber_monitoreo
+    import cyber_precios
+    from rentabilidad.cierre_ecom_diario import ayer_en_argentina
+    from rentabilidad.db import sesion
+    inicio = date.fromisoformat(inicio_txt) if inicio_txt else date(2026, 11, 2)
+    fin = date.fromisoformat(fin_txt) if fin_txt else date(2026, 11, 12)
+    fecha = date.fromisoformat(fecha_txt) if fecha_txt else ayer_en_argentina()
+    if fecha < inicio:
+        raise HTTPException(status_code=422, detail=f"El Cyber empieza el {inicio.isoformat()}: {fecha.isoformat()} es anterior.")
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    lista = cyber_precios.leer_precios(ss)
+    stock_fn = None
+    if con_stock:
+        try:
+            from ml_full import EcomFullAdapter
+            from rentabilidad.ingesta_ecom_api import EcomApiClient
+            ecom = EcomFullAdapter(EcomApiClient())
+            stock_fn = lambda sku: cyber_input.stock_de_ecom(ecom, sku)       # noqa: E731
+        except Exception:  # noqa: BLE001
+            stock_fn = None
+    with sesion() as db:
+        ventas_cyber = cyber_monitoreo.ventas_del_periodo(db, inicio, fecha)
+        previas = cyber_monitoreo.ventas_del_periodo(db, inicio - timedelta(days=cyber_monitoreo.DIAS_BASE), inicio - timedelta(days=1))
+    base = cyber_monitoreo.ritmo_base(previas)
+    dia = [v for v in ventas_cyber if v["fecha"] == fecha]
+    r = cyber_monitoreo.analizar_dia(fecha, inicio, fin, lista, dia, ventas_cyber, base, stock_fn)
+    r["asunto"], r["texto"] = cyber_monitoreo.texto_mail(r)
+    return r
+
+
+@app.get("/cyber/monitoreo/dia")
+async def cyber_monitoreo_dia(fecha: str | None = None, inicio: str | None = None, fin: str | None = None):
+    """SOLO LECTURA: el monitoreo del Cyber de un día (ventas, precio cobrado vs el del Cyber, margen, ritmo vs histórico, stock, alertas y candidatas)."""
+    return await run_in_threadpool(_cyber_monitoreo_calcular, fecha, inicio, fin)
+
+
+@app.post("/cyber/monitoreo/publicar")
+async def cyber_monitoreo_publicar(request: Request):
+    """Calcula el monitoreo del día y AGREGA filas (nunca borra ni pisa): alertas en la pestaña «Maca» de «Historial Automatizaciones», detalle en «Monitoreo Cyber» y candidatas
+    en «Cyber_Candidatas» del Sheet del ERP. Idempotente: repetir el mismo día no duplica. Devuelve además `asunto` y `texto` para el mail (n8n)."""
+    import cyber_monitoreo
+    b = await request.json() if request.headers.get("content-length") not in (None, "0") else {}
+    r = await run_in_threadpool(_cyber_monitoreo_calcular, b.get("fecha"), b.get("inicio"), b.get("fin"))
+    gc = get_gs()
+    avisos = []
+    try:
+        r["publicado_maca"] = await run_in_threadpool(cyber_monitoreo.publicar_alertas_maca, gc, r["alertas"])
+    except Exception as e:  # noqa: BLE001
+        r["publicado_maca"] = None
+        avisos.append(f"No se pudieron escribir las alertas en «Maca»: {e}")
+    try:
+        r["publicado_monitoreo"] = await run_in_threadpool(cyber_monitoreo.publicar_monitoreo, gc.open_by_key(SPREADSHEET_ID), r)
+    except Exception as e:  # noqa: BLE001
+        r["publicado_monitoreo"] = None
+        avisos.append(f"No se pudo escribir «Monitoreo Cyber»: {e}")
+    r["avisos"] = avisos
+    return r
+
+
 @app.get("/cyber/precios/otra-cuenta")
 async def cyber_precios_otra_cuenta(cuenta: str):
     """Precios del Cyber ya definidos para esos SKU en la OTRA cuenta (mismo precio en GROUP y ARG)."""
