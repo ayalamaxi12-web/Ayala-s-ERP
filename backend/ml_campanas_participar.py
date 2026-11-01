@@ -84,8 +84,17 @@ def participar_una(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, tipo:
     elif tipo in TIPOS_CON_PRECIO:
         return {"ok": False, "error": f"Esta campaña es de tipo {tipo}: ML exige el precio final y la fila no lo trae."}
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}", "Content-Type": "application/json"}
-    d = ml._post(f"https://api.mercadolibre.com/seller-promotions/items/{item_id}?app_version=v2", headers, body)
+    url = f"https://api.mercadolibre.com/seller-promotions/items/{item_id}?app_version=v2"
+    d = ml._post(url, headers, body)
     err = _es_error(d)
+    if err and "offer id is required" in err.lower():
+        # Campañas donde ML ya generó una oferta candidata para la publicación (ej. SMART): hay que mandar su `offer_id`, que sale de la propia lista de promociones del ítem.
+        for p in ml.promociones_item(item_id, cuenta):
+            if _id_promo(p) == promotion_id and (p.get("offer_id") or p.get("ref_id")):
+                body["offer_id"] = p.get("offer_id") or p.get("ref_id")
+                d = ml._post(url, headers, body)
+                err = _es_error(d)
+                break
     return {"ok": False, "error": err, "respuesta": d} if err else {"ok": True, "respuesta": d}
 
 
@@ -132,6 +141,10 @@ def participar(ml: MLOfertasEscritura, cuenta: str, promotion_id: str, filas: li
                               "Tipo/Promocion": f"{tipo} ({nombre})", "Precio Anterior": "", "Precio Nuevo": (f.get("deal_price") if (tipo in TIPOS_CON_PRECIO or f.get("cambiado")) else None) or "propuesta de ML",
                               "Operador": operador, "Origen": "Campañas ML"})
         else:
+            if "OFFER_ALREADY_EXISTS" in str(r.get("error")) or "OFFER_ALREADY_EXISTS" in str(r.get("respuesta")):
+                # La publicación ya tiene una oferta en esa campaña (o una propia): no es un fallo de la corrida ni corta las siguientes. No se pisa nada.
+                resultados.append({"item_id": f["item_id"], "estado": "ya_tiene", "mensaje": "ML dice que esta publicación ya tiene una oferta (OFFER_ALREADY_EXISTS): no se tocó. Revisala en ML si el precio no es el que querés."})
+                continue
             seguidos += 1
             resultados.append({"item_id": f["item_id"], "estado": "error", "mensaje": r["error"]})
     ok = [x for x in resultados if x["estado"] == "ok"]
