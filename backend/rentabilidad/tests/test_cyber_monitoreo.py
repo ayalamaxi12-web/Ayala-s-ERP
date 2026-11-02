@@ -120,3 +120,22 @@ def test_si_cambian_los_encabezados_de_maca_no_escribe():
     with pytest.raises(ValueError):
         cm.publicar_alertas_maca(GcFalso(ws), [{"x": 1}])
     assert len(ws.filas) == 2
+
+
+class OrdenFalsa:
+    def __init__(self, **kw):
+        base = dict(usuario_integracion="GLOBALELECTRONICSGROUP", skus_vendidos="A", fecha_creacion_venta=DIA, item_ml="MLA1", unidades=1, precio_final=10000, precio_sin_iva=8264.46,
+                    rentabilidad=1000, costo_sin_iva=4000, pm="Veronica", excluido=False)
+        base.update(kw)
+        self.__dict__.update(base)
+
+
+def test_ventas_de_filas_en_vivo_filtra_lo_que_no_es_de_ml_o_tiene_varios_sku():
+    filas = [OrdenFalsa(), OrdenFalsa(usuario_integracion="Global WEB"), OrdenFalsa(skus_vendidos="A,B"), OrdenFalsa(excluido=True), OrdenFalsa(usuario_integracion="GLOBALELECTRONICSARG", item_ml="MLA2")]
+    out = cm.ventas_de_filas(filas)
+    assert [(x["cuenta"], x["mla"]) for x in out] == [("IT", "MLA1"), ("MT", "MLA2")]
+
+
+def test_totales_por_cuenta():
+    r = correr([fila(mla="MLA1", cuenta="IT"), fila(mla="MLA2", cuenta="MT")], [v(mla="MLA2", cuenta="MT")])
+    assert r["por_cuenta"] == {"IT": {"en_lista": 1, "con_ventas": 0}, "MT": {"en_lista": 1, "con_ventas": 1}}

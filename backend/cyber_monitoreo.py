@@ -40,22 +40,32 @@ def link_ml(mla: str) -> str:
     return f"https://articulo.mercadolibre.com.ar/MLA-{digitos}" if digitos else ""
 
 
-def ventas_del_periodo(db, desde: date, hasta: date) -> list[dict]:
-    """Órdenes de ML (de un solo SKU, no excluidas) creadas entre `desde` y `hasta`, ya con la cuenta."""
+def _a_dict(v) -> dict | None:
+    """Una orden (guardada o en vivo) → dict simple; None si no es de ML, está excluida o tiene varios SKU."""
     from cyber_input import cuenta_de_usuario
-    from rentabilidad.models import VentaEcom
     from rentabilidad.pricing_pm import norm_sku
 
-    out = []
+    cuenta = cuenta_de_usuario(v.usuario_integracion)
+    if getattr(v, "excluido", False) or not cuenta or not v.skus_vendidos or "," in v.skus_vendidos:
+        return None
+    return {"fecha": v.fecha_creacion_venta, "sku": norm_sku(v.skus_vendidos), "sku_orig": v.skus_vendidos, "cuenta": cuenta, "mla": v.item_ml or "", "unidades": int(v.unidades or 1),
+            "precio_final": float(v.precio_final or 0), "precio_sin_iva": float(v.precio_sin_iva or 0), "rentabilidad": None if v.rentabilidad is None else float(v.rentabilidad),
+            "costo": float(v.costo_sin_iva or 0), "pm": v.pm or ""}
+
+
+def ventas_del_periodo(db, desde: date, hasta: date) -> list[dict]:
+    """Órdenes de ML (de un solo SKU, no excluidas) ya guardadas, creadas entre `desde` y `hasta`, con la cuenta."""
+    from rentabilidad.models import VentaEcom
+
+    if hasta < desde:
+        return []
     q = db.query(VentaEcom).filter(VentaEcom.excluido.is_(False), VentaEcom.fecha_creacion_venta >= desde, VentaEcom.fecha_creacion_venta <= hasta)
-    for v in q.all():
-        cuenta = cuenta_de_usuario(v.usuario_integracion)
-        if not cuenta or not v.skus_vendidos or "," in v.skus_vendidos:
-            continue
-        out.append({"fecha": v.fecha_creacion_venta, "sku": norm_sku(v.skus_vendidos), "sku_orig": v.skus_vendidos, "cuenta": cuenta, "mla": v.item_ml or "", "unidades": int(v.unidades or 1),
-                    "precio_final": float(v.precio_final or 0), "precio_sin_iva": float(v.precio_sin_iva or 0), "rentabilidad": None if v.rentabilidad is None else float(v.rentabilidad),
-                    "costo": float(v.costo_sin_iva or 0), "pm": v.pm or ""})
-    return out
+    return [d for d in (_a_dict(v) for v in q.all()) if d]
+
+
+def ventas_de_filas(filas) -> list[dict]:
+    """Lo mismo, a partir de filas armadas en vivo (sin guardar), como las de «Ventas de hoy»."""
+    return [d for d in (_a_dict(v) for v in filas) if d]
 
 
 def ritmo_base(ventas_previas: list[dict], dias: int = DIAS_BASE) -> dict[tuple, float]:
@@ -164,7 +174,13 @@ def analizar_dia(fecha: date, inicio: date, fin: date, lista: list[dict], ventas
     filas.sort(key=lambda x: (-(x["prioridad"] or 0), -x["unidades"]))
     alertas.sort(key=lambda x: (x["Prioridad"], x["SKU"]))
     candidatas.sort(key=lambda x: -x["unidades"])
-    return {"fecha": fecha.isoformat(), "dia_del_cyber": dias_cyber, "dias_totales": (fin - inicio).days + 1,
+    por_cuenta = {}
+    for (cuenta, _mla) in en_lista:
+        por_cuenta.setdefault(cuenta, {"en_lista": 0, "con_ventas": 0})["en_lista"] += 1
+    for (cuenta, mla) in dia:
+        if (cuenta, mla) in en_lista:
+            por_cuenta[cuenta]["con_ventas"] += 1
+    return {"fecha": fecha.isoformat(), "dia_del_cyber": dias_cyber, "por_cuenta": por_cuenta, "dias_totales": (fin - inicio).days + 1,
             "totales": {"publicaciones_con_ventas": len(filas), "publicaciones_en_lista": len(en_lista), "publicaciones_sin_ventas": len(sin_ventas), "unidades": sum(a["unidades"] for a in dia.values()),
                         "facturacion": round(fact, 2), "rentabilidad": round(rent, 2), "rentabilidad_pct": round(rent / sin_iva * 100, 2) if sin_iva else None,
                         "acumulado_facturacion": round(fact_ac, 2), "acumulado_rentabilidad": round(rent_ac, 2),

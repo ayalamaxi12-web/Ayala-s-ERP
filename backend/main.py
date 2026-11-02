@@ -845,13 +845,26 @@ def _cyber_monitoreo_calcular(fecha_txt: str | None, inicio_txt: str | None, fin
             stock_fn = lambda sku: cyber_input.stock_de_ecom(ecom, sku)       # noqa: E731
         except Exception:  # noqa: BLE001
             stock_fn = None
+    from rentabilidad.ventas_hoy import hoy_en_argentina
+    hoy = hoy_en_argentina()
     with sesion() as db:
-        ventas_cyber = cyber_monitoreo.ventas_del_periodo(db, inicio, fecha)
+        # Lo guardado llega hasta ayer; el día de hoy se lee EN VIVO de Ecom (como «Ventas de hoy») y no se guarda.
+        ventas_cyber = cyber_monitoreo.ventas_del_periodo(db, inicio, min(fecha, hoy - timedelta(days=1)))
         previas = cyber_monitoreo.ventas_del_periodo(db, inicio - timedelta(days=cyber_monitoreo.DIAS_BASE), inicio - timedelta(days=1))
+    en_vivo = fecha >= hoy
+    if en_vivo:
+        from rentabilidad import api as rapi
+        tc = rapi._resolver_tc(None)
+        ingesta = rapi.EcomApiAdapter().periodo(hoy, hoy, tc)
+        iva = rapi.IvaProvider(consultar=rapi._consultar_catalogo_tactica_con_cache())
+        with sesion() as db:
+            filas_hoy = rapi.construir_filas_ecom(db, ingesta, iva, **rapi._providers_ecom(rapi._fetch_fn_con_cache())).filas
+            ventas_cyber += [v for v in cyber_monitoreo.ventas_de_filas(filas_hoy) if v["fecha"] == hoy]
     base = cyber_monitoreo.ritmo_base(previas)
     dia = [v for v in ventas_cyber if v["fecha"] == fecha]
     r = cyber_monitoreo.analizar_dia(fecha, inicio, fin, lista, dia, ventas_cyber, base, stock_fn)
     r["asunto"], r["texto"] = cyber_monitoreo.texto_mail(r)
+    r["en_vivo"] = en_vivo
     return r
 
 
