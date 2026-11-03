@@ -81,6 +81,7 @@ def test_rutas_protegidas(metodo, path):
     ("GET", "/rentabilidad/reporte/pricing/ofertas"),
     ("OPTIONS", "/ml-proxy"),
     ("OPTIONS", "/ecom/update-price"),
+    ("POST", "/picking/escanear"),      # clave propia (PICKING_KEY), no X-ERP-Key
 ])
 def test_rutas_abiertas(metodo, path):
     assert not requiere_clave(metodo, path)
