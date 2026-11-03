@@ -39,12 +39,26 @@ def test_el_precio_cobrado_es_por_unidad():
     assert r["filas"][0]["precio_cobrado"] == 10000.0 and r["filas"][0]["coincide"]
 
 
-def test_margen_bajo_el_piso_del_grupo_es_prioridad_1_y_poco_menos_que_lo_proyectado_es_2():
-    bajo = correr([fila(grupo="rey", margen=25.0)], [v(rent=500.0)])           # 500/8264 = 6 %
-    assert bajo["alertas"][0]["Prioridad"] == 1 and "bajo el piso" in bajo["alertas"][0]["_motivo"]
-    medio = correr([fila(grupo="liquidar", margen=20.0)], [v(rent=1400.0)])    # 16,9 % contra 20 %
+def test_margen_peor_que_lo_proyectado_y_bajo_el_piso_es_prioridad_1_y_solo_peor_es_2():
+    bajo = correr([fila(grupo="rey", margen=25.0)], [v(rent=500.0)])           # 500/8264 = 6 % contra 25 % proyectado y bajo el piso del rey
+    assert bajo["alertas"][0]["Prioridad"] == 1
+    medio = correr([fila(grupo="liquidar", margen=20.0)], [v(rent=1400.0)])    # 16,9 % contra 20 %, liquidar no tiene piso
     assert medio["alertas"][0]["Prioridad"] == 2
     assert not correr([fila(grupo="liquidar", margen=17.0)], [v(rent=1400.0)])["alertas"]
+
+
+def test_las_que_entraron_por_pm_menos_3_bajo_el_piso_a_proposito_no_alertan_si_el_margen_es_el_previsto():
+    assert not correr([fila(grupo="rey", margen=5.0, estado="piso_pm")], [v(rent=1200.0)])["alertas"]      # 14,5 % real contra 5 % proyectado
+
+
+def test_un_pack_vendido_a_su_precio_no_es_una_diferencia_de_precio():
+    pack = correr([fila(precio=20000)], [v(u=3, final=20000.0)])             # «3×X»: una orden = una unidad de la publicación (3 unidades de SKU)
+    f = pack["filas"][0]
+    assert f["coincide"] and f["precio_cobrado"] == 20000.0 and f["unidades"] == 3 and not pack["alertas"]
+    doble = correr([fila(precio=20000)], [v(u=6, final=40000.0)])            # dos packs en la misma orden
+    assert doble["filas"][0]["coincide"] and doble["filas"][0]["precio_cobrado"] == 20000.0
+    caro = correr([fila(precio=10087)], [v(final=13865.0)])                  # una diferencia real
+    assert caro["filas"][0]["dif_precio_pct"] == round((13865 / 10087 - 1) * 100, 2) and caro["alertas"][0]["Prioridad"] == 1
 
 
 def test_stock_y_ritmo():

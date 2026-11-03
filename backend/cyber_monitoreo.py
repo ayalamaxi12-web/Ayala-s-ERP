@@ -19,7 +19,7 @@ CANAL_ALERTA = "ML Cyber"
 COLS_ALERTA = ["Fecha", "SKU", "PM", "Canal", "Se_Vende", "Deberia", "Margen_Real", "Margen_Proyect", "Prioridad", "Link"]
 TOL_PRECIO_PCT = 2.0            # el precio cobrado se aparta del del Cyber en más de esto → prioridad 1
 TOL_MARGEN_PTS = 3.0            # el margen real está esto o más por debajo del proyectado → prioridad 2
-PISO_POR_GRUPO = {"rey": 18.0, "medio": 8.0}      # margen real por debajo de esto → prioridad 1 (el piso más bajo que se acepta por grupo; liquidar no tiene)
+PISO_POR_GRUPO = {"rey": 18.0, "medio": 8.0}      # el margen peor que lo proyectado Y bajo este piso (o negativo) → prioridad 1; liquidar no tiene piso
 RITMO_BAJO = 0.5                # vende menos de la mitad de su ritmo histórico → aviso
 DIAS_STOCK_URGENTE = 3
 UNIDADES_CANDIDATA = 2          # mínimo de unidades en el día para proponer una publicación que no está en el Cyber
@@ -83,9 +83,10 @@ def _agrupar(ventas: list[dict]) -> dict[tuple, dict]:
     out: dict[tuple, dict] = {}
     for v in ventas:
         a = out.setdefault((v["cuenta"], v["mla"]), {"cuenta": v["cuenta"], "mla": v["mla"], "sku": v["sku"], "sku_orig": v["sku_orig"], "pm": v["pm"], "unidades": 0, "facturacion": 0.0,
-                                                    "sin_iva": 0.0, "rent": 0.0, "sin_iva_con_rent": 0.0, "sin_costo": 0})
+                                                    "sin_iva": 0.0, "rent": 0.0, "sin_iva_con_rent": 0.0, "sin_costo": 0, "ordenes": []})
         a["unidades"] += v["unidades"]
         a["facturacion"] += v["precio_final"]
+        a["ordenes"].append(v["precio_final"])
         a["sin_iva"] += v["precio_sin_iva"]
         if v["rentabilidad"] is not None and v["costo"] > 0:
             a["rent"] += v["rentabilidad"]
@@ -124,6 +125,10 @@ def analizar_dia(fecha: date, inicio: date, fin: date, lista: list[dict], ventas
         proy = _f(r.get("Margen_3_cuotas_pct"))
         grupo = str(r.get("Grupo") or "")
         pc = a["precio_cobrado"]
+        if cyber and a["ordenes"]:
+            # El precio del Cyber es el de UNA publicación (un pack «3×X» ya es una sola unidad de la publicación). Cada orden vale k veces ese precio si compraron k; se compara por orden,
+            # no por unidad de SKU (un pack de 3 vendido a su precio no es «−66 %»).
+            pc = a["facturacion"] / sum(max(1, round(p / cyber)) for p in a["ordenes"])
         dif = None if not cyber or pc is None else round((pc / cyber - 1) * 100, 2)
         coincide = dif is not None and abs(dif) <= TOL_PRECIO_PCT
         b = base.get(("MLA", a["mla"]), base.get((a["sku"], a["cuenta"]), 0.0))
@@ -143,12 +148,11 @@ def analizar_dia(fecha: date, inicio: date, fin: date, lista: list[dict], ventas
             motivos.append(f"vendió a ${pc:,.0f} y el Cyber es ${cyber:,.0f} ({dif:+.1f} %)")
             prioridad = 1
         piso = PISO_POR_GRUPO.get(grupo)
-        if a["margen_real"] is not None and piso is not None and a["margen_real"] < piso:
-            motivos.append(f"margen real {a['margen_real']:.1f} % bajo el piso del grupo ({piso:.0f} %)")
-            prioridad = 1
-        elif a["margen_real"] is not None and proy is not None and a["margen_real"] <= proy - TOL_MARGEN_PTS:
-            motivos.append(f"margen real {a['margen_real']:.1f} % contra {proy:.1f} % proyectado")
-            prioridad = prioridad or 2
+        mr = a["margen_real"]
+        # Margen: solo avisa si salió PEOR que lo proyectado (el piso ya se decidió al definir el precio; las que entraron por «PM −3 %» sin llegar al piso son a propósito).
+        if mr is not None and proy is not None and mr <= proy - TOL_MARGEN_PTS:
+            motivos.append(f"margen real {mr:.1f} % contra {proy:.1f} % proyectado")
+            prioridad = max(prioridad, 1 if (piso is not None and mr < piso) or mr < 0 else 2)
         if dias_stock is not None and dias_stock < DIAS_STOCK_URGENTE:
             motivos.append(f"quedan {dias_stock} días de stock")
             prioridad = 1
