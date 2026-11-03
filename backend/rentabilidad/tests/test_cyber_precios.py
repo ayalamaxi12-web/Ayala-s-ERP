@@ -36,6 +36,8 @@ class WsFalsa:
         return [dict(zip(h, r)) for r in self.vals[1:]]
     def get_all_values(self):
         return self.vals
+    def append_rows(self, filas, value_input_option=None):
+        self.vals += [list(x) for x in filas]
 
 
 class SsFalso:
@@ -78,3 +80,29 @@ def test_respaldo_de_costo_desde_ecom_para_campanas(monkeypatch):
     assert f("ABC").costo_usd == Decimal("5") and f("ABC").iva_factor == Decimal("1.21") and f("ABC").pm == "Nati"
     assert f("VIG").costo_usd == Decimal("3") and f("VIG").iva_factor == Decimal("1.105")
     assert f("SIN").costo_usd is None
+
+
+class MLCyber:
+    def promociones_seller(self, cuenta):
+        return [{"id": "P-X", "type": "SMART", "name": "Otra"}, {"id": "P-CYBER", "type": "DEAL", "name": "MKP T1 CYBER MONDAY NOV"}]
+
+    def items_de_promocion(self, pid, tipo, cuenta):
+        assert (pid, tipo) == ("P-CYBER", "DEAL")
+        return [{"id": "MLA1", "price": 900, "original_price": 1000}, {"id": "MLA2", "price": 450, "original_price": 500}, {"status": "started"}]
+
+
+def test_items_cyber_en_ml_toma_la_campana_deal_del_cyber():
+    r = cp.items_cyber_en_ml(MLCyber(), "MT")
+    assert r["campana"]["id"] == "P-CYBER" and [x["mla"] for x in r["items"]] == ["MLA1", "MLA2"] and r["items"][0]["precio"] == 900
+    assert cp.items_cyber_en_ml(MLCyber(), "MT", "NO-EXISTE")["campana"] is None
+
+
+def test_agregar_faltantes_no_toca_lo_que_ya_estaba_y_no_duplica():
+    ss = SsFalso()
+    cp.guardar_precios(ss, "MT", [fila("A", 100)])
+    previo = [list(x) for x in ss.ws.vals]
+    # una fila ya existente (MLAA) y dos nuevas leídas de ML
+    r = cp.agregar_faltantes(ss, "MT", [{"mla": "MLAA", "precio": 1}, {"mla": "MLA1", "precio": 900, "precio_original": 1000}, {"mla": "MLA2", "precio": 450}])
+    assert r == {"agregadas": 2, "ya_estaban": 1}
+    assert ss.ws.vals[:len(previo)] == previo and [x[2] for x in ss.ws.vals[len(previo):]] == ["MLA1", "MLA2"] and ss.ws.vals[-1][6] == "leido_de_ml"
+    assert cp.agregar_faltantes(ss, "MT", [{"mla": "MLA1", "precio": 900}])["agregadas"] == 0

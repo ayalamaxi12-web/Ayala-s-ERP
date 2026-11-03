@@ -906,6 +906,28 @@ async def cyber_precios_otra_cuenta(cuenta: str):
     return {"precios": await run_in_threadpool(cyber_precios.precios_otra_cuenta, ss, cuenta)}
 
 
+@app.post("/campanas-ml/cyber/desde-ml")
+async def campanas_ml_cyber_desde_ml(request: Request):
+    """SOLO LECTURA: las publicaciones de la cuenta que ya están dentro de la campaña del Cyber según ML, con su precio de oferta."""
+    import cyber_precios
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    promo = str(b.get("promotion_id") or "").strip() or None
+    job_id = f"mlcamp_c_{int(time.time() * 1000)}"
+    ml_campanas_participar.lanzar(job_id, lambda prog: cyber_precios.items_cyber_en_ml(ml_ofertas.MLOfertasClient(), cuenta, promo))
+    return {"job_id": job_id}
+
+
+@app.post("/cyber/precios/agregar-desde-ml")
+async def cyber_precios_agregar_desde_ml(request: Request):
+    """Agrega a `Cyber_Precios` las publicaciones leídas de ML que no figuran para esa cuenta (no toca las existentes)."""
+    import cyber_precios
+    b = await request.json()
+    cuenta = _cuenta_valida(b.get("cuenta", ""))
+    ss = get_gs().open_by_key(SPREADSHEET_ID)
+    return await run_in_threadpool(cyber_precios.agregar_faltantes, ss, cuenta, [f for f in (b.get("filas") or []) if isinstance(f, dict)])
+
+
 @app.post("/cyber/precios/guardar")
 async def cyber_precios_guardar(request: Request):
     """Guarda en la pestaña `Cyber_Precios` del Sheet del ERP los precios definidos de esa cuenta (la lista oficial del Cyber, que usa el monitoreo)."""
