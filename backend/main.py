@@ -873,6 +873,34 @@ async def cyber_monitoreo_dia(fecha: str | None = None, inicio: str | None = Non
     """SOLO LECTURA: el monitoreo del Cyber de un día (ventas, precio cobrado vs el del Cyber, margen, ritmo vs histórico, stock, alertas y candidatas)."""
     return await run_in_threadpool(_cyber_monitoreo_calcular, fecha, inicio, fin)
 
+@app.post("/picking/escanear")
+async def picking_escanear(request: Request):
+    """Registra el pickeo de una etiqueta de ML (QR) en el Sheet de picking. Clave propia: `X-Picking-Key` = env `PICKING_KEY` (solo sirve para esto). Ver `picking.py`."""
+    import hmac
+    import picking
+    esperada = os.getenv("PICKING_KEY", "").strip()
+    if not esperada:
+        raise HTTPException(503, "El picking no está habilitado (falta PICKING_KEY en Railway).")
+    recibida = request.headers.get("x-picking-key", "")
+    if not recibida or not hmac.compare_digest(recibida.encode("utf-8"), esperada.encode("utf-8")):
+        raise HTTPException(401, "Clave de picking incorrecta.")
+    b = await request.json()
+    from ml_auth import SELLERS, ml_headers
+    import requests as _rq
+
+    def _get(url, headers):
+        return _rq.get(url, headers=headers, timeout=15)
+
+    def _correr():
+        ss = get_gs().open_by_key(picking.SHEET_ID)
+        return picking.escanear(ss, str(b.get("codigo") or ""), str(b.get("operador") or ""), SELLERS, ml_headers, _get)
+
+    try:
+        return await run_in_threadpool(_correr)
+    except picking.PickingError as e:
+        return {"estado": "error", "mensaje": str(e)}
+
+
 
 @app.post("/cyber/monitoreo/publicar")
 async def cyber_monitoreo_publicar(request: Request):
