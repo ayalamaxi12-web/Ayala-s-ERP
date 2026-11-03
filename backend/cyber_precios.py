@@ -94,3 +94,39 @@ def guardar_precios(ss, cuenta: str, filas: list[dict], ahora: datetime | None =
     ws.clear()
     ws.update(values=[COLS_PRECIOS] + cuerpo, range_name="A1")
     return {"guardadas": len(nuevas), "otras_cuentas": len(previas)}
+
+
+def items_cyber_en_ml(ml, cuenta: str, promotion_id: str | None = None) -> dict:
+    """SOLO LECTURA. Las publicaciones de esa cuenta que YA están dentro de la campaña del Cyber según ML (`started`), con su precio de oferta. Si no se pasa `promotion_id` se toma
+    la campaña tipo DEAL cuyo nombre dice «CYBER MONDAY»."""
+    campanas = ml.promociones_seller(cuenta)
+    if promotion_id:
+        camp = next((c for c in campanas if c.get("id") == promotion_id), None)
+    else:
+        camp = next((c for c in campanas if "CYBER MONDAY" in str(c.get("name", "")).upper() and c.get("type") == "DEAL"), None) \
+            or next((c for c in campanas if "CYBER MONDAY" in str(c.get("name", "")).upper()), None)
+    if not camp or not camp.get("type"):
+        return {"campana": None, "items": [], "aviso": "ML no lista una campaña del Cyber para esa cuenta (revisá el identificador)."}
+    filas = []
+    for it in ml.items_de_promocion(camp["id"], camp["type"], cuenta):
+        mla = str(it.get("id") or it.get("item_id") or "")
+        if mla:
+            filas.append({"mla": mla, "precio": it.get("price") if it.get("price") is not None else it.get("new_price"), "precio_original": it.get("original_price")})
+    return {"campana": {"id": camp["id"], "nombre": camp.get("name"), "tipo": camp.get("type")}, "items": filas, "aviso": None}
+
+
+def agregar_faltantes(ss, cuenta: str, filas: list[dict], ahora: datetime | None = None) -> dict:
+    """Agrega a `Cyber_Precios` las publicaciones leídas de ML que todavía no figuran para esa cuenta. NO toca ni reemplaza las filas que ya están."""
+    ahora = ahora or datetime.now(timezone(timedelta(hours=-3)))
+    ws = _hoja(ss)
+    ya = {(str(f.get("Cuenta")), str(f.get("MLA"))) for f in leer_precios(ss)}
+    nuevas = []
+    for f in filas:
+        mla = str(f.get("mla") or "")
+        if not mla or (cuenta, mla) in ya:
+            continue
+        ya.add((cuenta, mla))
+        nuevas.append(["", cuenta, mla, "", f.get("precio"), "", "leido_de_ml", "Leída de ML: oferta activa en la campaña del Cyber", f.get("precio_original"), "", "", "", "", ahora.strftime("%d/%m/%Y %H:%M")])
+    if nuevas:
+        ws.append_rows(nuevas, value_input_option="USER_ENTERED")
+    return {"agregadas": len(nuevas), "ya_estaban": len(filas) - len(nuevas)}
