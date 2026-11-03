@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 CANAL_ALERTA = "ML Cyber"
+ALIAS_ENCABEZADO = {"Margen_Proyectado": "Margen_Proyect"}
 COLS_ALERTA = ["Fecha", "SKU", "PM", "Canal", "Se_Vende", "Deberia", "Margen_Real", "Margen_Proyect", "Prioridad", "Link"]
 TOL_PRECIO_PCT = 2.0            # el precio cobrado se aparta del del Cyber en más de esto → prioridad 1
 TOL_MARGEN_PTS = 3.0            # el margen real está esto o más por debajo del proyectado → prioridad 2
@@ -247,7 +248,7 @@ def publicar_alertas_maca(gc, alertas: list[dict]) -> dict:
     ss = gc.open_by_key(HISTORIAL_AUTOMATIZACIONES_ID)
     ws = ss.worksheet(TAB_MACA)
     cab = [str(c).strip() for c in (ws.row_values(1) or [])][: len(COLS_ALERTA)]
-    if cab != COLS_ALERTA:
+    if [ALIAS_ENCABEZADO.get(c, c) for c in cab] != COLS_ALERTA:   # acepta «Margen_Proyectado» (como lo escribe el otro flujo) sin tocar la hoja
         raise ValueError(f"Los encabezados de la pestaña «{TAB_MACA}» cambiaron ({cab}): no se escribió nada.")
     filas = [[a[c] for c in COLS_ALERTA] for a in alertas]
     return {"agregadas": _agregar_sin_duplicar(ws, COLS_ALERTA, filas, [0, 1, 3, 9]), "recibidas": len(filas)}      # clave: fecha + SKU + canal + link

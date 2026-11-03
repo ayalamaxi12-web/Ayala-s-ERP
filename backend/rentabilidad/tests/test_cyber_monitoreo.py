@@ -128,6 +128,13 @@ def test_publicar_en_maca_agrega_sin_duplicar_ni_tocar_lo_existente():
     assert len(ws.filas) == 3 and ws.filas[1] == previa and ws.filas[2][3] == "ML Cyber"
 
 
+def test_maca_acepta_margen_proyectado_como_encabezado():
+    cab = ["Margen_Proyectado" if c == "Margen_Proyect" else c for c in cm.COLS_ALERTA]
+    ws = WsFalsa([cab])
+    r = correr([fila(precio=10000)], [v(final=11000.0)])
+    assert cm.publicar_alertas_maca(GcFalso(ws), r["alertas"])["agregadas"] == 1
+
+
 def test_si_cambian_los_encabezados_de_maca_no_escribe():
     import pytest
     ws = WsFalsa([["Fecha", "Otra"], []])
