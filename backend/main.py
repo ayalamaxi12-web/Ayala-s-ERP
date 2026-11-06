@@ -900,6 +900,18 @@ async def picking_escanear(request: Request):
     except picking.PickingError as e:
         return {"estado": "error", "mensaje": str(e)}
 
+@app.get("/tactica/pedidos/explorar")
+async def tactica_pedidos_explorar(tabla: str | None = None):
+    """Paso 1 de la alerta de pedidos pendientes de Táctica: informe de solo lectura (tablas de pedidos/ítems/pagos, estados con su cantidad, fechas).
+    Protegido con `X-ERP-Key`. Solo SELECT con NOLOCK; ver `tactica_pedidos.py`."""
+    import tactica_pedidos
+    try:
+        return await run_in_threadpool(tactica_pedidos.informe_exploracion, tabla)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"No se pudo consultar Táctica (¿túnel Tailscale / VPN / subnet router caído?): {e}")
+
 
 
 @app.post("/cyber/monitoreo/publicar")
