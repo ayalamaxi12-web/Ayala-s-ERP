@@ -6,3 +6,7 @@ __pycache__/
 
 # Proyección 2027: el snapshot real tiene márgenes/costos/capital (sensible). Solo vive en la base del backend, nunca en el repo.
 dashboard_data*.json
+
+# Táctica pendientes: credenciales y resultados de exploración (nunca al repo)
+tactica_pendientes/.env
+tactica_exploracion_*.md
