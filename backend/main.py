@@ -912,6 +912,54 @@ async def tactica_pedidos_explorar(tabla: str | None = None):
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"No se pudo consultar Táctica (¿túnel Tailscale / VPN / subnet router caído?): {e}")
 
+@app.post("/tactica/pendientes/correr")
+async def tactica_pendientes_correr():
+    """Corrida diaria de la alerta de pedidos pendientes de Táctica: consulta (solo lectura, NOLOCK) y GUARDA el resultado del día con historial por pedido.
+    Si Táctica no responde devuelve 200 con estado «error» (así el flujo de n8n sigue y el mail avisa que no hubo datos). Ver `tactica_pendientes.py`."""
+    import tactica_pedidos
+    import tactica_pendientes
+    from rentabilidad.db import sesion
+
+    def _correr():
+        hoy = tactica_pendientes.hoy_art()
+        try:
+            con, cur = tactica_pedidos.conectar()
+            try:
+                pedidos, total = tactica_pendientes.consultar_pendientes(cur, hoy)
+            finally:
+                con.close()
+        except Exception as e:  # noqa: BLE001
+            with sesion() as db:
+                tactica_pendientes.registrar_error(db, hoy, f"No se pudo consultar Táctica: {e}")
+            return {"estado": "error", "mensaje": f"No se pudo consultar Táctica (¿PC, túnel o VPN caídos?): {e}"}
+        with sesion() as db:
+            return tactica_pendientes.guardar_corrida(db, hoy, pedidos, total)
+
+    return await run_in_threadpool(_correr)
+
+
+@app.get("/tactica/pendientes/mail")
+async def tactica_pendientes_mail(fecha: str | None = None):
+    """Asunto y texto del mail de las 8:00 (primero «cerrar o anular», después «activar», por días parado). Si no hay corrida buena del día, devuelve el aviso de que no llegaron datos."""
+    import tactica_pendientes
+    from datetime import date as _date
+    from rentabilidad.db import sesion
+    try:
+        f = _date.fromisoformat(fecha) if fecha else None
+    except ValueError:
+        raise HTTPException(400, "fecha debe ser AAAA-MM-DD")
+    with sesion() as db:
+        return tactica_pendientes.armar_mail(db, f)
+
+
+@app.get("/tactica/pendientes/historial")
+async def tactica_pendientes_historial(pedido: int):
+    """Historial de un pedido pendiente: en qué corridas apareció y cuántos días llevaba parado."""
+    import tactica_pendientes
+    from rentabilidad.db import sesion
+    with sesion() as db:
+        return {"pedido": pedido, "historial": tactica_pendientes.historial_pedido(db, pedido)}
+
 
 
 @app.post("/cyber/monitoreo/publicar")
