@@ -40,9 +40,9 @@ def ident(nombre: str) -> str:
     return f"[{nombre}]"
 
 
-def tabla(nombre: str, esquema: str = "dbo") -> str:
-    """Referencia a tabla de usuario SIEMPRE con NOLOCK."""
-    return f"{ident(esquema)}.{ident(nombre)} WITH (NOLOCK)"
+def tabla(nombre: str, esquema: str = "dbo", alias: str | None = None) -> str:
+    """Referencia a tabla de usuario SIEMPRE con NOLOCK (el alias va antes del hint: `[dbo].[t] AS x WITH (NOLOCK)`)."""
+    return f"{ident(esquema)}.{ident(nombre)}" + (f" AS {ident(alias)[1:-1]}" if alias else "") + " WITH (NOLOCK)"
 
 
 def consulta(cur, sql: str, params=None):

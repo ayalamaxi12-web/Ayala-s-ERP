@@ -333,3 +333,14 @@ el costo vigente de un período pasado, no investigado en profundidad).
    hoy); la etapa de ingesta/persistencia real hacia la tabla
    `venta_tactica` (asignar `periodo`, chequear `SkuExcluido`) — el
    adaptador de este documento solo resuelve la lectura, no persiste.
+
+---
+
+## 6. Pedidos (relevado 2026-11-06 para la alerta de pedidos pendientes)
+
+- Tabla `pedidos` (≈201 mil): `RecID` es `varchar(12)`. `Numero` = número visible; `FechaCreacion`, `FechaModificacion` (nunca vacías) y `FechaCompletado` (vacía en los abiertos).
+- **`pedidos.Estado` (confirmado por Maxx mirando pedidos reales en Táctica): 0 = Pendiente (363), 1 = Completado (169.238), 2 = Anulado (31.801).**
+- Cliente: `pedidos.IDFiscal` → `fiscal.RazonSocial`. Vendedor: `pedidos.IDUsuarioVendedor` → `usuarios.Usuario`. Monto: `pedidos.Total` en la moneda `NroMoneda`.
+- Ítems (SKU): `pedidositems.IDPedido = pedidos.RecID`, SKU en `Codigo` (con espacios finales).
+- Tablas que cuelgan del pedido por `IDPedido`: `facturas`, `remitositems`, `entregas`, `compras`, `financiacion`, `historia`, `pedidosrevisiones` (+ items). No hay tabla de pagos ligada directo al pedido.
+- «Días parado» = días corridos desde `pedidos.FechaModificacion`. Implementación: `backend/tactica_pendientes.py` (solo SELECT con NOLOCK).

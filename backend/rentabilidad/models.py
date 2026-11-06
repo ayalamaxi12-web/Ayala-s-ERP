@@ -648,3 +648,37 @@ class MlLoteCache(Base):
     clave: Mapped[str] = mapped_column(String(40), primary_key=True)  # sha1 de la clave de lectura
     obtenido_en: Mapped[datetime] = mapped_column(DateTime, index=True)
     payload: Mapped[list] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))
+
+
+class TacticaPendienteCorrida(Base):
+    """Una corrida diaria de la alerta de pedidos pendientes de Táctica (una por fecha). `estado` ok | error. Ver `tactica_pendientes.py`."""
+
+    __tablename__ = "tactica_pendiente_corrida"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    fecha: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    ejecutada_en: Mapped[datetime] = mapped_column(DateTime)
+    estado: Mapped[str] = mapped_column(String(8))
+    total_pendientes: Mapped[int] = mapped_column(Integer, default=0)  # todos los pedidos en estado Pendiente ese día
+    parados: Mapped[int] = mapped_column(Integer, default=0)  # los que llevan 3 días o más sin movimiento (los de la alerta)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class TacticaPendiente(Base):
+    """Un pedido pendiente parado, en una corrida. El historial de un pedido es el conjunto de sus filas por fecha."""
+
+    __tablename__ = "tactica_pendiente"
+    __table_args__ = (UniqueConstraint("fecha", "nro_pedido", name="uq_tactica_pendiente_dia_pedido"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    fecha: Mapped[date] = mapped_column(Date, index=True)
+    nro_pedido: Mapped[int] = mapped_column(Integer, index=True)
+    cliente: Mapped[str] = mapped_column(String(255), default="")
+    vendedor: Mapped[str] = mapped_column(String(120), default="")
+    monto: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    moneda: Mapped[str] = mapped_column(String(8), default="")
+    skus: Mapped[str] = mapped_column(Text, default="")
+    dias_parado: Mapped[int] = mapped_column(Integer)
+    ultimo_movimiento: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    creado: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    nivel: Mapped[str] = mapped_column(String(16))  # activar | cerrar_o_anular
