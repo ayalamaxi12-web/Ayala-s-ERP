@@ -5914,7 +5914,7 @@ function ofmRender(){
     let margen=null;
     if(f._costoUnitSinIva!=null){
       const costoARS=f._costoUnitSinIva*tc;
-      margen=!tc?null:ofmMargenAt(f.precio_oferta,f._ivaFactor,costoARS,f.domain_id,f.cuotas_ofrecidas);
+      margen=!tc?null:ofmMargenAt(f.precio_oferta,f._ivaFactor,costoARS,f.domain_id,f.cuotas_ofrecidas,ofmEnvioRealDe(f));
     }
     // Contra precio_oferta (lo que paga el cliente), NO precio_normal --
     // el tachado se infla a propósito como "teatro" para mostrar más
@@ -6881,8 +6881,10 @@ function ayalaCoreMargenAt(precio,f){
 // 4 lugares que simulaban margen no repiten la rama. `costoARS` lo sigue
 // calculando cada llamador (lo usa también para su propio texto de
 // desglose fuera de acá).
+// Envío real de la última venta de la publicación (lo que ya muestra el aviso «Envío real…»): gratis → ese monto; sin envío gratis → 0; sin dato → null (regla por umbral).
+function ofmEnvioRealDe(f){const c=f&&f.costo_envio_real;if(!c)return null;return c.cost_type==='free'?(Number(c.costo_envio_real)||0):0;}
 function margenParaFila(f,precio,costoARS,domainId,cuotasOfrecidas){
-  return f._ayalaCoreMotor?ayalaCoreMargenAt(precio,f):ofmMargenAt(precio,f._ivaFactor,costoARS,domainId,cuotasOfrecidas);
+  return f._ayalaCoreMotor?ayalaCoreMargenAt(precio,f):ofmMargenAt(precio,f._ivaFactor,costoARS,domainId,cuotasOfrecidas,ofmEnvioRealDe(f));
 }
 const AC_COND_ORDEN=['contado','reducida','3','6','9','12'];
 // Reemplazado 2026-09-04: antes calculaba la renta por escalada
