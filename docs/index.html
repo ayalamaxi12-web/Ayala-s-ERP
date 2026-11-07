@@ -6063,6 +6063,15 @@ async function ofmCargarPromociones(itemId){
   }catch(e){if(cont)cont.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
 }
 // ══ Panel «Gestionar» de una publicación (Precios y ofertas ML): una pestaña por tarea, textos cortos, desglose plegado. Mismos ids y mismas cuentas que antes. ══
+// Cuotas con las que se simula el margen del panel (por publicación): por defecto las que la publicación ya ofrece; contado = 0. Solo simulación: no cambia el precio ni escribe nada.
+let OFG_CUOTAS={};
+function ofgCuotas(itemId){const f=ofmFilaPorId[itemId];const v=OFG_CUOTAS[itemId];return(v===undefined?(f&&f.cuotas_ofrecidas):v)||null;}
+function ofgSetCuotas(itemId,v){OFG_CUOTAS[itemId]=parseInt(v,10)||0;ofmSimularCampana(itemId);ofmSimularActivar(itemId);if(qs('ofm-pp-margen-'+itemId))ofmSimularPoner(itemId);}
+function ofgCuotasSelHtml(f,itemId){
+  if(f._ayalaCoreMotor)return'';const cur=ofgCuotas(itemId)||0;
+  const op=[[0,'Contado'],...Object.keys(ML_CUOTAS.planes).map(k=>[+k,k+' cuotas'])].map(([v,t])=>`<option value="${v}" ${v===cur?'selected':''}>${t}</option>`).join('');
+  return `<label class="ofg-dato" title="Con cuántas cuotas se calcula el margen de abajo (solo simulación)"><span>Margen en</span><select class="fi" style="padding:0 4px;font-size:12px;height:22px" onchange="ofgSetCuotas('${itemId}',this.value)">${op}</select></label>`;
+}
 let OFG_TAB={};   // pestaña abierta por publicación (se conserva si el panel se vuelve a dibujar)
 const OFG_TABS=[['trad','Oferta tradicional'],['desc','Descuento propio'],['precio','Poner precio'],['promos','Promociones']];
 function ofgTab(itemId,tab){
@@ -6139,7 +6148,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     .map(([t,v])=>`<span class="ofg-dato"><span>${t}</span><b>${ofgPesos(v||0)}</b></span>`).join('');
 
   cont.innerHTML=`<div class="ofg">
-    <div class="ofg-cab"><div><h3 class="ofg-tit">${acEsc(f.titulo||itemId)}</h3><div class="ofg-sub">${acEsc(itemId)} · SKU ${acEsc(f.sku||'—')} · ${etiquetaCuenta(f.cuenta)}</div></div><div class="ofg-datos">${chips}</div></div>
+    <div class="ofg-cab"><div><h3 class="ofg-tit">${acEsc(f.titulo||itemId)}</h3><div class="ofg-sub">${acEsc(itemId)} · SKU ${acEsc(f.sku||'—')} · ${etiquetaCuenta(f.cuenta)}</div></div><div class="ofg-datos">${chips}${ofgCuotasSelHtml(f,itemId)}</div></div>
     <div class="ofg-tabs" role="tablist" aria-label="Qué querés hacer con esta publicación" onkeydown="ofgTabKey(event,'${itemId}')">${tabs}</div>
     ${panel('trad',`<p class="ofg-lead">Mete la publicación en tu campaña mensual con el precio del PM como precio final; el tachado se calcula con el descuento que pongas.</p>
       <div class="ofg-notas">${notas.join('')}</div>
@@ -6188,7 +6197,7 @@ function ofmPonerCalc(itemId){
   if(f._costoUnitSinIva==null)return{f,precio,m:null,motivo:`Sin costo/IVA: margen sin dato (SKU: ${acEsc(f.sku||'sin SKU')}).`};
   const tc=ofmTc();if(!tc)return{f,precio,m:null,motivo:'Sin TC del BNA: margen sin dato.'};
   const costoARS=f._costoUnitSinIva*tc;
-  const m=margenParaFila(f,precio,costoARS,f.domain_id,null);
+  const m=margenParaFila(f,precio,costoARS,f.domain_id,ofgCuotas(itemId));
   return{f,precio,m,costoARS,tc,bajo:m.margenPct!==null&&m.margenPct*100<OFM.umbral};
 }
 function ofmSimularPoner(itemId){
@@ -6237,7 +6246,7 @@ function ofmSimularActivar(itemId){
   if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}).`);return;}
   const tc=ofmTc();if(!tc){out.innerHTML=av+ofgSinMargen(f,'Sin TC del BNA (ni guardado): no se puede simular el margen.');return;}
   const costoARS=f._costoUnitSinIva*tc;
-  out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,null),costoARS,tc);
+  out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,ofgCuotas(itemId)),costoARS,tc);
 }
 async function ofmConfirmarActivar(itemId){
   const operador=ofmRequireOperador();if(!operador)return;
@@ -6249,7 +6258,7 @@ async function ofmConfirmarActivar(itemId){
   let margenPct=null,bajoUmbral=false;
   if(f._costoUnitSinIva!=null&&ofmTc()){
     const tc=ofmTc();
-    const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
+    const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,ofgCuotas(itemId));
     margenPct=m.margenPct;bajoUmbral=margenPct!==null&&margenPct*100<OFM.umbral;
   }
   const margenTxt=margenPct!==null?(margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)';
@@ -6292,7 +6301,7 @@ function ofmSimularCampana(itemId){
   if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}).`);return;}
   const tc=ofmTc();if(!tc){out.innerHTML=av+ofgSinMargen(f,'Sin TC del BNA (ni guardado): no se puede simular el margen.');return;}
   const costoARS=f._costoUnitSinIva*tc;
-  out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,null),costoARS,tc);
+  out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,ofgCuotas(itemId)),costoARS,tc);
 }
 // Pedido explícito de Maxx 2026-09-01: cuando ML rechaza por credibilidad
 // y devuelve un techo real (`techo_acreditado_ml`), no es un error mudo --
@@ -6314,7 +6323,7 @@ async function ofmConfirmarCampana(itemId,opts){
   const margenEn=(precio)=>{
     if(f._costoUnitSinIva==null)return{pct:null,txt:'sin dato (falta costo/IVA)'};
     const tc=ofmTc();if(!tc)return{pct:null,txt:'sin dato (falta el TC del BNA)'};
-    const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,null);
+    const m=margenParaFila(f,precio,f._costoUnitSinIva*tc,f.domain_id,ofgCuotas(itemId));
     return{pct:m.margenPct,txt:m.margenPct!==null?(m.margenPct*100).toFixed(1)+'%':'sin dato (falta costo/IVA de Táctica)'};
   };
   const {pct:margenPct,txt:margenTxt}=margenEn(precioPm);
