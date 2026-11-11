@@ -912,6 +912,17 @@ async def tactica_pedidos_explorar(tabla: str | None = None):
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"No se pudo consultar Táctica (¿túnel Tailscale / VPN / subnet router caído?): {e}")
 
+@app.get("/tactica/pedidos/valores")
+async def tactica_pedidos_valores(columna: str = "Escenario"):
+    """Valores distintos de una columna de `pedidos` (p. ej. «Escenario») con su cantidad y un número de pedido de ejemplo. Solo lectura, NOLOCK; protegido con `X-ERP-Key`."""
+    import tactica_pedidos
+    try:
+        return await run_in_threadpool(tactica_pedidos.informe_valores, columna)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"No se pudo consultar Táctica (¿túnel Tailscale / VPN / subnet router caído?): {e}")
+
 @app.post("/tactica/pendientes/correr")
 async def tactica_pendientes_correr():
     """Corrida diaria de la alerta de pedidos pendientes de Táctica: consulta (solo lectura, NOLOCK) y GUARDA el resultado del día con historial por pedido.
