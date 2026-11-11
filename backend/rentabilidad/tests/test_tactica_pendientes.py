@@ -141,3 +141,20 @@ def test_mail_resumen_por_vendedor_atraso_viejo_y_avisos(db_session):
     detalle = t[: t.index("ATRASO VIEJO")]
     assert "#2000" in detalle and "#2001" not in detalle and "#2002" not in detalle           # los de más de 30 días no se listan en el mail
     assert [f["atraso_viejo"] for f in m["filas"]].count(True) == 2
+
+
+def test_mail_aparta_a_maxi_y_las_notas_de_credito_y_las_pone_en_su_grupo(db_session):
+    from decimal import Decimal
+    _guardar(db_session, [(10, "Laura", Decimal(100), "A"), (12, "Maximiliano Ayala", Decimal(5), "B"), (9, "jacqueline romero", Decimal(0), "C"),
+                          (8, "Jacqueline  Romero", Decimal(0), "D"), (7, "Mariannys Rodriguez", Decimal(0), "E"), (4, "Maca", Decimal(1), "F")])
+    m = tp.armar_mail(db_session, HOY)
+    t = m["texto"]
+    assert "parados 3 días o más: 2 (cerrar o anular: 1 · activar: 1)" in t                  # solo Laura y Maca cuentan arriba
+    assert "Aparte, no cuentan arriba: jacqueline romero 2 · Mariannys Rodriguez 1 · Maximiliano Ayala 1" in t
+    detalle = t[: t.index("El detalle completo")]
+    assert "#2000" in detalle and "#2005" in detalle and "#2001" not in detalle and "#2002" not in detalle  # las apartadas no se listan
+    assert "5 pedidos" not in m["asunto"] and "2 pedidos" in m["asunto"]
+    grupos = {f["vendedor"]: f["grupo"] for f in m["filas"]}
+    assert grupos["Maximiliano Ayala"] == "propios" and grupos["jacqueline romero"] == "notas_credito"
+    assert grupos["Jacqueline  Romero"] == "notas_credito" and grupos["Mariannys Rodriguez"] == "notas_credito" and grupos["Laura"] == "pendientes"
+    assert len(m["filas"]) == 6                                                              # el Sheet recibe TODAS

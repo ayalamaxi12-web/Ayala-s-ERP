@@ -21,6 +21,10 @@ MONEDAS = {1: "ARS", 2: "USD", 3: "EUR", 4: "CNY"}
 LOTE = 400
 MAX_FILAS_GRUPO = 40      # tope de líneas de detalle POR GRUPO en el mail (el detalle completo va al Sheet por n8n)
 DIAS_VIEJO = 30           # más de esto: «atraso viejo», aparte, solo resumido
+# Vendedores cuyos pedidos NO son el foco del mail (pedido de Maxx, 2026-11-11): se avisan solo con su cantidad y van a su propia pestaña del Sheet.
+# Clave: nombre en minúsculas y sin espacios de más. «notas_credito»: se cargan como pedido pero son notas de crédito (probable).
+VENDEDORES_APARTE = {"maximiliano ayala": "propios", "jacqueline romero": "notas_credito", "mariannys rodriguez": "notas_credito"}
+GRUPO_PRINCIPAL = "pendientes"
 
 SQL_PEDIDOS = (
     "SELECT p.Numero AS nro, p.FechaCreacion AS creado, p.FechaModificacion AS ultimo, p.Total AS total, p.NroMoneda AS moneda, p.RecID AS recid, "
@@ -132,6 +136,10 @@ def _linea(p) -> str:
     return f"  #{p.nro_pedido} · {p.dias_parado} d · {p.cliente or '(sin cliente)'} · {p.vendedor or '(sin vendedor)'} · {_monto(p)} · {skus or '(sin ítems)'} · último mov. {ult}"
 
 
+def grupo_de(vendedor: str) -> str:
+    return VENDEDORES_APARTE.get(" ".join((vendedor or "").lower().split()), GRUPO_PRINCIPAL)
+
+
 def _es_preventa(p) -> bool:
     return any(c.strip().upper().startswith("PV-") for c in (p.skus or "").split(",") if c.strip())
 
@@ -143,6 +151,13 @@ def _por_vendedor(filas) -> list[str]:
         c[0 if p.nivel == "cerrar_o_anular" else 1] += 1
     orden = sorted(cuenta.items(), key=lambda kv: (-kv[1][0], -kv[1][1], kv[0]))
     return [f"  {v}: {c[0] + c[1]} (cerrar {c[0]} · activar {c[1]})" for v, c in orden]
+
+
+def _filas_out(filas) -> list[dict]:
+    """TODAS las filas (también las apartadas) con su `grupo`: n8n las reparte en pestañas según ese campo."""
+    return [{"nro_pedido": p.nro_pedido, "cliente": p.cliente, "vendedor": p.vendedor, "monto": float(p.monto), "moneda": p.moneda, "skus": p.skus,
+             "dias_parado": p.dias_parado, "ultimo_movimiento": p.ultimo_movimiento.isoformat() if p.ultimo_movimiento else None, "nivel": p.nivel,
+             "atraso_viejo": p.dias_parado > DIAS_VIEJO, "grupo": grupo_de(p.vendedor)} for p in filas]
 
 
 def armar_mail(db, fecha: date | None = None) -> dict:
@@ -160,13 +175,24 @@ def armar_mail(db, fecha: date | None = None) -> dict:
             texto += f"\n\nÚltimo intento ({corrida.ejecutada_en:%H:%M}): {corrida.error_msg}"
         return {"hay_datos": False, "fecha": fecha.isoformat(), "asunto": "Táctica · SIN DATOS hoy (revisar la PC o la VPN)", "texto": texto, "filas": []}
     filas = (db.query(TacticaPendiente).filter(TacticaPendiente.fecha == fecha).order_by(TacticaPendiente.dias_parado.desc(), TacticaPendiente.nro_pedido).all())
+    aparte = [p for p in filas if grupo_de(p.vendedor) != GRUPO_PRINCIPAL]
+    todas = filas
+    filas = [p for p in todas if grupo_de(p.vendedor) == GRUPO_PRINCIPAL]
     cerrar = [p for p in filas if p.nivel == "cerrar_o_anular"]
     activar = [p for p in filas if p.nivel == "activar"]
     cab = (f"Pedidos pendientes de Táctica · {fecha:%Y-%m-%d}\n"
            f"Pendientes en total: {corrida.total_pendientes} · parados {DIAS_ACTIVAR} días o más: {len(filas)} "
            f"(cerrar o anular: {len(cerrar)} · activar: {len(activar)})")
+    if aparte:
+        cuenta: dict[str, list] = {}
+        for p in aparte:
+            nombre = " ".join((p.vendedor or "(sin vendedor)").split())      # mismo nombre aunque cambien mayúsculas o espacios
+            c = cuenta.setdefault(nombre.lower(), [nombre, 0])
+            c[1] += 1
+        cab += "\nAparte, no cuentan arriba: " + " · ".join(f"{v} {n}" for _, (v, n) in sorted(cuenta.items())) + " (están en sus pestañas del Sheet)."
     if not filas:
-        return {"hay_datos": True, "fecha": fecha.isoformat(), "asunto": "Táctica · sin pedidos pendientes parados", "texto": cab + "\n\nNo hay pedidos pendientes parados.", "filas": []}
+        texto = cab + "\n\nNo hay pedidos pendientes parados."
+        return {"hay_datos": True, "fecha": fecha.isoformat(), "asunto": "Táctica · sin pedidos pendientes parados", "texto": texto, "filas": _filas_out(todas)}
     cerrar_reciente = [p for p in cerrar if p.dias_parado <= DIAS_VIEJO]
     viejos = [p for p in cerrar if p.dias_parado > DIAS_VIEJO]
     partes = [cab, "", "POR VENDEDOR", *_por_vendedor(filas)]
@@ -186,10 +212,7 @@ def armar_mail(db, fecha: date | None = None) -> dict:
         partes += ["", f"ATRASO VIEJO (más de {DIAS_VIEJO} días) · {len(viejos)}", *_por_vendedor(viejos), "  El detalle está en el Sheet."]
     partes += ["", "El detalle completo de todos los pedidos está en el Sheet."]
     asunto = f"Táctica · {len(filas)} pedidos pendientes parados ({len(cerrar)} para cerrar o anular)"
-    out = [{"nro_pedido": p.nro_pedido, "cliente": p.cliente, "vendedor": p.vendedor, "monto": float(p.monto), "moneda": p.moneda, "skus": p.skus,
-            "dias_parado": p.dias_parado, "ultimo_movimiento": p.ultimo_movimiento.isoformat() if p.ultimo_movimiento else None, "nivel": p.nivel,
-            "atraso_viejo": p.dias_parado > DIAS_VIEJO} for p in filas]
-    return {"hay_datos": True, "fecha": fecha.isoformat(), "asunto": asunto, "texto": "\n".join(partes), "filas": out}
+    return {"hay_datos": True, "fecha": fecha.isoformat(), "asunto": asunto, "texto": "\n".join(partes), "filas": _filas_out(todas)}
 
 
 def historial_pedido(db, nro: int) -> list[dict]:
