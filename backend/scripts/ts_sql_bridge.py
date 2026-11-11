@@ -42,6 +42,9 @@ def _conectar_via_socks5(destino: tuple[str, int]) -> socket.socket:
     if len(resp) < 2 or resp[1] != 0:
         codigo = resp[1] if len(resp) > 1 else "?"
         raise ConnectionError(f"SOCKS5 CONNECT rechazado (código={codigo})")
+    # El timeout de 10 s era solo para el saludo SOCKS5. Si se deja puesto, el relay corta cualquier consulta de SQL que tarde más de 10 s
+    # en contestar (síntoma: «Unexpected EOF from the server» / 20017 a los 10 s exactos).
+    s.settimeout(None)
     return s
 
 
