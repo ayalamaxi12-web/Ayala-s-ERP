@@ -74,9 +74,11 @@ def test_guardar_historial_y_mail(db_session):
     mail = tp.armar_mail(db_session, HOY)
     assert mail["hay_datos"] and "2 para cerrar o anular" in mail["asunto"]
     txt = mail["texto"]
-    assert txt.index("CERRAR O ANULAR") < txt.index("ACTIVAR")
-    assert txt.index("#1002") < txt.index("#1004") < txt.index("#1001")       # primero cerrar/anular, por días de mayor a menor; después activar
-    assert "USD 250" in txt and "SKU-C" in txt
+    assert "Parados 3 días o más: 3 (cerrar o anular: 2 · activar: 1)" in txt and "Pendientes en total: 363" in txt
+    assert "  Laura: 3 (cerrar 2 · activar 1) · ARS 2.000 · USD 250" in txt          # montos por moneda, sin mezclarlas
+    assert "#1002" not in txt and "SKU-C" not in txt                                 # el mail ya no trae el detalle de cada pedido
+    assert len(mail["filas"]) == 3                                                    # el Sheet recibe todos
+    assert "POR PM" not in txt                                                         # sin función de PM, no hay sección de PM
 
 
 def test_repetir_el_dia_reemplaza_y_conserva_otros_dias(db_session):
@@ -120,58 +122,58 @@ def _guardar(db, filas_extra, escenario="PREVENTA Pago Total"):
     tp.guardar_corrida(db, HOY, ped, 500)
 
 
-def test_mail_el_tope_es_por_grupo_y_activar_siempre_se_ve(db_session):
+def test_mail_resumen_por_vendedor_con_montos_y_atraso_viejo(db_session):
     from decimal import Decimal
-    _guardar(db_session, [(10, "Laura", Decimal(100), "A")] * (tp.MAX_FILAS_GRUPO + 15) + [(4, "Maca", Decimal(100), "B")] * 3)
+    _guardar(db_session, [(8, "Laura", Decimal(100), "A"), (40, "Laura", Decimal(250), "B"), (4, "Maca", Decimal(50), "C"), (5, "Maca", Decimal(0), "D")])
     m = tp.armar_mail(db_session, HOY)
     t = m["texto"]
-    assert "ACTIVAR (3 a 6 días) · 3" in t and t.count("  #") == tp.MAX_FILAS_GRUPO + 3          # 40 de cerrar + los 3 de activar
-    assert "… y 15 más (están en el Sheet)." in t
-    assert len(m["filas"]) == tp.MAX_FILAS_GRUPO + 18                                          # el Sheet recibe TODOS
+    assert "  Laura: 2 (cerrar 2 · activar 0) · ARS 350" in t
+    assert "  Maca: 2 (cerrar 0 · activar 2) · ARS 50" in t
+    assert t.index("  Laura:") < t.index("  Maca:")                                  # primero quien más tiene para cerrar
+    assert "de los parados, con más de 30 días: 1" in t
+    assert [f["atraso_viejo"] for f in m["filas"]].count(True) == 1
 
 
-def test_mail_resumen_por_vendedor_atraso_viejo_y_avisos(db_session):
-    from decimal import Decimal
-    _guardar(db_session, [(8, "Laura", Decimal(100), "A"), (40, "Laura", Decimal(100), "B"), (90, "Maca", Decimal(0), "X"), (4, "Maca", Decimal(50), "C")])
-    m = tp.armar_mail(db_session, HOY)
-    t = m["texto"]
-    assert "  Laura: 2 (cerrar 2 · activar 0)" in t and "  Maca: 2 (cerrar 1 · activar 1)" in t
-    assert "Para revisar: 1 con monto 0" in t
-    assert "ATRASO VIEJO (más de 30 días) · 2" in t
-    detalle = t[: t.index("ATRASO VIEJO")]
-    assert "#2000" in detalle and "#2001" not in detalle and "#2002" not in detalle           # los de más de 30 días no se listan en el mail
-    assert [f["atraso_viejo"] for f in m["filas"]].count(True) == 2
-
-
-def test_mail_aparta_a_maxi_y_las_notas_de_credito_y_las_pone_en_su_grupo(db_session):
+def test_mail_aparta_a_maxi_las_notas_de_credito_y_las_preventas(db_session):
     from decimal import Decimal
     _guardar(db_session, [(10, "Laura", Decimal(100), "A"), (12, "Maximiliano Ayala", Decimal(5), "B"), (9, "jacqueline romero", Decimal(0), "C"),
-                          (8, "Jacqueline  Romero", Decimal(0), "D"), (7, "Mariannys Rodriguez", Decimal(0), "E"), (4, "Maca", Decimal(1), "F")])
+                          (8, "Jacqueline  Romero", Decimal(0), "D"), (7, "Mariannys Rodriguez", Decimal(0), "E"), (4, "Maca", Decimal(1), "F"),
+                          (9, "Laura", Decimal(7), "PV-NOV26-GL-5000, ENVIOS-BSAS-C1"), (8, "Maximiliano Ayala", Decimal(1), "PV-Y")])
     m = tp.armar_mail(db_session, HOY)
     t = m["texto"]
-    assert "parados 3 días o más: 2 (cerrar o anular: 1 · activar: 1)" in t                  # solo Laura y Maca cuentan arriba
-    assert "Aparte, no cuentan arriba: jacqueline romero 2 · Mariannys Rodriguez 1 · Maximiliano Ayala 1" in t
-    detalle = t[: t.index("El detalle completo")]
-    assert "#2000" in detalle and "#2005" in detalle and "#2001" not in detalle and "#2002" not in detalle  # las apartadas no se listan
-    assert "5 pedidos" not in m["asunto"] and "2 pedidos" in m["asunto"]
-    grupos = {f["vendedor"]: f["grupo"] for f in m["filas"]}
-    assert grupos["Maximiliano Ayala"] == "propios" and grupos["jacqueline romero"] == "notas_credito"
-    assert grupos["Jacqueline  Romero"] == "notas_credito" and grupos["Mariannys Rodriguez"] == "notas_credito" and grupos["Laura"] == "pendientes"
-    assert len(m["filas"]) == 6                                                              # el Sheet recibe TODAS
-
-
-def test_preventas_van_a_su_grupo_y_el_vendedor_apartado_tiene_prioridad(db_session):
-    from decimal import Decimal
-    _guardar(db_session, [(10, "Laura", Decimal(100), "A"), (12, "Laura", Decimal(5), "PV-NOV26-GL-5000, ENVIOS-BSAS-C1"), (9, "Maca", Decimal(1), "pv-x"),
-                          (8, "Maximiliano Ayala", Decimal(1), "PV-Y")])
-    m = tp.armar_mail(db_session, HOY)
-    t = m["texto"]
-    assert "parados 3 días o más: 1 (cerrar o anular: 1 · activar: 0)" in t                    # solo el pedido «A» cuenta arriba
-    assert "Aparte, no cuentan arriba: Maximiliano Ayala 1 · preventas (PV-) 2" in t
+    assert "Parados 3 días o más: 2 (cerrar o anular: 1 · activar: 1)" in t              # solo Laura «A» y Maca cuentan arriba
+    assert "Aparte, no cuentan arriba: jacqueline romero 2 · Mariannys Rodriguez 1 · Maximiliano Ayala 2 · preventas (PV-) 1" in t
+    assert "  Maximiliano Ayala:" not in t and "  jacqueline romero:" not in t          # no aparecen en el resumen por vendedor
+    assert "2 pedidos" in m["asunto"]
     grupos = {f["skus"]: f["grupo"] for f in m["filas"]}
-    assert grupos["A"] == "pendientes" and grupos["pv-x"] == "preventas" and grupos["PV-NOV26-GL-5000, ENVIOS-BSAS-C1"] == "preventas"
-    assert grupos["PV-Y"] == "propios"                                                         # Maxi tiene prioridad sobre preventa
+    assert grupos["A"] == "pendientes" and grupos["B"] == "propios" and grupos["C"] == "notas_credito" and grupos["E"] == "notas_credito"
+    assert grupos["PV-NOV26-GL-5000, ENVIOS-BSAS-C1"] == "preventas" and grupos["PV-Y"] == "propios"   # Maxi tiene prioridad sobre preventa
+    assert len(m["filas"]) == 8                                                           # el Sheet recibe TODAS
     assert tp.es_preventa("PV-A") and tp.es_preventa("X, pv-b") and not tp.es_preventa("TN1060COMP, ENVIOS-CABA") and not tp.es_preventa("")
+
+
+def test_mail_por_pm_con_monto_y_el_pm_va_a_las_filas(db_session):
+    from decimal import Decimal
+    pms = {"A1": "Laura", "A2": "Laura", "B1": "Matias", "C1": "SIN PM"}
+    _guardar(db_session, [(10, "Nico", Decimal(100), "A1, A2, ENVIOS-CABA"), (9, "Nico", Decimal(50), "B1, A1, A2"), (5, "Pame", Decimal(30), "B1"),
+                          (4, "Pame", Decimal(20), "C1"), (4, "Pame", Decimal(10), "ENVIOS-CABA")])
+    m = tp.armar_mail(db_session, HOY, pm_fn=lambda sku: pms.get(sku))
+    t = m["texto"]
+    assert "POR PM (pedidos · monto" in t
+    assert "  Laura: 2 (cerrar 2 · activar 0) · ARS 150" in t          # gana el PM con más ítems (los ENVIOS no cuentan)
+    assert "  Matias: 1 (cerrar 0 · activar 1) · ARS 30" in t
+    assert "  Sin PM: 2 (cerrar 0 · activar 2) · ARS 30" in t           # sin SKU con PM (o solo envío)
+    assert {f["skus"]: f["pm"] for f in m["filas"]}["B1, A1, A2"] == "Laura"
+
+
+def test_si_falla_la_planilla_de_pm_el_mail_sale_igual_sin_esa_seccion(db_session):
+    from decimal import Decimal
+    _guardar(db_session, [(10, "Nico", Decimal(100), "A1")])
+    def roto(sku):
+        raise RuntimeError("Sheets caído")
+    m = tp.armar_mail(db_session, HOY, pm_fn=roto)
+    assert m["hay_datos"] and "POR VENDEDOR" in m["texto"] and "POR PM: no disponible hoy" in m["texto"]
+    assert m["filas"][0]["pm"] == ""
 
 
 def test_estado_pago_segun_el_escenario():
@@ -190,5 +192,4 @@ def test_el_escenario_se_trae_se_guarda_y_sale_en_el_mail_y_en_las_filas(db_sess
     tp.guardar_corrida(db_session, HOY, pedidos, total)
     assert db_session.query(TacticaPendiente).filter_by(fecha=HOY).first().escenario == "VENTAS Esperando Pago"
     m = tp.armar_mail(db_session, HOY)
-    assert "· Esperando pago ·" in m["texto"]                                              # etiqueta corta en cada línea del detalle
     assert all(f["escenario"] == "VENTAS Esperando Pago" and f["estado_pago"] == "Esperando pago" for f in m["filas"])

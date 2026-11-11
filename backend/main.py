@@ -959,8 +959,15 @@ async def tactica_pendientes_mail(fecha: str | None = None):
         f = _date.fromisoformat(fecha) if fecha else None
     except ValueError:
         raise HTTPException(400, "fecha debe ser AAAA-MM-DD")
-    with sesion() as db:
-        return tactica_pendientes.armar_mail(db, f)
+    def _pm_por_sku():
+        """SKU -> PM desde la planilla de categorías (una sola lectura; si falla, el mail sale sin la sección de PM)."""
+        from rentabilidad import api as rapi
+        prov = rapi.ClasificacionProvider(fetch_fn=rapi._fetch_fn_con_cache())
+        return lambda sku: prov.clasificacion_ecom(sku).get("pm")
+    def _armar():
+        with sesion() as db:
+            return tactica_pendientes.armar_mail(db, f, _pm_por_sku())
+    return await run_in_threadpool(_armar)
 
 
 @app.get("/tactica/pendientes/historial")
