@@ -109,3 +109,35 @@ def test_sin_pedidos_parados(db_session):
     tp.guardar_corrida(db_session, HOY, [], 120)
     m = tp.armar_mail(db_session, HOY)
     assert m["hay_datos"] and "sin pedidos pendientes parados" in m["asunto"]
+
+
+def _guardar(db, filas_extra):
+    ped = []
+    for i, (dias, vend, monto, skus) in enumerate(filas_extra):
+        ult = datetime(2026, 11, 6) - __import__("datetime").timedelta(days=dias)
+        ped.append({"nro": 2000 + i, "cliente": "C", "vendedor": vend, "monto": monto, "moneda": "ARS", "skus": skus, "ultimo": ult, "creado": ult,
+                    "dias": dias, "nivel": tp.nivel_de(dias)})
+    tp.guardar_corrida(db, HOY, ped, 500)
+
+
+def test_mail_el_tope_es_por_grupo_y_activar_siempre_se_ve(db_session):
+    from decimal import Decimal
+    _guardar(db_session, [(10, "Laura", Decimal(100), "A")] * (tp.MAX_FILAS_GRUPO + 15) + [(4, "Maca", Decimal(100), "B")] * 3)
+    m = tp.armar_mail(db_session, HOY)
+    t = m["texto"]
+    assert "ACTIVAR (3 a 6 días) · 3" in t and t.count("  #") == tp.MAX_FILAS_GRUPO + 3          # 40 de cerrar + los 3 de activar
+    assert "… y 15 más (están en el Sheet)." in t
+    assert len(m["filas"]) == tp.MAX_FILAS_GRUPO + 18                                          # el Sheet recibe TODOS
+
+
+def test_mail_resumen_por_vendedor_atraso_viejo_y_avisos(db_session):
+    from decimal import Decimal
+    _guardar(db_session, [(8, "Laura", Decimal(100), "A"), (40, "Laura", Decimal(100), "B"), (90, "Maca", Decimal(0), "PV-X"), (4, "Maca", Decimal(50), "C")])
+    m = tp.armar_mail(db_session, HOY)
+    t = m["texto"]
+    assert "  Laura: 2 (cerrar 2 · activar 0)" in t and "  Maca: 2 (cerrar 1 · activar 1)" in t
+    assert "1 con monto 0" in t and "1 con SKU de preventa (PV-)" in t
+    assert "ATRASO VIEJO (más de 30 días) · 2" in t
+    detalle = t[: t.index("ATRASO VIEJO")]
+    assert "#2000" in detalle and "#2001" not in detalle and "#2002" not in detalle           # los de más de 30 días no se listan en el mail
+    assert [f["atraso_viejo"] for f in m["filas"]].count(True) == 2
