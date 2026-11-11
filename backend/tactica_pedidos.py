@@ -187,3 +187,33 @@ def informe_exploracion(tabla_pedidos: str | None = None) -> dict:
     finally:
         con.close()
     return {"informe": "\n".join(inf.lineas)}
+
+
+def valores_columna(cur, columna: str, tabla_nombre: str = "pedidos", esquema: str = "dbo", maximo: int = 60) -> dict:
+    """Valores distintos de UNA columna de `pedidos` (solo lectura, NOLOCK): cuántos pedidos tiene cada valor (en total y pendientes) y un número
+    de pedido de ejemplo para buscarlo en Táctica. Sirve para entender una columna como «Escenario» antes de usarla (p. ej. el estado de pago).
+    No devuelve clientes ni montos. Si la columna no existe en la tabla, lo dice y lista dónde aparece una columna con ese nombre."""
+    ident(columna), ident(tabla_nombre), ident(esquema)         # valida los nombres (solo letras, números y _)
+    _, cols = consulta(cur, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s", (esquema, tabla_nombre))
+    real = next((c[0] for c in cols if c[0].lower() == columna.lower()), None)
+    if real is None:
+        _, otras = consulta(cur, "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME = %s ORDER BY TABLE_NAME", (columna,))
+        return {"existe": False, "columna": columna, "tabla": f"{esquema}.{tabla_nombre}",
+                "aparece_en": [f"{e}.{t}" for e, t in otras][:40], "columnas_de_la_tabla": sorted(c[0] for c in cols)}
+    _, n = consulta(cur, f"SELECT COUNT(DISTINCT {ident(real)}) FROM {tabla(tabla_nombre, esquema)}")
+    distintos = int(n[0][0])
+    if distintos > maximo:
+        return {"existe": True, "columna": real, "tabla": f"{esquema}.{tabla_nombre}", "distintos": distintos,
+                "valores": [], "nota": f"Más de {maximo} valores distintos: no parece una columna de categorías."}
+    cs, filas = consulta(cur, f"SELECT {ident(real)} AS valor, COUNT(*) AS pedidos, SUM(CASE WHEN Estado = 0 THEN 1 ELSE 0 END) AS pendientes, "
+                              f"MAX(Numero) AS ejemplo_numero FROM {tabla(tabla_nombre, esquema)} GROUP BY {ident(real)} ORDER BY COUNT(*) DESC")
+    valores = [{"valor": (str(v).strip() if v is not None else None), "pedidos": int(c), "pendientes": int(pe or 0), "ejemplo_numero": ej} for v, c, pe, ej in filas]
+    return {"existe": True, "columna": real, "tabla": f"{esquema}.{tabla_nombre}", "distintos": distintos, "valores": valores}
+
+
+def informe_valores(columna: str) -> dict:
+    con, cur = conectar()
+    try:
+        return valores_columna(cur, columna)
+    finally:
+        con.close()
