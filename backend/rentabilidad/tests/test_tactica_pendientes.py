@@ -150,7 +150,7 @@ def test_mail_aparta_a_maxi_y_las_notas_de_credito_y_las_pone_en_su_grupo(db_ses
     m = tp.armar_mail(db_session, HOY)
     t = m["texto"]
     assert "parados 3 días o más: 2 (cerrar o anular: 1 · activar: 1)" in t                  # solo Laura y Maca cuentan arriba
-    assert "Aparte, no cuentan arriba: Mariannys Rodriguez 1 · Maximiliano Ayala 1 · jacqueline romero 2" in t
+    assert "Aparte, no cuentan arriba: jacqueline romero 2 · Mariannys Rodriguez 1 · Maximiliano Ayala 1" in t
     detalle = t[: t.index("El detalle completo")]
     assert "#2000" in detalle and "#2005" in detalle and "#2001" not in detalle and "#2002" not in detalle  # las apartadas no se listan
     assert "5 pedidos" not in m["asunto"] and "2 pedidos" in m["asunto"]

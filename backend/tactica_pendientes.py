@@ -184,11 +184,12 @@ def armar_mail(db, fecha: date | None = None) -> dict:
            f"Pendientes en total: {corrida.total_pendientes} · parados {DIAS_ACTIVAR} días o más: {len(filas)} "
            f"(cerrar o anular: {len(cerrar)} · activar: {len(activar)})")
     if aparte:
-        cuenta: dict[str, int] = {}
+        cuenta: dict[str, list] = {}
         for p in aparte:
-            nombre = " ".join((p.vendedor or "(sin vendedor)").split())      # mismo nombre aunque venga con espacios de más
-            cuenta[nombre] = cuenta.get(nombre, 0) + 1
-        cab += "\nAparte, no cuentan arriba: " + " · ".join(f"{v} {n}" for v, n in sorted(cuenta.items())) + " (están en sus pestañas del Sheet)."
+            nombre = " ".join((p.vendedor or "(sin vendedor)").split())      # mismo nombre aunque cambien mayúsculas o espacios
+            c = cuenta.setdefault(nombre.lower(), [nombre, 0])
+            c[1] += 1
+        cab += "\nAparte, no cuentan arriba: " + " · ".join(f"{v} {n}" for _, (v, n) in sorted(cuenta.items())) + " (están en sus pestañas del Sheet)."
     if not filas:
         texto = cab + "\n\nNo hay pedidos pendientes parados."
         return {"hay_datos": True, "fecha": fecha.isoformat(), "asunto": "Táctica · sin pedidos pendientes parados", "texto": texto, "filas": _filas_out(todas)}
