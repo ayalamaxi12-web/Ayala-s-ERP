@@ -25,10 +25,15 @@ DIAS_VIEJO = 30           # más de esto: «atraso viejo», aparte, solo resumid
 # Clave: nombre en minúsculas y sin espacios de más. «notas_credito»: se cargan como pedido pero son notas de crédito (probable).
 VENDEDORES_APARTE = {"maximiliano ayala": "propios", "jacqueline romero": "notas_credito", "mariannys rodriguez": "notas_credito"}
 GRUPO_PRINCIPAL = "pendientes"
+# «Estado de pago» según el Escenario del pedido (versión PROVISORIA, a validar con Cobranzas/Ventas: pedido de Maxx 2026-11-11). El Escenario es la etapa del circuito
+# (quién tiene el pedido), no un estado de pago puro: solo algunas etapas dicen algo del pago. Orden = prioridad; se busca el texto (en minúsculas) dentro del Escenario.
+REGLAS_PAGO = (("pago total", "Pagado"), ("pago parcial", "Pago parcial"), ("esperando pago", "Esperando pago"), ("pago enviado", "Pago a confirmar"),
+               ("pago recibido", "Pago a confirmar"), ("cobra autorizado", "Pagado"))
+PAGO_SIN_DATO = "Sin dato en Escenario"
 
 SQL_PEDIDOS = (
     "SELECT p.Numero AS nro, p.FechaCreacion AS creado, p.FechaModificacion AS ultimo, p.Total AS total, p.NroMoneda AS moneda, p.RecID AS recid, "
-    "f.RazonSocial AS cliente, u.Usuario AS vendedor "
+    "f.RazonSocial AS cliente, u.Usuario AS vendedor, p.Escenario AS escenario "
     f"FROM {tabla('pedidos', alias='p')} "
     f"LEFT JOIN {tabla('fiscal', alias='f')} ON f.RecID = p.IDFiscal "
     f"LEFT JOIN {tabla('usuarios', alias='u')} ON u.RecID = p.IDUsuarioVendedor "
@@ -60,7 +65,7 @@ def consultar_pendientes(cur, hoy: date) -> tuple[list[dict], int]:
         dias = (hoy - ultimo.date()).days if ultimo else 0
         if dias < DIAS_ACTIVAR:
             continue
-        pedidos.append({"recid": str(r["recid"]).strip(), "nro": int(r["nro"]), "cliente": str(r["cliente"] or "").strip(), "vendedor": str(r["vendedor"] or "").strip(),
+        pedidos.append({"recid": str(r["recid"]).strip(), "nro": int(r["nro"]), "cliente": str(r["cliente"] or "").strip(), "vendedor": str(r["vendedor"] or "").strip(), "escenario": str(r["escenario"] or "").strip(),
                         "monto": Decimal(str(round(float(r["total"] or 0), 2))), "moneda": MONEDAS.get(int(r["moneda"] or 1), str(r["moneda"])),
                         "ultimo": ultimo, "creado": r["creado"], "dias": dias, "nivel": nivel_de(dias), "skus": ""})
     # SKU de cada pedido, por lotes (solo lectura)
@@ -95,7 +100,7 @@ def guardar_corrida(db, fecha: date, pedidos: list[dict], total_pendientes: int,
     corrida.total_pendientes, corrida.parados = total_pendientes, len(pedidos)
     for p in pedidos:
         db.add(TacticaPendiente(fecha=fecha, nro_pedido=p["nro"], cliente=p["cliente"][:255], vendedor=p["vendedor"][:120], monto=p["monto"], moneda=p["moneda"],
-                                skus=p["skus"], dias_parado=p["dias"], ultimo_movimiento=p["ultimo"], creado=p["creado"], nivel=p["nivel"]))
+                                skus=p["skus"], dias_parado=p["dias"], ultimo_movimiento=p["ultimo"], creado=p["creado"], nivel=p["nivel"], escenario=p["escenario"][:120]))
     db.flush()
     return resumen(len(pedidos), total_pendientes, pedidos)
 
@@ -133,7 +138,16 @@ def _monto(p) -> str:
 def _linea(p) -> str:
     ult = p.ultimo_movimiento.strftime("%Y-%m-%d") if p.ultimo_movimiento else "?"
     skus = p.skus if len(p.skus) <= 90 else p.skus[:87] + "..."
-    return f"  #{p.nro_pedido} · {p.dias_parado} d · {p.cliente or '(sin cliente)'} · {p.vendedor or '(sin vendedor)'} · {_monto(p)} · {skus or '(sin ítems)'} · último mov. {ult}"
+    return (f"  #{p.nro_pedido} · {p.dias_parado} d · {p.cliente or '(sin cliente)'} · {p.vendedor or '(sin vendedor)'} · {_monto(p)} · {estado_pago_de(p.escenario)} · "
+            f"{skus or '(sin ítems)'} · último mov. {ult}")
+
+
+def estado_pago_de(escenario: str) -> str:
+    e = (escenario or "").strip().lower()
+    for texto, estado in REGLAS_PAGO:
+        if texto in e:
+            return estado
+    return PAGO_SIN_DATO
 
 
 def es_preventa(skus: str) -> bool:
@@ -162,7 +176,7 @@ def _filas_out(filas) -> list[dict]:
     """TODAS las filas (también las apartadas) con su `grupo`: n8n las reparte en pestañas según ese campo."""
     return [{"nro_pedido": p.nro_pedido, "cliente": p.cliente, "vendedor": p.vendedor, "monto": float(p.monto), "moneda": p.moneda, "skus": p.skus,
              "dias_parado": p.dias_parado, "ultimo_movimiento": p.ultimo_movimiento.isoformat() if p.ultimo_movimiento else None, "nivel": p.nivel,
-             "atraso_viejo": p.dias_parado > DIAS_VIEJO, "grupo": grupo_de(p.vendedor, p.skus)} for p in filas]
+             "atraso_viejo": p.dias_parado > DIAS_VIEJO, "grupo": grupo_de(p.vendedor, p.skus), "escenario": p.escenario or "", "estado_pago": estado_pago_de(p.escenario)} for p in filas]
 
 
 def armar_mail(db, fecha: date | None = None) -> dict:

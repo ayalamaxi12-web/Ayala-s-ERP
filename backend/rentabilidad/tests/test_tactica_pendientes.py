@@ -24,7 +24,7 @@ class Cur:
         elif "pedidositems" in sql:
             self.description = [("IDPedido",), ("Codigo",)]
         else:
-            self.description = [(c,) for c in ("nro", "creado", "ultimo", "total", "moneda", "recid", "cliente", "vendedor")]
+            self.description = [(c,) for c in ("nro", "creado", "ultimo", "total", "moneda", "recid", "cliente", "vendedor", "escenario")]
 
     def fetchall(self):
         if "COUNT(*)" in self.last:
@@ -34,8 +34,8 @@ class Cur:
         return self.pedidos
 
 
-def fila(nro, ultimo, recid, total=1000.0, moneda=1, cliente="ACME SA", vendedor="Laura", creado=datetime(2026, 10, 1)):
-    return (nro, creado, ultimo, total, moneda, recid, cliente, vendedor)
+def fila(nro, ultimo, recid, total=1000.0, moneda=1, cliente="ACME SA", vendedor="Laura", creado=datetime(2026, 10, 1), escenario="VENTAS Esperando Pago"):
+    return (nro, creado, ultimo, total, moneda, recid, cliente, vendedor, escenario)
 
 
 def cur_base():
@@ -111,12 +111,12 @@ def test_sin_pedidos_parados(db_session):
     assert m["hay_datos"] and "sin pedidos pendientes parados" in m["asunto"]
 
 
-def _guardar(db, filas_extra):
+def _guardar(db, filas_extra, escenario="PREVENTA Pago Total"):
     ped = []
     for i, (dias, vend, monto, skus) in enumerate(filas_extra):
         ult = datetime(2026, 11, 6) - __import__("datetime").timedelta(days=dias)
         ped.append({"nro": 2000 + i, "cliente": "C", "vendedor": vend, "monto": monto, "moneda": "ARS", "skus": skus, "ultimo": ult, "creado": ult,
-                    "dias": dias, "nivel": tp.nivel_de(dias)})
+                    "dias": dias, "nivel": tp.nivel_de(dias), "escenario": escenario})
     tp.guardar_corrida(db, HOY, ped, 500)
 
 
@@ -172,3 +172,23 @@ def test_preventas_van_a_su_grupo_y_el_vendedor_apartado_tiene_prioridad(db_sess
     assert grupos["A"] == "pendientes" and grupos["pv-x"] == "preventas" and grupos["PV-NOV26-GL-5000, ENVIOS-BSAS-C1"] == "preventas"
     assert grupos["PV-Y"] == "propios"                                                         # Maxi tiene prioridad sobre preventa
     assert tp.es_preventa("PV-A") and tp.es_preventa("X, pv-b") and not tp.es_preventa("TN1060COMP, ENVIOS-CABA") and not tp.es_preventa("")
+
+
+def test_estado_pago_segun_el_escenario():
+    casos = {"VENTAS Esperando Pago": "Esperando pago", "PREVENTA Esperando Pago": "Esperando pago", "PREVENTA Pago Total": "Pagado",
+             "PREVENTA Pago Parcial": "Pago parcial", "VENTAS Pago Enviado": "Pago a confirmar", "COBRA Pago Recibido Mostrador (NO FACTURAR) a Confirmar": "Pago a confirmar",
+             "COBRA Autorizado a Armar": "Pagado", "COBRA Autorizado": "Pagado", "DEPO Recibido": tp.PAGO_SIN_DATO, "FACTURAR Preventa": tp.PAGO_SIN_DATO,
+             "empty": tp.PAGO_SIN_DATO, "": tp.PAGO_SIN_DATO, None: tp.PAGO_SIN_DATO, "  ventas   ESPERANDO PAGO ": "Esperando pago"}
+    for escenario, esperado in casos.items():
+        assert tp.estado_pago_de(escenario) == esperado, escenario
+
+
+def test_el_escenario_se_trae_se_guarda_y_sale_en_el_mail_y_en_las_filas(db_session):
+    pedidos, total = tp.consultar_pendientes(cur_base(), HOY)
+    assert {p["escenario"] for p in pedidos} == {"VENTAS Esperando Pago"}
+    assert "p.Escenario AS escenario" in tp.SQL_PEDIDOS
+    tp.guardar_corrida(db_session, HOY, pedidos, total)
+    assert db_session.query(TacticaPendiente).filter_by(fecha=HOY).first().escenario == "VENTAS Esperando Pago"
+    m = tp.armar_mail(db_session, HOY)
+    assert "· Esperando pago ·" in m["texto"]                                              # etiqueta corta en cada línea del detalle
+    assert all(f["escenario"] == "VENTAS Esperando Pago" and f["estado_pago"] == "Esperando pago" for f in m["filas"])

@@ -682,3 +682,4 @@ class TacticaPendiente(Base):
     ultimo_movimiento: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     creado: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     nivel: Mapped[str] = mapped_column(String(16))  # activar | cerrar_o_anular
+    escenario: Mapped[str] = mapped_column(String(120), default="", server_default="")  # pedidos.Escenario de Táctica: etapa del circuito (VENTAS / COBRA / DEPO…)
