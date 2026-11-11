@@ -136,12 +136,17 @@ def _linea(p) -> str:
     return f"  #{p.nro_pedido} · {p.dias_parado} d · {p.cliente or '(sin cliente)'} · {p.vendedor or '(sin vendedor)'} · {_monto(p)} · {skus or '(sin ítems)'} · último mov. {ult}"
 
 
-def grupo_de(vendedor: str) -> str:
-    return VENDEDORES_APARTE.get(" ".join((vendedor or "").lower().split()), GRUPO_PRINCIPAL)
+def es_preventa(skus: str) -> bool:
+    """Pedido con algún SKU de preventa (prefijo PV-): espera la llegada de la mercadería, por eso no es «parado» en el sentido de los demás."""
+    return any(c.strip().upper().startswith("PV-") for c in (skus or "").split(",") if c.strip())
 
 
-def _es_preventa(p) -> bool:
-    return any(c.strip().upper().startswith("PV-") for c in (p.skus or "").split(",") if c.strip())
+def grupo_de(vendedor: str, skus: str = "") -> str:
+    """propios / notas_credito (por vendedor, tienen prioridad), después preventas (por SKU PV-), el resto = pendientes."""
+    g = VENDEDORES_APARTE.get(" ".join((vendedor or "").lower().split()))
+    if g:
+        return g
+    return "preventas" if es_preventa(skus) else GRUPO_PRINCIPAL
 
 
 def _por_vendedor(filas) -> list[str]:
@@ -157,7 +162,7 @@ def _filas_out(filas) -> list[dict]:
     """TODAS las filas (también las apartadas) con su `grupo`: n8n las reparte en pestañas según ese campo."""
     return [{"nro_pedido": p.nro_pedido, "cliente": p.cliente, "vendedor": p.vendedor, "monto": float(p.monto), "moneda": p.moneda, "skus": p.skus,
              "dias_parado": p.dias_parado, "ultimo_movimiento": p.ultimo_movimiento.isoformat() if p.ultimo_movimiento else None, "nivel": p.nivel,
-             "atraso_viejo": p.dias_parado > DIAS_VIEJO, "grupo": grupo_de(p.vendedor)} for p in filas]
+             "atraso_viejo": p.dias_parado > DIAS_VIEJO, "grupo": grupo_de(p.vendedor, p.skus)} for p in filas]
 
 
 def armar_mail(db, fecha: date | None = None) -> dict:
@@ -175,9 +180,9 @@ def armar_mail(db, fecha: date | None = None) -> dict:
             texto += f"\n\nÚltimo intento ({corrida.ejecutada_en:%H:%M}): {corrida.error_msg}"
         return {"hay_datos": False, "fecha": fecha.isoformat(), "asunto": "Táctica · SIN DATOS hoy (revisar la PC o la VPN)", "texto": texto, "filas": []}
     filas = (db.query(TacticaPendiente).filter(TacticaPendiente.fecha == fecha).order_by(TacticaPendiente.dias_parado.desc(), TacticaPendiente.nro_pedido).all())
-    aparte = [p for p in filas if grupo_de(p.vendedor) != GRUPO_PRINCIPAL]
+    aparte = [p for p in filas if grupo_de(p.vendedor, p.skus) != GRUPO_PRINCIPAL]
     todas = filas
-    filas = [p for p in todas if grupo_de(p.vendedor) == GRUPO_PRINCIPAL]
+    filas = [p for p in todas if grupo_de(p.vendedor, p.skus) == GRUPO_PRINCIPAL]
     cerrar = [p for p in filas if p.nivel == "cerrar_o_anular"]
     activar = [p for p in filas if p.nivel == "activar"]
     cab = (f"Pedidos pendientes de Táctica · {fecha:%Y-%m-%d}\n"
@@ -186,10 +191,13 @@ def armar_mail(db, fecha: date | None = None) -> dict:
     if aparte:
         cuenta: dict[str, list] = {}
         for p in aparte:
-            nombre = " ".join((p.vendedor or "(sin vendedor)").split())      # mismo nombre aunque cambien mayúsculas o espacios
+            if grupo_de(p.vendedor, p.skus) == "preventas":
+                nombre = "preventas (PV-)"
+            else:
+                nombre = " ".join((p.vendedor or "(sin vendedor)").split())     # mismo nombre aunque cambien mayúsculas o espacios
             c = cuenta.setdefault(nombre.lower(), [nombre, 0])
             c[1] += 1
-        cab += "\nAparte, no cuentan arriba: " + " · ".join(f"{v} {n}" for _, (v, n) in sorted(cuenta.items())) + " (están en sus pestañas del Sheet)."
+        cab += "\nAparte, no cuentan arriba: " + " · ".join(f"{v} {n}" for _, (v, n) in sorted(cuenta.items())) + " (están en el Sheet, columna grupo)."
     if not filas:
         texto = cab + "\n\nNo hay pedidos pendientes parados."
         return {"hay_datos": True, "fecha": fecha.isoformat(), "asunto": "Táctica · sin pedidos pendientes parados", "texto": texto, "filas": _filas_out(todas)}
@@ -197,10 +205,8 @@ def armar_mail(db, fecha: date | None = None) -> dict:
     viejos = [p for p in cerrar if p.dias_parado > DIAS_VIEJO]
     partes = [cab, "", "POR VENDEDOR", *_por_vendedor(filas)]
     sin_monto = sum(1 for p in filas if not p.monto)
-    preventas = sum(1 for p in filas if _es_preventa(p))
-    avisos = [t for t in ((f"{sin_monto} con monto 0" if sin_monto else ""), (f"{preventas} con SKU de preventa (PV-)" if preventas else "")) if t]
-    if avisos:
-        partes += ["", "Para revisar aparte: " + " · ".join(avisos) + " (siguen contados arriba)."]
+    if sin_monto:
+        partes += ["", f"Para revisar: {sin_monto} con monto 0 (siguen contados arriba)."]
     for titulo, grupo in ((f"CERRAR O ANULAR ({DIAS_CERRAR} a {DIAS_VIEJO} días)", cerrar_reciente), (f"ACTIVAR ({DIAS_ACTIVAR} a {DIAS_CERRAR - 1} días)", activar)):
         if not grupo:
             continue

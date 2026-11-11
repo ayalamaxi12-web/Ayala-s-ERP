@@ -132,11 +132,11 @@ def test_mail_el_tope_es_por_grupo_y_activar_siempre_se_ve(db_session):
 
 def test_mail_resumen_por_vendedor_atraso_viejo_y_avisos(db_session):
     from decimal import Decimal
-    _guardar(db_session, [(8, "Laura", Decimal(100), "A"), (40, "Laura", Decimal(100), "B"), (90, "Maca", Decimal(0), "PV-X"), (4, "Maca", Decimal(50), "C")])
+    _guardar(db_session, [(8, "Laura", Decimal(100), "A"), (40, "Laura", Decimal(100), "B"), (90, "Maca", Decimal(0), "X"), (4, "Maca", Decimal(50), "C")])
     m = tp.armar_mail(db_session, HOY)
     t = m["texto"]
     assert "  Laura: 2 (cerrar 2 · activar 0)" in t and "  Maca: 2 (cerrar 1 · activar 1)" in t
-    assert "1 con monto 0" in t and "1 con SKU de preventa (PV-)" in t
+    assert "Para revisar: 1 con monto 0" in t
     assert "ATRASO VIEJO (más de 30 días) · 2" in t
     detalle = t[: t.index("ATRASO VIEJO")]
     assert "#2000" in detalle and "#2001" not in detalle and "#2002" not in detalle           # los de más de 30 días no se listan en el mail
@@ -158,3 +158,17 @@ def test_mail_aparta_a_maxi_y_las_notas_de_credito_y_las_pone_en_su_grupo(db_ses
     assert grupos["Maximiliano Ayala"] == "propios" and grupos["jacqueline romero"] == "notas_credito"
     assert grupos["Jacqueline  Romero"] == "notas_credito" and grupos["Mariannys Rodriguez"] == "notas_credito" and grupos["Laura"] == "pendientes"
     assert len(m["filas"]) == 6                                                              # el Sheet recibe TODAS
+
+
+def test_preventas_van_a_su_grupo_y_el_vendedor_apartado_tiene_prioridad(db_session):
+    from decimal import Decimal
+    _guardar(db_session, [(10, "Laura", Decimal(100), "A"), (12, "Laura", Decimal(5), "PV-NOV26-GL-5000, ENVIOS-BSAS-C1"), (9, "Maca", Decimal(1), "pv-x"),
+                          (8, "Maximiliano Ayala", Decimal(1), "PV-Y")])
+    m = tp.armar_mail(db_session, HOY)
+    t = m["texto"]
+    assert "parados 3 días o más: 1 (cerrar o anular: 1 · activar: 0)" in t                    # solo el pedido «A» cuenta arriba
+    assert "Aparte, no cuentan arriba: Maximiliano Ayala 1 · preventas (PV-) 2" in t
+    grupos = {f["skus"]: f["grupo"] for f in m["filas"]}
+    assert grupos["A"] == "pendientes" and grupos["pv-x"] == "preventas" and grupos["PV-NOV26-GL-5000, ENVIOS-BSAS-C1"] == "preventas"
+    assert grupos["PV-Y"] == "propios"                                                         # Maxi tiene prioridad sobre preventa
+    assert tp.es_preventa("PV-A") and tp.es_preventa("X, pv-b") and not tp.es_preventa("TN1060COMP, ENVIOS-CABA") and not tp.es_preventa("")
