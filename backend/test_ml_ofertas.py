@@ -1042,7 +1042,7 @@ def test_activar_en_campana_tradicional_suma_envio_real_sin_cuotas():
     ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
     try:
         ml = _armar_ml_ajuste(tags=["immediate_payment"], envio_response={"lead_time": {"cost_type": "free", "list_cost": 12000.0}})
-        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000), ajustar_cuotas_envio=True)
 
         assert r["ok"] is True
         assert r["precio_pm"] == 100000.0
@@ -1062,7 +1062,7 @@ def test_activar_en_campana_tradicional_suma_cuotas_y_envio_en_ese_orden():
     ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
     try:
         ml = _armar_ml_ajuste(tags=["cuota-simple-3"], envio_response={"lead_time": {"cost_type": "free", "list_cost": 12000.0}})
-        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000), ajustar_cuotas_envio=True)
 
         assert r["ok"] is True
         assert r["precio_final"] == 120500.0
@@ -1080,7 +1080,7 @@ def test_activar_en_campana_tradicional_no_suma_envio_si_lo_pago_el_comprador():
     ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
     try:
         ml = _armar_ml_ajuste(tags=["immediate_payment"], envio_response={"lead_time": {"cost_type": "charged", "list_cost": 12000.0}})
-        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000), ajustar_cuotas_envio=True)
 
         assert r["ok"] is True
         assert r["precio_final"] == 100000.0
@@ -1390,3 +1390,20 @@ def test_ventas_recientes_por_item_parte_el_rango_en_tramos_y_no_pasa_del_offset
     ultimas = ventas_recientes_por_item(_ML(), "IT", "2026-08-29T00:00:00.000-00:00", "2026-10-28T23:00:00.000-00:00")
     assert "MLA1" in ultimas
     assert len(llamadas) >= 8                                                 # 60 días / 7 = 9 tramos
+
+
+def test_activar_en_campana_tradicional_por_defecto_usa_el_precio_tal_cual_aunque_tenga_cuotas_y_envio():
+    # Pedido de Maxx 2026-11-12: el precio que se manda es el que se aplica; solo se infla el tachado. Mismo escenario que el test de cuotas + envío,
+    # pero sin pedir el ajuste: no se suma el 8,5 % ni el envío real.
+    ml_ofertas._ultima_venta_cache.clear()
+    ml_ofertas._ultima_venta_cache["MLA1"] = {"fecha": "2026-08-01", "shipping_id": 555, "orden_id": 1}
+    try:
+        ml = _armar_ml_ajuste(tags=["cuota-simple-3"], envio_response={"lead_time": {"cost_type": "free", "list_cost": 12000.0}})
+        r = activar_en_campana_tradicional(ml, "IT", "MLA1", Decimal(100000))
+
+        assert r["ok"] is True
+        assert r["precio_final"] == 100000.0 and r["precio"] == 100000.0
+        assert r["precio_tachado_pedido"] == 133333.0                      # solo el tachado se infla: 100000 / 0,75
+        assert "ajuste_cuotas_envio" not in r
+    finally:
+        ml_ofertas._ultima_venta_cache.clear()
