@@ -1334,7 +1334,7 @@ class _SinTactica:
         return None
 
 
-def _ofertas_ml_activas(incluir_propias: bool) -> list[dict]:
+def _ofertas_ml_activas(incluir_propias: bool, sin_acceso: list | None = None) -> list[dict]:
     """Ofertas activas de ML leídas en vivo con el módulo Ofertas ML (las dos
     cuentas). Import perezoso: `rentabilidad/` no depende de ML para el resto."""
     import ml_ofertas
@@ -1345,6 +1345,8 @@ def _ofertas_ml_activas(incluir_propias: bool) -> list[dict]:
         for cuenta in ml_ofertas.SELLERS:
             f, _ = ml_ofertas.ofertas_propias_activas(ml, sin, sin, cuenta)
             filas.extend(f)
+    if sin_acceso is not None:
+        sin_acceso.extend(getattr(ml, "items_sin_acceso", []))      # publicaciones que ML no dejó leer (403): se saltean y se informan
     return [ml_ofertas._fila_a_dict(f) for f in filas]
 
 
@@ -1361,8 +1363,9 @@ def reporte_control_ofertas(
     `incluir_propias=true` suma las ofertas propias (PRICE_DISCOUNT): el
     escaneo es publicación por publicación y tarda varios minutos."""
     _verificar_token_reporte(token, x_reporte_token)
+    sin_acceso: list = []
     try:
-        ofertas = _ofertas_ml_activas(incluir_propias)
+        ofertas = _ofertas_ml_activas(incluir_propias, sin_acceso)
     except Exception as e:
         raise HTTPException(502, f"No se pudieron leer las ofertas de Mercado Libre: {type(e).__name__}: {e}")
     with sesion() as db:
@@ -1370,6 +1373,7 @@ def reporte_control_ofertas(
             db, ofertas, ayer_en_argentina() + timedelta(days=1), tolerancia_pct=tolerancia_pct, solo_revisar=solo_revisar,
         )
     res["incluye_ofertas_propias"] = incluir_propias
+    res["publicaciones_sin_acceso"] = sin_acceso     # MLA que ML no dejó leer (403): no entran en el control; revisarlas a mano
     return res
 
 
