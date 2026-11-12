@@ -883,9 +883,14 @@ def _es_challenge_seguridad(mensaje: str) -> bool:
 def activar_en_campana_tradicional(
     ml: MLOfertasEscritura, cuenta: str, item_id: str, precio_pm: Decimal,
     descuento_pct: Decimal = Decimal(25), promotion_id: str | None = None,
-    tachado_exacto: Decimal | None = None,
+    tachado_exacto: Decimal | None = None, ajustar_cuotas_envio: bool = False,
 ) -> dict:
-    """Automatiza el flujo real de Maxx (confirmado 2026-08-28, 80% de su
+    """**2026-11-12 (pedido de Maxx): el precio que se manda se usa TAL CUAL.** El ajuste por cuotas y envío real que se describe más abajo (desde 2026-09-02)
+    ahora es OPCIONAL y viene apagado: solo se aplica con `ajustar_cuotas_envio=True`. Motivo: la pantalla ya propone un precio con cuotas y envío (editable)
+    y calcula margen y tachado sobre él; sumarle otra vez el 8,5 % (cuotas) lo inflaba dos veces (se metió a $53.562 un precio de $49.366). Lo único que se
+    infla es el tachado, según el descuento.
+
+    Automatiza el flujo real de Maxx (confirmado 2026-08-28, 80% de su
     uso): mete la publicación en su campaña mensual propia ("Oferta
     Tradicional <mes>") dejando `precio_final` (`precio_pm` ajustado por
     cuotas/envío real -- ver más abajo) como precio final -- SIEMPRE, pase
@@ -1039,13 +1044,14 @@ def activar_en_campana_tradicional(
     # corazón de la función. Se trata como "sin dato" (0), igual que
     # cuando la cache todavía no tiene nada para este ítem.
     cuotas_ofrecidas = _cuotas_sin_interes(previo)
-    cuotas_pct = CUOTAS_PCT_DEFAULT.get(cuotas_ofrecidas) if cuotas_ofrecidas and tachado_exacto is None else None
+    ajustar = ajustar_cuotas_envio and tachado_exacto is None
+    cuotas_pct = CUOTAS_PCT_DEFAULT.get(cuotas_ofrecidas) if cuotas_ofrecidas and ajustar else None
     precio_con_cuotas = (
         (precio_pm * (1 + cuotas_pct / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if cuotas_pct else precio_pm
     )
     try:
-        envio_info = costo_envio_real_item(ml, item_id, cuenta) if tachado_exacto is None else None
+        envio_info = costo_envio_real_item(ml, item_id, cuenta) if ajustar else None
     except Exception:
         envio_info = None
     costo_envio = (
