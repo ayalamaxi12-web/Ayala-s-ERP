@@ -360,6 +360,25 @@ class MLOfertasClient(MLFullClient):
             f"https://api.mercadolibre.com/seller-promotions/items/{item_id}", {"app_version": "v2"}, headers,
         ) or []
 
+    ATRIBUTOS_ITEMS_OFERTAS = "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes,user_product_id,status,sub_status,available_quantity"
+
+    def _lote_items(self, lote: list[str], cuenta: str, headers: dict) -> list:
+        """`GET /items?ids=` de un lote. Si ML responde 403 al lote (basta una publicación que no se pueda leer: de otra cuenta, bloqueada, en revisión…) el lote
+        se parte a la mitad hasta aislarla: esa publicación se saltea y queda anotada en `self.items_sin_acceso`; el resto del lote se lee igual.
+        Otros errores (401, 5xx, cuota) se propagan como antes."""
+        try:
+            return self._get("https://api.mercadolibre.com/items", {"ids": ",".join(lote), "attributes": self.ATRIBUTOS_ITEMS_OFERTAS}, headers) or []
+        except requests.HTTPError as e:
+            if getattr(e.response, "status_code", None) != 403:
+                raise
+            if len(lote) == 1:
+                if not hasattr(self, "items_sin_acceso"):
+                    self.items_sin_acceso = []
+                self.items_sin_acceso.append({"item_id": lote[0], "cuenta": cuenta, "motivo": "ML respondió 403 (sin acceso a esta publicación)"})
+                return []
+            mitad = len(lote) // 2
+            return self._lote_items(lote[:mitad], cuenta, headers) + self._lote_items(lote[mitad:], cuenta, headers)
+
     def detalle_items_ofertas(self, item_ids: list[str], cuenta: str,
                                progreso_cb: Callable[[int, int, str], None] | None = None) -> list[dict]:
         """SKU/categoría/título/cuotas por lote de 20 -- `domain_id` viene
@@ -396,11 +415,7 @@ class MLOfertasClient(MLFullClient):
             if progreso_cb:
                 progreso_cb(i, total, "catalogo")
             lote = item_ids[i:i + 20]
-            d = self._get(
-                "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote), "attributes": "id,title,price,original_price,permalink,seller_custom_field,domain_id,tags,attributes,user_product_id,status,sub_status,available_quantity"},
-                headers,
-            )
+            d = self._lote_items(lote, cuenta, headers)
             for entrada in (d or []):
                 cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
                 if cuerpo:

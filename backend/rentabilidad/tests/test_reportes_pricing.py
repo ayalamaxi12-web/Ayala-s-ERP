@@ -266,12 +266,13 @@ def test_endpoints_con_token(cliente, db_multihilo, monkeypatch):
     r = cliente.get(url, headers={"X-Reporte-Token": "secreto"}, params={"todo_el_ciclo": "true"})
     assert r.json()["dia"] is None and len(r.json()["filas"]) == 1
 
-    monkeypatch.setattr(api, "_ofertas_ml_activas", lambda incluir_propias: [_oferta("TONER-1", 99000)])
+    monkeypatch.setattr(api, "_ofertas_ml_activas", lambda incluir_propias, sin_acceso=None: [_oferta("TONER-1", 99000)])
     r = cliente.get("/rentabilidad/reporte/pricing/ofertas", params={"token": "secreto"})
     assert r.status_code == 200, r.text
     assert r.json()["filas"][0]["estado"] == "por_debajo"
+    assert r.json()["publicaciones_sin_acceso"] == []                                   # el campo existe aunque ML no haya negado ninguna
 
-    def falla(incluir_propias):
+    def falla(incluir_propias, sin_acceso=None):
         raise RuntimeError("sin token de ML")
     monkeypatch.setattr(api, "_ofertas_ml_activas", falla)
     assert cliente.get("/rentabilidad/reporte/pricing/ofertas", params={"token": "secreto"}).status_code == 502
