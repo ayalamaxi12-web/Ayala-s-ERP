@@ -6093,6 +6093,7 @@ function ofgMargenHtml(f,m,costoARS,tc){
   const pct=m.margenPct!==null?(m.margenPct*100).toFixed(1).replace('.',',')+' %':'—';
   const L=[['Precio sin IVA',m.baseSinIva,0],['Comisión',m.comision,1]];
   if(!f._ayalaCoreMotor)L.push(['Costo fijo',m.costoFijo,1]);
+  if(!f._ayalaCoreMotor&&m.cuotas>0)L.push(['Cuotas sin interés',m.cuotas,1]);   // ya estaba restada en el margen, pero no figuraba en la lista
   L.push(['Envío',m.envio,1]);
   if(!f._ayalaCoreMotor)L.push(['Costo por orden de Ecom',m.costoOrden||0,1]);
   if(f._ayalaCoreMotor)L.push(['Financiero',m.cuotas,1]);
