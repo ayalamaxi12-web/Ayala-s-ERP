@@ -44,3 +44,11 @@ def test_los_tramos_quedan_en_orden_y_cubren_todo():
 def test_agingHoy_es_una_fecha_aaaa_mm_dd():
     r = js('console.log(JSON.stringify(agingHoy()))', {})
     assert re.match(r'^\d{4}-\d{2}-\d{2}$', r)
+
+
+def test_solo_positivos_deja_solo_rentabilidad_mayor_a_cero():
+    src = open(INDEX, encoding='utf-8').read()
+    cod = extraer_funcion(src, 'dashEsPositiva') + '\nconst D=JSON.parse(process.argv[1]);console.log(JSON.stringify(D.map(dashEsPositiva)));'
+    filas = [{'rentabilidad': 1500.5}, {'rentabilidad': 0}, {'rentabilidad': -20}, {'rentabilidad': '35'}, {'rentabilidad': None}, {}]
+    r = json.loads(subprocess.run(['node', '-e', cod, json.dumps(filas)], capture_output=True, text=True, check=True).stdout)
+    assert r == [True, False, False, True, False, False]            # 0 y negativas no entran; sin dato tampoco
