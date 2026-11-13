@@ -1265,6 +1265,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria"><div class="ms-trigger" onclick="toggleMS('ms-categoria')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria')">Todos</button><button onclick="clearMS('ms-categoria')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm"><div class="ms-trigger" onclick="toggleMS('ms-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm')">Todos</button><button onclick="clearMS('ms-pm')">Ninguno</button></div></div></div></div>
   <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('hist',this.value)" onkeydown="if(event.key==='Enter'){applyFilters();dashSkuAcHide('hist');}"><div id="dash-sku-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
+  <div class="filter-group" title="De qué sistema vienen las ventas. El histórico que se baja al Sheet es solo Ecom: filtrá «Ecom» para comparar"><span class="filter-label">Sistema</span><div class="cr-seg dash-seg" id="seg-sis" role="group" aria-label="Sistema"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('hist','sis','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="Ecom" aria-pressed="false" onclick="dashSegElegir('hist','sis','Ecom')">Ecom</button><button type="button" class="cr-seg-b" data-v="Tactica" aria-pressed="false" onclick="dashSegElegir('hist','sis','Tactica')">Táctica</button></div></div>
   <div class="filter-group" title="Aging = SKUs de stock a liquidar que se venden a pérdida y están contemplados (se cargan en Criterios de precio)"><span class="filter-label">Aging</span><div class="cr-seg dash-seg" id="seg-aging" role="group" aria-label="Aging"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('hist','aging','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="solo" aria-pressed="false" onclick="dashSegElegir('hist','aging','solo')">Solo aging</button><button type="button" class="cr-seg-b" data-v="sin" aria-pressed="false" onclick="dashSegElegir('hist','aging','sin')">Sin aging</button></div></div>
   <div class="filter-group" title="Ventas con pérdida: rentabilidad $ menor a cero. Sin pérdida: cero o más"><span class="filter-label">Resultado</span><div class="cr-seg dash-seg" id="seg-res" role="group" aria-label="Resultado"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('hist','res','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="sin" aria-pressed="false" onclick="dashSegElegir('hist','res','sin')">Sin pérdida</button><button type="button" class="cr-seg-b" data-v="con" aria-pressed="false" onclick="dashSegElegir('hist','res','con')">Con pérdida</button></div></div>
   <button class="btn primary" onclick="applyFilters()">Aplicar</button>
@@ -8056,7 +8057,7 @@ function onCmpDimChange(){
 function applyFilters(inst){
   inst=inst||'hist';const ids=_dashIds(inst);
   if(inst==='hist'){
-    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:DASH_SEG.hist.aging,resultado:DASH_SEG.hist.res,sku:qs(ids.sku).value.trim().toLowerCase()};
+    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:DASH_SEG.hist.aging,resultado:DASH_SEG.hist.res,sistema:DASH_SEG.hist.sis,sku:qs(ids.sku).value.trim().toLowerCase()};
   }else{
     vivoFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:DASH_SEG.vivo.aging,resultado:DASH_SEG.vivo.res,sku:qs(ids.sku).value.trim().toLowerCase()};
     const dim=qs('cmp-dim-vivo').value;
@@ -8068,7 +8069,7 @@ function resetFilters(inst){
   inst=inst||'hist';const ids=_dashIds(inst);
   [ids.desde,ids.hasta,ids.sku].forEach(id=>{const el=qs(id);if(el)el.value='';});
   [ids.canal,ids.categoria,ids.pm].forEach(id=>clearMS(id));
-  DASH_SEG[inst]={aging:'todos',res:'todos'};dashSegPintar(inst);
+  DASH_SEG[inst]={aging:'todos',res:'todos',sis:'todos'};dashSegPintar(inst);
   if(inst==='hist'){qs('f-desde2').value='';qs('f-hasta2').value='';activeFilters={};}
   else{const dsel=qs('cmp-dim-vivo');if(dsel)dsel.value='';onCmpDimChange();vivoFilters={};vivoCompare={};}
   renderDashboard(inst);
@@ -8078,13 +8079,13 @@ function resetFilters(inst){
 //   Una venta es de aging si ALGUNO de sus SKU está en esa lista. «Solo aging» / «Sin aging» no tocan la rentabilidad: solo dejan unas u otras filas, así se ve la renta general con y sin aging.
 // RESULTADO = la venta dio pérdida (rentabilidad $ menor a cero) o no (cero o más). Es independiente del aging: una venta a pérdida puede ser de aging o no, y no es lo mismo.
 let AGING_SKUS=new Set(),AGING_INFO={},AGING_T=0;
-let DASH_SEG={hist:{aging:'todos',res:'todos'},vivo:{aging:'todos',res:'todos'}};
+let DASH_SEG={hist:{aging:'todos',res:'todos',sis:'todos'},vivo:{aging:'todos',res:'todos',sis:'todos'}};
 function agingKey(s){return normSku(s).replace(/\s+/g,'');}   // igual que el backend (skus_aging.clave): sin espacios y sin distinguir mayúsculas
 function dashEsAging(d){return AGING_SKUS.size>0&&(d.skus||[]).some(x=>AGING_SKUS.has(agingKey(x)));}
 function dashEsPerdida(d){return Number(d.rentabilidad)<0;}
 function dashSegPintar(inst){
   const suf=inst==='vivo'?'-vivo':'';
-  [['seg-aging','aging'],['seg-res','res']].forEach(([id,k])=>{const g=qs(id+suf);if(g)g.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===DASH_SEG[inst][k]?'true':'false'));});
+  [['seg-aging','aging'],['seg-res','res'],['seg-sis','sis']].forEach(([id,k])=>{const g=qs(id+suf);if(g)g.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===DASH_SEG[inst][k]?'true':'false'));});
 }
 async function agingAsegurar(forzar){
   const bu=getBackendUrl();if(!bu)return false;
@@ -8107,6 +8108,7 @@ function getFiltered(inst){
     if(f.canal)out=out.filter(d=>f.canal.includes(d.canal));
     if(f.categoria)out=out.filter(d=>f.categoria.includes(d.categoria));
     if(f.pm)out=out.filter(d=>f.pm.includes(d.pm));
+    if(f.sistema&&f.sistema!=='todos')out=out.filter(d=>d.sistema===f.sistema);
     if(f.aging==='solo')out=out.filter(dashEsAging);else if(f.aging==='sin')out=out.filter(d=>!dashEsAging(d));
     if(f.resultado==='con')out=out.filter(dashEsPerdida);else if(f.resultado==='sin')out=out.filter(d=>!dashEsPerdida(d));
     if(f.sku)out=out.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));

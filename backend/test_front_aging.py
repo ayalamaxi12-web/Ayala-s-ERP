@@ -68,3 +68,11 @@ def test_el_aging_ignora_espacios_y_mayusculas_en_los_sku():
     r = js('AGING_SKUS=new Set(D.a.map(agingKey));console.log(JSON.stringify(D.v.map(dashEsAging)))',
            {'a': ['choppsub-gls-frost-blue-16oz'], 'v': [{'skus': ['CHOPPSUB-GLS-FROST-BLUE -16OZ']}, {'skus': ['OTRO']}]})
     assert r == [True, False]
+
+
+def test_filtro_sistema_separa_ecom_de_tactica():
+    ventas = [dict(v('1', ['A'], 10), sistema='Ecom'), dict(v('2', ['B'], 20), sistema='Tactica'), dict(v('3', ['C'], 30), sistema='Ecom')]
+    cuerpo = 'allSalesData=D.v;activeFilters={sistema:D.s};console.log(JSON.stringify(getFiltered("hist").data1.map(x=>x.numOrden)))'
+    assert js(cuerpo, {'v': ventas, 's': 'Ecom'}) == ['1', '3']
+    assert js(cuerpo, {'v': ventas, 's': 'Tactica'}) == ['2']
+    assert js(cuerpo, {'v': ventas, 's': 'todos'}) == ['1', '2', '3']
