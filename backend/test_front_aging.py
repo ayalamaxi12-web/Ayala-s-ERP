@@ -1,7 +1,6 @@
-"""Filtro «Aging» de Ventas & Rentabilidad (docs/index.html): antigüedad de la venta = días desde su fecha hasta hoy, en tramos."""
+"""Ventas & Rentabilidad (docs/index.html): filtros «Aging» (SKUs de stock a liquidar) y «Resultado» (con / sin pérdida), independientes entre sí."""
 import json
 import os
-import re
 import shutil
 import subprocess
 
@@ -11,44 +10,69 @@ from scripts.paridad_margenes import extraer_funcion
 
 INDEX = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'index.html')
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
+FNS = ('normSku', 'agingKey', 'dashEsAging', 'dashEsPerdida', '_dashData', '_dashFilters', 'getFiltered')
 
 
 def js(cuerpo, datos):
     src = open(INDEX, encoding='utf-8').read()
-    tramos = re.search(r'^const AGING_TRAMOS=.*$', src, re.M).group(0)
-    cod = tramos + '\n' + '\n'.join(extraer_funcion(src, n) for n in ('agingHoy', 'agingDias', 'agingTramoDe')) + '\nconst D=JSON.parse(process.argv[1]);\n' + cuerpo
-    return json.loads(subprocess.run(['node', '-e', cod, json.dumps(datos)], capture_output=True, text=True, check=True).stdout)
+    base = ('let AGING_SKUS=new Set(),allSalesData=[],vivoSalesData=[],activeFilters={},vivoFilters={},vivoCompare={};\n'
+            + '\n'.join(extraer_funcion(src, n) for n in FNS) + '\nconst D=JSON.parse(process.argv[1]);\n')
+    return json.loads(subprocess.run(['node', '-e', base + cuerpo, json.dumps(datos)], capture_output=True, text=True, check=True).stdout)
 
 
-HOY = '2026-11-13'
+def v(num, skus, rent, fecha='2026-11-10'):
+    return {'numOrden': num, 'skus': skus, 'rentabilidad': rent, 'fechaStr': fecha, 'canal': 'ML', 'categoria': 'C', 'pm': 'Laura'}
 
 
-def test_tramos_en_los_bordes():
-    casos = {'2026-11-13': '0-7 días', '2026-11-06': '0-7 días', '2026-11-05': '8-15 días', '2026-10-29': '8-15 días', '2026-10-28': '16-30 días',
-             '2026-10-14': '16-30 días', '2026-10-13': '31-60 días', '2026-09-14': '31-60 días', '2026-09-13': '61-90 días', '2026-08-15': '61-90 días',
-             '2026-08-14': 'Más de 90 días', '2025-01-01': 'Más de 90 días'}
-    r = js('console.log(JSON.stringify(Object.keys(D.c).map(f=>agingTramoDe(f,D.h))))', {'c': casos, 'h': HOY})
-    assert r == list(casos.values())
+# 1 renta con aging a pérdida · 2 renta común a pérdida · 3 aging con ganancia · 4 común con ganancia · 5 combo mixto (un SKU de aging + uno común) a pérdida · 6 renta 0
+VENTAS = [v('1', ['TN1060COMP'], -500), v('2', ['CF283ACOMP'], -100), v('3', ['W1105ACOMP'], 300), v('4', ['Q2612ACOMP'], 900), v('5', ['TN1060COMP', 'Q2612ACOMP'], -50), v('6', ['X'], 0)]
+AGING = ['tn1060comp', 'W1105ACOMP']                                  # el listado de aging: se compara sin distinguir mayúsculas
 
 
-def test_dias_hora_en_la_fecha_futuras_y_vacias():
-    r = js('console.log(JSON.stringify([agingDias("2026-11-10 15:30:00",D.h),agingDias("2026-11-20",D.h),agingTramoDe("2026-11-20",D.h),agingTramoDe("",D.h),agingTramoDe(null,D.h),agingTramoDe("basura",D.h)]))', {'h': HOY})
-    assert r == [3, 0, '0-7 días', None, None, None]                                   # con hora se toma solo el día; futuras = 0; sin fecha no entra en ningún tramo
+def ordenes(aging, res):
+    cuerpo = ('AGING_SKUS=new Set(D.a.map(agingKey));allSalesData=D.v;activeFilters={aging:D.f,resultado:D.r};'
+              'console.log(JSON.stringify(getFiltered("hist").data1.map(x=>x.numOrden)))')
+    return js(cuerpo, {'a': AGING, 'v': VENTAS, 'f': aging, 'r': res})
 
 
-def test_los_tramos_quedan_en_orden_y_cubren_todo():
-    r = js('console.log(JSON.stringify(AGING_TRAMOS.map(t=>t[0])))', {})
-    assert r == ['0-7 días', '8-15 días', '16-30 días', '31-60 días', '61-90 días', 'Más de 90 días']
+def test_sin_filtros_estan_todas():
+    assert ordenes('todos', 'todos') == ['1', '2', '3', '4', '5', '6']
 
 
-def test_agingHoy_es_una_fecha_aaaa_mm_dd():
-    r = js('console.log(JSON.stringify(agingHoy()))', {})
-    assert re.match(r'^\d{4}-\d{2}-\d{2}$', r)
+def test_solo_aging_y_sin_aging_se_reparten_las_ventas_sin_perderse_ninguna():
+    solo, sin = ordenes('solo', 'todos'), ordenes('sin', 'todos')
+    assert solo == ['1', '3', '5']                                      # alguno de sus SKU es de aging (el combo mixto también)
+    assert sin == ['2', '4', '6']
+    assert sorted(solo + sin) == ['1', '2', '3', '4', '5', '6']
 
 
-def test_solo_positivos_deja_solo_rentabilidad_mayor_a_cero():
-    src = open(INDEX, encoding='utf-8').read()
-    cod = extraer_funcion(src, 'dashEsPositiva') + '\nconst D=JSON.parse(process.argv[1]);console.log(JSON.stringify(D.map(dashEsPositiva)));'
-    filas = [{'rentabilidad': 1500.5}, {'rentabilidad': 0}, {'rentabilidad': -20}, {'rentabilidad': '35'}, {'rentabilidad': None}, {}]
-    r = json.loads(subprocess.run(['node', '-e', cod, json.dumps(filas)], capture_output=True, text=True, check=True).stdout)
-    assert r == [True, False, False, True, False, False]            # 0 y negativas no entran; sin dato tampoco
+def test_resultado_con_perdida_es_estrictamente_menor_a_cero_y_sin_perdida_es_el_resto():
+    assert ordenes('todos', 'con') == ['1', '2', '5']
+    assert ordenes('todos', 'sin') == ['3', '4', '6']                   # la de rentabilidad 0 no es pérdida
+
+
+def test_aging_y_resultado_se_combinan_son_cosas_distintas():
+    assert ordenes('solo', 'con') == ['1', '5']                         # aging que dio pérdida
+    assert ordenes('sin', 'con') == ['2']                               # a pérdida SIN estar contemplada: lo que hay que mirar
+    assert ordenes('solo', 'sin') == ['3']
+    assert ordenes('sin', 'sin') == ['4', '6']                          # la renta general «sana»: sin aging y sin pérdida
+
+
+def test_sin_listado_de_aging_nada_es_aging():
+    r = js('allSalesData=D.v;activeFilters={aging:"solo"};const a=getFiltered("hist").data1.length;activeFilters={aging:"sin"};console.log(JSON.stringify([a,getFiltered("hist").data1.length]))',
+           {'v': VENTAS})
+    assert r == [0, 6]
+
+
+def test_el_aging_ignora_espacios_y_mayusculas_en_los_sku():
+    r = js('AGING_SKUS=new Set(D.a.map(agingKey));console.log(JSON.stringify(D.v.map(dashEsAging)))',
+           {'a': ['choppsub-gls-frost-blue-16oz'], 'v': [{'skus': ['CHOPPSUB-GLS-FROST-BLUE -16OZ']}, {'skus': ['OTRO']}]})
+    assert r == [True, False]
+
+
+def test_filtro_sistema_separa_ecom_de_tactica():
+    ventas = [dict(v('1', ['A'], 10), sistema='Ecom'), dict(v('2', ['B'], 20), sistema='Tactica'), dict(v('3', ['C'], 30), sistema='Ecom')]
+    cuerpo = 'allSalesData=D.v;activeFilters={sistema:D.s};console.log(JSON.stringify(getFiltered("hist").data1.map(x=>x.numOrden)))'
+    assert js(cuerpo, {'v': ventas, 's': 'Ecom'}) == ['1', '3']
+    assert js(cuerpo, {'v': ventas, 's': 'Tactica'}) == ['2']
+    assert js(cuerpo, {'v': ventas, 's': 'todos'}) == ['1', '2', '3']

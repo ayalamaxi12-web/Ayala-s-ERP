@@ -354,6 +354,9 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .cr-seg-b{min-height:40px;padding:0 18px;border:0;border-radius:var(--r-chico);background:transparent;color:var(--tinta-2);font:400 14px var(--fuente);cursor:pointer}
 .cr-seg-b[aria-pressed="true"]{background:var(--mod-activo-fondo,var(--superficie));color:var(--mod-activo-texto,var(--tinta));box-shadow:inset 0 0 0 1px var(--mod-activo-borde,var(--borde));font-weight:600}
 .cr-seg-b:focus-visible{outline:2px solid var(--mod-foco,var(--tinta));outline-offset:2px}
+.dash-seg.cr-seg{margin:0;padding:2px}.dash-seg .cr-seg-b{min-height:30px;padding:0 12px;font-size:12px}
+.cr-ag-form{display:grid;grid-template-columns:minmax(220px,2fr) 1fr 1fr auto;gap:10px;align-items:end;margin:8px 0 12px}.cr-ag-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave)}.cr-ag-form textarea{min-height:64px;resize:vertical}
+@media(max-width:760px){.cr-ag-form{grid-template-columns:1fr}}
 .cr-cuerpo{display:flex;flex-direction:column;gap:12px}
 .cr-t{display:flex;align-items:center;gap:10px;margin:4px 0;font-size:16px;color:var(--tinta)}
 .cr-ap{background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r-recuadro);padding:14px 16px}
@@ -1261,9 +1264,10 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal"><div class="ms-trigger" onclick="toggleMS('ms-canal')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal')">Todos</button><button onclick="clearMS('ms-canal')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria"><div class="ms-trigger" onclick="toggleMS('ms-categoria')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria')">Todos</button><button onclick="clearMS('ms-categoria')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm"><div class="ms-trigger" onclick="toggleMS('ms-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm')">Todos</button><button onclick="clearMS('ms-pm')">Ninguno</button></div></div></div></div>
-  <div class="filter-group" title="Antigüedad de la venta: días desde su fecha hasta hoy"><span class="filter-label">Aging</span><div class="ms-wrap" id="ms-aging"><div class="ms-trigger" onclick="toggleMS('ms-aging')">Todos</div><div class="ms-dropdown"><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-aging')">Todos</button><button onclick="clearMS('ms-aging')">Ninguno</button></div></div></div></div>
   <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('hist',this.value)" onkeydown="if(event.key==='Enter'){applyFilters();dashSkuAcHide('hist');}"><div id="dash-sku-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
-  <button class="btn" id="btn-solo-pos" aria-pressed="false" title="Muestra solo las ventas con rentabilidad positiva" onclick="dashToggleSoloPos('hist')">Solo positivos</button>
+  <div class="filter-group" title="De qué sistema vienen las ventas. El histórico que se baja al Sheet es solo Ecom: filtrá «Ecom» para comparar"><span class="filter-label">Sistema</span><div class="cr-seg dash-seg" id="seg-sis" role="group" aria-label="Sistema"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('hist','sis','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="Ecom" aria-pressed="false" onclick="dashSegElegir('hist','sis','Ecom')">Ecom</button><button type="button" class="cr-seg-b" data-v="Tactica" aria-pressed="false" onclick="dashSegElegir('hist','sis','Tactica')">Táctica</button></div></div>
+  <div class="filter-group" title="Aging = SKUs de stock a liquidar que se venden a pérdida y están contemplados (se cargan en Criterios de precio)"><span class="filter-label">Aging</span><div class="cr-seg dash-seg" id="seg-aging" role="group" aria-label="Aging"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('hist','aging','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="solo" aria-pressed="false" onclick="dashSegElegir('hist','aging','solo')">Solo aging</button><button type="button" class="cr-seg-b" data-v="sin" aria-pressed="false" onclick="dashSegElegir('hist','aging','sin')">Sin aging</button></div></div>
+  <div class="filter-group" title="Ventas con pérdida: rentabilidad $ menor a cero. Sin pérdida: cero o más"><span class="filter-label">Resultado</span><div class="cr-seg dash-seg" id="seg-res" role="group" aria-label="Resultado"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('hist','res','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="sin" aria-pressed="false" onclick="dashSegElegir('hist','res','sin')">Sin pérdida</button><button type="button" class="cr-seg-b" data-v="con" aria-pressed="false" onclick="dashSegElegir('hist','res','con')">Con pérdida</button></div></div>
   <button class="btn primary" onclick="applyFilters()">Aplicar</button>
   <button class="btn" onclick="resetFilters()">Limpiar</button>
 </div>
@@ -1285,9 +1289,9 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal-vivo"><div class="ms-trigger" onclick="toggleMS('ms-canal-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal-vivo')">Todos</button><button onclick="clearMS('ms-canal-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria-vivo"><div class="ms-trigger" onclick="toggleMS('ms-categoria-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria-vivo')">Todos</button><button onclick="clearMS('ms-categoria-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm-vivo"><div class="ms-trigger" onclick="toggleMS('ms-pm-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm-vivo')">Todos</button><button onclick="clearMS('ms-pm-vivo')">Ninguno</button></div></div></div></div>
-  <div class="filter-group" title="Antigüedad de la venta: días desde su fecha hasta hoy"><span class="filter-label">Aging</span><div class="ms-wrap" id="ms-aging-vivo"><div class="ms-trigger" onclick="toggleMS('ms-aging-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-aging-vivo')">Todos</button><button onclick="clearMS('ms-aging-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku-vivo" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('vivo',this.value)" onkeydown="if(event.key==='Enter'){applyFilters('vivo');dashSkuAcHide('vivo');}"><div id="dash-sku-ac-dropdown-vivo" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
-  <button class="btn" id="btn-solo-pos-vivo" aria-pressed="false" title="Muestra solo las ventas con rentabilidad positiva" onclick="dashToggleSoloPos('vivo')">Solo positivos</button>
+  <div class="filter-group" title="Aging = SKUs de stock a liquidar que se venden a pérdida y están contemplados (se cargan en Criterios de precio)"><span class="filter-label">Aging</span><div class="cr-seg dash-seg" id="seg-aging-vivo" role="group" aria-label="Aging"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('vivo','aging','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="solo" aria-pressed="false" onclick="dashSegElegir('vivo','aging','solo')">Solo aging</button><button type="button" class="cr-seg-b" data-v="sin" aria-pressed="false" onclick="dashSegElegir('vivo','aging','sin')">Sin aging</button></div></div>
+  <div class="filter-group" title="Ventas con pérdida: rentabilidad $ menor a cero. Sin pérdida: cero o más"><span class="filter-label">Resultado</span><div class="cr-seg dash-seg" id="seg-res-vivo" role="group" aria-label="Resultado"><button type="button" class="cr-seg-b" data-v="todos" aria-pressed="true" onclick="dashSegElegir('vivo','res','todos')">Todos</button><button type="button" class="cr-seg-b" data-v="sin" aria-pressed="false" onclick="dashSegElegir('vivo','res','sin')">Sin pérdida</button><button type="button" class="cr-seg-b" data-v="con" aria-pressed="false" onclick="dashSegElegir('vivo','res','con')">Con pérdida</button></div></div>
   <button class="btn primary" onclick="applyFilters('vivo')">Aplicar</button>
   <button class="btn" onclick="resetFilters('vivo')">Limpiar</button>
 </div>
@@ -1907,6 +1911,11 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="ofg-nota ofg-nota-aviso" id="cr-aviso"></div>
   <div class="cr-seg" id="cr-canales" role="group" aria-label="Canal"></div>
   <div id="cr-cuerpo" class="cr-cuerpo"><div class="loading-block"><div class="spinner"></div><span>Cargando criterios...</span></div></div>
+  <section class="cr-ap" id="cr-aging" aria-label="SKUs de aging">
+    <h4>SKUs de aging</h4>
+    <p class="cr-nota">Stock a liquidar: SKUs que se venden a pérdida a propósito y cuya pérdida está contemplada. Cada PM carga los suyos. En Ventas y Rentabilidad se usan para ver la rentabilidad general con y sin aging. Cada cambio pide operador (arriba) y queda en el historial.</p>
+    <div id="cr-aging-cuerpo"><div class="loading-block"><div class="spinner"></div><span>Cargando…</span></div></div>
+  </section>
   <details class="cr-sec"><summary>Historial de cambios</summary><div class="cr-sec-c" id="cr-historial"></div></details>
   <div class="card" style="display:none">   <!-- tabla de reglas vieja (Verificar ML, ya fuera del menú): sigue en el DOM hasta la limpieza final -->
     <div class="rules-grid" id="rules-grid"></div>
@@ -2724,7 +2733,50 @@ async function criteriosCargar(){
     CR.data=await r.json();
     const op=qs('cr-operador');if(op&&!op.value){try{op.value=localStorage.getItem('ofm_operador')||'';}catch(e){}}
     criteriosRender();
+    criteriosAgingCargar();
   }catch(e){cuerpo.innerHTML=`<p class="ofg-vacio">No se pudieron leer los criterios (${acEsc(e.message||e)}).</p>`;}
+}
+// ══ SKUs de AGING (backend: GET/POST /criterios/skus-aging, POST /criterios/skus-aging/quitar) ══
+let CRAG={skus:[],historial:[],pm:''};
+const CRAG_PMS=['Laura','Matias','Veronica','Maca','Cristian'];
+function critAgSeparar(t){return String(t||'').split(/[\n\r,;\t]+/).map(x=>x.trim()).filter(Boolean);}
+async function criteriosAgingCargar(){
+  const cont=qs('cr-aging-cuerpo');if(!cont)return;
+  try{const r=await fetch(`${getBackendUrl()}/criterios/skus-aging`);if(!r.ok)throw new Error('estado '+r.status);const d=await r.json();CRAG.skus=d.skus||[];CRAG.historial=d.historial||[];criteriosAgingRender();}
+  catch(e){cont.innerHTML=`<p class="ofg-vacio">No se pudo leer el listado de aging (${acEsc(e.message||e)}).</p>`;}
+}
+function criteriosAgingRender(){
+  const cont=qs('cr-aging-cuerpo');if(!cont)return;
+  const pms=[...new Set([...CRAG_PMS,...CRAG.skus.map(x=>x.pm),...(typeof allSalesData!=='undefined'?allSalesData.map(d=>d.pm):[])].filter(Boolean))].sort();
+  const lista=CRAG.pm?CRAG.skus.filter(x=>x.pm===CRAG.pm):CRAG.skus;
+  const cuenta={};CRAG.skus.forEach(x=>{cuenta[x.pm]=(cuenta[x.pm]||0)+1;});
+  cont.innerHTML=`<div class="cr-ag-form">
+      <label>SKUs (uno por línea o separados por coma)<textarea id="cr-ag-skus" class="fi" placeholder="TN1060COMP&#10;CF283ACOMP"></textarea></label>
+      <label>PM dueño<input id="cr-ag-pm" class="fi" list="cr-ag-pms" placeholder="Laura"><datalist id="cr-ag-pms">${pms.map(p=>`<option value="${acEsc(p)}">`).join('')}</datalist></label>
+      <label>Motivo (opcional)<input id="cr-ag-motivo" class="fi" maxlength="200" placeholder="Stock viejo"></label>
+      <button type="button" class="btn primary" onclick="criteriosAgingAgregar()">Agregar al aging</button></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><label style="font-size:12px;color:var(--texto-suave)">Ver el listado de
+      <select id="cr-ag-filtro" class="fi" onchange="CRAG.pm=this.value;criteriosAgingRender()"><option value="">Todos los PM (${CRAG.skus.length})</option>${Object.keys(cuenta).sort().map(p=>`<option value="${acEsc(p)}" ${CRAG.pm===p?'selected':''}>${acEsc(p)} (${cuenta[p]})</option>`).join('')}</select></label></div>`+
+    (lista.length?`<table class="cr-hist"><thead><tr><th>SKU</th><th>PM</th><th>Motivo</th><th>Lo cargó</th><th>Cuándo</th><th></th></tr></thead><tbody>${lista.map(x=>`<tr><td>${acEsc(x.sku)}</td><td>${acEsc(x.pm)}</td><td>${acEsc(x.motivo||'')}</td><td>${acEsc(x.operador||'')}</td><td>${x.cuando?new Date(x.cuando).toLocaleString('es-AR'):''}</td><td><button type="button" class="btn" onclick="criteriosAgingQuitar(${CRAG.skus.indexOf(x)})">Quitar</button></td></tr>`).join('')}</tbody></table>`:'<p class="ofg-vacio">Todavía no hay SKUs de aging cargados.</p>')+
+    (CRAG.historial.length?`<details class="cr-sec"><summary>Historial del aging (${CRAG.historial.length})</summary><div class="cr-sec-c"><table class="cr-hist"><thead><tr><th>Cuándo</th><th>Quién</th><th>Qué</th><th>SKU</th><th>PM</th></tr></thead><tbody>${[...CRAG.historial].reverse().slice(0,200).map(h=>`<tr><td>${new Date(h.cuando).toLocaleString('es-AR')}</td><td>${acEsc(h.operador||'')}</td><td>${h.accion==='quitar'?'Quitó':'Agregó'}</td><td>${acEsc(h.sku)}</td><td>${acEsc(h.pm||'')}</td></tr>`).join('')}</tbody></table></div></details>`:'');
+}
+async function criteriosAgingAgregar(){
+  const operador=qs('cr-operador')?.value;if(!operador){toast('Elegí el operador primero','error');return;}
+  const texto=qs('cr-ag-skus').value,pm=(qs('cr-ag-pm').value||'').trim(),motivo=qs('cr-ag-motivo').value;
+  const n=critAgSeparar(texto).length;if(!n){toast('Pegá al menos un SKU','error');return;}if(!pm){toast('Poné el PM dueño de esos SKUs','error');return;}
+  if(!confirm(`¿Agregar ${n} SKU${n>1?'s':''} al aging de ${pm}?\nOperador: ${operador}\n\nEn Ventas y Rentabilidad se van a poder ver aparte.`))return;
+  try{
+    const r=await criteriosLlamar(`${getBackendUrl()}/criterios/skus-aging`,'POST',{skus:texto,pm,motivo,operador});
+    const ya=(r.ya_estaban||[]).map(x=>`${x.sku} (${x.pm})`);
+    toast(`Agregados: ${(r.agregados||[]).length}`+(ya.length?` · ya estaban: ${ya.slice(0,5).join(', ')}${ya.length>5?'…':''}`:''));
+    qs('cr-ag-skus').value='';AGING_T=0;await criteriosAgingCargar();
+  }catch(e){toast('No se agregó: '+(e.message||e),'error');}
+}
+async function criteriosAgingQuitar(i){
+  const x=CRAG.skus[i];if(!x)return;const operador=qs('cr-operador')?.value;if(!operador){toast('Elegí el operador primero','error');return;}
+  if(!confirm(`¿Sacar ${x.sku} del aging de ${x.pm}?\nOperador: ${operador}`))return;
+  try{await criteriosLlamar(`${getBackendUrl()}/criterios/skus-aging/quitar`,'POST',{sku:x.sku,operador});toast('Listo: ya no es aging');AGING_T=0;await criteriosAgingCargar();}
+  catch(e){toast('No se pudo: '+(e.message||e),'error');}
 }
 function criteriosCanal(c){CR.canal=c;criteriosRender();}
 function criteriosRender(){
@@ -2789,7 +2841,7 @@ function goPage(page,el){
   else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
   if(['analisis-competencia','campanas-ml','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
-  if(page==='dashboard'){rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
+  if(page==='dashboard'){agingAsegurar();rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='ventas-hoy')ventasHoyEntrar();
   if(page==='reglas')criteriosCargar();
@@ -7966,7 +8018,7 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
   _dashFinalizarCarga();
 }
 function _dashFinalizarCarga(){
-  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));initAgingMS('ms-aging');qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
+  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
 // ── "hist" (histórico, sin tocar) vs "vivo" (pestaña nueva 2026-08-19) --
 // accessors chicos en vez de duplicar cada función entera. ──
 function _dashData(inst){return inst==='vivo'?vivoSalesData:allSalesData;}
@@ -7974,8 +8026,8 @@ function _dashFilters(inst){return inst==='vivo'?vivoFilters:activeFilters;}
 function _dashCharts(inst){return inst==='vivo'?dashChartsVivo:dashCharts;}
 function _dashIds(inst){
   return inst==='vivo'
-    ?{pg:'page-dashboard-vivo',desde:'f-desde-vivo',hasta:'f-hasta-vivo',sku:'f-sku-vivo',canal:'ms-canal-vivo',categoria:'ms-categoria-vivo',pm:'ms-pm-vivo',aging:'ms-aging-vivo',diario:'chartDiario-vivo',canalChart:'chartCanal-vivo',donut:'chartDonut-vivo'}
-    :{pg:'page-dashboard',desde:'f-desde',hasta:'f-hasta',sku:'f-sku',canal:'ms-canal',categoria:'ms-categoria',pm:'ms-pm',aging:'ms-aging',diario:'chartDiario',canalChart:'chartCanal',donut:'chartDonut'};
+    ?{pg:'page-dashboard-vivo',desde:'f-desde-vivo',hasta:'f-hasta-vivo',sku:'f-sku-vivo',canal:'ms-canal-vivo',categoria:'ms-categoria-vivo',pm:'ms-pm-vivo',diario:'chartDiario-vivo',canalChart:'chartCanal-vivo',donut:'chartDonut-vivo'}
+    :{pg:'page-dashboard',desde:'f-desde',hasta:'f-hasta',sku:'f-sku',canal:'ms-canal',categoria:'ms-categoria',pm:'ms-pm',diario:'chartDiario',canalChart:'chartCanal',donut:'chartDonut'};
 }
 function goVentasTab(tab){
   ventasTab=tab;
@@ -8005,9 +8057,9 @@ function onCmpDimChange(){
 function applyFilters(inst){
   inst=inst||'hist';const ids=_dashIds(inst);
   if(inst==='hist'){
-    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:getMSValues(ids.aging),soloPos:!!dashSoloPos.hist,sku:qs(ids.sku).value.trim().toLowerCase()};
+    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:DASH_SEG.hist.aging,resultado:DASH_SEG.hist.res,sistema:DASH_SEG.hist.sis,sku:qs(ids.sku).value.trim().toLowerCase()};
   }else{
-    vivoFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:getMSValues(ids.aging),soloPos:!!dashSoloPos.vivo,sku:qs(ids.sku).value.trim().toLowerCase()};
+    vivoFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:DASH_SEG.vivo.aging,resultado:DASH_SEG.vivo.res,sku:qs(ids.sku).value.trim().toLowerCase()};
     const dim=qs('cmp-dim-vivo').value;
     vivoCompare={dim,v1:(dim&&dim!=='sistema')?(qs('cmp-v1-vivo')?.value||''):'',v2:(dim&&dim!=='sistema')?(qs('cmp-v2-vivo')?.value||''):''};
   }
@@ -8016,29 +8068,38 @@ function applyFilters(inst){
 function resetFilters(inst){
   inst=inst||'hist';const ids=_dashIds(inst);
   [ids.desde,ids.hasta,ids.sku].forEach(id=>{const el=qs(id);if(el)el.value='';});
-  [ids.canal,ids.categoria,ids.pm,ids.aging].forEach(id=>{if(msState[id])clearMS(id);});
-  dashSoloPos[inst]=false;dashSoloPosPintar(inst);
+  [ids.canal,ids.categoria,ids.pm].forEach(id=>clearMS(id));
+  DASH_SEG[inst]={aging:'todos',res:'todos',sis:'todos'};dashSegPintar(inst);
   if(inst==='hist'){qs('f-desde2').value='';qs('f-hasta2').value='';activeFilters={};}
   else{const dsel=qs('cmp-dim-vivo');if(dsel)dsel.value='';onCmpDimChange();vivoFilters={};vivoCompare={};}
   renderDashboard(inst);
 }
-// ── Aging (pedido de Maxx 2026-11-13, definido por Claude): ANTIGÜEDAD DE LA VENTA = días corridos desde la fecha de la venta hasta hoy (hora Argentina).
-// Se agrupa en tramos y el filtro «Aging» de Ventas & Rentabilidad deja las ventas de los tramos elegidos. No depende del rango Desde/Hasta (que es absoluto): el
-// aging es relativo a hoy. Una venta sin fecha no entra en ningún tramo. Fechas futuras cuentan como 0 días.
-const AGING_TRAMOS=[['0-7 días',0,7],['8-15 días',8,15],['16-30 días',16,30],['31-60 días',31,60],['61-90 días',61,90],['Más de 90 días',91,Infinity]];
-function agingHoy(){return new Date(Date.now()-3*3600*1000).toISOString().slice(0,10);}
-function agingDias(fechaStr,hoyStr){
-  const f=String(fechaStr||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null;
-  const h=hoyStr||agingHoy();
-  return Math.max(0,Math.round((Date.UTC(+h.slice(0,4),+h.slice(5,7)-1,+h.slice(8,10))-Date.UTC(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)))/86400000));
+// ── Aging y Resultado de Ventas & Rentabilidad (aclaración de Maxx 2026-11-13).
+// AGING = los SKUs de stock a liquidar que se venden a pérdida A PROPÓSITO (su pérdida está contemplada). La lista la mantiene cada PM en «Criterios de precio» (backend: GET /criterios/skus-aging).
+//   Una venta es de aging si ALGUNO de sus SKU está en esa lista. «Solo aging» / «Sin aging» no tocan la rentabilidad: solo dejan unas u otras filas, así se ve la renta general con y sin aging.
+// RESULTADO = la venta dio pérdida (rentabilidad $ menor a cero) o no (cero o más). Es independiente del aging: una venta a pérdida puede ser de aging o no, y no es lo mismo.
+let AGING_SKUS=new Set(),AGING_INFO={},AGING_T=0;
+let DASH_SEG={hist:{aging:'todos',res:'todos',sis:'todos'},vivo:{aging:'todos',res:'todos',sis:'todos'}};
+function agingKey(s){return normSku(s).replace(/\s+/g,'');}   // igual que el backend (skus_aging.clave): sin espacios y sin distinguir mayúsculas
+function dashEsAging(d){return AGING_SKUS.size>0&&(d.skus||[]).some(x=>AGING_SKUS.has(agingKey(x)));}
+function dashEsPerdida(d){return Number(d.rentabilidad)<0;}
+function dashSegPintar(inst){
+  const suf=inst==='vivo'?'-vivo':'';
+  [['seg-aging','aging'],['seg-res','res'],['seg-sis','sis']].forEach(([id,k])=>{const g=qs(id+suf);if(g)g.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===DASH_SEG[inst][k]?'true':'false'));});
 }
-function agingTramoDe(fechaStr,hoyStr){const d=agingDias(fechaStr,hoyStr);if(d===null)return null;const t=AGING_TRAMOS.find(x=>d>=x[1]&&d<=x[2]);return t?t[0]:null;}
-function initAgingMS(id){initMS(id,AGING_TRAMOS.map(t=>t[0]));msState[id].all=AGING_TRAMOS.map(t=>t[0]);renderMSOptions(id);}   // initMS ordena alfabético: acá se deja el orden de los tramos
-// Botón «Solo positivos» de Ventas & Rentabilidad (pedido de Maxx 2026-11-13): deja solo las ventas con rentabilidad $ mayor a cero (las de rentabilidad 0 o negativa no entran).
-let dashSoloPos={hist:false,vivo:false};
-function dashEsPositiva(d){return Number(d.rentabilidad)>0;}
-function dashSoloPosPintar(inst){const b=qs(inst==='vivo'?'btn-solo-pos-vivo':'btn-solo-pos');if(!b)return;const on=!!dashSoloPos[inst];b.classList.toggle('primary',on);b.setAttribute('aria-pressed',on?'true':'false');}
-function dashToggleSoloPos(inst){inst=inst||'hist';dashSoloPos[inst]=!dashSoloPos[inst];dashSoloPosPintar(inst);applyFilters(inst);}
+async function agingAsegurar(forzar){
+  const bu=getBackendUrl();if(!bu)return false;
+  if(!forzar&&AGING_T&&Date.now()-AGING_T<60000)return true;
+  try{
+    const r=await fetch(`${bu}/criterios/skus-aging`);if(!r.ok)throw new Error('estado '+r.status);const d=await r.json();
+    AGING_SKUS=new Set((d.skus||[]).map(x=>agingKey(x.sku)));AGING_INFO={};(d.skus||[]).forEach(x=>{AGING_INFO[agingKey(x.sku)]=x;});AGING_T=Date.now();return true;
+  }catch(e){toast('No se pudo leer el listado de aging: '+(e.message||e),'error');return false;}
+}
+async function dashSegElegir(inst,cual,valor){
+  inst=inst||'hist';DASH_SEG[inst][cual]=valor;dashSegPintar(inst);
+  if(cual==='aging'&&valor!=='todos'){await agingAsegurar(true);if(!AGING_SKUS.size)toast('El listado de aging está vacío: cargalo en Criterios de precio.','error');}
+  applyFilters(inst);
+}
 function getFiltered(inst){
   inst=inst||'hist';
   const data=_dashData(inst);const f=_dashFilters(inst);
@@ -8047,8 +8108,9 @@ function getFiltered(inst){
     if(f.canal)out=out.filter(d=>f.canal.includes(d.canal));
     if(f.categoria)out=out.filter(d=>f.categoria.includes(d.categoria));
     if(f.pm)out=out.filter(d=>f.pm.includes(d.pm));
-    if(f.aging)out=out.filter(d=>f.aging.includes(agingTramoDe(d.fechaStr)));
-    if(f.soloPos)out=out.filter(dashEsPositiva);
+    if(f.sistema&&f.sistema!=='todos')out=out.filter(d=>d.sistema===f.sistema);
+    if(f.aging==='solo')out=out.filter(dashEsAging);else if(f.aging==='sin')out=out.filter(d=>!dashEsAging(d));
+    if(f.resultado==='con')out=out.filter(dashEsPerdida);else if(f.resultado==='sin')out=out.filter(d=>!dashEsPerdida(d));
     if(f.sku)out=out.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));
     return out;
   }
@@ -10109,7 +10171,7 @@ function ofertasExport(){
       canales.forEach((c,i)=>{ if(!canalColors[c]) canalColors[c]=PALETTE[i%PALETTE.length]; });
       initMS('ms-canal-vivo',new Set(vivoSalesData.map(d=>d.canal)));
       initMS('ms-categoria-vivo',new Set(vivoSalesData.map(d=>d.categoria)));
-      initMS('ms-pm-vivo',new Set(vivoSalesData.map(d=>d.pm).filter(Boolean)));initAgingMS('ms-aging-vivo');
+      initMS('ms-pm-vivo',new Set(vivoSalesData.map(d=>d.pm).filter(Boolean)));
       document.getElementById('f-desde-vivo').value='';document.getElementById('f-hasta-vivo').value='';
       document.getElementById('f-sku-vivo').value='';
       document.getElementById('cmp-dim-vivo').value='';onCmpDimChange();
