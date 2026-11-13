@@ -1261,7 +1261,9 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal"><div class="ms-trigger" onclick="toggleMS('ms-canal')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal')">Todos</button><button onclick="clearMS('ms-canal')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria"><div class="ms-trigger" onclick="toggleMS('ms-categoria')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria')">Todos</button><button onclick="clearMS('ms-categoria')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm"><div class="ms-trigger" onclick="toggleMS('ms-pm')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm')">Todos</button><button onclick="clearMS('ms-pm')">Ninguno</button></div></div></div></div>
+  <div class="filter-group" title="Antigüedad de la venta: días desde su fecha hasta hoy"><span class="filter-label">Aging</span><div class="ms-wrap" id="ms-aging"><div class="ms-trigger" onclick="toggleMS('ms-aging')">Todos</div><div class="ms-dropdown"><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-aging')">Todos</button><button onclick="clearMS('ms-aging')">Ninguno</button></div></div></div></div>
   <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('hist',this.value)" onkeydown="if(event.key==='Enter'){applyFilters();dashSkuAcHide('hist');}"><div id="dash-sku-ac-dropdown" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
+  <button class="btn" id="btn-solo-pos" aria-pressed="false" title="Muestra solo las ventas con rentabilidad positiva" onclick="dashToggleSoloPos('hist')">Solo positivos</button>
   <button class="btn primary" onclick="applyFilters()">Aplicar</button>
   <button class="btn" onclick="resetFilters()">Limpiar</button>
 </div>
@@ -1283,7 +1285,9 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="filter-group"><span class="filter-label">Canal</span><div class="ms-wrap" id="ms-canal-vivo"><div class="ms-trigger" onclick="toggleMS('ms-canal-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-canal-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-canal-vivo')">Todos</button><button onclick="clearMS('ms-canal-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">Categoría</span><div class="ms-wrap" id="ms-categoria-vivo"><div class="ms-trigger" onclick="toggleMS('ms-categoria-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-categoria-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-categoria-vivo')">Todos</button><button onclick="clearMS('ms-categoria-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group"><span class="filter-label">PM</span><div class="ms-wrap" id="ms-pm-vivo"><div class="ms-trigger" onclick="toggleMS('ms-pm-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="filterMSOptions(this,'ms-pm-vivo')"></div><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-pm-vivo')">Todos</button><button onclick="clearMS('ms-pm-vivo')">Ninguno</button></div></div></div></div>
+  <div class="filter-group" title="Antigüedad de la venta: días desde su fecha hasta hoy"><span class="filter-label">Aging</span><div class="ms-wrap" id="ms-aging-vivo"><div class="ms-trigger" onclick="toggleMS('ms-aging-vivo')">Todos</div><div class="ms-dropdown"><div class="ms-list"></div><div class="ms-actions"><button onclick="selectAllMS('ms-aging-vivo')">Todos</button><button onclick="clearMS('ms-aging-vivo')">Ninguno</button></div></div></div></div>
   <div class="filter-group" style="position:relative"><span class="filter-label">SKU</span><input type="text" id="f-sku-vivo" placeholder="Buscar SKU..." style="width:120px;" autocomplete="off" oninput="dashSkuAcShow('vivo',this.value)" onkeydown="if(event.key==='Enter'){applyFilters('vivo');dashSkuAcHide('vivo');}"><div id="dash-sku-ac-dropdown-vivo" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div></div>
+  <button class="btn" id="btn-solo-pos-vivo" aria-pressed="false" title="Muestra solo las ventas con rentabilidad positiva" onclick="dashToggleSoloPos('vivo')">Solo positivos</button>
   <button class="btn primary" onclick="applyFilters('vivo')">Aplicar</button>
   <button class="btn" onclick="resetFilters('vivo')">Limpiar</button>
 </div>
@@ -7962,7 +7966,7 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
   _dashFinalizarCarga();
 }
 function _dashFinalizarCarga(){
-  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
+  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));initAgingMS('ms-aging');qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
 // ── "hist" (histórico, sin tocar) vs "vivo" (pestaña nueva 2026-08-19) --
 // accessors chicos en vez de duplicar cada función entera. ──
 function _dashData(inst){return inst==='vivo'?vivoSalesData:allSalesData;}
@@ -7970,8 +7974,8 @@ function _dashFilters(inst){return inst==='vivo'?vivoFilters:activeFilters;}
 function _dashCharts(inst){return inst==='vivo'?dashChartsVivo:dashCharts;}
 function _dashIds(inst){
   return inst==='vivo'
-    ?{pg:'page-dashboard-vivo',desde:'f-desde-vivo',hasta:'f-hasta-vivo',sku:'f-sku-vivo',canal:'ms-canal-vivo',categoria:'ms-categoria-vivo',pm:'ms-pm-vivo',diario:'chartDiario-vivo',canalChart:'chartCanal-vivo',donut:'chartDonut-vivo'}
-    :{pg:'page-dashboard',desde:'f-desde',hasta:'f-hasta',sku:'f-sku',canal:'ms-canal',categoria:'ms-categoria',pm:'ms-pm',diario:'chartDiario',canalChart:'chartCanal',donut:'chartDonut'};
+    ?{pg:'page-dashboard-vivo',desde:'f-desde-vivo',hasta:'f-hasta-vivo',sku:'f-sku-vivo',canal:'ms-canal-vivo',categoria:'ms-categoria-vivo',pm:'ms-pm-vivo',aging:'ms-aging-vivo',diario:'chartDiario-vivo',canalChart:'chartCanal-vivo',donut:'chartDonut-vivo'}
+    :{pg:'page-dashboard',desde:'f-desde',hasta:'f-hasta',sku:'f-sku',canal:'ms-canal',categoria:'ms-categoria',pm:'ms-pm',aging:'ms-aging',diario:'chartDiario',canalChart:'chartCanal',donut:'chartDonut'};
 }
 function goVentasTab(tab){
   ventasTab=tab;
@@ -8001,9 +8005,9 @@ function onCmpDimChange(){
 function applyFilters(inst){
   inst=inst||'hist';const ids=_dashIds(inst);
   if(inst==='hist'){
-    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),sku:qs(ids.sku).value.trim().toLowerCase()};
+    activeFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,desde2:qs('f-desde2').value,hasta2:qs('f-hasta2').value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:getMSValues(ids.aging),soloPos:!!dashSoloPos.hist,sku:qs(ids.sku).value.trim().toLowerCase()};
   }else{
-    vivoFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),sku:qs(ids.sku).value.trim().toLowerCase()};
+    vivoFilters={desde:qs(ids.desde).value,hasta:qs(ids.hasta).value,canal:getMSValues(ids.canal),categoria:getMSValues(ids.categoria),pm:getMSValues(ids.pm),aging:getMSValues(ids.aging),soloPos:!!dashSoloPos.vivo,sku:qs(ids.sku).value.trim().toLowerCase()};
     const dim=qs('cmp-dim-vivo').value;
     vivoCompare={dim,v1:(dim&&dim!=='sistema')?(qs('cmp-v1-vivo')?.value||''):'',v2:(dim&&dim!=='sistema')?(qs('cmp-v2-vivo')?.value||''):''};
   }
@@ -8012,11 +8016,29 @@ function applyFilters(inst){
 function resetFilters(inst){
   inst=inst||'hist';const ids=_dashIds(inst);
   [ids.desde,ids.hasta,ids.sku].forEach(id=>{const el=qs(id);if(el)el.value='';});
-  [ids.canal,ids.categoria,ids.pm].forEach(id=>clearMS(id));
+  [ids.canal,ids.categoria,ids.pm,ids.aging].forEach(id=>{if(msState[id])clearMS(id);});
+  dashSoloPos[inst]=false;dashSoloPosPintar(inst);
   if(inst==='hist'){qs('f-desde2').value='';qs('f-hasta2').value='';activeFilters={};}
   else{const dsel=qs('cmp-dim-vivo');if(dsel)dsel.value='';onCmpDimChange();vivoFilters={};vivoCompare={};}
   renderDashboard(inst);
 }
+// ── Aging (pedido de Maxx 2026-11-13, definido por Claude): ANTIGÜEDAD DE LA VENTA = días corridos desde la fecha de la venta hasta hoy (hora Argentina).
+// Se agrupa en tramos y el filtro «Aging» de Ventas & Rentabilidad deja las ventas de los tramos elegidos. No depende del rango Desde/Hasta (que es absoluto): el
+// aging es relativo a hoy. Una venta sin fecha no entra en ningún tramo. Fechas futuras cuentan como 0 días.
+const AGING_TRAMOS=[['0-7 días',0,7],['8-15 días',8,15],['16-30 días',16,30],['31-60 días',31,60],['61-90 días',61,90],['Más de 90 días',91,Infinity]];
+function agingHoy(){return new Date(Date.now()-3*3600*1000).toISOString().slice(0,10);}
+function agingDias(fechaStr,hoyStr){
+  const f=String(fechaStr||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null;
+  const h=hoyStr||agingHoy();
+  return Math.max(0,Math.round((Date.UTC(+h.slice(0,4),+h.slice(5,7)-1,+h.slice(8,10))-Date.UTC(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)))/86400000));
+}
+function agingTramoDe(fechaStr,hoyStr){const d=agingDias(fechaStr,hoyStr);if(d===null)return null;const t=AGING_TRAMOS.find(x=>d>=x[1]&&d<=x[2]);return t?t[0]:null;}
+function initAgingMS(id){initMS(id,AGING_TRAMOS.map(t=>t[0]));msState[id].all=AGING_TRAMOS.map(t=>t[0]);renderMSOptions(id);}   // initMS ordena alfabético: acá se deja el orden de los tramos
+// Botón «Solo positivos» de Ventas & Rentabilidad (pedido de Maxx 2026-11-13): deja solo las ventas con rentabilidad $ mayor a cero (las de rentabilidad 0 o negativa no entran).
+let dashSoloPos={hist:false,vivo:false};
+function dashEsPositiva(d){return Number(d.rentabilidad)>0;}
+function dashSoloPosPintar(inst){const b=qs(inst==='vivo'?'btn-solo-pos-vivo':'btn-solo-pos');if(!b)return;const on=!!dashSoloPos[inst];b.classList.toggle('primary',on);b.setAttribute('aria-pressed',on?'true':'false');}
+function dashToggleSoloPos(inst){inst=inst||'hist';dashSoloPos[inst]=!dashSoloPos[inst];dashSoloPosPintar(inst);applyFilters(inst);}
 function getFiltered(inst){
   inst=inst||'hist';
   const data=_dashData(inst);const f=_dashFilters(inst);
@@ -8025,6 +8047,8 @@ function getFiltered(inst){
     if(f.canal)out=out.filter(d=>f.canal.includes(d.canal));
     if(f.categoria)out=out.filter(d=>f.categoria.includes(d.categoria));
     if(f.pm)out=out.filter(d=>f.pm.includes(d.pm));
+    if(f.aging)out=out.filter(d=>f.aging.includes(agingTramoDe(d.fechaStr)));
+    if(f.soloPos)out=out.filter(dashEsPositiva);
     if(f.sku)out=out.filter(d=>d.skus.some(s=>s.toLowerCase().includes(f.sku)));
     return out;
   }
@@ -10085,7 +10109,7 @@ function ofertasExport(){
       canales.forEach((c,i)=>{ if(!canalColors[c]) canalColors[c]=PALETTE[i%PALETTE.length]; });
       initMS('ms-canal-vivo',new Set(vivoSalesData.map(d=>d.canal)));
       initMS('ms-categoria-vivo',new Set(vivoSalesData.map(d=>d.categoria)));
-      initMS('ms-pm-vivo',new Set(vivoSalesData.map(d=>d.pm).filter(Boolean)));
+      initMS('ms-pm-vivo',new Set(vivoSalesData.map(d=>d.pm).filter(Boolean)));initAgingMS('ms-aging-vivo');
       document.getElementById('f-desde-vivo').value='';document.getElementById('f-hasta-vivo').value='';
       document.getElementById('f-sku-vivo').value='';
       document.getElementById('cmp-dim-vivo').value='';onCmpDimChange();
