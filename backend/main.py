@@ -3617,6 +3617,37 @@ async def criterios_volver_al_comun(request: Request):
     return {"ok": True, "cambio": e}
 
 
+@app.get("/criterios/skus-aging")
+async def criterios_skus_aging():
+    """Listado de SKUs de aging (stock a liquidar, se vende a pérdida a propósito), con el historial de cambios. Lo usa Ventas y Rentabilidad."""
+    import skus_aging
+    from rentabilidad import db as _db
+    return await run_in_threadpool(lambda: skus_aging.leer(_db.sesion))
+
+
+@app.post("/criterios/skus-aging")
+async def criterios_skus_aging_agregar(request: Request):
+    """Suma SKUs al listado de aging de un PM. Operador y PM obligatorios; queda en el historial."""
+    import skus_aging
+    from rentabilidad import db as _db
+    b = await request.json()
+    try:
+        return {"ok": True, **await run_in_threadpool(lambda: skus_aging.agregar(_db.sesion, b.get("skus"), str(b.get("pm", "")), str(b.get("motivo", "")), str(b.get("operador", ""))))}
+    except skus_aging.SkuAgingInvalido as ex:
+        raise HTTPException(status_code=422, detail=str(ex))
+
+
+@app.post("/criterios/skus-aging/quitar")
+async def criterios_skus_aging_quitar(request: Request):
+    import skus_aging
+    from rentabilidad import db as _db
+    b = await request.json()
+    try:
+        return {"ok": True, **await run_in_threadpool(lambda: skus_aging.quitar(_db.sesion, str(b.get("sku", "")), str(b.get("operador", ""))))}
+    except skus_aging.SkuAgingInvalido as ex:
+        raise HTTPException(status_code=422, detail=str(ex))
+
+
 @app.get("/ayala-core/catalogo-skus")
 async def ayala_core_catalogo_skus():
     """TODOS los SKU de la foto de costos de Ecom (miles), para el selector del Motor: se carga una sola vez y se busca en el navegador. `[sku, estado_costo, tiene_iva_en_ecom]`;
