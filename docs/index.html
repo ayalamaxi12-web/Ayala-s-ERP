@@ -1919,8 +1919,15 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="cr-cab"><div><h2 class="cr-tit" style="color:var(--text)">Posventa ML</h2><p class="cr-sub">Reclamos, mediaciones, devoluciones y cancelaciones tomados directo de la API de Mercado Libre, con el rango de fechas que elijas. Solo lectura.</p></div></div>
   <div class="card" style="margin-bottom:14px">
     <div class="ofx-fila">
-      <label>Desde<input type="date" id="pv-desde" class="fi"></label>
-      <label>Hasta<input type="date" id="pv-hasta" class="fi"></label>
+      <div class="dash-filters" style="padding:0;background:none;border:0;box-shadow:none;display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+        <div class="filter-group"><span class="filter-label p1">● Desde</span><input type="date" id="pv-desde"></div>
+        <div class="filter-group"><span class="filter-label p1">Hasta</span><input type="date" id="pv-hasta"></div>
+        <div class="vs-sep">vs</div>
+        <div class="filter-group"><span class="filter-label p2">● Desde 2</span><input type="date" id="pv-desde2"></div>
+        <div class="filter-group"><span class="filter-label p2">Hasta 2</span><input type="date" id="pv-hasta2"></div>
+        <button type="button" class="btn" onclick="posventaPeriodoAnterior()" title="Completa el período 2 con el período inmediato anterior, de la misma duración">Período anterior</button>
+        <button type="button" class="btn" onclick="posventaSinComparar()" title="Borra el período 2">Sin comparar</button>
+      </div>
       <button type="button" class="btn primary" onclick="posventaRun('IT')" id="btn-pv-IT">Ver Group</button>
       <button type="button" class="btn primary" onclick="posventaRun('MT')" id="btn-pv-MT">Ver Arg</button>
       <button type="button" class="btn" onclick="posventaCsv()" id="btn-pv-csv" style="display:none">⬇ CSV de reclamos</button>
@@ -1928,7 +1935,6 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <button type="button" class="btn" onclick="respuestasRun('IT',false)" id="btn-rs-IT">Respuestas Group</button>
       <button type="button" class="btn" onclick="respuestasRun('MT',false)" id="btn-rs-MT">Respuestas Arg</button>
       <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="rs-msj" checked> incluir mensajes (más lento)</label>
-      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="rs-cmp" checked> comparar con el período anterior</label>
       <label>Períodos guardados<select id="rs-guardados" class="fi" onchange="respuestasAbrirGuardado()"><option value="">— abrir uno guardado —</option></select></label>
     </div>
     <p class="ofx-nota">Los reclamos se cuentan por la fecha del reclamo y las ventas por la fecha de la venta, ambos dentro del rango. La tasa de abajo es de referencia: la oficial de ML es la de reputación (60 días).</p>
@@ -5343,6 +5349,8 @@ function runFullConciliar(){return fullActualizar('conciliar');}
 
 // ── Posventa ML (backend: ml_posventa.py, /ml-posventa/*): reclamos, cancelaciones y reputación por cuenta y rango. Solo lectura. ──
 let PV={res:null};
+function posventaPeriodoAnterior(){const d=qs('pv-desde').value,h=qs('pv-hasta').value;if(!d||!h){toast('Elegí primero desde y hasta','error');return;}const a=new Date(d+'T00:00:00Z'),b=new Date(h+'T00:00:00Z'),n=Math.round((b-a)/864e5)+1,f=x=>x.toISOString().slice(0,10),ph=new Date(a.getTime()-864e5),pd=new Date(ph.getTime()-(n-1)*864e5);qs('pv-desde2').value=f(pd);qs('pv-hasta2').value=f(ph);}
+function posventaSinComparar(){qs('pv-desde2').value='';qs('pv-hasta2').value='';}
 function posventaIniciar(){respuestasGuardadosListar();const h=qs('pv-hasta'),d=qs('pv-desde');if(h&&!h.value){const hoy=new Date(),ini=new Date(hoy.getTime()-30*864e5),f=x=>x.toISOString().slice(0,10);h.value=f(hoy);d.value=f(ini);}}
 async function posventaRun(cuenta){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
@@ -5379,10 +5387,11 @@ function posventaCsv(){
 let RS={res:null};
 async function respuestasRun(cuenta,forzar){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
-  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-rs-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Respuestas Group':'Respuestas Arg',msj=qs('rs-msj').checked,cmp=qs('rs-cmp').checked;
+  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,d2=qs('pv-desde2').value,h2=qs('pv-hasta2').value,btn=qs('btn-rs-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Respuestas Group':'Respuestas Arg',msj=qs('rs-msj').checked;
+  if(!!d2!==!!h2){st.textContent='El período 2 necesita desde y hasta (o dejalo vacío para no comparar).';return;}
   if(!desde||!hasta){st.textContent='Elegí desde y hasta (para comparar meses, abarcá varios).';return;}
   btn.disabled=true;btn.textContent='● buscando...';st.textContent='Buscando la foto guardada…';
-  const q=`cuenta=${cuenta}&desde=${desde}&hasta=${hasta}&mensajes=${msj}&comparar=${cmp}`;
+  const q=`cuenta=${cuenta}&desde=${desde}&hasta=${hasta}&mensajes=${msj}${d2?`&desde2=${d2}&hasta2=${h2}`:''}`;
   if(!forzar){
     try{const f=await (await fetch(`${url}/ml-respuestas/foto?${q}`)).json();
       if(f.existe&&f.payload){RS.res=f.payload;RS.foto={en:f.obtenido_en,cerrado:f.periodo_cerrado,cuenta};respuestasPintar();st.textContent='Foto guardada: se abrió al instante.';btn.disabled=false;btn.textContent=rotulo;return;}}catch(e){console.warn(e);}
@@ -5398,11 +5407,11 @@ async function respuestasRun(cuenta,forzar){
 async function respuestasGuardadosListar(){
   const url=getBackendUrl(),sel=qs('rs-guardados');if(!url||!sel)return;
   const todos=[];for(const c of ['IT','MT']){try{const d=await (await fetch(`${url}/ml-respuestas/fotos?cuenta=${c}`)).json();(d.fotos||[]).forEach(f=>todos.push({...f,cuenta:c}));}catch(e){}}
-  RS.guardados=todos;sel.innerHTML='<option value="">— abrir uno guardado —</option>'+todos.map((f,i)=>`<option value="${i}">${etiquetaCuenta(f.cuenta)} · ${f.desde} → ${f.hasta}${f.mensajes?' · con mensajes':''}</option>`).join('');
+  RS.guardados=todos;sel.innerHTML='<option value="">— abrir uno guardado —</option>'+todos.map((f,i)=>`<option value="${i}">${etiquetaCuenta(f.cuenta)} · ${f.desde} → ${f.hasta}${f.mensajes?' · con mensajes':''}${f.desde2?` · vs ${f.desde2} → ${f.hasta2}`:''}</option>`).join('');
 }
 function respuestasAbrirGuardado(){
   const i=qs('rs-guardados').value;if(i==='')return;const f=RS.guardados[+i];if(!f)return;
-  qs('pv-desde').value=f.desde;qs('pv-hasta').value=f.hasta;qs('rs-msj').checked=!!f.mensajes;qs('rs-cmp').checked=!!f.comparar;respuestasRun(f.cuenta,false);
+  qs('pv-desde').value=f.desde;qs('pv-hasta').value=f.hasta;qs('rs-msj').checked=!!f.mensajes;qs('pv-desde2').value=f.desde2||'';qs('pv-hasta2').value=f.hasta2||'';respuestasRun(f.cuenta,false);
 }
 function respuestasTabla(tit,filas,colConv,rotConv){
   if(!filas||!filas.length)return `<div class="card" style="margin-bottom:14px"><div class="card-title">${tit}</div><p class="ofx-nota">Sin datos en el rango.</p></div>`;
@@ -5415,11 +5424,15 @@ let RS_CH={};
 function rsGraf(id,cfg){if(RS_CH[id]){RS_CH[id].destroy();}const c=qs(id);if(!c||typeof Chart==='undefined')return;RS_CH[id]=new Chart(c,cfg);}
 const rsN=(x,d)=>x==null?'—':Number(x).toLocaleString('es-AR',{maximumFractionDigits:d==null?1:d});
 const rsT=h=>h==null?'—':(h<1?Math.round(h*60)+' min':h<48?rsN(h,1)+' h':rsN(h/24,1)+' d');
-function rsKpis(t,cant,rot,ant){
+function rsKpis(t,cant,rot,ant,r){
   if(!t)return '';
-  const dl=(a,b,menorMejor,suf)=>{if(!ant||a==null||b==null)return '';const x=Math.round((a-b)*10)/10;if(!x)return ' = igual al período anterior';const bien=menorMejor?x<0:x>0;return ` <span style="color:var(--${bien?'green':'red'})">${x>0?'▲':'▼'} ${rsN(Math.abs(x))}${suf||''}</span> vs anterior`;};
-  const k=(a,v,sub,col,d)=>`<div class="card" style="min-width:140px;flex:1;margin:0"><div class="ofx-nota">${a}</div><div style="font-size:24px;font-weight:700;${col?'color:var(--'+col+')':''}">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}${d?`<div class="ofx-nota" style="margin:0">${d}</div>`:''}</div>`;
-  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">${k(rot,rsN(t[cant],0),'','',ant?dl(t[cant],ant[cant],false,''):'')}${k('% respondidas',rsN(t.pct_respondidas)+'%','',t.pct_respondidas>=95?'green':t.pct_respondidas>=85?'yellow':'red',ant?dl(t.pct_respondidas,ant.pct_respondidas,false,' pp'):'')}${k('Sin responder',rsN(t.sin_responder,0),'',t.sin_responder?'red':'green',ant?dl(t.sin_responder,ant.sin_responder,true,''):'')}${k('Tiempo mediano',rsT(t.mediana_h),'promedio '+rsT(t.promedio_h),'',ant?dl(t.mediana_h,ant.mediana_h,true,' h'):'')}${k('En 1 hora',rsN(t.pct_1h)+'%','','',ant?dl(t.pct_1h,ant.pct_1h,false,' pp'):'')}${k('En 24 horas',rsN(t.pct_24h)+'%','',t.pct_24h>=95?'green':'yellow',ant?dl(t.pct_24h,ant.pct_24h,false,' pp'):'')}</div>`;
+  const l1=r?`${r.desde} → ${r.hasta}`:'Período 1',l2=r&&r.anterior?`${r.anterior.desde} → ${r.anterior.hasta}`:'Período 2';
+  // Igual que en Ventas & Rentabilidad: delta pegado al número (↑/↓ % contra el período 2); en porcentajes, puntos; en tiempos y «sin responder» bajar es mejor.
+  const dRel=(v1,v2,menorMejor)=>{if(!ant||v1==null||v2==null||!v2)return '';const pct=(v1-v2)/Math.abs(v2)*100,up=pct>=0,bien=menorMejor?!up:up;return `<div style="font-size:9px;color:${bien?'var(--green)':'var(--red)'};margin-top:3px;font-family:'DM Mono',monospace">${up?'↑':'↓'} ${Math.abs(pct).toFixed(1)}%</div>`;};
+  const dPts=(v1,v2)=>{if(!ant||v1==null||v2==null)return '';const diff=v1-v2,up=diff>=0;return `<div style="font-size:9px;color:${up?'var(--green)':'var(--red)'};margin-top:3px;font-family:'DM Mono',monospace">${up?'↑':'↓'} ${Math.abs(diff).toFixed(1)} pts</div>`;};
+  const kpi=(cl,lab,v1,v2,fmt,dfn)=>`<div class="kpi-card ${cl}"><div class="kpi-label">${lab}</div><div class="kpi-value">${fmt(v1)}</div>${ant?(dfn||dRel)(v1,v2):''}${ant?`<div class="kpi-sub">${acEsc(l2)}: ${fmt(v2)}</div>`:''}</div>`;
+  const A=ant||{},n0=x=>rsN(x,0),pc=x=>x==null?'—':rsN(x)+'%';
+  return `${ant?`<div style="font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin:6px 0 10px">📅 <span style="color:var(--accent2)">${acEsc(l1)}</span> vs <span style="color:var(--accent3)">${acEsc(l2)}</span></div>`:''}<div class="kpi-row" style="margin-bottom:12px">${kpi('c1',rot,t[cant],A[cant],n0)}${kpi('c2','% respondidas',t.pct_respondidas,A.pct_respondidas,pc,dPts)}${kpi('c3','Sin responder',t.sin_responder,A.sin_responder,n0,(a,b)=>dRel(a,b,true))}${kpi('c4','Tiempo mediano',t.mediana_h,A.mediana_h,rsT,(a,b)=>dRel(a,b,true))}${kpi('c5','Respondidas en 1 h',t.pct_1h,A.pct_1h,pc,dPts)}${kpi('c1','Respondidas en 24 h',t.pct_24h,A.pct_24h,pc,dPts)}</div>`;
 }
 function rsTramos(arr){
   if(!arr)return '';const tot=arr.reduce((a,x)=>a+x.cantidad,0)||1,col=['#2e9e5b','#6bbf59','#e0b83a','#e07b39','#d64545','#8a8f98'];
@@ -5465,14 +5478,14 @@ function rsCsv(tipo){
 }
 function respuestasPintar(){
   const r=RS.res;if(!r)return;const tieneMsj=!!r.mensajes_total;
-  qs('rs-res').innerHTML=`${rsBannerFoto()}<p class="ofx-nota">Respuestas de ${acEsc(etiquetaCuenta(r.cuenta))} · ${acEsc(r.desde)} → ${acEsc(r.hasta)}${r.anterior?` (comparado con ${acEsc(r.anterior.desde)} → ${acEsc(r.anterior.hasta)})`:''}. Tiempos corridos (24 h, no horario laboral). Los meses de los extremos del rango pueden estar incompletos: comparar meses completos.</p>
-  <h3 style="margin:14px 0 6px">Preguntas de compradores</h3>${rsKpis(r.preguntas_total,'preguntas','Preguntas',r.anterior&&r.anterior.preguntas_total)}
+  qs('rs-res').innerHTML=`${rsBannerFoto()}<p class="ofx-nota">Respuestas de ${acEsc(etiquetaCuenta(r.cuenta))} · ${acEsc(r.desde)} → ${acEsc(r.hasta)}${r.anterior?``:''}. Tiempos corridos (24 h, no horario laboral). Los meses de los extremos del rango pueden estar incompletos: comparar meses completos.</p>
+  <h3 style="margin:14px 0 6px">Preguntas de compradores</h3>${rsKpis(r.preguntas_total,'preguntas','Preguntas',r.anterior&&r.anterior.preguntas_total,r)}
   <div class="card" style="margin-bottom:14px"><div class="card-title">¿Cuánto tardamos en responder?</div>${rsTramos(r.preguntas_tramos)}</div>
   ${rsSeriesHtml('p','Preguntas')}
   ${respuestasTabla('Comparativa mes a mes',r.preguntas_por_mes,'preguntas','Preguntas')}
   ${rsTablaItems(r.preguntas_items)}
   <div class="card" style="margin-bottom:18px"><div class="card-title">Detalle de preguntas</div>${rsFiltroHtml('p')}<div class="table-wrap" style="max-height:520px;overflow:auto"><table class="ofm-tabla" id="rs-t-p"></table></div></div>
-  ${tieneMsj?`<h3 style="margin:14px 0 6px">Mensajes de posventa</h3>${rsKpis(r.mensajes_total,'conversaciones','Conversaciones',r.anterior&&r.anterior.mensajes_total)}
+  ${tieneMsj?`<h3 style="margin:14px 0 6px">Mensajes de posventa <small style="font-weight:400;color:var(--text2)">· chats cuyo primer mensaje del comprador cae entre ${acEsc(r.desde)} y ${acEsc(r.hasta)}</small></h3>${rsKpis(r.mensajes_total,'conversaciones','Conversaciones nuevas',r.anterior&&r.anterior.mensajes_total,r)}
   <div class="card" style="margin-bottom:14px"><div class="card-title">¿Cuánto tardamos en responder?</div>${rsTramos(r.mensajes_tramos)}</div>
   ${rsDesgloseChats(r.mensajes_categorias)}
   ${rsSeriesHtml('m','Conversaciones nuevas')}
