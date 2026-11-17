@@ -183,6 +183,9 @@ def actualizar(job_id: str, modulo: str, dias_ventas: int = 30, semanas_objetivo
                 res = conciliar(ml, ecom, progreso_cb=_progreso)
                 estado, n_inc = _guardar_conciliacion(sesion_fn, res, previo_conc, t0)
                 _anotar_historial(job_id, res, historial_fn)
+            if getattr(ml, "sin_acceso", None):
+                ids = sorted({x["inventory_id"] for x in ml.sin_acceso})
+                _log(job_id, f"ML respondió 403 (sin permiso) para {len(ids)} inventario(s), se omitieron: {', '.join(ids[:15])}{'…' if len(ids) > 15 else ''}")
             _jobs[job_id]["progress"] = None
             _log(job_id, "Listo." if estado == "completa" else f"Listo con datos incompletos para {n_inc} SKU.")
             _jobs[job_id]["status"] = "done"
