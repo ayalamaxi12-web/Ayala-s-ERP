@@ -33,6 +33,7 @@ HEADER_CLAVE = "x-erp-key"
 
 _RUTAS_GET_PROTEGIDAS = ("/ml/token", "/ml-proxy", "/competencia/analisis", "/competencia/publicaciones-propias", "/competencia/precio-ml", "/campanas/calendario", "/proyeccion-2027/dashboard", "/proyeccion-2027/versiones", "/proyeccion-2027/transito", "/fravega/catalogo", "/cyber/input/csv", "/cyber/input/reglas", "/cyber/input/descartadas", "/cyber/precios/otra-cuenta", "/cyber/monitoreo/dia", "/tactica/pedidos/explorar", "/tactica/pedidos/valores", "/tactica/pendientes/mail", "/tactica/pendientes/historial")
 RUTA_PICKING = "/picking/"
+RUTAS_SESION = ("/auth/login", "/auth/cambiar-clave", "/auth/usuarios")      # usuarios y accesos: se autentican con su propia sesión (Authorization: Bearer), no con X-ERP-Key. `/auth/check` (verifica la clave compartida) NO está acá
 _METODOS_ESCRITURA = ("POST", "PUT", "PATCH", "DELETE")
 
 _MAX_AVISADOS = 500
@@ -44,6 +45,9 @@ def requiere_clave(metodo: str, path: str) -> bool:
     metodo = metodo.upper()
     if (path.rstrip("/") or "/").startswith(RUTA_PICKING):
         return False        # el picking del depósito tiene su propia clave (PICKING_KEY), que solo sirve para registrar pickeos
+    p0 = path.rstrip("/") or "/"
+    if any(p0 == r or p0.startswith(r + "/") for r in RUTAS_SESION):
+        return False        # login y administración de usuarios: se autentican con la sesión (ver usuarios_erp.py)
     if metodo in _METODOS_ESCRITURA:
         return True
     if metodo in ("GET", "HEAD"):

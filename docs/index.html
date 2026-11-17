@@ -355,6 +355,15 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .cr-seg-b[aria-pressed="true"]{background:var(--mod-activo-fondo,var(--superficie));color:var(--mod-activo-texto,var(--tinta));box-shadow:inset 0 0 0 1px var(--mod-activo-borde,var(--borde));font-weight:600}
 .cr-seg-b:focus-visible{outline:2px solid var(--mod-foco,var(--tinta));outline-offset:2px}
 .dash-seg.cr-seg{margin:0;padding:2px}.dash-seg .cr-seg-b{min-height:30px;padding:0 12px;font-size:12px}
+.login-ov{position:fixed;inset:0;z-index:9999;background:var(--fondo);display:flex;align-items:center;justify-content:center;padding:16px}
+.login-ov[hidden]{display:none}
+.login-card{width:100%;max-width:380px;background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r-tarjeta);padding:24px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--sombra-tarjeta)}
+.login-card h2{margin:0;font-size:20px;color:var(--tinta)}.login-card p{margin:0;font-size:13px;color:var(--texto-suave)}
+.login-card label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave)}
+.login-err{min-height:18px;font-size:12px;color:var(--red)}
+.tb-usuario{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:12px}.tb-usuario[hidden]{display:none}.tb-usuario .btn{min-height:28px;padding:0 10px;font-size:12px}
+.acc-grid{display:grid;grid-template-columns:minmax(280px,1fr) 2fr;gap:14px;align-items:start}@media(max-width:900px){.acc-grid{grid-template-columns:1fr}}
+.acc-mods{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px}.acc-mods label{display:flex;gap:6px;align-items:center;font-size:13px}.acc-mods h5{grid-column:1/-1;margin:10px 0 2px;font-size:12px;color:var(--texto-suave);text-transform:uppercase}
 .cr-ag-form{display:grid;grid-template-columns:minmax(220px,2fr) 1fr 1fr auto;gap:10px;align-items:end;margin:8px 0 12px}.cr-ag-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave)}.cr-ag-form textarea{min-height:64px;resize:vertical}
 @media(max-width:760px){.cr-ag-form{grid-template-columns:1fr}}
 .cr-cuerpo{display:flex;flex-direction:column;gap:12px}
@@ -1081,6 +1090,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <span class="tb-erp">ERP</span>
   <span id="tb-modulo" class="tb-modulo"></span>
   <span id="status-global" role="status" aria-live="polite">●</span>
+  <span id="tb-usuario" class="tb-usuario" hidden><span id="tb-usuario-n"></span><button type="button" class="btn" onclick="claveMostrar()">Contraseña</button><button type="button" class="btn" onclick="sesionSalir()">Salir</button></span>
 </header>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 <nav class="sidebar" id="sidebar" aria-label="Módulos del ERP">
@@ -1133,6 +1143,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <div class="sidebar-section-label">Sistema</div>
     <a href="#" class="sidebar-item" data-page="config" onclick="goPage('config',this);return false;"><span class="icon" data-ico="sliders" aria-hidden="true"></span>Configuración</a>
     <a href="#" class="sidebar-item" data-page="reglas" onclick="goPage('reglas',this);return false;"><span class="icon" data-ico="ruler" aria-hidden="true"></span>Criterios de precio</a>
+    <a href="#" class="sidebar-item" data-page="accesos" id="menu-accesos" style="display:none" onclick="goPage('accesos',this);return false;"><span class="icon" data-ico="users" aria-hidden="true"></span>Accesos</a>
   </div>
 </nav>
 <div class="app-body">
@@ -1901,6 +1912,24 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   </div>
 </div>
 
+<!-- ACCESOS: usuarios y módulos que ve cada uno (solo admin) -->
+<div id="page-accesos" class="page">
+  <div class="cr-cab"><div><h2 class="cr-tit">Accesos</h2><p class="cr-sub">Creá usuarios y tildá a qué módulos entra cada uno: en su ERP solo van a aparecer los tildados. Los administradores ven todo.</p></div></div>
+  <div class="ofg-nota ofg-nota-aviso"><span>Por ahora esto ordena <b>qué pantallas ve cada persona</b>. Que el servidor también filtre los datos por usuario es la etapa siguiente.</span></div>
+  <div class="acc-grid">
+    <section class="cr-ap"><h4>Usuarios</h4><div id="acc-lista"><div class="loading-block"><div class="spinner"></div><span>Cargando…</span></div></div>
+      <h4 style="margin-top:16px">Nuevo usuario</h4>
+      <div class="cr-ag-form" style="grid-template-columns:1fr">
+        <label>Usuario (sin espacios)<input id="acc-n-usuario" class="fi" autocomplete="off" placeholder="laura"></label>
+        <label>Nombre<input id="acc-n-nombre" class="fi" autocomplete="off" placeholder="Laura"></label>
+        <label>Contraseña inicial (mínimo 8)<input id="acc-n-clave" class="fi" type="password" autocomplete="new-password"></label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="acc-n-admin"> Administrador (ve todo)</label>
+        <button type="button" class="btn primary" onclick="accesosCrear()">Crear usuario</button>
+      </div></section>
+    <section class="cr-ap" id="acc-detalle"><p class="ofg-vacio">Elegí un usuario de la lista para ver y cambiar sus accesos.</p></section>
+  </div>
+</div>
+
 <!-- REGLAS -->
 <div id="page-reglas" class="page">
   <div class="cr-cab">
@@ -2501,7 +2530,7 @@ let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;let proyLo
 function qs(id){return document.getElementById(id);}
 // ── ÍCONOS SVG en línea (estilo Lucide, trazo 1,8): reemplazan a los emojis. Fuente única: ICONOS. <span data-ico="nombre" data-size="18"> se hidrata al cargar. ──
 // ICONOS-INICIO
-const ICONOS={  'upload':'<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 20h16"/>','download':'<path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>','file-text':'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>','zap':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+const ICONOS={  'users':'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>','upload':'<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 20h16"/>','download':'<path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>','file-text':'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>','zap':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
  'home':'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>','line-chart':'<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
  'wallet':'<path d="M3 7h16a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l2-3h12v3"/><circle cx="16" cy="14" r="1.2"/>',
  'globe':'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
@@ -2823,6 +2852,7 @@ function goPage(page,el){
   if(MENU_RETIRADOS[page]){page=MENU_RETIRADOS[page];el=null;}
   if(page==='competidores'){page='analisis-competencia';el=null;}   // Competidores ML (jubilado): su link viejo abre Análisis de Competencia; «Enviar a Ecom» vive en «Jugar mi precio»
   if(page==='intel-comercial'){page='analisis-competencia';el=null;}   // SKUs & Referencias (jubilada): su link viejo abre Análisis de Competencia (vista Por SKU)
+  if(!accesoPermitido(page)){toast('No tenés acceso a ese módulo','error');page=accesoPrimeraPagina()||'dashboard';el=null;}   // usuarios y accesos por módulo
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
@@ -2845,6 +2875,7 @@ function goPage(page,el){
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='ventas-hoy')ventasHoyEntrar();
   if(page==='reglas')criteriosCargar();
+  if(page==='accesos')accesosCargar();
   if(page==='proyeccion'&&!proyLoaded)proyeccionCargar();
   if(page==='cobranzas'&&!cobrLoaded)loadCobranzas();
   if(page==='brasil'&&!brLoaded)loadBrasil();
@@ -10349,6 +10380,111 @@ function ofertasExport(){
 
 })();
 // ── FIN RENTABILIDAD TÁCTICA v2 ─────────────────────────────────────────────
+
+// ══ USUARIOS Y ACCESOS POR MÓDULO (backend: /auth/*, ver usuarios_erp.py) ══
+// Etapa 1: ordena las PANTALLAS: cada usuario ve en su menú solo los módulos que el admin le tildó. Que el servidor también filtre los datos por usuario es la etapa siguiente.
+// Mientras no exista ningún usuario en el servidor el ERP sigue abierto como siempre (GET /auth/estado → login_requerido: false).
+let SESION=null;
+const ACC={usuarios:[],modulos:[],sel:null};
+function sesionLeer(){try{return JSON.parse(localStorage.getItem('erp_sesion')||'null');}catch(e){return null;}}
+function sesionGuardar(x){try{if(x)localStorage.setItem('erp_sesion',JSON.stringify(x));else localStorage.removeItem('erp_sesion');}catch(e){}}
+function accesoPermitido(page,ses){
+  ses=ses===undefined?SESION:ses;
+  if(!ses)return page!=='accesos';                      // ERP abierto (sin usuarios): todo menos la página de Accesos
+  const u=ses.usuario;if(u.rol==='admin')return true;
+  if(page==='accesos')return false;
+  return(u.modulos||[]).includes(page);
+}
+function accesoPrimeraPagina(ses){const it=[...document.querySelectorAll('.sidebar-item[data-page]')].find(a=>a.id!=='menu-accesos'&&accesoPermitido(a.dataset.page,ses));return it?it.dataset.page:null;}
+function accesosAplicarMenu(){
+  document.querySelectorAll('.sidebar-item[data-page]').forEach(a=>{a.style.display=accesoPermitido(a.dataset.page)?'':'none';});
+  document.querySelectorAll('.sidebar-section').forEach(sec=>{sec.style.display=[...sec.querySelectorAll('.sidebar-item')].some(a=>a.style.display!=='none')?'':'none';});
+  const tb=qs('tb-usuario');if(tb){tb.hidden=!SESION;if(SESION)qs('tb-usuario-n').textContent=(SESION.usuario.nombre||SESION.usuario.usuario)+(SESION.usuario.rol==='admin'?' · admin':'');}
+}
+function accesosIrSiHaceFalta(){const act=document.querySelector('.page.active');const pag=act?act.id.replace(/^page-/,''):'';if(!pag||!accesoPermitido(pag)){const p=accesoPrimeraPagina();if(p)goPage(p,null);}}
+async function authLlamar(ruta,metodo,cuerpo){
+  const r=await fetch(getBackendUrl()+ruta,{method:metodo||'GET',headers:cuerpo?{'Content-Type':'application/json'}:undefined,body:cuerpo?JSON.stringify(cuerpo):undefined});
+  let d=null;try{d=await r.json();}catch(e){}
+  if(!r.ok)throw new Error((d&&d.detail)||('estado '+r.status));return d;
+}
+// Agrega la sesión (Authorization: Bearer) a los requests que van al backend configurado.
+(function(){const _f=window.fetch.bind(window);window.fetch=function(input,init){try{if(SESION&&SESION.token){const bu=getBackendUrl(),u=input instanceof Request?input.url:String(input);if(bu&&(u===bu||u.startsWith(bu+'/'))){init=Object.assign({},init||{});const h=new Headers(init.headers||(input instanceof Request?input.headers:undefined));if(!h.has('Authorization'))h.set('Authorization','Bearer '+SESION.token);init.headers=h;}}}catch(e){}return _f(input,init);};})();
+async function sesionIniciar(){
+  if(!getBackendUrl())return;
+  let est;try{est=await authLlamar('/auth/estado');}catch(e){return;}                  // el servidor no responde: se sigue como hasta ahora
+  if(!est.login_requerido){SESION=null;sesionGuardar(null);accesosAplicarMenu();return;}
+  const g=sesionLeer();
+  if(g&&g.token){SESION=g;try{const u=await authLlamar('/auth/yo');SESION={token:g.token,usuario:u};sesionGuardar(SESION);accesosAplicarMenu();accesosIrSiHaceFalta();return;}catch(e){SESION=null;sesionGuardar(null);}}
+  accesosAplicarMenu();loginMostrar();
+}
+function loginMostrar(){qs('login-err').textContent='';qs('login-c').value='';qs('login-ov').hidden=false;setTimeout(()=>qs('login-u').focus(),30);}
+async function loginEnviar(){
+  const u=qs('login-u').value.trim(),c=qs('login-c').value;if(!u||!c){qs('login-err').textContent='Completá usuario y contraseña.';return;}
+  const b=qs('login-btn');b.disabled=true;qs('login-err').textContent='';
+  try{const r=await authLlamar('/auth/login','POST',{usuario:u,clave:c});SESION={token:r.token,usuario:r.usuario};sesionGuardar(SESION);qs('login-ov').hidden=true;qs('login-c').value='';accesosAplicarMenu();accesosIrSiHaceFalta();}
+  catch(e){qs('login-err').textContent=e.message||'No se pudo ingresar.';}
+  finally{b.disabled=false;}
+}
+function sesionSalir(){SESION=null;sesionGuardar(null);accesosAplicarMenu();loginMostrar();}
+function claveMostrar(){qs('clave-err').textContent='';qs('clave-a').value='';qs('clave-n').value='';qs('clave-ov').hidden=false;setTimeout(()=>qs('clave-a').focus(),30);}
+async function claveEnviar(){
+  try{const r=await authLlamar('/auth/cambiar-clave','POST',{actual:qs('clave-a').value,nueva:qs('clave-n').value});SESION={token:r.token,usuario:r.usuario};sesionGuardar(SESION);qs('clave-ov').hidden=true;toast('Contraseña cambiada');}
+  catch(e){qs('clave-err').textContent=e.message||'No se pudo cambiar.';}
+}
+// Si se cambian los accesos desde otra pestaña, o se desactiva al usuario, se nota al volver a la pantalla (con un mínimo de 1 minuto entre chequeos).
+let _sesionChequeo=0;
+document.addEventListener('visibilitychange',()=>{if(document.hidden||!SESION||Date.now()-_sesionChequeo<60000)return;_sesionChequeo=Date.now();
+  authLlamar('/auth/yo').then(u=>{SESION={token:SESION.token,usuario:u};sesionGuardar(SESION);accesosAplicarMenu();accesosIrSiHaceFalta();}).catch(()=>{SESION=null;sesionGuardar(null);accesosAplicarMenu();loginMostrar();});});
+const _saveBackendUrlOriginal=saveBackendUrl;window.saveBackendUrl=function(){const r=_saveBackendUrlOriginal.apply(this,arguments);sesionIniciar();return r;};
+
+// ── Página «Accesos» (solo admin)
+async function accesosCargar(){
+  const cont=qs('acc-lista');if(!cont)return;
+  if(!SESION||SESION.usuario.rol!=='admin'){cont.innerHTML='<p class="ofg-vacio">Esta página es solo para el administrador.</p>';return;}
+  try{
+    if(!ACC.modulos.length)ACC.modulos=(await authLlamar('/auth/modulos')).modulos;
+    ACC.usuarios=(await authLlamar('/auth/usuarios')).usuarios;
+    if(ACC.sel&&!ACC.usuarios.find(u=>u.usuario===ACC.sel))ACC.sel=null;
+    accesosRender();
+  }catch(e){cont.innerHTML=`<p class="ofg-vacio">No se pudieron leer los usuarios (${acEsc(e.message||e)}).</p>`;}
+}
+function accesosRender(){
+  const fecha=x=>x?new Date(x).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'nunca';
+  qs('acc-lista').innerHTML=`<table class="cr-hist"><thead><tr><th>Usuario</th><th>Rol</th><th>Módulos</th><th>Último ingreso</th><th></th></tr></thead><tbody>${ACC.usuarios.map(u=>`<tr style="${u.activo?'':'opacity:.55'}"><td><b>${acEsc(u.usuario)}</b><br><small>${acEsc(u.nombre||'')}${u.activo?'':' · inactivo'}</small></td><td>${u.rol==='admin'?'Admin':'Usuario'}</td><td>${u.rol==='admin'?'Todos':u.modulos.length}</td><td>${fecha(u.ultimo_ingreso)}</td><td><button type="button" class="btn${ACC.sel===u.usuario?' primary':''}" onclick="accesosElegir('${acEsc(u.usuario)}')">Editar</button></td></tr>`).join('')||'<tr><td colspan="5">Todavía no hay usuarios.</td></tr>'}</tbody></table>`;
+  const u=ACC.usuarios.find(x=>x.usuario===ACC.sel),d=qs('acc-detalle');
+  if(!u){d.innerHTML='<p class="ofg-vacio">Elegí un usuario de la lista para ver y cambiar sus accesos.</p>';return;}
+  const esAdmin=u.rol==='admin',secs=[...new Set(ACC.modulos.map(m=>m.seccion))];
+  d.innerHTML=`<h4>${acEsc(u.usuario)} ${esAdmin?'<span class="ofg-chip ofg-chip-ok">administrador</span>':''} ${u.activo?'':'<span class="ofg-chip">inactivo</span>'}</h4>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave);max-width:320px">Nombre<input id="acc-e-nombre" class="fi" value="${acEsc(u.nombre||'')}"></label>
+    <h4 style="margin-top:14px">Módulos a los que entra</h4>
+    ${esAdmin?'<p class="cr-nota">Los administradores ven todos los módulos y la página de Accesos.</p>':`<div style="display:flex;gap:8px;margin:6px 0"><button type="button" class="btn" onclick="accesosMarcar(true)">Tildar todos</button><button type="button" class="btn" onclick="accesosMarcar(false)">Destildar todos</button></div>
+    <div class="acc-mods">${secs.map(sec=>`<h5>${acEsc(sec)}</h5>`+ACC.modulos.filter(m=>m.seccion===sec).map(m=>`<label><input type="checkbox" class="acc-mod" value="${acEsc(m.id)}" ${u.modulos.includes(m.id)?'checked':''}> ${acEsc(m.nombre)}</label>`).join('')).join('')}</div>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button type="button" class="btn primary" onclick="accesosGuardar()">Guardar</button><button type="button" class="btn" onclick="accesosActivo(${u.activo?'false':'true'})">${u.activo?'Desactivar usuario':'Reactivar usuario'}</button></div>
+    <h4 style="margin-top:18px">Restablecer contraseña</h4>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end"><label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--texto-suave)">Contraseña nueva (mínimo 8)<input id="acc-e-clave" class="fi" type="password" autocomplete="new-password"></label><button type="button" class="btn" onclick="accesosClave()">Cambiar contraseña</button></div>
+    <p class="cr-nota">Al cambiarla o desactivar al usuario se cierran sus sesiones abiertas.</p>`;
+}
+function accesosElegir(u){ACC.sel=u;accesosRender();}
+function accesosMarcar(v){document.querySelectorAll('.acc-mod').forEach(c=>{c.checked=v;});}
+async function accesosCrear(){
+  try{await authLlamar('/auth/usuarios','POST',{usuario:qs('acc-n-usuario').value,nombre:qs('acc-n-nombre').value,clave:qs('acc-n-clave').value,rol:qs('acc-n-admin').checked?'admin':'usuario',modulos:[]});
+    ['acc-n-usuario','acc-n-nombre','acc-n-clave'].forEach(i=>{qs(i).value='';});qs('acc-n-admin').checked=false;toast('Usuario creado: ahora tildale los módulos');await accesosCargar();}
+  catch(e){toast('No se creó: '+(e.message||e),'error');}
+}
+async function accesosGuardar(){
+  const u=ACC.sel;if(!u)return;
+  const cuerpo={nombre:qs('acc-e-nombre').value};if(document.querySelector('.acc-mod'))cuerpo.modulos=[...document.querySelectorAll('.acc-mod:checked')].map(c=>c.value);
+  try{await authLlamar('/auth/usuarios/'+encodeURIComponent(u),'PUT',cuerpo);toast('Accesos guardados');await accesosCargar();}catch(e){toast('No se guardó: '+(e.message||e),'error');}
+}
+async function accesosActivo(v){
+  const u=ACC.sel;if(!u)return;if(!confirm((v?'¿Reactivar a ':'¿Desactivar a ')+u+'?'+(v?'':'\nSe cierran sus sesiones abiertas.')))return;
+  try{await authLlamar('/auth/usuarios/'+encodeURIComponent(u),'PUT',{activo:v});toast(v?'Usuario reactivado':'Usuario desactivado');await accesosCargar();}catch(e){toast('No se pudo: '+(e.message||e),'error');}
+}
+async function accesosClave(){
+  const u=ACC.sel,c=qs('acc-e-clave').value;if(!u)return;if(!c){toast('Escribí la contraseña nueva','error');return;}
+  try{await authLlamar('/auth/usuarios/'+encodeURIComponent(u),'PUT',{clave:c});qs('acc-e-clave').value='';toast('Contraseña cambiada');}catch(e){toast('No se cambió: '+(e.message||e),'error');}
+}
+
 // init() se llama recién acá (no donde se declara, más arriba): goPage('dashboard')
 // invoca rentQueryBarInit(), definida en el IIFE de arriba -- llamar init() antes
 // de que ese IIFE termine de ejecutarse tiraba "rentQueryBarInit is not defined"
@@ -10356,7 +10492,26 @@ function ofertasExport(){
 // (hallazgo real, 2026-08-19: goPage tira la excepción sin capturarla, así que
 // nunca llega a loadDashboard()).
 init();
+sesionIniciar();
 </script>
+<div class="login-ov" id="login-ov" hidden role="dialog" aria-modal="true" aria-labelledby="login-t">
+  <form class="login-card" onsubmit="loginEnviar();return false">
+    <h2 id="login-t">Ingresar al ERP</h2><p>Con tu usuario y contraseña.</p>
+    <label>Usuario<input id="login-u" class="fi" autocomplete="username" autocapitalize="none"></label>
+    <label>Contraseña<input id="login-c" class="fi" type="password" autocomplete="current-password"></label>
+    <div class="login-err" id="login-err" role="alert"></div>
+    <button type="submit" class="btn primary" id="login-btn">Ingresar</button>
+  </form>
+</div>
+<div class="login-ov" id="clave-ov" hidden role="dialog" aria-modal="true" aria-labelledby="clave-t">
+  <form class="login-card" onsubmit="claveEnviar();return false">
+    <h2 id="clave-t">Cambiar mi contraseña</h2>
+    <label>Contraseña actual<input id="clave-a" class="fi" type="password" autocomplete="current-password"></label>
+    <label>Contraseña nueva (mínimo 8)<input id="clave-n" class="fi" type="password" autocomplete="new-password"></label>
+    <div class="login-err" id="clave-err" role="alert"></div>
+    <div style="display:flex;gap:8px"><button type="submit" class="btn primary">Guardar</button><button type="button" class="btn" onclick="document.getElementById('clave-ov').hidden=true">Cancelar</button></div>
+  </form>
+</div>
 <div class="toast" id="toast"></div>
 </body>
 </html>

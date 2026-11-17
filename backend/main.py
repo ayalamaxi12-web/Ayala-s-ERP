@@ -3617,6 +3617,85 @@ async def criterios_volver_al_comun(request: Request):
     return {"ok": True, "cambio": e}
 
 
+# ── Usuarios y accesos por módulo (ver usuarios_erp.py). /auth/* tiene su propia autenticación (sesión), por eso no pide X-ERP-Key. ──
+def _token_de(request: Request) -> str:
+    h = request.headers.get("authorization") or ""
+    return h[7:].strip() if h.lower().startswith("bearer ") else ""
+
+
+async def _auth(request: Request, fn, *args, solo_admin: bool = False):
+    import usuarios_erp as UE
+    from rentabilidad import db as _db
+    try:
+        if solo_admin:
+            await run_in_threadpool(lambda: UE.exigir_admin(_db.sesion, _token_de(request)))
+        return await run_in_threadpool(lambda: fn(_db.sesion, *args))
+    except UE.UsuarioInvalido as ex:
+        raise HTTPException(status_code=422, detail=str(ex))
+    except UE.CredencialesInvalidas as ex:
+        raise HTTPException(status_code=401, detail=str(ex))
+    except UE.NoAutorizado as ex:
+        raise HTTPException(status_code=403, detail=str(ex))
+    except UE.Bloqueado as ex:
+        raise HTTPException(status_code=429, detail=str(ex))
+    except UE.SesionNoConfigurada as ex:
+        raise HTTPException(status_code=503, detail=str(ex))
+
+
+@app.get("/auth/estado")
+async def auth_estado(request: Request):
+    import usuarios_erp as UE
+    return await _auth(request, UE.estado)
+
+
+@app.get("/auth/modulos")
+async def auth_modulos():
+    import usuarios_erp as UE
+    return {"modulos": [{"id": i, "nombre": n, "seccion": s} for i, n, s in UE.MODULOS]}
+
+
+@app.post("/auth/login")
+async def auth_login(request: Request):
+    import usuarios_erp as UE
+    b = await request.json()
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    return await _auth(request, lambda sf, *a: UE.login(sf, str(b.get("usuario", "")), str(b.get("clave", "")), ip))
+
+
+@app.get("/auth/yo")
+async def auth_yo(request: Request):
+    import usuarios_erp as UE
+    return await _auth(request, lambda sf: UE.usuario_de_token(sf, _token_de(request)))
+
+
+@app.post("/auth/cambiar-clave")
+async def auth_cambiar_clave(request: Request):
+    import usuarios_erp as UE
+    b = await request.json()
+    return await _auth(request, lambda sf: UE.cambiar_clave(sf, UE.usuario_de_token(sf, _token_de(request))["usuario"], str(b.get("actual", "")), str(b.get("nueva", ""))))
+
+
+@app.get("/auth/usuarios")
+async def auth_usuarios(request: Request):
+    import usuarios_erp as UE
+    return {"usuarios": await _auth(request, UE.listar, solo_admin=True)}
+
+
+@app.post("/auth/usuarios")
+async def auth_usuarios_crear(request: Request):
+    import usuarios_erp as UE
+    b = await request.json()
+    return {"ok": True, "usuario": await _auth(request, lambda sf: UE.crear(sf, str(b.get("usuario", "")), str(b.get("nombre", "")), str(b.get("clave", "")), b.get("modulos") or [], str(b.get("rol") or "usuario")),
+                                               solo_admin=True)}
+
+
+@app.put("/auth/usuarios/{usuario}")
+async def auth_usuarios_editar(usuario: str, request: Request):
+    import usuarios_erp as UE
+    b = await request.json()
+    return {"ok": True, "usuario": await _auth(request, lambda sf: UE.editar(sf, usuario, b.get("nombre"), b.get("modulos"), b.get("activo"), b.get("clave") or None, b.get("rol")), solo_admin=True)}
+
+
 @app.get("/criterios/skus-aging")
 async def criterios_skus_aging():
     """Listado de SKUs de aging (stock a liquidar, se vende a pérdida a propósito), con el historial de cambios. Lo usa Ventas y Rentabilidad."""

@@ -683,3 +683,20 @@ class TacticaPendiente(Base):
     creado: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     nivel: Mapped[str] = mapped_column(String(16))  # activar | cerrar_o_anular
     escenario: Mapped[str] = mapped_column(String(120), default="", server_default="")  # pedidos.Escenario de Táctica: etapa del circuito (VENTAS / COBRA / DEPO…)
+
+
+class UsuarioErp(Base):
+    """Usuario del ERP con login propio y accesos por módulo (ver `usuarios_erp.py`). La clave se guarda hasheada (scrypt), nunca en claro."""
+
+    __tablename__ = "usuario_erp"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    usuario: Mapped[str] = mapped_column(String(40), unique=True, index=True)       # en minúsculas
+    nombre: Mapped[str] = mapped_column(String(80), default="")
+    rol: Mapped[str] = mapped_column(String(16), default="usuario")                  # admin | usuario
+    modulos: Mapped[str] = mapped_column(Text, default="[]")                          # lista JSON de ids de módulo (el admin ve todos, esta lista no cuenta)
+    pass_hash: Mapped[str] = mapped_column(String(200))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    version_sesion: Mapped[int] = mapped_column(Integer, default=1)                  # se sube al cambiar la clave o desactivar: invalida las sesiones abiertas
+    creado: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ultimo_ingreso: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
