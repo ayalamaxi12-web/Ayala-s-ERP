@@ -44,6 +44,7 @@ Lado Ecom, descubierto por introspección GraphQL contra la cuenta real
 from __future__ import annotations
 
 import threading
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -66,6 +67,17 @@ class MLCuotaAgotada(RuntimeError):
     def __init__(self, status: int):
         super().__init__(f"Mercado Libre respondió {status} (demasiadas consultas seguidas)" if status == 429 else f"Mercado Libre respondió {status} (no disponible por ahora)")
         self.status = status
+
+
+class MLSinAcceso(RuntimeError):
+    """ML respondió 403 (la cuenta no tiene permiso sobre ese recurso, p. ej. un `inventory_id` que no es de la cuenta consultada). Lleva SOLO el endpoint, sin ids ni
+    vendedor, para poder mostrarlo."""
+
+    def __init__(self, url: str):
+        ruta = re.sub(r"^https?://[^/]+", "", url.split("?")[0])
+        ruta = re.sub(r"/[A-Z]{2,}\d{6,}|/\d{5,}", "/{id}", ruta)
+        super().__init__(f"Mercado Libre respondió 403 (sin permiso) en {ruta}")
+        self.ruta = ruta
 
 
 # Ritmo de lectura. Una sola puerta para TODA lectura de ML de este módulo (conciliación y simulador comparten proceso): como mucho una consulta a la vez
@@ -106,6 +118,8 @@ def _get_real(url: str, params: dict, headers: dict):
     for intento in range(REINTENTOS):
         _esperar_turno(url)
         r = requests.get(url, params=params, headers=headers, timeout=20)
+        if r.status_code == 403:
+            raise MLSinAcceso(url)
         if r.status_code in (429, 503):
             ultimo = r.status_code
             if intento < REINTENTOS - 1:
@@ -140,6 +154,9 @@ class MLFullClient:
         self._cache = cache
         # Lotes que no se pudieron leer ni con reintentos: [{"cuenta", "tipo", "inventory_ids"}]. El llamador los usa para marcar datos incompletos.
         self.lotes_fallidos: list[dict] = []
+        # `inventory_id` a los que ML respondió 403: se omiten (no tiran toda la lectura) y se informan. `_presupuesto_403` limita las consultas extra para aislarlos.
+        self.sin_acceso: list[dict] = []
+        self._presupuesto_403 = 150
 
     def _operaciones_lote(self, cuenta: str, headers: dict, lote: list[str], desde: str, hasta: str, tipo: str) -> list[dict] | None:
         """Todas las operaciones de UN lote de `inventory_id` (con paginado `scroll`), reducidas a los campos que se usan. `None` = el lote falló
@@ -166,6 +183,20 @@ class MLFullClient:
         except MLCuotaAgotada:
             self.lotes_fallidos.append({"cuenta": cuenta, "tipo": tipo, "inventory_ids": list(lote)})
             return None
+        except MLSinAcceso:
+            # Un `inventory_id` ajeno a la cuenta (o sin permiso) hace que ML rechace el lote entero: se parte el lote hasta aislar el que falla y se sigue con el resto.
+            if len(lote) == 1:
+                self.sin_acceso.append({"cuenta": cuenta, "tipo": tipo, "inventory_id": lote[0]})
+                return []
+            if self._presupuesto_403 <= 0:
+                raise
+            self._presupuesto_403 -= 2
+            medio = len(lote) // 2
+            a = self._operaciones_lote(cuenta, headers, lote[:medio], desde, hasta, tipo)
+            b = self._operaciones_lote(cuenta, headers, lote[medio:], desde, hasta, tipo)
+            if a is None or b is None:
+                return None
+            return a + b
         if self._cache is not None:
             self._cache.put(clave, ops)
         return ops
