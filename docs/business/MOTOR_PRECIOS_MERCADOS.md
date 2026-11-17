@@ -9,7 +9,7 @@ El Motor calcula con la fórmula de siempre (`ayala_core.calcular_precio_condici
 | Frávega | Simple, 3, 6, 9, 12 | 15,5 % base (a confirmar) | 3: 6,8 · 6: 10,6 · 9: 13,7 · 12: 16,6 (se suman a la base; a confirmar) |
 | OnCity | ídem Frávega | **copiado de Frávega, a confirmar** (filas propias) | ídem |
 | Megatone | ídem Frávega | **copiado de Frávega, a confirmar** (filas propias) | ídem |
-| Web (Mercado Pago) | Simple, 3, 6, 9, 12, 18, 24 | 6 % por cobro | 0 · 3,40 · 7,90 · 12,60 · 15,20 · 22,10 · 27,60, **× (1 + recargo 20 %, editable y a confirmar)** = 4,08 · 9,48 · 15,12 · 18,24 · 26,52 · 33,12 |
+| Web (Mercado Pago) | Simple, 3, 6, 9, 12, 18, 24 | 6,05 % por cobro (5 % + IVA) | 0 · 3,40 · 7,90 · 12,60 · 15,20 · 22,10 · 27,60, **× (1 + recargo 21 % de IVA, editable)** = 4,114 · 9,559 · 15,246 · 18,392 · 26,741 · 33,396 (verificado con el detalle de una operación real de 9 cuotas, 2026-11-17) |
 
 «Reducida» existe solo en Mercado Libre. «Simple» es el Contado de los otros mercados (solo la comisión base). La pantalla muestra la **comisión total desglosada** (base + cuotas [+ recargo]) y la marca «a confirmar».
 

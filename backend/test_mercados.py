@@ -25,14 +25,14 @@ def _sin(filas, mercado, concepto, cuotas=None):
     return [f for f in filas if not (f["mercado"] == mercado and f["concepto"] == concepto and (cuotas is None or f["cuotas"] == cuotas))]
 
 
-def test_web_aplica_el_recargo_de_20_por_ciento_sobre_las_cuotas_y_es_editable():
+def test_web_aplica_el_recargo_de_21_por_ciento_sobre_las_cuotas_y_es_editable():
     par = mk.parametros_mercado("web", FILAS, HOY)
-    esperado = {"contado": "0", "3": "4.08", "6": "9.48", "9": "15.12", "12": "18.24", "18": "26.52", "24": "33.12"}   # las cifras de la planilla de Maxi
+    esperado = {"contado": "0", "3": "4.114", "6": "9.559", "9": "15.246", "12": "18.392", "18": "26.741", "24": "33.396"}   # cuota de MP × 1,21 (IVA): la 9 cuotas coincide con el detalle real de una operación
     assert {k: str(v.normalize()) for k, v in par["financiero"].items()} == {k: str(D(v).normalize()) for k, v in esperado.items()}
-    assert par["comision_pct"] == D("6") and par["recargo_cuotas"] == D("20") and par["condiciones"] == ["contado", "3", "6", "9", "12", "18", "24"]
+    assert par["comision_pct"] == D("6.05") and par["recargo_cuotas"] == D("21") and par["condiciones"] == ["contado", "3", "6", "9", "12", "18", "24"]
     sin_recargo = mk.parametros_mercado("web", FILAS, HOY, recargo_cuotas=D("0"))
     assert sin_recargo["financiero"]["24"] == D("27.60")
-    # lo que Maxi ya decidió (base 6 % y recargo 20 %) no se marca «a confirmar»; solo las cuotas de Mercado Pago, en UN aviso
+    # lo que Maxi ya decidió (base 6,05 % y recargo 21 %) no se marca «a confirmar»; solo las cuotas de Mercado Pago, en UN aviso
     assert [a["texto"] for a in par["avisos"]] == ["Cuotas de Web (Mercado Pago): a confirmar"]
 
 
@@ -148,7 +148,7 @@ def test_lote_por_mercado_solo_trae_las_condiciones_de_ese_mercado(cliente):
     sku = ayala_core.SKUS_PILOTO[0]
     web = cliente.get("/ayala-core/motor-lote", params={"mercado": "web", "skus": sku}).json()["resultados"][0]
     assert list(web["precios"]) == ["contado", "3", "6", "9", "12", "18", "24"] and web["mercado"] == "web" and web["etiqueta_contado"] == "Simple"
-    assert web["envio_estimado_como_ml"] is True and web["parametros"]["costo_orden"] == 149.12 and web["parametros"]["recargo_cuotas"] == 20
+    assert web["envio_estimado_como_ml"] is True and web["parametros"]["costo_orden"] == 149.12 and web["parametros"]["recargo_cuotas"] == 21
     fr = cliente.get("/ayala-core/motor-lote", params={"mercado": "fravega", "skus": sku, "envio_real": 8500}).json()["resultados"][0]
     assert "reducida" not in fr["precios"] and fr["envio_estimado_como_ml"] is False and fr["parametros"]["desglose"]["6"]["total"] == 26.1
     r = cliente.get("/ayala-core/motor-lote", params={"mercado": "oncity", "skus": sku}).json()

@@ -71,10 +71,10 @@ FILAS_INICIALES: list[list[str]] = [
     *[_f("ml", "costo_fijo", techo, monto, "", fuente="ayuda de ML (2026-10)", nota=nota)
       for techo, monto, nota in (("15000", "1330", "precio menor a $15.000"), ("24000", "2740", "precio de $15.000 a $23.999"),
                                  ("33000", "3320", "precio de $24.000 a $32.999"), ("sin_tope", "0", "desde $33.000: sin costo fijo"))],
-    _f("web", "comision_base", "", "6", "", fuente="Mercado Pago (Maxi 2026-10-24)", nota="6 % por cobro, cualquier medio de pago"),
+    _f("web", "comision_base", "", "6.05", "", fuente="Mercado Pago (detalle de operación, Maxi 2026-11-17)", nota="6,05 % por cobro (5 % + IVA 21 %), cualquier medio de pago; se calcula sobre todo lo que paga el cliente"),
     _f("web", "cuotas", "simple", "0.00", A_CONFIRMAR, fuente="Mercado Pago"),
     *[_f("web", "cuotas", n, p, A_CONFIRMAR, fuente="Mercado Pago") for n, p in (("3", "3.40"), ("6", "7.90"), ("9", "12.60"), ("12", "15.20"), ("18", "22.10"), ("24", "27.60"))],
-    _f("web", "recargo_cuotas", "", "20", "", fuente="regla de Maxi", nota="Recargo de 20 % sobre la comisión de cuotas (4,08; 9,48; 15,12; 18,24; 26,52; 33,12 = cuota × 1,20). Editable."),
+    _f("web", "recargo_cuotas", "", "21", "", fuente="Mercado Pago (detalle de operación, Maxi 2026-11-17)", nota="Recargo de 21 % (IVA) sobre la comisión de cuotas: 9 cuotas = 12,60 × 1,21 = 15,246 %, igual al cobro real de MP. Editable."),
     *_bloque_fravega("fravega", False), *_bloque_fravega("oncity", True), *_bloque_fravega("megatone", True),
 ]
 
