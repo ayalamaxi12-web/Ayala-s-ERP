@@ -2841,7 +2841,7 @@ function goPage(page,el){
   else{qs('vivo-filters-bar').style.display='none';qs('page-dashboard-vivo').style.display='none';qs('page-dashboard').style.display='none';}
   closeSidebar();
   if(['analisis-competencia','campanas-ml','ofertas-margen','ayala-core','pricing'].includes(page))costosEstadoCargar();
-  if(page==='dashboard'){agingAsegurar();rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;_dashFinalizarCarga();}else{loadDashboard();}}}
+  if(page==='dashboard'){agingAsegurar();rentQueryBarInit();if(!dashLoaded){const cache=restaurarUltimoResultado('dashboard');if(cache&&cache.length){allSalesData=cache;DASH_TS=tsUltimoResultado('dashboard');_dashFinalizarCarga();loadDashboard(true);}else{loadDashboard();}}else if(!DASH_TS||Date.now()-DASH_TS>300000){loadDashboard(true);}}
   if(page==='historico'&&!histLoaded)loadHistorico();
   if(page==='ventas-hoy')ventasHoyEntrar();
   if(page==='reglas')criteriosCargar();
@@ -3532,6 +3532,7 @@ function getBackendKey(){try{return localStorage.getItem('erp_backend_key')||'';
 // pedirle nada al backend/Sheets, el usuario decide cuándo re-cargar.
 function guardarUltimoResultado(clave,datos){try{localStorage.setItem('ult_'+clave,JSON.stringify({datos,ts:Date.now()}));}catch(e){}}
 function restaurarUltimoResultado(clave){try{const c=JSON.parse(localStorage.getItem('ult_'+clave)||'null');return c?c.datos:null;}catch(e){return null;}}
+function tsUltimoResultado(clave){try{const c=JSON.parse(localStorage.getItem('ult_'+clave)||'null');return c&&c.ts?c.ts:null;}catch(e){return null;}}
 async function testBackend(){const url=getBackendUrl();if(!url){qs('backend-status').textContent='⚠ Ingresá la URL primero';return;}qs('backend-status').textContent='● Testeando...';try{const res=await fetch(url+'/health',{signal:AbortSignal.timeout(5000)});const d=await res.json();let ck='';try{const rc=await fetch(url+'/auth/check',{method:'POST',signal:AbortSignal.timeout(5000)});if(rc.status===401)ck=' · ⚠ la clave falta o es incorrecta';else if(rc.ok){const dc=await rc.json();ck=dc.clave_activa?' · 🔑 clave OK':' · clave aún no exigida';}}catch(e2){}qs('backend-status').textContent='✅ Backend online · '+d.time+ck;}catch(e){qs('backend-status').textContent='❌ No se pudo conectar: '+e.message;}}
 
 // ── CATS ──
@@ -8001,7 +8002,8 @@ function _fmtPeriodoLabel(p){
   const short=s=>{const t=(s||'').split('-');return t.length===3?`${+t[2]}/${+t[1]}`:s;};
   return d1&&d2?`${short(d1)}→${short(d2)}`:p;
 }
-async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';allSalesData=[];
+let DASH_TS=null;   // hora de los datos que se están viendo (del servidor, o del último guardado en este navegador)
+async function loadDashboard(silencioso){if(!silencioso){qs('page-dashboard').innerHTML='<div class="loading-block"><div class="spinner"></div><span>Cargando datos de ventas...</span></div>';qs('status-global').textContent='● cargando...';qs('status-global').style.color='var(--accent3)';allSalesData=[];}else{qs('status-global').textContent=qs('status-global').textContent.replace(/ · actualizando…$/,'')+' · actualizando…';}
   const bu=getBackendUrl();
   if(!bu){qs('page-dashboard').innerHTML='<div class="loading-block"><span style="color:var(--red)">Falta configurar la URL del backend en Configuración</span></div>';return;}
   try{
@@ -8010,15 +8012,16 @@ async function loadDashboard(){qs('page-dashboard').innerHTML='<div class="loadi
       fetch(`${bu}/rentabilidad/historico/ecom`).then(r=>{if(!r.ok)throw new Error(`Ecom: status ${r.status}`);return r.json();}),
     ]);
     allSalesData=tac.map(mapVentaTacticaOut).concat(eco.map(mapVentaEcomOut));
-    guardarUltimoResultado('dashboard',allSalesData);
+    guardarUltimoResultado('dashboard',allSalesData);DASH_TS=Date.now();
   }catch(e){
+    if(silencioso){toast('No se pudo actualizar Ventas y Rentabilidad: sigue lo último guardado ('+e.message+')','error');qs('status-global').textContent=qs('status-global').textContent.replace(/ · actualizando…$/,'');return;}
     qs('page-dashboard').innerHTML=`<div class="loading-block"><span style="color:var(--red)">No se pudo cargar el histórico del backend.<br><small>${e.message}</small></span></div>`;
     return;
   }
   _dashFinalizarCarga();
 }
 function _dashFinalizarCarga(){
-  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`;qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
+  if(!allSalesData.length){qs('page-dashboard').innerHTML='<div class="loading-block"><span>Sin datos histórico todavía — usá "Consultar" arriba para traer un período en vivo, o "Guardar Cierre" para que quede disponible acá</span></div>';return;}const canales=[...new Set(allSalesData.map(d=>d.canal))].sort();canales.forEach((c,i)=>canalColors[c]=PALETTE[i%PALETTE.length]);initMS('ms-canal',new Set(allSalesData.map(d=>d.canal)));initMS('ms-categoria',new Set(allSalesData.map(d=>d.categoria)));initMS('ms-pm',new Set(allSalesData.map(d=>d.pm).filter(Boolean)));qs('status-global').textContent=`● ${allSalesData.length.toLocaleString()} líneas (histórico)`+(DASH_TS?` · datos de ${new Date(DASH_TS).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`:'');qs('status-global').style.color='var(--green)';dashLoaded=true;renderDashboard();}
 // ── "hist" (histórico, sin tocar) vs "vivo" (pestaña nueva 2026-08-19) --
 // accessors chicos en vez de duplicar cada función entera. ──
 function _dashData(inst){return inst==='vivo'?vivoSalesData:allSalesData;}
