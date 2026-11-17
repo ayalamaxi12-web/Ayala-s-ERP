@@ -1121,6 +1121,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
          del sidebar 2026-08-27 -- unificada en el módulo de abajo, pedido de Maxx.
          Código intacto, sigue en el DOM, solo no tiene entrada de menú. -->
     <a href="#" class="sidebar-item" data-page="full-ml" data-mod="ml" onclick="goPage('full-ml',this);return false;"><span class="icon" data-ico="zap" aria-hidden="true"></span>Full ML</a>
+    <a href="#" class="sidebar-item" data-page="posventa-ml" data-mod="ml" onclick="goPage('posventa-ml',this);return false;"><span class="icon" data-ico="shield" aria-hidden="true"></span>Posventa ML</a>
     <a href="#" class="sidebar-item" data-page="ofertas-margen" data-mod="ml" onclick="goPage('ofertas-margen',this);return false;"><span class="icon" data-ico="tag" aria-hidden="true"></span>Precios y ofertas ML</a>
     <a href="#" class="sidebar-item" data-page="campanas-ml" data-mod="ml" onclick="goPage('campanas-ml',this);return false;"><span class="icon" data-ico="megaphone" aria-hidden="true"></span>Campañas ML</a>
     <a href="#" class="sidebar-item" data-page="analisis-competencia" data-mod="ml" onclick="goPage('analisis-competencia',this);return false;"><span class="icon" data-ico="search" aria-hidden="true"></span>Análisis de Competencia</a>
@@ -1912,6 +1913,28 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   </div>
 </div>
 
+<!-- POSVENTA ML: reclamos, cancelaciones y reputación desde la API (solo lectura) -->
+<div id="page-posventa-ml" class="page">
+  <div class="cr-cab"><div><h2 class="cr-tit">Posventa ML</h2><p class="cr-sub">Reclamos, mediaciones, devoluciones y cancelaciones tomados directo de la API de Mercado Libre, con el rango de fechas que elijas. Solo lectura.</p></div></div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="ofx-fila">
+      <label>Desde<input type="date" id="pv-desde" class="fi"></label>
+      <label>Hasta<input type="date" id="pv-hasta" class="fi"></label>
+      <button type="button" class="btn primary" onclick="posventaRun('IT')" id="btn-pv-IT">Ver Group</button>
+      <button type="button" class="btn primary" onclick="posventaRun('MT')" id="btn-pv-MT">Ver Arg</button>
+      <button type="button" class="btn" onclick="posventaCsv()" id="btn-pv-csv" style="display:none">⬇ CSV de reclamos</button>
+      <span style="width:100%"></span>
+      <button type="button" class="btn" onclick="respuestasRun('IT')" id="btn-rs-IT">Respuestas Group</button>
+      <button type="button" class="btn" onclick="respuestasRun('MT')" id="btn-rs-MT">Respuestas Arg</button>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="rs-msj" checked> incluir mensajes (más lento)</label>
+    </div>
+    <p class="ofx-nota">Los reclamos se cuentan por la fecha del reclamo y las ventas por la fecha de la venta, ambos dentro del rango. La tasa de abajo es de referencia: la oficial de ML es la de reputación (60 días).</p>
+    <div id="pv-status" role="status" aria-live="polite" class="ofx-nota"></div><div id="pv-log" style="display:none"></div>
+  </div>
+  <div id="pv-res"></div>
+  <div id="rs-res"></div>
+</div>
+
 <!-- ACCESOS: usuarios y módulos que ve cada uno (solo admin) -->
 <div id="page-accesos" class="page">
   <div class="cr-cab"><div><h2 class="cr-tit">Accesos</h2><p class="cr-sub">Creá usuarios y tildá a qué módulos entra cada uno: en su ERP solo van a aparecer los tildados. Los administradores ven todo.</p></div></div>
@@ -2530,7 +2553,7 @@ let dashLoaded=false,histLoaded=false,cobrLoaded=false,brLoaded=false;let proyLo
 function qs(id){return document.getElementById(id);}
 // ── ÍCONOS SVG en línea (estilo Lucide, trazo 1,8): reemplazan a los emojis. Fuente única: ICONOS. <span data-ico="nombre" data-size="18"> se hidrata al cargar. ──
 // ICONOS-INICIO
-const ICONOS={  'users':'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>','upload':'<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 20h16"/>','download':'<path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>','file-text':'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>','zap':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+const ICONOS={  'shield':'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>','users':'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>','upload':'<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 20h16"/>','download':'<path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>','file-text':'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>','zap':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
  'home':'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>','line-chart':'<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
  'wallet':'<path d="M3 7h16a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l2-3h12v3"/><circle cx="16" cy="14" r="1.2"/>',
  'globe':'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
@@ -2886,6 +2909,7 @@ function goPage(page,el){
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
   if(page==='intel-referencias'&&!referenciasPageLoaded)loadReferenciasPage();
   if(page==='full-ml')fullFotoCargar();
+  if(page==='posventa-ml')posventaIniciar();
   if(page==='ofertas-ml'){ofertasTab('IT');if(ofertasData.IT.length||ofertasData.MT.length)ofertasRender();}
   if(page==='ofertas-margen'){ofmCfgLoad();if(ofmResult)ofmRender();cargarTablasML().then(()=>{if(ofmResult)ofmRender();});}
   if(page==='ayala-core'){if(!ayalaCoreLoaded)ayalaCoreLoad();ayalaCoreAutoRecalcularMontar();ayalaCoreSkuMontar();ayalaCoreMercadoMontar();acBloquesMontar();ayalaCoreTarifasCargar();}
@@ -5313,6 +5337,71 @@ function pollFullJob(statusUrl,logEl,statusEl,btn,btnLabel,onDone,onFail){
   },4000);
 }
 function runFullConciliar(){return fullActualizar('conciliar');}
+
+// ── Posventa ML (backend: ml_posventa.py, /ml-posventa/*): reclamos, cancelaciones y reputación por cuenta y rango. Solo lectura. ──
+let PV={res:null};
+function posventaIniciar(){const h=qs('pv-hasta'),d=qs('pv-desde');if(h&&!h.value){const hoy=new Date(),ini=new Date(hoy.getTime()-30*864e5),f=x=>x.toISOString().slice(0,10);h.value=f(hoy);d.value=f(ini);}}
+async function posventaRun(cuenta){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-pv-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Ver Group':'Ver Arg';
+  if(!desde||!hasta){st.textContent='Elegí desde y hasta.';return;}
+  btn.disabled=true;btn.textContent='● corriendo...';st.textContent='Iniciando…';
+  try{
+    const r=await fetch(`${url}/ml-posventa/run?cuenta=${cuenta}&desde=${desde}&hasta=${hasta}`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ml-posventa/status/${job_id}`,qs('pv-log'),st,btn,rotulo,res=>{PV.res=res;posventaPintar();});
+  }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent=rotulo;}
+}
+function posventaPintar(){
+  const r=PV.res;if(!r)return;const s=r.resumen,rp=r.reputacion,n=x=>x==null?'—':Number(x).toLocaleString('es-AR'),pc=x=>x==null?'—':Number(x).toLocaleString('es-AR',{maximumFractionDigits:2})+'%';
+  qs('btn-pv-csv').style.display='';
+  const kpi=(t,v,sub)=>`<div class="card" style="min-width:150px;flex:1"><div class="ofx-nota">${t}</div><div style="font-size:22px;font-weight:700">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}</div>`;
+  const tabla=(tit,arr)=>`<div class="card" style="flex:1;min-width:260px"><div class="card-title">${tit}</div><table class="ofm-tabla"><tbody>${arr.map(x=>`<tr><td>${acEsc(x.clave)}</td><td style="text-align:right">${x.cantidad}</td></tr>`).join('')||'<tr><td>Sin datos</td></tr>'}</tbody></table></div>`;
+  qs('pv-res').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${kpi('Ventas pagadas',n(s.ventas_pagadas),n(s.unidades)+' unidades')}${kpi('Reclamos',n(s.reclamos),n(s.abiertos)+' abiertos')}${kpi('Tasa de reclamos',pc(s.tasa_reclamos),'sobre ventas del rango')}${kpi('Mediaciones',n(s.mediaciones))}${kpi('Devoluciones',n(s.devoluciones))}${kpi('Canceladas',n(s.canceladas),pc(s.tasa_cancelacion)+' de las órdenes')}</div>
+  ${rp?`<div class="card" style="margin-bottom:14px"><div class="card-title">Reputación oficial de ML (${acEsc(rp.periodo||'60 días')})</div><p class="ofx-nota">Nivel <b>${acEsc(rp.nivel||'—')}</b> · ${acEsc(rp.medalla||'sin medalla')} · reclamos ${pc((rp.reclamos.tasa||0)*100)} (${n(rp.reclamos.valor)}) · demoras ${pc((rp.demoras.tasa||0)*100)} (${n(rp.demoras.valor)}) · cancelaciones ${pc((rp.cancelaciones.tasa||0)*100)} (${n(rp.cancelaciones.valor)})</p></div>`:''}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${tabla('Por motivo',r.por_motivo)}${tabla('Por tipo',r.por_tipo)}${tabla('Por etapa',r.por_etapa)}</div>
+  <div class="card" style="margin-bottom:14px"><div class="card-title">Publicaciones con más reclamos</div><div class="table-wrap"><table class="ofm-tabla"><thead><tr><th>MLA</th><th>SKU</th><th>Título</th><th>Reclamos</th><th>Unid. vendidas</th><th>Tasa</th></tr></thead><tbody>${r.ranking_sku.map(x=>`<tr><td><a href="https://articulo.mercadolibre.com.ar/${acEsc(x.item_id)}" target="_blank" rel="noopener">${acEsc(x.item_id)}</a></td><td>${acEsc(x.sku||'')}</td><td>${acEsc(x.titulo)}</td><td style="text-align:right">${x.reclamos}</td><td style="text-align:right">${x.unidades_vendidas}</td><td style="text-align:right">${pc(x.tasa)}</td></tr>`).join('')||'<tr><td colspan="6">Sin reclamos en el rango.</td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="card-title">Reclamos (${r.reclamos.length})</div><div class="table-wrap"><table class="ofm-tabla"><thead><tr><th>Fecha</th><th>Orden</th><th>SKU</th><th>Tipo</th><th>Etapa</th><th>Estado</th><th>Motivo</th><th>Resolución</th></tr></thead><tbody>${r.reclamos.map(x=>`<tr><td>${acEsc(x.fecha)}</td><td>${acEsc(x.orden||'')}</td><td>${acEsc(x.sku||x.item_id||'')}</td><td>${acEsc(x.tipo||'')}</td><td>${acEsc(x.etapa||'')}</td><td>${acEsc(x.estado||'')}</td><td>${acEsc(x.motivo)}</td><td>${acEsc(x.resolucion)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function posventaCsv(){
+  const r=PV.res;if(!r)return;const cols=['fecha','cierre','orden','item_id','sku','titulo','tipo','etapa','estado','motivo','resolucion','beneficiado'];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const csv='﻿'+cols.join(';')+'\n'+r.reclamos.map(x=>cols.map(c=>q(x[c])).join(';')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`posventa_${r.cuenta}_${r.desde}_${r.hasta}.csv`;a.click();
+}
+
+
+// ── Respuestas ML (backend: ml_respuestas.py, /ml-respuestas/*): preguntas y mensajes por mes, con comparativa contra el mes anterior. Solo lectura. ──
+let RS={res:null};
+async function respuestasRun(cuenta){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-rs-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Respuestas Group':'Respuestas Arg';
+  if(!desde||!hasta){st.textContent='Elegí desde y hasta (para comparar meses, abarcá varios).';return;}
+  btn.disabled=true;btn.textContent='● corriendo...';st.textContent='Iniciando…';
+  try{
+    const r=await fetch(`${url}/ml-respuestas/run?cuenta=${cuenta}&desde=${desde}&hasta=${hasta}&mensajes=${qs('rs-msj').checked}`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ml-respuestas/status/${job_id}`,qs('pv-log'),st,btn,rotulo,res=>{RS.res=res;respuestasPintar();});
+  }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent=rotulo;}
+}
+function respuestasTabla(tit,filas,colConv,rotConv){
+  if(!filas||!filas.length)return `<div class="card" style="margin-bottom:14px"><div class="card-title">${tit}</div><p class="ofx-nota">Sin datos en el rango.</p></div>`;
+  const n=x=>x==null?'—':Number(x).toLocaleString('es-AR',{maximumFractionDigits:1});
+  // Δ contra el mes anterior; en tiempos, bajar es mejor (verde), en % respondidas, subir es mejor.
+  const d=(a,b,menorMejor,suf)=>{if(a==null||b==null)return '';const x=Math.round((a-b)*10)/10;if(!x)return '<small> =</small>';const bien=menorMejor?x<0:x>0;return `<small style="color:var(--${bien?'green':'red'})"> ${x>0?'▲':'▼'}${Math.abs(x).toLocaleString('es-AR')}${suf||''}</small>`;};
+  return `<div class="card" style="margin-bottom:14px"><div class="card-title">${tit}</div><div class="table-wrap"><table class="ofm-tabla"><thead><tr><th>Mes</th><th>${rotConv}</th><th>Respondidas</th><th>Sin responder</th><th>% respondidas</th><th>Tiempo mediano (h)</th><th>Promedio (h)</th><th>% en 1 h</th><th>% en 24 h</th></tr></thead><tbody>${filas.map((f,i)=>{const a=filas[i-1]||{};return `<tr><td><b>${acEsc(f.mes)}</b></td><td style="text-align:right">${f[colConv]}${a.mes?d(f[colConv],a[colConv]):''}</td><td style="text-align:right">${f.respondidas}</td><td style="text-align:right">${f.sin_responder}</td><td style="text-align:right">${n(f.pct_respondidas)}%${d(f.pct_respondidas,a.pct_respondidas,false,' pp')}</td><td style="text-align:right">${n(f.mediana_h)}${d(f.mediana_h,a.mediana_h,true)}</td><td style="text-align:right">${n(f.promedio_h)}</td><td style="text-align:right">${n(f.pct_1h)}%</td><td style="text-align:right">${n(f.pct_24h)}%${d(f.pct_24h,a.pct_24h,false,' pp')}</td></tr>`;}).join('')}</tbody></table></div></div>`;
+}
+function respuestasPintar(){
+  const r=RS.res;if(!r)return;
+  qs('rs-res').innerHTML=`<p class="ofx-nota">Respuestas de ${acEsc(etiquetaCuenta(r.cuenta))} · ${acEsc(r.desde)} → ${acEsc(r.hasta)}. Tiempos corridos (24 h, no horario laboral). Los meses de los extremos del rango pueden estar incompletos: comparar meses completos.</p>
+  ${respuestasTabla('Preguntas de compradores, por mes',r.preguntas_por_mes,'preguntas','Preguntas')}
+  ${(r.mensajes_por_mes||[]).length||qs('rs-msj').checked?respuestasTabla('Mensajes de posventa, por mes (desde el primer mensaje del comprador)',r.mensajes_por_mes,'conversaciones','Conversaciones'):''}
+  ${r.mensajes_truncado?'<p class="ofx-nota">⚠ Había más conversaciones que el máximo leído (2.500): los mensajes cubren las ventas más recientes del rango.</p>':''}
+  ${(r.top_sin_responder||[]).length?`<div class="card"><div class="card-title">Publicaciones con preguntas sin responder</div><table class="ofm-tabla"><tbody>${r.top_sin_responder.map(x=>`<tr><td><a href="https://articulo.mercadolibre.com.ar/${acEsc(x.item_id)}" target="_blank" rel="noopener">${acEsc(x.item_id)}</a></td><td style="text-align:right">${x.sin_responder}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+}
+
 // ── Candidatos a Full (backend: ml_full_candidatos.py): publicaciones activas con ventas que todavía no son de Full. Solo lectura. ──
 let fullCandDatos={IT:[],MT:[]};
 async function fullCandRun(cuenta){
