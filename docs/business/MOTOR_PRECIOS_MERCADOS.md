@@ -64,3 +64,9 @@ Las pestañas «Mercados» y «Envios» viven en el Sheet que indica la variable
 - **Costo por orden de Ecom ($149,12)** se descuenta también en ML (todo lo que se vende por Ecom lo lleva).
 - **Cuotas y tramos de Ofertas al dato más reciente** (ayuda oficial de ML, indicación de Maxi): cuotas 3/6/9/12 = 8,50 / 12,90 / 17,30 / 20,80 % (antes 8,90 / 13,40 / 17,80 / 21,60, verificadas el 2/9); costo fijo de Ofertas ML = 1330 / 2740 / 3320 con techos 15.000 / 24.000 / 33.000 (antes 1255 / 2500 / 3030, 16k/24k/33k). La reducida (5 %) no cambia. Un solo lugar: `ml_ofertas.CUOTAS_PCT_DEFAULT` y `COSTO_FIJO_TRAMOS_DEFAULT`.
 - Con estas reglas los precios de ML **cambian a propósito**; los demás mercados no.
+
+## Web: envío (decisión de Maxx, 2026-11-17; pendiente para más adelante)
+- El precio publicado en la Web **no incluye el envío**: se suma en el carrito al cerrar la compra.
+- Dentro de CABA, gratis desde $30.000. El resto va por correo o por la logística tercerizada (PAAQ).
+- Mientras tanto el envío se carga **a mano** en el Motor. Más adelante se calcula por peso y medidas con sus montos.
+- Mercado Pago cobra comisión y cuotas sobre **todo lo que paga el cliente** (precio + envío): cuando se modele el envío, esa base incluye el envío cobrado.
