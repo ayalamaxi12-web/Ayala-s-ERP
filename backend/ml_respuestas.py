@@ -6,17 +6,23 @@ Los tiempos son corridos (24 h/7 días), no horario laboral. Un mes parcial al b
 """
 from __future__ import annotations
 
-from datetime import datetime
+import unicodedata
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta
 from statistics import median
 from typing import Callable
 
 from ml_auth import SELLERS
-from ml_full import MLFullClient
+from ml_full import MLFullClient, _sku_de_item
 from ml_posventa import traer_ordenes
 
 _jobs: dict[str, dict] = {}
 MAX_PAGINAS = 200
-MAX_CONVERSACIONES = 2500
+MAX_CONVERSACIONES = 6000
+HILOS = 6
+MAX_DETALLE = 1500
+TRAMOS_H = [(0.25, "Hasta 15 min"), (1, "15 min a 1 h"), (4, "1 a 4 h"), (24, "4 a 24 h"), (None, "Más de 24 h")]
+DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 SIN_RESPUESTA = ("UNANSWERED", "CLOSED_UNANSWERED")
 
 
@@ -68,8 +74,90 @@ def conversacion(ml: MLFullClient, cuenta: str, pack_id: str) -> dict | None:
         return None
     primero = _fecha_msg(comp[0])
     resp = next((m for m in msgs if str((m.get("from") or {}).get("user_id")) == seller and _fecha_msg(m) > primero), None)
-    return {"pack": str(pack_id), "inicio": primero.isoformat(), "mensajes_comprador": len(comp),
+    t = comp[0].get("text")
+    texto = (t.get("plain") if isinstance(t, dict) else t) or ""
+    return {"pack": str(pack_id), "inicio": primero.isoformat(), "mensajes_comprador": len(comp), "texto": texto[:240],
             "respuesta_h": _horas(primero, _fecha_msg(resp)) if resp else None}
+
+
+# Desglose de chats: se clasifica por palabras del PRIMER mensaje del comprador (la primera categoría que coincide, en este orden). Es una ayuda para ver
+# de qué se habla, no una verdad: lo que no coincide con nada queda en «Otros».
+CATEGORIAS = [
+    ("Cancelar la compra", ("cancel", "anular", "ya no lo quiero", "no lo quiero")),
+    ("Factura", ("factura", "cuit", "comprobante")),
+    ("Cambio o devolución", ("devol", "cambio", "cambiar el", "arrepent", "reembols", "reintegro", "devuelv")),
+    ("Producto con falla o garantía", ("no funciona", "falla", "fallo", "roto", "rota", "defect", "garant", "no anda", "no enciende", "no prende", "danad", "no carga", "mal estado", "service")),
+    ("Faltante o producto equivocado", ("falta", "equivoc", "distinto", "incompleto", "no vino", "no viene", "otro modelo", "diferente")),
+    ("¿Dónde está mi pedido? / envío", ("cuando llega", "cuando me llega", "donde esta", "seguimiento", "no llego", "no me llego", "demora", "entrega", "despach", "envio", "enviaron", "retiro", "llegar", "correo", "cadete", "paquete")),
+    ("Cambiar dirección o datos", ("direccion", "domicilio", "dni", "telefono", "cambiar los datos", "sucursal", "otra casa")),
+    ("Uso, instalación o compatibilidad", ("como se usa", "como funciona", "instal", "configur", "manual", "compatible", "se puede", "sirve para", "cargador", "bateria", "como lo")),
+    ("Agradecimiento o consulta general", ("gracias", "ok", "perfecto", "buen dia", "buenas", "hola")),
+]
+
+
+def _sin_tildes(t: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", (t or "").lower()) if unicodedata.category(c) != "Mn")
+
+
+def categoria_chat(texto: str) -> str:
+    t = _sin_tildes(texto)
+    for nombre, claves in CATEGORIAS:
+        if any(k in t for k in claves):
+            return nombre
+    return "Otros"
+
+
+def desglose_chats(convs: list[dict]) -> list[dict]:
+    g: dict[str, list[dict]] = {}
+    for c in convs:
+        g.setdefault(c["categoria"], []).append(c)
+    total = len(convs) or 1
+    out = []
+    for cat, cs in g.items():
+        ts = [c["respuesta_h"] for c in cs if c["respuesta_h"] is not None]
+        meses: dict[str, int] = {}
+        for c in cs:
+            meses[c["inicio"][:7]] = meses.get(c["inicio"][:7], 0) + 1
+        out.append({"categoria": cat, "cantidad": len(cs), "pct": round(len(cs) / total * 100, 1), "sin_responder": len(cs) - len(ts), **_resumen_tiempos(ts),
+                    "por_mes": dict(sorted(meses.items())), "ejemplos": [c["texto"] for c in cs if c["texto"]][:3]})
+    return sorted(out, key=lambda r: (-r["cantidad"], r["categoria"]))
+
+
+def _texto(x) -> str:
+    return ((x.get("plain") if isinstance(x, dict) else x) or "").strip()
+
+
+def tramos(tiempos: list[float], sin_responder: int) -> list[dict]:
+    """Cuántas se respondieron en cada franja de tiempo, más las que siguen sin respuesta."""
+    cont = [0] * len(TRAMOS_H)
+    for t in tiempos:
+        for i, (tope, _) in enumerate(TRAMOS_H):
+            if tope is None or t <= tope:
+                cont[i] += 1
+                break
+    return [{"tramo": TRAMOS_H[i][1], "cantidad": cont[i]} for i in range(len(TRAMOS_H))] + [{"tramo": "Sin responder", "cantidad": sin_responder}]
+
+
+def series(eventos: list[tuple[str, float | None]]) -> dict:
+    """Series de (fecha-hora local, tiempo de respuesta en h o None): por día, por hora del día y por día de la semana."""
+    def agrupar(clave):
+        g: dict = {}
+        for f, t in eventos:
+            g.setdefault(clave(f), []).append(t)
+        return g
+
+    def fila(k, ts):
+        v = [t for t in ts if t is not None]
+        return {"clave": k, "cantidad": len(ts), "sin_responder": len(ts) - len(v), "mediana_h": round(median(v), 2) if v else None}
+    por_dia = [fila(k, v) | {"fecha": k} for k, v in sorted(agrupar(lambda f: f[:10]).items())]
+    por_hora = [fila(f"{h:02d}", agrupar(lambda f: f[11:13]).get(f"{h:02d}", [])) for h in range(24)]
+    sem = agrupar(lambda f: date.fromisoformat(f[:10]).weekday())
+    por_semana = [fila(DIAS[i], sem.get(i, [])) for i in range(7)]
+    def lunes(f):
+        d = date.fromisoformat(f[:10])
+        return (d - timedelta(days=d.weekday())).isoformat()
+    por_sem_iso = [fila(k, v) | {"fecha": k} for k, v in sorted(agrupar(lunes).items())]
+    return {"por_dia": por_dia, "por_hora": por_hora, "por_dia_semana": por_semana, "por_semana": por_sem_iso}
 
 
 def _resumen_tiempos(tiempos: list[float]) -> dict:
@@ -105,6 +193,32 @@ def por_mes_mensajes(convs: list[dict]) -> list[dict]:
     return out
 
 
+def detalle_preguntas(preguntas: list[dict], info_items: dict[str, dict]) -> list[dict]:
+    out = []
+    for q in sorted(preguntas, key=lambda x: x.get("date_created") or "", reverse=True)[:MAX_DETALLE]:
+        a = q.get("answer") or {}
+        resp = bool(a and (a.get("text") or a.get("date_created")))
+        it = info_items.get(q.get("item_id") or "", {})
+        out.append({"id": q.get("id"), "fecha": (q.get("date_created") or "")[:16].replace("T", " "), "item_id": q.get("item_id"), "titulo": it.get("titulo", ""), "sku": it.get("sku"),
+                    "pregunta": _texto(q.get("text")), "respuesta": _texto(a.get("text")) if resp else "", "estado": q.get("status"),
+                    "respuesta_h": round(_horas(_dt(q.get("date_created")), _dt(a.get("date_created"))), 2) if resp and _horas(_dt(q.get("date_created")), _dt(a.get("date_created"))) is not None else None})
+    return out
+
+
+def top_items(preguntas: list[dict], info_items: dict[str, dict], n: int = 30) -> list[dict]:
+    g: dict[str, list[dict]] = {}
+    for q in preguntas:
+        if q.get("item_id"):
+            g.setdefault(q["item_id"], []).append(q)
+    out = []
+    for i, qs in g.items():
+        ts = [t for q in qs if q.get("answer") and (t := _horas(_dt(q.get("date_created")), _dt(q["answer"].get("date_created")))) is not None]
+        it = info_items.get(i, {})
+        out.append({"item_id": i, "titulo": it.get("titulo", ""), "sku": it.get("sku"), "preguntas": len(qs), "sin_responder": sum(1 for q in qs if q.get("status") in SIN_RESPUESTA),
+                    "mediana_h": round(median(ts), 2) if ts else None})
+    return sorted(out, key=lambda r: (-r["preguntas"], r["item_id"]))[:n]
+
+
 def top_sin_responder(preguntas: list[dict], n: int = 20) -> list[dict]:
     cont: dict[str, int] = {}
     for q in preguntas:
@@ -113,38 +227,128 @@ def top_sin_responder(preguntas: list[dict], n: int = 20) -> list[dict]:
     return [{"item_id": k, "sin_responder": v} for k, v in sorted(cont.items(), key=lambda kv: (-kv[1], kv[0]))[:n]]
 
 
+def periodo_anterior(desde: str, hasta: str) -> tuple[str, str]:
+    """El período inmediato anterior de la misma duración (para comparar la evolución)."""
+    d, h = date.fromisoformat(desde), date.fromisoformat(hasta)
+    n = (h - d).days + 1
+    ph = d - timedelta(days=1)
+    return (ph - timedelta(days=n - 1)).isoformat(), ph.isoformat()
+
+
 def metricas_respuestas(ml: MLFullClient, cuenta: str, desde: str, hasta: str, con_mensajes: bool = True,
-                        progreso_cb: Callable[[str], None] | None = None) -> dict:
+                        progreso_cb: Callable[[str], None] | None = None, comparar: bool = False) -> dict:
     p = progreso_cb or (lambda t: None)
+    if comparar:
+        pd, ph = periodo_anterior(desde, hasta)
+        p("Período anterior")
+        ant = metricas_respuestas(ml, cuenta, pd, ph, con_mensajes, progreso_cb=None, comparar=False)
+        r = metricas_respuestas(ml, cuenta, desde, hasta, con_mensajes, progreso_cb=progreso_cb, comparar=False)
+        r["anterior"] = {"desde": pd, "hasta": ph, "preguntas_total": ant.get("preguntas_total"), "mensajes_total": ant.get("mensajes_total")}
+        return r
     p("Trayendo preguntas")
     preguntas = traer_preguntas(ml, cuenta, desde, hasta)
+    p("Identificando publicaciones")
+    ids = list(dict.fromkeys(q["item_id"] for q in preguntas if q.get("item_id")))[:800]
+    info: dict[str, dict] = {}
+    try:
+        for b in ml.detalle_items(ids, cuenta):
+            info[b.get("id")] = {"titulo": b.get("title", ""), "sku": _sku_de_item(b)}
+    except Exception:  # noqa: BLE001  (sin títulos igual se muestra todo lo demás)
+        pass
+    tp = [t for q in preguntas if q.get("answer") and (t := _horas(_dt(q.get("date_created")), _dt(q["answer"].get("date_created")))) is not None]
+    sin = sum(1 for q in preguntas if q.get("status") in SIN_RESPUESTA)
+    ev = [((q.get("date_created") or "")[:19], _horas(_dt(q.get("date_created")), _dt((q.get("answer") or {}).get("date_created"))) if q.get("answer") else None) for q in preguntas if q.get("date_created")]
     r = {"cuenta": cuenta, "desde": desde, "hasta": hasta, "preguntas_por_mes": por_mes_preguntas(preguntas), "top_sin_responder": top_sin_responder(preguntas),
+         "preguntas_total": {"preguntas": len(preguntas), "sin_responder": sin, "pct_respondidas": round((len(preguntas) - sin) / len(preguntas) * 100, 1) if preguntas else None, **_resumen_tiempos(tp)},
+         "preguntas_tramos": tramos(tp, sin), "preguntas_series": series(ev), "preguntas_items": top_items(preguntas, info), "preguntas_detalle": detalle_preguntas(preguntas, info),
          "mensajes_por_mes": [], "mensajes_truncado": False}
     if con_mensajes:
         p("Trayendo ventas")
-        packs = list(dict.fromkeys(str(o.get("pack_id") or o.get("id")) for o in traer_ordenes(ml, cuenta, desde, hasta)))
-        r["mensajes_truncado"] = len(packs) > MAX_CONVERSACIONES
-        convs = []
-        for i, pk in enumerate(packs[:MAX_CONVERSACIONES]):
-            if i % 25 == 0:
-                p(f"Leyendo conversaciones {i}/{min(len(packs), MAX_CONVERSACIONES)}")
+        packs: dict[str, str] = {}
+        for o in traer_ordenes(ml, cuenta, desde, hasta):
+            packs.setdefault(str(o.get("pack_id") or o.get("id")), str(o.get("id")))
+        lista = list(packs)
+        r["mensajes_truncado"] = len(lista) > MAX_CONVERSACIONES
+        lista = lista[:MAX_CONVERSACIONES]
+        hechas = [0]
+
+        def leer(pk):
             try:
                 c = conversacion(ml, cuenta, pk)
             except Exception:  # noqa: BLE001  (una conversación que falla no tira el resto)
                 c = None
-            if c:
-                convs.append(c)
+            hechas[0] += 1
+            if hechas[0] % 50 == 0:
+                p(f"Leyendo conversaciones {hechas[0]}/{len(lista)}")
+            return c
+        with ThreadPoolExecutor(HILOS) as ex:
+            convs = [c for c in ex.map(leer, lista) if c]
+        for c in convs:
+            c["orden"] = packs.get(c["pack"])
+            c["categoria"] = categoria_chat(c["texto"])
+        tm = [c["respuesta_h"] for c in convs if c["respuesta_h"] is not None]
         r["mensajes_por_mes"] = por_mes_mensajes(convs)
+        r["mensajes_total"] = {"conversaciones": len(convs), "sin_responder": len(convs) - len(tm), "pct_respondidas": round(len(tm) / len(convs) * 100, 1) if convs else None, **_resumen_tiempos(tm)}
+        r["mensajes_tramos"] = tramos(tm, len(convs) - len(tm))
+        r["mensajes_categorias"] = desglose_chats(convs)
+        r["mensajes_series"] = series([(c["inicio"][:19], c["respuesta_h"]) for c in convs])
+        r["mensajes_detalle"] = [{"fecha": c["inicio"][:16].replace("T", " "), "orden": c.get("orden"), "pack": c["pack"], "categoria": c["categoria"], "texto": c["texto"], "mensajes": c["mensajes_comprador"], "respuesta_h": None if c["respuesta_h"] is None else round(c["respuesta_h"], 2)}
+                                 for c in sorted(convs, key=lambda c: c["inicio"], reverse=True)[:MAX_DETALLE]]
     return r
 
 
-def iniciar_job(job_id: str, cuenta: str, desde: str, hasta: str, con_mensajes: bool = True, ml: MLFullClient | None = None) -> None:
+MODULO_FOTO = "respuestas_ml"
+
+
+def params_foto(desde: str, hasta: str, mensajes: bool, comparar: bool) -> str:
+    from ml_foto import clave_params
+    return clave_params(d=desde, h=hasta, m=int(mensajes), c=int(comparar))
+
+
+def guardar_foto(cuenta: str, desde: str, hasta: str, mensajes: bool, comparar: bool, resultado: dict, duracion: float, sesion_fn=None) -> None:
+    """Guarda el resultado de este período: lo ya pasado no cambia, así no hay que volver a leerlo de ML cada vez que se mira."""
+    import ml_foto
+    if sesion_fn is None:
+        from rentabilidad.db import sesion as sesion_fn
+    with sesion_fn() as db:
+        ml_foto.guardar_exito(db, MODULO_FOTO, cuenta, params_foto(desde, hasta, mensajes, comparar), resultado, "ok", 0, duracion, [])
+
+
+def leer_foto(cuenta: str, desde: str, hasta: str, mensajes: bool, comparar: bool, sesion_fn=None) -> dict:
+    import ml_foto
+    if sesion_fn is None:
+        from rentabilidad.db import sesion as sesion_fn
+    with sesion_fn() as db:
+        v = ml_foto.vista_foto(ml_foto.leer(db, MODULO_FOTO, cuenta, params_foto(desde, hasta, mensajes, comparar)))
+    v["periodo_cerrado"] = hasta < date.today().isoformat()
+    return v
+
+
+def listar_fotos(cuenta: str, sesion_fn=None) -> list[dict]:
+    from rentabilidad.models import MlFoto
+    if sesion_fn is None:
+        from rentabilidad.db import sesion as sesion_fn
+    with sesion_fn() as db:
+        fs = db.query(MlFoto).filter(MlFoto.modulo == MODULO_FOTO, MlFoto.cuenta == cuenta, MlFoto.payload.isnot(None)).order_by(MlFoto.obtenido_en.desc()).all()
+        out = []
+        for f in fs:
+            kv = dict(x.split("=", 1) for x in (f.params or "").split(";") if "=" in x)
+            out.append({"desde": kv.get("d"), "hasta": kv.get("h"), "mensajes": kv.get("m") == "1", "comparar": kv.get("c") == "1", "obtenido_en": f.obtenido_en.isoformat() + "Z"})
+    return out
+
+
+def iniciar_job(job_id: str, cuenta: str, desde: str, hasta: str, con_mensajes: bool = True, comparar: bool = False, ml: MLFullClient | None = None) -> None:
     _jobs[job_id] = {"status": "running", "log": [f"Respuestas {cuenta} {desde} → {hasta}"], "result": None, "progress": None}
     try:
+        t0 = __import__("time").monotonic()
         res = metricas_respuestas(ml or MLFullClient(), cuenta, desde, hasta, con_mensajes,
-                                  lambda t: _jobs[job_id].update(progress={"current": 0, "total": 1, "label": f"{t} ({cuenta})"}))
+                                  lambda t: _jobs[job_id].update(progress={"current": 0, "total": 1, "label": f"{t} ({cuenta})"}), comparar)
+        try:
+            guardar_foto(cuenta, desde, hasta, con_mensajes, comparar, res, round(__import__("time").monotonic() - t0, 1))
+            _jobs[job_id]["log"].append("Listo y guardado: la próxima vez que mires este período se abre al instante.")
+        except Exception as e:  # noqa: BLE001  (guardar no debe perder el resultado que ya se leyó)
+            _jobs[job_id]["log"].append(f"Listo (no se pudo guardar la foto: {type(e).__name__}).")
         _jobs[job_id].update(status="done", result=res, progress=None)
-        _jobs[job_id]["log"].append("Listo.")
     except Exception as e:  # noqa: BLE001
         _jobs[job_id].update(status="error", progress=None)
         _jobs[job_id]["log"].append(f"Error: {e}")

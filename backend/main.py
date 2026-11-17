@@ -3004,7 +3004,7 @@ async def ml_posventa_status(job_id: str):
     return ml_posventa.estado_job(job_id) or {"status": "not_found"}
 
 @app.post("/ml-respuestas/run")
-async def ml_respuestas_run(background_tasks: BackgroundTasks, cuenta: str, desde: str, hasta: str, mensajes: bool = True):
+async def ml_respuestas_run(background_tasks: BackgroundTasks, cuenta: str, desde: str, hasta: str, mensajes: bool = True, comparar: bool = True):
     """Métricas de respuesta ML (solo lectura): preguntas y mensajes de posventa por mes (tiempos y % respondidas)."""
     _cuenta_valida(cuenta)
     try:
@@ -3014,8 +3014,19 @@ async def ml_respuestas_run(background_tasks: BackgroundTasks, cuenta: str, desd
     if h < d or (h - d).days > 400:
         raise HTTPException(status_code=422, detail="Rango inválido (hasta ≥ desde, máximo ~13 meses).")
     job_id = f"mlrespuestas_{int(time.time() * 1000)}"
-    background_tasks.add_task(ml_respuestas.iniciar_job, job_id, cuenta, desde, hasta, mensajes)
+    background_tasks.add_task(ml_respuestas.iniciar_job, job_id, cuenta, desde, hasta, mensajes, comparar)
     return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-respuestas/foto")
+async def ml_respuestas_foto(cuenta: str, desde: str, hasta: str, mensajes: bool = True, comparar: bool = True):
+    """Foto guardada de ese período (no lee ML). `existe: false` si todavía no se corrió."""
+    _cuenta_valida(cuenta)
+    return ml_respuestas.leer_foto(cuenta, desde, hasta, mensajes, comparar)
+
+@app.get("/ml-respuestas/fotos")
+async def ml_respuestas_fotos(cuenta: str):
+    _cuenta_valida(cuenta)
+    return {"fotos": ml_respuestas.listar_fotos(cuenta)}
 
 @app.get("/ml-respuestas/status/{job_id}")
 async def ml_respuestas_status(job_id: str):
