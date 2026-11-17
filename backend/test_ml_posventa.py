@@ -34,7 +34,7 @@ def test_traer_reclamos_filtra_por_fecha_y_corta_paginacion():
     def get(url, params, headers):
         llamadas.append(params["offset"])
         return {"paging": {"total": 8}, "data": paginas[params["offset"]]}
-    r = P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-14", "2026-11-18")
+    r, _ = P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-14", "2026-11-18")
     assert [c["id"] for c in r] == [2, 3, 4, 5, 6]
     assert llamadas == [0, 4]
 
@@ -63,12 +63,23 @@ def test_endpoint_valida_rango(monkeypatch):
 
 
 def test_traer_reclamos_si_ml_rechaza_filtros_prueba_la_variante_simple():
-    llamadas = []
-
     def get(url, params, headers):
-        llamadas.append(sorted(k for k in params if k not in ("limit", "offset")))
         if params.get("sort") or params.get("players.role"):
             raise RuntimeError("400 Client Error")
         return {"paging": {"total": 2}, "data": [_c(1, "1", "2026-11-11T00:00:00.000-03:00"), _c(2, "1", "2026-09-01T00:00:00.000-03:00")]}
-    r = P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-17")
-    assert [c["id"] for c in r] == [1] and llamadas[-1] == []
+    r, origen = P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-17")
+    assert [c["id"] for c in r] == [1] and origen == "claims/search"
+
+
+def test_si_claims_search_siempre_da_400_se_arma_desde_las_ordenes():
+    def get(url, params, headers):
+        if "claims/search" in url:
+            raise RuntimeError("400")
+        assert url.endswith("/claims/77")
+        return _c(77, "1", "2026-11-11T00:00:00.000-03:00")
+    ords = [{"id": 1, "status": "paid", "mediations": [{"id": 77}]}, {"id": 2, "status": "paid", "mediations": []}]
+    r, origen = P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-17", ords)
+    assert [c["id"] for c in r] == [77] and origen == "ordenes"
+    import pytest
+    with pytest.raises(RuntimeError):
+        P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-17", None)

@@ -61,22 +61,45 @@ def traer_ordenes(ml: MLFullClient, cuenta: str, desde: str, hasta: str) -> list
         "sort": "date_desc", "limit": 50}, h, "results")
 
 
-def traer_reclamos(ml: MLFullClient, cuenta: str, desde: str, hasta: str) -> list[dict]:
-    """Reclamos creados entre `desde` y `hasta` (inclusive). ML rechazó (400) la búsqueda con `sort` y filtros de jugador, así que se prueba de la más específica a la
-    más simple: la sesión es la de la cuenta vendedora y la API ya devuelve solo SUS reclamos. Sin orden garantizado se pagina todo y se filtra por fecha."""
+def reclamos_por_ordenes(ml: MLFullClient, cuenta: str, ordenes: list[dict], desde: str, hasta: str, tope: int = 600) -> list[dict]:
+    """Plan B cuando `claims/search` rechaza el pedido: cada orden trae en `mediations` los ids de sus reclamos y `claims/{id}` devuelve el detalle."""
+    h = {"Authorization": f"Bearer {ml._token(cuenta)}"}
+    ids = list(dict.fromkeys(str(m.get("id")) for o in ordenes for m in (o.get("mediations") or []) if m.get("id")))[:tope]
+    out = []
+    for i in ids:
+        try:
+            c = ml._get(f"https://api.mercadolibre.com/post-purchase/v1/claims/{i}", {}, h)
+        except Exception:  # noqa: BLE001  (un reclamo que no se puede leer no tira el resto)
+            continue
+        if c and desde <= _dia(c.get("date_created")) <= hasta:
+            out.append(c)
+    return out
+
+
+def traer_reclamos(ml: MLFullClient, cuenta: str, desde: str, hasta: str, ordenes: list[dict] | None = None) -> tuple[list[dict], str]:
+    """Reclamos creados entre `desde` y `hasta` (inclusive) y de dónde salieron. ML rechaza (400) `claims/search` según qué parámetros se le manden (incluso con solo
+    `limit`/`offset`), así que se prueban varias formas de pedirlo y, si ninguna funciona, se arma desde las órdenes (`mediations` → `claims/{id}`)."""
     h = {"Authorization": f"Bearer {ml._token(cuenta)}"}
     url = "https://api.mercadolibre.com/post-purchase/v1/claims/search"
-    variantes = [({"players.role": "respondent", "players.user_id": SELLERS[cuenta], "sort": "date_created:desc"}, True),
-                 ({"players.role": "respondent", "players.user_id": SELLERS[cuenta]}, False), ({}, False)]
+    yo = {"players.role": "respondent", "players.user_id": SELLERS[cuenta]}
+    variantes = [({**yo, "sort": "date_created:desc"}, True, 50), ({**yo}, False, 50), ({**yo}, False, 30), ({"status": "opened"}, False, 30), ({}, False, 30)]
     ultimo: Exception | None = None
-    for extra, ordenado in variantes:
+    for extra, ordenado, limite in variantes:
         try:
-            todos = _paginar(ml, url, {**extra, "limit": 50}, h, "data",
-                             parar=(lambda filas: all(_dia(f.get("date_created")) < desde for f in filas)) if ordenado else None)
-        except Exception as e:  # noqa: BLE001  (400 por un filtro no aceptado: se prueba la variante siguiente)
+            if extra == {"status": "opened"}:       # sin filtro de jugador: abiertos y cerrados por separado
+                todos = _paginar(ml, url, {"status": "opened", "limit": limite}, h, "data") + _paginar(ml, url, {"status": "closed", "limit": limite}, h, "data")
+            else:
+                todos = _paginar(ml, url, {**extra, "limit": limite}, h, "data",
+                                 parar=(lambda filas: all(_dia(f.get("date_created")) < desde for f in filas)) if ordenado else None)
+        except Exception as e:  # noqa: BLE001  (400 por un parámetro no aceptado: se prueba la forma siguiente)
             ultimo = e
             continue
-        return [c for c in todos if desde <= _dia(c.get("date_created")) <= hasta]
+        unicos = {str(c.get("id")): c for c in todos}.values()
+        return [c for c in unicos if desde <= _dia(c.get("date_created")) <= hasta], "claims/search"
+    if ordenes is not None:
+        r = reclamos_por_ordenes(ml, cuenta, ordenes, desde, hasta)
+        if r or not any(o.get("mediations") for o in ordenes):
+            return r, "ordenes"
     raise ultimo or RuntimeError("no se pudo leer reclamos")
 
 
@@ -153,7 +176,7 @@ def metricas_posventa(ml: MLFullClient, cuenta: str, desde: str, hasta: str, pro
     p("Trayendo ventas")
     ordenes = traer_ordenes(ml, cuenta, desde, hasta)
     p("Trayendo reclamos")
-    reclamos = traer_reclamos(ml, cuenta, desde, hasta)
+    reclamos, origen = traer_reclamos(ml, cuenta, desde, hasta, ordenes)
     h = {"Authorization": f"Bearer {ml._token(cuenta)}"}
     p("Identificando publicaciones")
     r = calcular(ordenes, reclamos, lambda oid: ml._get(f"https://api.mercadolibre.com/orders/{oid}", {}, h))
@@ -162,7 +185,7 @@ def metricas_posventa(ml: MLFullClient, cuenta: str, desde: str, hasta: str, pro
         r["reputacion"] = reputacion(ml, cuenta)
     except Exception:  # noqa: BLE001
         r["reputacion"] = None
-    r.update(cuenta=cuenta, desde=desde, hasta=hasta)
+    r.update(cuenta=cuenta, desde=desde, hasta=hasta, reclamos_origen=origen)
     return r
 
 
