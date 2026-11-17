@@ -8215,6 +8215,7 @@ document.addEventListener('click',e=>{
 //    peras con manzanas. Ahora el ranking sale de la facturación
 //    COMBINADA (P1+P2), y la Participación también usa esa combinada
 //    (ya coincide con `totalFact`, que siempre fue P1+P2).
+function _margenPesosColor(v){return v<0?'var(--red)':v>0?'var(--green)':'var(--text2)';}   // Margen $ = rentabilidad en pesos: rojo si es pérdida
 function _rentBadgeClass(rp){return rp>0.6?'badge-green':rp>0.4?'badge-blue':rp>0.2?'badge-yellow':'badge-red';}
 function _rentInlineColor(pct){return pct>50?'var(--green)':pct>30?'var(--accent)':pct>15?'var(--yellow)':'var(--red)';}
 function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,rentMap2,inst){
@@ -8225,6 +8226,7 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,ren
   if(useComparison)html+='<th>Facturación P2</th><th>Var.</th>';
   html+='<th>Participación</th>';
   html+=useComparison?'<th>Rent. % P1</th><th>Rent. % P2</th>':'<th>Rent. %</th>';
+  html+=useComparison?'<th title="Rentabilidad en pesos de la categoría en el período">Margen $ P1</th><th title="Rentabilidad en pesos de la categoría en el período">Margen $ P2</th>':'<th title="Rentabilidad en pesos de la categoría en el período">Margen $</th>';
   html+='</tr></thead><tbody>';
   topCats.forEach(([cat,fact])=>{
     const fact2=useComparison?(groupSum(data2,'categoria','precioFinal')[cat]||0):0;
@@ -8250,14 +8252,17 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,ren
     html+='<td><div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-size:9px;font-family:DM Mono,monospace;color:var(--text2)">'+pct+'%</span></div></td>';
     html+='<td><span class="badge '+_rentBadgeClass(rp1)+'">'+(rp1*100).toFixed(1)+'%</span></td>';
     if(useComparison)html+='<td>'+(rp2!==null?'<span class="badge '+_rentBadgeClass(rp2)+'">'+(rp2*100).toFixed(1)+'%</span>':'-')+'</td>';
+    html+='<td class="mono" style="font-size:10px;color:'+_margenPesosColor(rentMap[cat]||0)+'">'+fmt$(rentMap[cat]||0)+'</td>';
+    if(useComparison)html+='<td class="mono" style="font-size:10px;color:'+_margenPesosColor(rentMap2[cat]||0)+'">'+(fact2?fmt$(rentMap2[cat]||0):'-')+'</td>';
     html+='</tr>';
     // Filas colapsables de SKU
-    html+='<tr id="'+catId+'" style="display:none"><td colspan="'+(useComparison?7:5)+'" style="padding:0">';
+    html+='<tr id="'+catId+'" style="display:none"><td colspan="'+(useComparison?10:6)+'" style="padding:0">';
     html+='<table style="width:100%;background:var(--surface2)"><thead><tr style="background:rgba(0,157,188,0.08)">';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">SKU</th>';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P1</th>';
     if(useComparison){html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Facturación P2</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Var.</th>';}
     html+=useComparison?'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. % P1</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. % P2</th>':'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Rent. %</th>';
+    html+=useComparison?'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Margen $ P1</th><th style="padding:5px 10px;font-size:9px;color:var(--text3)">Margen $ P2</th>':'<th style="padding:5px 10px;font-size:9px;color:var(--text3)">Margen $</th>';
     html+='<th style="padding:5px 10px;font-size:9px;color:var(--text3)">% cat</th></tr></thead><tbody>';
     topSkus.forEach(([sku,sv])=>{
       const sv2=skuMap2[sku]||0;
@@ -8268,9 +8273,9 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,ren
       // Rent% de este SKU, por período -- mismo criterio que la fila de categoría de arriba.
       const skuRent1=data.filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
       const skuRentPct1=(skuSin1[sku]||0)>0?(skuRent1/skuSin1[sku]*100):0;
-      let skuRentPct2=null;
+      let skuRentPct2=null,skuRent2=0;
       if(useComparison){
-        const skuRent2=(data2||[]).filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
+        skuRent2=(data2||[]).filter(d=>d.skus&&d.skus.some(s=>s===sku)).reduce((s,d)=>s+d.rentabilidad,0);
         skuRentPct2=(skuSin2[sku]||0)>0?(skuRent2/skuSin2[sku]*100):null;
       }
       html+='<tr><td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent)">'+sku+'</td>';
@@ -8278,6 +8283,8 @@ function buildTopCatsHTML(topCats,data,data2,useComparison,totalFact,rentMap,ren
       if(useComparison){html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px">'+(sv2?fmt$(sv2):'-')+'</td><td style="padding:4px 10px">'+svarStr+'</td>';}
       html+='<td style="padding:4px 10px;font-size:9px;font-family:DM Mono,monospace;font-weight:700;color:'+_rentInlineColor(skuRentPct1)+'">'+skuRentPct1.toFixed(1)+'%</td>';
       if(useComparison)html+='<td style="padding:4px 10px;font-size:9px;font-family:DM Mono,monospace;font-weight:700;color:'+(skuRentPct2!==null?_rentInlineColor(skuRentPct2):'var(--text3)')+'">'+(skuRentPct2!==null?skuRentPct2.toFixed(1)+'%':'-')+'</td>';
+      html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:'+_margenPesosColor(skuRent1)+'">'+fmt$(skuRent1)+'</td>';
+      if(useComparison)html+='<td style="padding:4px 10px;font-family:DM Mono,monospace;font-size:9px;color:'+_margenPesosColor(skuRent2)+'">'+(sv2?fmt$(skuRent2):'-')+'</td>';
       html+='<td style="padding:4px 10px;font-size:9px;color:var(--text3);font-family:DM Mono,monospace">'+sp+'%</td></tr>';
     });
     html+='</tbody></table></td></tr>';
