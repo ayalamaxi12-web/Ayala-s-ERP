@@ -1925,9 +1925,11 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <button type="button" class="btn primary" onclick="posventaRun('MT')" id="btn-pv-MT">Ver Arg</button>
       <button type="button" class="btn" onclick="posventaCsv()" id="btn-pv-csv" style="display:none">⬇ CSV de reclamos</button>
       <span style="width:100%"></span>
-      <button type="button" class="btn" onclick="respuestasRun('IT')" id="btn-rs-IT">Respuestas Group</button>
-      <button type="button" class="btn" onclick="respuestasRun('MT')" id="btn-rs-MT">Respuestas Arg</button>
+      <button type="button" class="btn" onclick="respuestasRun('IT',false)" id="btn-rs-IT">Respuestas Group</button>
+      <button type="button" class="btn" onclick="respuestasRun('MT',false)" id="btn-rs-MT">Respuestas Arg</button>
       <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="rs-msj" checked> incluir mensajes (más lento)</label>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="rs-cmp" checked> comparar con el período anterior</label>
+      <label>Períodos guardados<select id="rs-guardados" class="fi" onchange="respuestasAbrirGuardado()"><option value="">— abrir uno guardado —</option></select></label>
     </div>
     <p class="ofx-nota">Los reclamos se cuentan por la fecha del reclamo y las ventas por la fecha de la venta, ambos dentro del rango. La tasa de abajo es de referencia: la oficial de ML es la de reputación (60 días).</p>
     <div id="pv-status" role="status" aria-live="polite" class="ofx-nota"></div><div id="pv-log" style="display:none"></div>
@@ -5341,7 +5343,7 @@ function runFullConciliar(){return fullActualizar('conciliar');}
 
 // ── Posventa ML (backend: ml_posventa.py, /ml-posventa/*): reclamos, cancelaciones y reputación por cuenta y rango. Solo lectura. ──
 let PV={res:null};
-function posventaIniciar(){const h=qs('pv-hasta'),d=qs('pv-desde');if(h&&!h.value){const hoy=new Date(),ini=new Date(hoy.getTime()-30*864e5),f=x=>x.toISOString().slice(0,10);h.value=f(hoy);d.value=f(ini);}}
+function posventaIniciar(){respuestasGuardadosListar();const h=qs('pv-hasta'),d=qs('pv-desde');if(h&&!h.value){const hoy=new Date(),ini=new Date(hoy.getTime()-30*864e5),f=x=>x.toISOString().slice(0,10);h.value=f(hoy);d.value=f(ini);}}
 async function posventaRun(cuenta){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
   const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-pv-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Ver Group':'Ver Arg';
@@ -5375,17 +5377,32 @@ function posventaCsv(){
 
 // ── Respuestas ML (backend: ml_respuestas.py, /ml-respuestas/*): preguntas y mensajes por mes, con comparativa contra el mes anterior. Solo lectura. ──
 let RS={res:null};
-async function respuestasRun(cuenta){
+async function respuestasRun(cuenta,forzar){
   const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
-  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-rs-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Respuestas Group':'Respuestas Arg';
+  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-rs-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Respuestas Group':'Respuestas Arg',msj=qs('rs-msj').checked,cmp=qs('rs-cmp').checked;
   if(!desde||!hasta){st.textContent='Elegí desde y hasta (para comparar meses, abarcá varios).';return;}
-  btn.disabled=true;btn.textContent='● corriendo...';st.textContent='Iniciando…';
+  btn.disabled=true;btn.textContent='● buscando...';st.textContent='Buscando la foto guardada…';
+  const q=`cuenta=${cuenta}&desde=${desde}&hasta=${hasta}&mensajes=${msj}&comparar=${cmp}`;
+  if(!forzar){
+    try{const f=await (await fetch(`${url}/ml-respuestas/foto?${q}`)).json();
+      if(f.existe&&f.payload){RS.res=f.payload;RS.foto={en:f.obtenido_en,cerrado:f.periodo_cerrado,cuenta};respuestasPintar();st.textContent='Foto guardada: se abrió al instante.';btn.disabled=false;btn.textContent=rotulo;return;}}catch(e){console.warn(e);}
+  }
+  btn.textContent='● corriendo...';st.textContent='Iniciando…';
   try{
-    const r=await fetch(`${url}/ml-respuestas/run?cuenta=${cuenta}&desde=${desde}&hasta=${hasta}&mensajes=${qs('rs-msj').checked}`,{method:'POST'});
+    const r=await fetch(`${url}/ml-respuestas/run?${q}`,{method:'POST'});
     if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
     const{job_id}=await r.json();
-    pollFullJob(`${url}/ml-respuestas/status/${job_id}`,qs('pv-log'),st,btn,rotulo,res=>{RS.res=res;respuestasPintar();});
+    pollFullJob(`${url}/ml-respuestas/status/${job_id}`,qs('pv-log'),st,btn,rotulo,res=>{RS.res=res;RS.foto={en:new Date().toISOString(),cerrado:hasta<new Date().toISOString().slice(0,10),cuenta,nueva:true};respuestasPintar();respuestasGuardadosListar();});
   }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent=rotulo;}
+}
+async function respuestasGuardadosListar(){
+  const url=getBackendUrl(),sel=qs('rs-guardados');if(!url||!sel)return;
+  const todos=[];for(const c of ['IT','MT']){try{const d=await (await fetch(`${url}/ml-respuestas/fotos?cuenta=${c}`)).json();(d.fotos||[]).forEach(f=>todos.push({...f,cuenta:c}));}catch(e){}}
+  RS.guardados=todos;sel.innerHTML='<option value="">— abrir uno guardado —</option>'+todos.map((f,i)=>`<option value="${i}">${etiquetaCuenta(f.cuenta)} · ${f.desde} → ${f.hasta}${f.mensajes?' · con mensajes':''}</option>`).join('');
+}
+function respuestasAbrirGuardado(){
+  const i=qs('rs-guardados').value;if(i==='')return;const f=RS.guardados[+i];if(!f)return;
+  qs('pv-desde').value=f.desde;qs('pv-hasta').value=f.hasta;qs('rs-msj').checked=!!f.mensajes;qs('rs-cmp').checked=!!f.comparar;respuestasRun(f.cuenta,false);
 }
 function respuestasTabla(tit,filas,colConv,rotConv){
   if(!filas||!filas.length)return `<div class="card" style="margin-bottom:14px"><div class="card-title">${tit}</div><p class="ofx-nota">Sin datos en el rango.</p></div>`;
@@ -5398,16 +5415,17 @@ let RS_CH={};
 function rsGraf(id,cfg){if(RS_CH[id]){RS_CH[id].destroy();}const c=qs(id);if(!c||typeof Chart==='undefined')return;RS_CH[id]=new Chart(c,cfg);}
 const rsN=(x,d)=>x==null?'—':Number(x).toLocaleString('es-AR',{maximumFractionDigits:d==null?1:d});
 const rsT=h=>h==null?'—':(h<1?Math.round(h*60)+' min':h<48?rsN(h,1)+' h':rsN(h/24,1)+' d');
-function rsKpis(t,cant,rot){
+function rsKpis(t,cant,rot,ant){
   if(!t)return '';
-  const k=(a,v,sub,col)=>`<div class="card" style="min-width:140px;flex:1;margin:0"><div class="ofx-nota">${a}</div><div style="font-size:24px;font-weight:700;${col?'color:var(--'+col+')':''}">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}</div>`;
-  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">${k(rot,rsN(t[cant],0))}${k('% respondidas',rsN(t.pct_respondidas)+'%','',t.pct_respondidas>=95?'green':t.pct_respondidas>=85?'yellow':'red')}${k('Sin responder',rsN(t.sin_responder,0),'',t.sin_responder?'red':'green')}${k('Tiempo mediano',rsT(t.mediana_h),'promedio '+rsT(t.promedio_h))}${k('En 1 hora',rsN(t.pct_1h)+'%')}${k('En 24 horas',rsN(t.pct_24h)+'%','',t.pct_24h>=95?'green':'yellow')}</div>`;
+  const dl=(a,b,menorMejor,suf)=>{if(!ant||a==null||b==null)return '';const x=Math.round((a-b)*10)/10;if(!x)return ' = igual al período anterior';const bien=menorMejor?x<0:x>0;return ` <span style="color:var(--${bien?'green':'red'})">${x>0?'▲':'▼'} ${rsN(Math.abs(x))}${suf||''}</span> vs anterior`;};
+  const k=(a,v,sub,col,d)=>`<div class="card" style="min-width:140px;flex:1;margin:0"><div class="ofx-nota">${a}</div><div style="font-size:24px;font-weight:700;${col?'color:var(--'+col+')':''}">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}${d?`<div class="ofx-nota" style="margin:0">${d}</div>`:''}</div>`;
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">${k(rot,rsN(t[cant],0),'','',ant?dl(t[cant],ant[cant],false,''):'')}${k('% respondidas',rsN(t.pct_respondidas)+'%','',t.pct_respondidas>=95?'green':t.pct_respondidas>=85?'yellow':'red',ant?dl(t.pct_respondidas,ant.pct_respondidas,false,' pp'):'')}${k('Sin responder',rsN(t.sin_responder,0),'',t.sin_responder?'red':'green',ant?dl(t.sin_responder,ant.sin_responder,true,''):'')}${k('Tiempo mediano',rsT(t.mediana_h),'promedio '+rsT(t.promedio_h),'',ant?dl(t.mediana_h,ant.mediana_h,true,' h'):'')}${k('En 1 hora',rsN(t.pct_1h)+'%','','',ant?dl(t.pct_1h,ant.pct_1h,false,' pp'):'')}${k('En 24 horas',rsN(t.pct_24h)+'%','',t.pct_24h>=95?'green':'yellow',ant?dl(t.pct_24h,ant.pct_24h,false,' pp'):'')}</div>`;
 }
 function rsTramos(arr){
   if(!arr)return '';const tot=arr.reduce((a,x)=>a+x.cantidad,0)||1,col=['#2e9e5b','#6bbf59','#e0b83a','#e07b39','#d64545','#8a8f98'];
   return `<div style="display:flex;height:22px;border-radius:11px;overflow:hidden;margin:6px 0">${arr.map((x,i)=>`<div title="${acEsc(x.tramo)}: ${x.cantidad}" style="flex:${x.cantidad};background:${col[i]}"></div>`).join('')}</div><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px">${arr.map((x,i)=>`<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${col[i]};margin-right:4px"></span>${acEsc(x.tramo)}: <b>${x.cantidad}</b> (${Math.round(x.cantidad/tot*100)}%)</span>`).join('')}</div>`;
 }
-function rsSeriesHtml(pref,tit){return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-bottom:14px"><div class="card" style="margin:0"><div class="card-title">${tit} por día</div><div style="height:210px"><canvas id="rs-${pref}-dia"></canvas></div></div><div class="card" style="margin:0"><div class="card-title">A qué hora llegan y cuánto tardamos</div><div style="height:210px"><canvas id="rs-${pref}-hora"></canvas></div></div><div class="card" style="margin:0"><div class="card-title">Por día de la semana</div><div style="height:210px"><canvas id="rs-${pref}-sem"></canvas></div></div></div>`;}
+function rsSeriesHtml(pref,tit){return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-bottom:14px"><div class="card" style="margin:0"><div class="card-title">${tit} por día</div><div style="height:210px"><canvas id="rs-${pref}-dia"></canvas></div></div><div class="card" style="margin:0"><div class="card-title">A qué hora llegan y cuánto tardamos</div><div style="height:210px"><canvas id="rs-${pref}-hora"></canvas></div></div><div class="card" style="margin:0"><div class="card-title">Por día de la semana</div><div style="height:210px"><canvas id="rs-${pref}-sem"></canvas></div></div><div class="card" style="margin:0"><div class="card-title">Evolución semanal (semana que empieza el lunes)</div><div style="height:210px"><canvas id="rs-${pref}-semana"></canvas></div></div></div>`;}
 function rsSeriesDibujar(pref,se){
   if(!se)return;const css=getComputedStyle(document.documentElement),c1=css.getPropertyValue('--accent').trim()||'#00a7c4',c2=css.getPropertyValue('--yellow').trim()||'#e0b83a',txt=css.getPropertyValue('--text2').trim()||'#888';
   const ejes={x:{ticks:{color:txt,maxRotation:0,autoSkip:true},grid:{display:false}},y:{beginAtZero:true,ticks:{color:txt}},y2:{position:'right',beginAtZero:true,grid:{display:false},ticks:{color:txt,callback:v=>v+' h'}}};
@@ -5415,21 +5433,31 @@ function rsSeriesDibujar(pref,se){
   arm('rs-'+pref+'-dia',se.por_dia,f=>f.fecha.slice(5).split('-').reverse().join('/'));
   arm('rs-'+pref+'-hora',se.por_hora,f=>f.clave+'h');
   arm('rs-'+pref+'-sem',se.por_dia_semana,f=>f.clave);
+  arm('rs-'+pref+'-semana',se.por_semana||[],f=>f.fecha.slice(5).split('-').reverse().join('/'));
 }
 function rsTablaItems(arr){
   if(!arr||!arr.length)return '';
   return `<div class="card" style="margin-bottom:14px"><div class="card-title">Publicaciones que más preguntas reciben</div><div class="table-wrap"><table class="ofm-tabla"><thead><tr><th>Publicación</th><th>SKU</th><th style="text-align:right">Preguntas</th><th style="text-align:right">Sin responder</th><th style="text-align:right">Tiempo mediano</th></tr></thead><tbody>${arr.map(x=>`<tr><td><a href="https://articulo.mercadolibre.com.ar/${acEsc(x.item_id)}" target="_blank" rel="noopener">${acEsc(x.titulo||x.item_id)}</a></td><td>${acEsc(x.sku||'')}</td><td style="text-align:right"><b>${x.preguntas}</b></td><td style="text-align:right;${x.sin_responder?'color:var(--red);font-weight:700':''}">${x.sin_responder}</td><td style="text-align:right">${rsT(x.mediana_h)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function rsDesgloseChats(arr){
+  if(!arr||!arr.length)return '';const meses=[...new Set(arr.flatMap(x=>Object.keys(x.por_mes||{})))].sort(),max=Math.max(...arr.map(x=>x.cantidad))||1;
+  return `<div class="card" style="margin-bottom:14px"><div class="card-title">Desglose de chats: de qué escriben los compradores</div><p class="ofx-nota">Se clasifica por las palabras del primer mensaje del comprador. Es una guía: lo que no coincide con nada queda en «Otros». Clic en una fila para ver esos chats abajo.</p><div class="table-wrap"><table class="ofm-tabla"><thead><tr><th>Tema</th><th style="min-width:160px">Cantidad</th><th style="text-align:right">%</th><th style="text-align:right">Sin responder</th><th style="text-align:right">Tiempo mediano</th><th style="text-align:right">% en 24 h</th>${meses.map(m=>`<th style="text-align:right">${acEsc(m)}</th>`).join('')}<th>Ejemplos</th></tr></thead><tbody>${arr.map(x=>`<tr style="cursor:pointer" onclick="rsFiltrarCategoria('${acEsc(x.categoria).replace(/'/g,"&#39;")}')"><td><b>${acEsc(x.categoria)}</b></td><td><div style="background:var(--accent);height:10px;border-radius:5px;width:${Math.max(3,Math.round(x.cantidad/max*100))}%"></div> ${x.cantidad}</td><td style="text-align:right">${rsN(x.pct)}%</td><td style="text-align:right;${x.sin_responder?'color:var(--red);font-weight:700':''}">${x.sin_responder}</td><td style="text-align:right">${rsT(x.mediana_h)}</td><td style="text-align:right">${rsN(x.pct_24h)}%</td>${meses.map(m=>`<td style="text-align:right">${(x.por_mes||{})[m]||0}</td>`).join('')}<td style="max-width:320px;color:var(--text2);font-size:12px">${(x.ejemplos||[]).map(e=>'«'+acEsc(e.slice(0,70))+'»').join('<br>')}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function rsFiltrarCategoria(c){const b=qs('rs-b-m');if(b){b.value=c;rsDetallePintar('m');b.scrollIntoView({behavior:'smooth',block:'center'});}}
+function rsBannerFoto(){
+  const f=RS.foto;if(!f)return '';const cuando=f.en?new Date(f.en).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  return `<div class="ofg-nota" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><span>📌 ${f.nueva?'Leído y guardado':'Foto guardada'} el ${acEsc(cuando)}. ${f.cerrado?'El período ya cerró: estos datos no cambian.':'El período incluye días en curso: conviene volver a leer para completarlo.'}</span><button type="button" class="btn" onclick="respuestasRun(RS.foto.cuenta,true)">Volver a leer de ML</button></div>`;
 }
 function rsFiltroHtml(tipo){return `<div class="ofx-fila" style="margin:6px 0 10px"><label>Mostrar<select id="rs-f-${tipo}" class="fi" onchange="rsDetallePintar('${tipo}')"><option value="todas">Todas</option><option value="sin">Sin responder</option><option value="lentas">Respondidas en más de 24 h</option><option value="rapidas">Respondidas en menos de 1 h</option></select></label><label>Buscar<input id="rs-b-${tipo}" class="fi" placeholder="texto, SKU o publicación" oninput="rsDetallePintar('${tipo}')"></label><button type="button" class="btn" onclick="rsCsv('${tipo}')">⬇ CSV</button><span id="rs-n-${tipo}" class="ofx-nota"></span></div>`;}
 function rsDetallePintar(tipo){
   const r=RS.res;if(!r)return;const det=tipo==='p'?r.preguntas_detalle:r.mensajes_detalle;if(!det)return;
   const f=qs('rs-f-'+tipo).value,b=(qs('rs-b-'+tipo).value||'').toLowerCase().trim();
   const filas=det.filter(x=>{const sin=x.respuesta_h==null;if(f==='sin'&&!sin)return false;if(f==='lentas'&&!(x.respuesta_h>24))return false;if(f==='rapidas'&&!(x.respuesta_h!=null&&x.respuesta_h<1))return false;
-    return !b||[x.pregunta,x.texto,x.respuesta,x.sku,x.titulo,x.item_id,x.orden].some(v=>String(v||'').toLowerCase().includes(b));});
+    return !b||[x.pregunta,x.texto,x.respuesta,x.sku,x.titulo,x.item_id,x.orden,x.categoria].some(v=>String(v||'').toLowerCase().includes(b));});
   qs('rs-n-'+tipo).textContent=`${filas.length} de ${det.length}`;
   const col=x=>x.respuesta_h==null?'var(--red)':x.respuesta_h>24?'var(--yellow)':'var(--green)';
   qs('rs-t-'+tipo).innerHTML=tipo==='p'?`<thead><tr><th>Fecha</th><th>Publicación</th><th>Pregunta</th><th>Respuesta</th><th style="text-align:right">Tardó</th></tr></thead><tbody>${filas.slice(0,300).map(x=>`<tr><td style="white-space:nowrap">${acEsc(x.fecha)}</td><td><a href="https://articulo.mercadolibre.com.ar/${acEsc(x.item_id||'')}" target="_blank" rel="noopener">${acEsc(x.sku||x.item_id||'')}</a><br><small>${acEsc((x.titulo||'').slice(0,60))}</small></td><td style="max-width:340px">${acEsc(x.pregunta)}</td><td style="max-width:340px;color:var(--text2)">${acEsc(x.respuesta||'— sin responder —')}</td><td style="text-align:right;white-space:nowrap;color:${col(x)};font-weight:700">${x.respuesta_h==null?'sin resp.':rsT(x.respuesta_h)}</td></tr>`).join('')}</tbody>`
-   :`<thead><tr><th>Fecha</th><th>Orden</th><th>Qué escribió el comprador</th><th style="text-align:right">Mensajes</th><th style="text-align:right">Tardamos</th></tr></thead><tbody>${filas.slice(0,300).map(x=>`<tr><td style="white-space:nowrap">${acEsc(x.fecha)}</td><td>${acEsc(x.orden||x.pack)}</td><td style="max-width:520px">${acEsc(x.texto||'(sin texto)')}</td><td style="text-align:right">${x.mensajes}</td><td style="text-align:right;white-space:nowrap;color:${col(x)};font-weight:700">${x.respuesta_h==null?'sin resp.':rsT(x.respuesta_h)}</td></tr>`).join('')}</tbody>`;
+   :`<thead><tr><th>Fecha</th><th>Orden</th><th>Tema</th><th>Qué escribió el comprador</th><th style="text-align:right">Mensajes</th><th style="text-align:right">Tardamos</th></tr></thead><tbody>${filas.slice(0,300).map(x=>`<tr><td style="white-space:nowrap">${acEsc(x.fecha)}</td><td>${acEsc(x.orden||x.pack)}</td><td style="font-size:12px">${acEsc(x.categoria||'')}</td><td style="max-width:520px">${acEsc(x.texto||'(sin texto)')}</td><td style="text-align:right">${x.mensajes}</td><td style="text-align:right;white-space:nowrap;color:${col(x)};font-weight:700">${x.respuesta_h==null?'sin resp.':rsT(x.respuesta_h)}</td></tr>`).join('')}</tbody>`;
 }
 function rsCsv(tipo){
   const r=RS.res;if(!r)return;const det=tipo==='p'?r.preguntas_detalle:r.mensajes_detalle;if(!det||!det.length)return;const cols=Object.keys(det[0]),q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
@@ -5437,15 +5465,16 @@ function rsCsv(tipo){
 }
 function respuestasPintar(){
   const r=RS.res;if(!r)return;const tieneMsj=!!r.mensajes_total;
-  qs('rs-res').innerHTML=`<p class="ofx-nota">Respuestas de ${acEsc(etiquetaCuenta(r.cuenta))} · ${acEsc(r.desde)} → ${acEsc(r.hasta)}. Tiempos corridos (24 h, no horario laboral). Los meses de los extremos del rango pueden estar incompletos: comparar meses completos.</p>
-  <h3 style="margin:14px 0 6px">Preguntas de compradores</h3>${rsKpis(r.preguntas_total,'preguntas','Preguntas')}
+  qs('rs-res').innerHTML=`${rsBannerFoto()}<p class="ofx-nota">Respuestas de ${acEsc(etiquetaCuenta(r.cuenta))} · ${acEsc(r.desde)} → ${acEsc(r.hasta)}${r.anterior?` (comparado con ${acEsc(r.anterior.desde)} → ${acEsc(r.anterior.hasta)})`:''}. Tiempos corridos (24 h, no horario laboral). Los meses de los extremos del rango pueden estar incompletos: comparar meses completos.</p>
+  <h3 style="margin:14px 0 6px">Preguntas de compradores</h3>${rsKpis(r.preguntas_total,'preguntas','Preguntas',r.anterior&&r.anterior.preguntas_total)}
   <div class="card" style="margin-bottom:14px"><div class="card-title">¿Cuánto tardamos en responder?</div>${rsTramos(r.preguntas_tramos)}</div>
   ${rsSeriesHtml('p','Preguntas')}
   ${respuestasTabla('Comparativa mes a mes',r.preguntas_por_mes,'preguntas','Preguntas')}
   ${rsTablaItems(r.preguntas_items)}
   <div class="card" style="margin-bottom:18px"><div class="card-title">Detalle de preguntas</div>${rsFiltroHtml('p')}<div class="table-wrap" style="max-height:520px;overflow:auto"><table class="ofm-tabla" id="rs-t-p"></table></div></div>
-  ${tieneMsj?`<h3 style="margin:14px 0 6px">Mensajes de posventa</h3>${rsKpis(r.mensajes_total,'conversaciones','Conversaciones')}
+  ${tieneMsj?`<h3 style="margin:14px 0 6px">Mensajes de posventa</h3>${rsKpis(r.mensajes_total,'conversaciones','Conversaciones',r.anterior&&r.anterior.mensajes_total)}
   <div class="card" style="margin-bottom:14px"><div class="card-title">¿Cuánto tardamos en responder?</div>${rsTramos(r.mensajes_tramos)}</div>
+  ${rsDesgloseChats(r.mensajes_categorias)}
   ${rsSeriesHtml('m','Conversaciones nuevas')}
   ${respuestasTabla('Comparativa mes a mes',r.mensajes_por_mes,'conversaciones','Conversaciones')}
   ${r.mensajes_truncado?'<p class="ofx-nota">⚠ Había más conversaciones que el máximo leído (6.000): se leyeron las ventas más recientes del rango. Para ver todo, achicá el rango.</p>':''}
