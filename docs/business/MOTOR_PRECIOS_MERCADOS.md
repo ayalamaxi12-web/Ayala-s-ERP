@@ -9,7 +9,7 @@ El Motor calcula con la fórmula de siempre (`ayala_core.calcular_precio_condici
 | Frávega | Simple, 3, 6, 9, 12 | 15,5 % base (a confirmar) | 3: 6,8 · 6: 10,6 · 9: 13,7 · 12: 16,6 (se suman a la base; a confirmar) |
 | OnCity | ídem Frávega | **copiado de Frávega, a confirmar** (filas propias) | ídem |
 | Megatone | ídem Frávega | **copiado de Frávega, a confirmar** (filas propias) | ídem |
-| Web (Mercado Pago) | Simple, 3, 6, 9, 12, 18, 24 | 6 % por cobro | 0 · 3,40 · 7,90 · 12,60 · 15,20 · 22,10 · 27,60, **× (1 + recargo 20 %, editable y a confirmar)** = 4,08 · 9,48 · 15,12 · 18,24 · 26,52 · 33,12 |
+| Web (Mercado Pago) | Simple, 3, 6, 9, 12, 18, 24 | 6,05 % por cobro (5 % + IVA) | 0 · 3,40 · 7,90 · 12,60 · 15,20 · 22,10 · 27,60, **× (1 + recargo 21 % de IVA, editable)** = 4,114 · 9,559 · 15,246 · 18,392 · 26,741 · 33,396 (verificado con el detalle de una operación real de 9 cuotas, 2026-11-17) |
 
 «Reducida» existe solo en Mercado Libre. «Simple» es el Contado de los otros mercados (solo la comisión base). La pantalla muestra la **comisión total desglosada** (base + cuotas [+ recargo]) y la marca «a confirmar».
 
@@ -64,3 +64,9 @@ Las pestañas «Mercados» y «Envios» viven en el Sheet que indica la variable
 - **Costo por orden de Ecom ($149,12)** se descuenta también en ML (todo lo que se vende por Ecom lo lleva).
 - **Cuotas y tramos de Ofertas al dato más reciente** (ayuda oficial de ML, indicación de Maxi): cuotas 3/6/9/12 = 8,50 / 12,90 / 17,30 / 20,80 % (antes 8,90 / 13,40 / 17,80 / 21,60, verificadas el 2/9); costo fijo de Ofertas ML = 1330 / 2740 / 3320 con techos 15.000 / 24.000 / 33.000 (antes 1255 / 2500 / 3030, 16k/24k/33k). La reducida (5 %) no cambia. Un solo lugar: `ml_ofertas.CUOTAS_PCT_DEFAULT` y `COSTO_FIJO_TRAMOS_DEFAULT`.
 - Con estas reglas los precios de ML **cambian a propósito**; los demás mercados no.
+
+## Web: envío (decisión de Maxx, 2026-11-17; pendiente para más adelante)
+- El precio publicado en la Web **no incluye el envío**: se suma en el carrito al cerrar la compra.
+- Dentro de CABA, gratis desde $30.000. El resto va por correo o por la logística tercerizada (PAAQ).
+- Mientras tanto el envío se carga **a mano** en el Motor. Más adelante se calcula por peso y medidas con sus montos.
+- Mercado Pago cobra comisión y cuotas sobre **todo lo que paga el cliente** (precio + envío): cuando se modele el envío, esa base incluye el envío cobrado.
