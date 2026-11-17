@@ -87,6 +87,9 @@ def test_rutas_protegidas(metodo, path):
     ("OPTIONS", "/ml-proxy"),
     ("OPTIONS", "/ecom/update-price"),
     ("POST", "/picking/escanear"),      # clave propia (PICKING_KEY), no X-ERP-Key
+    ("POST", "/auth/login"),            # login y usuarios: se autentican con su propia sesión
+    ("PUT", "/auth/usuarios/maria"),
+    ("POST", "/auth/cambiar-clave"),
 ])
 def test_rutas_abiertas(metodo, path):
     assert not requiere_clave(metodo, path)
