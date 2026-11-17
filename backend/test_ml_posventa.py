@@ -60,3 +60,15 @@ def test_endpoint_valida_rango(monkeypatch):
     assert c.post("/ml-posventa/run?cuenta=XX&desde=2026-11-01&hasta=2026-11-02", headers=h).status_code == 422
     assert c.post("/ml-posventa/run?cuenta=IT&desde=2026-11-05&hasta=2026-11-02", headers=h).status_code == 422
     assert c.post("/ml-posventa/run?cuenta=IT&desde=malo&hasta=2026-11-02", headers=h).status_code == 422
+
+
+def test_traer_reclamos_si_ml_rechaza_filtros_prueba_la_variante_simple():
+    llamadas = []
+
+    def get(url, params, headers):
+        llamadas.append(sorted(k for k in params if k not in ("limit", "offset")))
+        if params.get("sort") or params.get("players.role"):
+            raise RuntimeError("400 Client Error")
+        return {"paging": {"total": 2}, "data": [_c(1, "1", "2026-11-11T00:00:00.000-03:00"), _c(2, "1", "2026-09-01T00:00:00.000-03:00")]}
+    r = P.traer_reclamos(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-17")
+    assert [c["id"] for c in r] == [1] and llamadas[-1] == []

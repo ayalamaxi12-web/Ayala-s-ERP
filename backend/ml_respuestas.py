@@ -6,17 +6,22 @@ Los tiempos son corridos (24 h/7 días), no horario laboral. Un mes parcial al b
 """
 from __future__ import annotations
 
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime
 from statistics import median
 from typing import Callable
 
 from ml_auth import SELLERS
-from ml_full import MLFullClient
+from ml_full import MLFullClient, _sku_de_item
 from ml_posventa import traer_ordenes
 
 _jobs: dict[str, dict] = {}
 MAX_PAGINAS = 200
-MAX_CONVERSACIONES = 2500
+MAX_CONVERSACIONES = 6000
+HILOS = 6
+MAX_DETALLE = 1500
+TRAMOS_H = [(0.25, "Hasta 15 min"), (1, "15 min a 1 h"), (4, "1 a 4 h"), (24, "4 a 24 h"), (None, "Más de 24 h")]
+DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 SIN_RESPUESTA = ("UNANSWERED", "CLOSED_UNANSWERED")
 
 
@@ -68,8 +73,43 @@ def conversacion(ml: MLFullClient, cuenta: str, pack_id: str) -> dict | None:
         return None
     primero = _fecha_msg(comp[0])
     resp = next((m for m in msgs if str((m.get("from") or {}).get("user_id")) == seller and _fecha_msg(m) > primero), None)
-    return {"pack": str(pack_id), "inicio": primero.isoformat(), "mensajes_comprador": len(comp),
+    t = comp[0].get("text")
+    texto = (t.get("plain") if isinstance(t, dict) else t) or ""
+    return {"pack": str(pack_id), "inicio": primero.isoformat(), "mensajes_comprador": len(comp), "texto": texto[:240],
             "respuesta_h": _horas(primero, _fecha_msg(resp)) if resp else None}
+
+
+def _texto(x) -> str:
+    return ((x.get("plain") if isinstance(x, dict) else x) or "").strip()
+
+
+def tramos(tiempos: list[float], sin_responder: int) -> list[dict]:
+    """Cuántas se respondieron en cada franja de tiempo, más las que siguen sin respuesta."""
+    cont = [0] * len(TRAMOS_H)
+    for t in tiempos:
+        for i, (tope, _) in enumerate(TRAMOS_H):
+            if tope is None or t <= tope:
+                cont[i] += 1
+                break
+    return [{"tramo": TRAMOS_H[i][1], "cantidad": cont[i]} for i in range(len(TRAMOS_H))] + [{"tramo": "Sin responder", "cantidad": sin_responder}]
+
+
+def series(eventos: list[tuple[str, float | None]]) -> dict:
+    """Series de (fecha-hora local, tiempo de respuesta en h o None): por día, por hora del día y por día de la semana."""
+    def agrupar(clave):
+        g: dict = {}
+        for f, t in eventos:
+            g.setdefault(clave(f), []).append(t)
+        return g
+
+    def fila(k, ts):
+        v = [t for t in ts if t is not None]
+        return {"clave": k, "cantidad": len(ts), "sin_responder": len(ts) - len(v), "mediana_h": round(median(v), 2) if v else None}
+    por_dia = [fila(k, v) | {"fecha": k} for k, v in sorted(agrupar(lambda f: f[:10]).items())]
+    por_hora = [fila(f"{h:02d}", agrupar(lambda f: f[11:13]).get(f"{h:02d}", [])) for h in range(24)]
+    sem = agrupar(lambda f: date.fromisoformat(f[:10]).weekday())
+    por_semana = [fila(DIAS[i], sem.get(i, [])) for i in range(7)]
+    return {"por_dia": por_dia, "por_hora": por_hora, "por_dia_semana": por_semana}
 
 
 def _resumen_tiempos(tiempos: list[float]) -> dict:
@@ -105,6 +145,32 @@ def por_mes_mensajes(convs: list[dict]) -> list[dict]:
     return out
 
 
+def detalle_preguntas(preguntas: list[dict], info_items: dict[str, dict]) -> list[dict]:
+    out = []
+    for q in sorted(preguntas, key=lambda x: x.get("date_created") or "", reverse=True)[:MAX_DETALLE]:
+        a = q.get("answer") or {}
+        resp = bool(a and (a.get("text") or a.get("date_created")))
+        it = info_items.get(q.get("item_id") or "", {})
+        out.append({"id": q.get("id"), "fecha": (q.get("date_created") or "")[:16].replace("T", " "), "item_id": q.get("item_id"), "titulo": it.get("titulo", ""), "sku": it.get("sku"),
+                    "pregunta": _texto(q.get("text")), "respuesta": _texto(a.get("text")) if resp else "", "estado": q.get("status"),
+                    "respuesta_h": round(_horas(_dt(q.get("date_created")), _dt(a.get("date_created"))), 2) if resp and _horas(_dt(q.get("date_created")), _dt(a.get("date_created"))) is not None else None})
+    return out
+
+
+def top_items(preguntas: list[dict], info_items: dict[str, dict], n: int = 30) -> list[dict]:
+    g: dict[str, list[dict]] = {}
+    for q in preguntas:
+        if q.get("item_id"):
+            g.setdefault(q["item_id"], []).append(q)
+    out = []
+    for i, qs in g.items():
+        ts = [t for q in qs if q.get("answer") and (t := _horas(_dt(q.get("date_created")), _dt(q["answer"].get("date_created")))) is not None]
+        it = info_items.get(i, {})
+        out.append({"item_id": i, "titulo": it.get("titulo", ""), "sku": it.get("sku"), "preguntas": len(qs), "sin_responder": sum(1 for q in qs if q.get("status") in SIN_RESPUESTA),
+                    "mediana_h": round(median(ts), 2) if ts else None})
+    return sorted(out, key=lambda r: (-r["preguntas"], r["item_id"]))[:n]
+
+
 def top_sin_responder(preguntas: list[dict], n: int = 20) -> list[dict]:
     cont: dict[str, int] = {}
     for q in preguntas:
@@ -118,23 +184,51 @@ def metricas_respuestas(ml: MLFullClient, cuenta: str, desde: str, hasta: str, c
     p = progreso_cb or (lambda t: None)
     p("Trayendo preguntas")
     preguntas = traer_preguntas(ml, cuenta, desde, hasta)
+    p("Identificando publicaciones")
+    ids = list(dict.fromkeys(q["item_id"] for q in preguntas if q.get("item_id")))[:800]
+    info: dict[str, dict] = {}
+    try:
+        for b in ml.detalle_items(ids, cuenta):
+            info[b.get("id")] = {"titulo": b.get("title", ""), "sku": _sku_de_item(b)}
+    except Exception:  # noqa: BLE001  (sin títulos igual se muestra todo lo demás)
+        pass
+    tp = [t for q in preguntas if q.get("answer") and (t := _horas(_dt(q.get("date_created")), _dt(q["answer"].get("date_created")))) is not None]
+    sin = sum(1 for q in preguntas if q.get("status") in SIN_RESPUESTA)
+    ev = [((q.get("date_created") or "")[:19], _horas(_dt(q.get("date_created")), _dt((q.get("answer") or {}).get("date_created"))) if q.get("answer") else None) for q in preguntas if q.get("date_created")]
     r = {"cuenta": cuenta, "desde": desde, "hasta": hasta, "preguntas_por_mes": por_mes_preguntas(preguntas), "top_sin_responder": top_sin_responder(preguntas),
+         "preguntas_total": {"preguntas": len(preguntas), "sin_responder": sin, "pct_respondidas": round((len(preguntas) - sin) / len(preguntas) * 100, 1) if preguntas else None, **_resumen_tiempos(tp)},
+         "preguntas_tramos": tramos(tp, sin), "preguntas_series": series(ev), "preguntas_items": top_items(preguntas, info), "preguntas_detalle": detalle_preguntas(preguntas, info),
          "mensajes_por_mes": [], "mensajes_truncado": False}
     if con_mensajes:
         p("Trayendo ventas")
-        packs = list(dict.fromkeys(str(o.get("pack_id") or o.get("id")) for o in traer_ordenes(ml, cuenta, desde, hasta)))
-        r["mensajes_truncado"] = len(packs) > MAX_CONVERSACIONES
-        convs = []
-        for i, pk in enumerate(packs[:MAX_CONVERSACIONES]):
-            if i % 25 == 0:
-                p(f"Leyendo conversaciones {i}/{min(len(packs), MAX_CONVERSACIONES)}")
+        packs: dict[str, str] = {}
+        for o in traer_ordenes(ml, cuenta, desde, hasta):
+            packs.setdefault(str(o.get("pack_id") or o.get("id")), str(o.get("id")))
+        lista = list(packs)
+        r["mensajes_truncado"] = len(lista) > MAX_CONVERSACIONES
+        lista = lista[:MAX_CONVERSACIONES]
+        hechas = [0]
+
+        def leer(pk):
             try:
                 c = conversacion(ml, cuenta, pk)
             except Exception:  # noqa: BLE001  (una conversación que falla no tira el resto)
                 c = None
-            if c:
-                convs.append(c)
+            hechas[0] += 1
+            if hechas[0] % 50 == 0:
+                p(f"Leyendo conversaciones {hechas[0]}/{len(lista)}")
+            return c
+        with ThreadPoolExecutor(HILOS) as ex:
+            convs = [c for c in ex.map(leer, lista) if c]
+        for c in convs:
+            c["orden"] = packs.get(c["pack"])
+        tm = [c["respuesta_h"] for c in convs if c["respuesta_h"] is not None]
         r["mensajes_por_mes"] = por_mes_mensajes(convs)
+        r["mensajes_total"] = {"conversaciones": len(convs), "sin_responder": len(convs) - len(tm), "pct_respondidas": round(len(tm) / len(convs) * 100, 1) if convs else None, **_resumen_tiempos(tm)}
+        r["mensajes_tramos"] = tramos(tm, len(convs) - len(tm))
+        r["mensajes_series"] = series([(c["inicio"][:19], c["respuesta_h"]) for c in convs])
+        r["mensajes_detalle"] = [{"fecha": c["inicio"][:16].replace("T", " "), "orden": c.get("orden"), "pack": c["pack"], "texto": c["texto"], "mensajes": c["mensajes_comprador"], "respuesta_h": None if c["respuesta_h"] is None else round(c["respuesta_h"], 2)}
+                                 for c in sorted(convs, key=lambda c: c["inicio"], reverse=True)[:MAX_DETALLE]]
     return r
 
 

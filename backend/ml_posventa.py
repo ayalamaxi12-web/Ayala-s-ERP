@@ -62,12 +62,22 @@ def traer_ordenes(ml: MLFullClient, cuenta: str, desde: str, hasta: str) -> list
 
 
 def traer_reclamos(ml: MLFullClient, cuenta: str, desde: str, hasta: str) -> list[dict]:
-    """Reclamos creados entre `desde` y `hasta` (inclusive). Pagina del más nuevo al más viejo y corta al pasar `desde`."""
+    """Reclamos creados entre `desde` y `hasta` (inclusive). ML rechazó (400) la búsqueda con `sort` y filtros de jugador, así que se prueba de la más específica a la
+    más simple: la sesión es la de la cuenta vendedora y la API ya devuelve solo SUS reclamos. Sin orden garantizado se pagina todo y se filtra por fecha."""
     h = {"Authorization": f"Bearer {ml._token(cuenta)}"}
-    todos = _paginar(ml, "https://api.mercadolibre.com/post-purchase/v1/claims/search", {
-        "players.role": "respondent", "players.user_id": SELLERS[cuenta], "sort": "date_created:desc", "limit": 50}, h, "data",
-        parar=lambda filas: all(_dia(f.get("date_created")) < desde for f in filas))
-    return [c for c in todos if desde <= _dia(c.get("date_created")) <= hasta]
+    url = "https://api.mercadolibre.com/post-purchase/v1/claims/search"
+    variantes = [({"players.role": "respondent", "players.user_id": SELLERS[cuenta], "sort": "date_created:desc"}, True),
+                 ({"players.role": "respondent", "players.user_id": SELLERS[cuenta]}, False), ({}, False)]
+    ultimo: Exception | None = None
+    for extra, ordenado in variantes:
+        try:
+            todos = _paginar(ml, url, {**extra, "limit": 50}, h, "data",
+                             parar=(lambda filas: all(_dia(f.get("date_created")) < desde for f in filas)) if ordenado else None)
+        except Exception as e:  # noqa: BLE001  (400 por un filtro no aceptado: se prueba la variante siguiente)
+            ultimo = e
+            continue
+        return [c for c in todos if desde <= _dia(c.get("date_created")) <= hasta]
+    raise ultimo or RuntimeError("no se pudo leer reclamos")
 
 
 def reputacion(ml: MLFullClient, cuenta: str) -> dict:
