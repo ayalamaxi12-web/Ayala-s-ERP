@@ -30,6 +30,7 @@ import ml_ofertas_foto
 import ml_ofertas_excel
 import ml_campanas_participar
 import ml_full_candidatos
+import ml_posventa
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
 
@@ -2982,6 +2983,24 @@ async def ml_full_candidatos_run(background_tasks: BackgroundTasks, cuenta: str,
 @app.get("/ml-full/candidatos/status/{job_id}")
 async def ml_full_candidatos_status(job_id: str):
     return ml_full_candidatos.estado_job(job_id) or {"status": "not_found"}
+
+@app.post("/ml-posventa/run")
+async def ml_posventa_run(background_tasks: BackgroundTasks, cuenta: str, desde: str, hasta: str):
+    """Posventa ML (solo lectura): ventas, canceladas, reclamos/mediaciones/devoluciones y reputación de la cuenta, en el rango [desde, hasta] (YYYY-MM-DD)."""
+    _cuenta_valida(cuenta)
+    try:
+        d, h = date.fromisoformat(desde), date.fromisoformat(hasta)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Fechas inválidas (usar AAAA-MM-DD).")
+    if h < d or (h - d).days > 190:
+        raise HTTPException(status_code=422, detail="Rango inválido (hasta ≥ desde, máximo ~6 meses).")
+    job_id = f"mlposventa_{int(time.time() * 1000)}"
+    background_tasks.add_task(ml_posventa.iniciar_job, job_id, cuenta, desde, hasta)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-posventa/status/{job_id}")
+async def ml_posventa_status(job_id: str):
+    return ml_posventa.estado_job(job_id) or {"status": "not_found"}
 
 @app.post("/ml-ofertas/costos-envio/run")
 async def ml_ofertas_costos_envio_run(background_tasks: BackgroundTasks, dias: int = 60):
