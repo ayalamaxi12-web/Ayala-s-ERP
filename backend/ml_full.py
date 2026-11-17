@@ -126,6 +126,14 @@ def _get_real(url: str, params: dict, headers: dict):
                 time.sleep(_espera_reintento(r, intento))
                 continue
             raise MLCuotaAgotada(ultimo)
+        if r.status_code == 400:
+            # Con el motivo que da ML (sin URL con ids): sin esto un «400 Bad Request» no dice qué parámetro rechazó.
+            try:
+                motivo = str((r.json() or {}).get("message") or (r.json() or {}).get("error") or "")[:200]
+            except ValueError:
+                motivo = ""
+            ruta = re.sub(r"/[A-Z]{2,}\d{6,}|/\d{5,}", "/{id}", url.split("?")[0].replace("https://api.mercadolibre.com", ""))
+            raise requests.HTTPError(f"Mercado Libre respondió 400 en {ruta}: {motivo or 'pedido rechazado'}", response=r)
         r.raise_for_status()
         return r.json()
     raise MLCuotaAgotada(ultimo or 429)
