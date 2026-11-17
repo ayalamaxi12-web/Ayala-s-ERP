@@ -1923,11 +1923,16 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <button type="button" class="btn primary" onclick="posventaRun('IT')" id="btn-pv-IT">Ver Group</button>
       <button type="button" class="btn primary" onclick="posventaRun('MT')" id="btn-pv-MT">Ver Arg</button>
       <button type="button" class="btn" onclick="posventaCsv()" id="btn-pv-csv" style="display:none">⬇ CSV de reclamos</button>
+      <span style="width:100%"></span>
+      <button type="button" class="btn" onclick="respuestasRun('IT')" id="btn-rs-IT">Respuestas Group</button>
+      <button type="button" class="btn" onclick="respuestasRun('MT')" id="btn-rs-MT">Respuestas Arg</button>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="rs-msj" checked> incluir mensajes (más lento)</label>
     </div>
     <p class="ofx-nota">Los reclamos se cuentan por la fecha del reclamo y las ventas por la fecha de la venta, ambos dentro del rango. La tasa de abajo es de referencia: la oficial de ML es la de reputación (60 días).</p>
     <div id="pv-status" role="status" aria-live="polite" class="ofx-nota"></div><div id="pv-log" style="display:none"></div>
   </div>
   <div id="pv-res"></div>
+  <div id="rs-res"></div>
 </div>
 
 <!-- ACCESOS: usuarios y módulos que ve cada uno (solo admin) -->
@@ -5364,6 +5369,37 @@ function posventaCsv(){
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const csv='﻿'+cols.join(';')+'\n'+r.reclamos.map(x=>cols.map(c=>q(x[c])).join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`posventa_${r.cuenta}_${r.desde}_${r.hasta}.csv`;a.click();
+}
+
+
+// ── Respuestas ML (backend: ml_respuestas.py, /ml-respuestas/*): preguntas y mensajes por mes, con comparativa contra el mes anterior. Solo lectura. ──
+let RS={res:null};
+async function respuestasRun(cuenta){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const desde=qs('pv-desde').value,hasta=qs('pv-hasta').value,btn=qs('btn-rs-'+cuenta),st=qs('pv-status'),rotulo=cuenta==='IT'?'Respuestas Group':'Respuestas Arg';
+  if(!desde||!hasta){st.textContent='Elegí desde y hasta (para comparar meses, abarcá varios).';return;}
+  btn.disabled=true;btn.textContent='● corriendo...';st.textContent='Iniciando…';
+  try{
+    const r=await fetch(`${url}/ml-respuestas/run?cuenta=${cuenta}&desde=${desde}&hasta=${hasta}&mensajes=${qs('rs-msj').checked}`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ml-respuestas/status/${job_id}`,qs('pv-log'),st,btn,rotulo,res=>{RS.res=res;respuestasPintar();});
+  }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent=rotulo;}
+}
+function respuestasTabla(tit,filas,colConv,rotConv){
+  if(!filas||!filas.length)return `<div class="card" style="margin-bottom:14px"><div class="card-title">${tit}</div><p class="ofx-nota">Sin datos en el rango.</p></div>`;
+  const n=x=>x==null?'—':Number(x).toLocaleString('es-AR',{maximumFractionDigits:1});
+  // Δ contra el mes anterior; en tiempos, bajar es mejor (verde), en % respondidas, subir es mejor.
+  const d=(a,b,menorMejor,suf)=>{if(a==null||b==null)return '';const x=Math.round((a-b)*10)/10;if(!x)return '<small> =</small>';const bien=menorMejor?x<0:x>0;return `<small style="color:var(--${bien?'green':'red'})"> ${x>0?'▲':'▼'}${Math.abs(x).toLocaleString('es-AR')}${suf||''}</small>`;};
+  return `<div class="card" style="margin-bottom:14px"><div class="card-title">${tit}</div><div class="table-wrap"><table class="ofm-tabla"><thead><tr><th>Mes</th><th>${rotConv}</th><th>Respondidas</th><th>Sin responder</th><th>% respondidas</th><th>Tiempo mediano (h)</th><th>Promedio (h)</th><th>% en 1 h</th><th>% en 24 h</th></tr></thead><tbody>${filas.map((f,i)=>{const a=filas[i-1]||{};return `<tr><td><b>${acEsc(f.mes)}</b></td><td style="text-align:right">${f[colConv]}${a.mes?d(f[colConv],a[colConv]):''}</td><td style="text-align:right">${f.respondidas}</td><td style="text-align:right">${f.sin_responder}</td><td style="text-align:right">${n(f.pct_respondidas)}%${d(f.pct_respondidas,a.pct_respondidas,false,' pp')}</td><td style="text-align:right">${n(f.mediana_h)}${d(f.mediana_h,a.mediana_h,true)}</td><td style="text-align:right">${n(f.promedio_h)}</td><td style="text-align:right">${n(f.pct_1h)}%</td><td style="text-align:right">${n(f.pct_24h)}%${d(f.pct_24h,a.pct_24h,false,' pp')}</td></tr>`;}).join('')}</tbody></table></div></div>`;
+}
+function respuestasPintar(){
+  const r=RS.res;if(!r)return;
+  qs('rs-res').innerHTML=`<p class="ofx-nota">Respuestas de ${acEsc(etiquetaCuenta(r.cuenta))} · ${acEsc(r.desde)} → ${acEsc(r.hasta)}. Tiempos corridos (24 h, no horario laboral). Los meses de los extremos del rango pueden estar incompletos: comparar meses completos.</p>
+  ${respuestasTabla('Preguntas de compradores, por mes',r.preguntas_por_mes,'preguntas','Preguntas')}
+  ${(r.mensajes_por_mes||[]).length||qs('rs-msj').checked?respuestasTabla('Mensajes de posventa, por mes (desde el primer mensaje del comprador)',r.mensajes_por_mes,'conversaciones','Conversaciones'):''}
+  ${r.mensajes_truncado?'<p class="ofx-nota">⚠ Había más conversaciones que el máximo leído (2.500): los mensajes cubren las ventas más recientes del rango.</p>':''}
+  ${(r.top_sin_responder||[]).length?`<div class="card"><div class="card-title">Publicaciones con preguntas sin responder</div><table class="ofm-tabla"><tbody>${r.top_sin_responder.map(x=>`<tr><td><a href="https://articulo.mercadolibre.com.ar/${acEsc(x.item_id)}" target="_blank" rel="noopener">${acEsc(x.item_id)}</a></td><td style="text-align:right">${x.sin_responder}</td></tr>`).join('')}</tbody></table></div>`:''}`;
 }
 
 // ── Candidatos a Full (backend: ml_full_candidatos.py): publicaciones activas con ventas que todavía no son de Full. Solo lectura. ──

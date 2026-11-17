@@ -31,6 +31,7 @@ import ml_ofertas_excel
 import ml_campanas_participar
 import ml_full_candidatos
 import ml_posventa
+import ml_respuestas
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
 
@@ -3001,6 +3002,24 @@ async def ml_posventa_run(background_tasks: BackgroundTasks, cuenta: str, desde:
 @app.get("/ml-posventa/status/{job_id}")
 async def ml_posventa_status(job_id: str):
     return ml_posventa.estado_job(job_id) or {"status": "not_found"}
+
+@app.post("/ml-respuestas/run")
+async def ml_respuestas_run(background_tasks: BackgroundTasks, cuenta: str, desde: str, hasta: str, mensajes: bool = True):
+    """Métricas de respuesta ML (solo lectura): preguntas y mensajes de posventa por mes (tiempos y % respondidas)."""
+    _cuenta_valida(cuenta)
+    try:
+        d, h = date.fromisoformat(desde), date.fromisoformat(hasta)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Fechas inválidas (usar AAAA-MM-DD).")
+    if h < d or (h - d).days > 400:
+        raise HTTPException(status_code=422, detail="Rango inválido (hasta ≥ desde, máximo ~13 meses).")
+    job_id = f"mlrespuestas_{int(time.time() * 1000)}"
+    background_tasks.add_task(ml_respuestas.iniciar_job, job_id, cuenta, desde, hasta, mensajes)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-respuestas/status/{job_id}")
+async def ml_respuestas_status(job_id: str):
+    return ml_respuestas.estado_job(job_id) or {"status": "not_found"}
 
 @app.post("/ml-ofertas/costos-envio/run")
 async def ml_ofertas_costos_envio_run(background_tasks: BackgroundTasks, dias: int = 60):
