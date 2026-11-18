@@ -69,14 +69,20 @@ class MLCuotaAgotada(RuntimeError):
         self.status = status
 
 
-class MLSinAcceso(RuntimeError):
-    """ML respondió 403 (la cuenta no tiene permiso sobre ese recurso, p. ej. un `inventory_id` que no es de la cuenta consultada). Lleva SOLO el endpoint, sin ids ni
-    vendedor, para poder mostrarlo."""
+class _Respuesta403:
+    status_code = 403
+    headers: dict = {}
 
-    def __init__(self, url: str):
+
+class MLSinAcceso(requests.HTTPError):
+    """ML respondió 403 (la cuenta no tiene permiso sobre ese recurso, p. ej. un `inventory_id` que no es de la cuenta consultada). Lleva SOLO el endpoint, sin ids ni
+    vendedor, para poder mostrarlo. Es un `requests.HTTPError` con `response.status_code == 403`, como antes: el resto del código que atrapa el 403 (p. ej. las ofertas
+    de ML que saltean la publicación sin acceso) sigue funcionando."""
+
+    def __init__(self, url: str, response=None):
         ruta = re.sub(r"^https?://[^/]+", "", url.split("?")[0])
         ruta = re.sub(r"/[A-Z]{2,}\d{6,}|/\d{5,}", "/{id}", ruta)
-        super().__init__(f"Mercado Libre respondió 403 (sin permiso) en {ruta}")
+        super().__init__(f"Mercado Libre respondió 403 (sin permiso) en {ruta}", response=response if response is not None else _Respuesta403())
         self.ruta = ruta
 
 
@@ -119,7 +125,7 @@ def _get_real(url: str, params: dict, headers: dict):
         _esperar_turno(url)
         r = requests.get(url, params=params, headers=headers, timeout=20)
         if r.status_code == 403:
-            raise MLSinAcceso(url)
+            raise MLSinAcceso(url, r)
         if r.status_code in (429, 503):
             ultimo = r.status_code
             if intento < REINTENTOS - 1:

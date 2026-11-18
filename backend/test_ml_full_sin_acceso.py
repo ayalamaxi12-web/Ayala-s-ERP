@@ -27,3 +27,18 @@ def test_si_todo_da_403_se_corta_y_avisa_el_endpoint():
     with pytest.raises(MLSinAcceso) as e:
         ml.ventas_full_por_inventory("IT", [f"INV{i}" for i in range(40)], "2026-10-01", "2026-11-01")
     assert "403" in str(e.value) and "operations/search" in str(e.value) and "115764017" not in str(e.value)
+
+
+def test_el_403_sigue_siendo_un_http_error_para_quien_lo_atrapaba():
+    import requests
+    from ml_ofertas import MLOfertasClient
+    e = MLSinAcceso("https://api.mercadolibre.com/items?ids=MLA1")
+    assert isinstance(e, requests.HTTPError) and e.response.status_code == 403 and "/items" in str(e)
+
+    def get(url, params, headers):
+        if "MLA2" in params["ids"].split(","):
+            raise MLSinAcceso(url)
+        return [{"code": 200, "body": {"id": i}} for i in params["ids"].split(",")]
+    ml = MLOfertasClient(get_fn=get, token_fn=lambda c: "t")
+    r = ml._lote_items(["MLA1", "MLA2", "MLA3"], "IT", {})
+    assert [x["body"]["id"] for x in r] == ["MLA1", "MLA3"] and ml.items_sin_acceso[0]["item_id"] == "MLA2"
