@@ -20,6 +20,7 @@ _jobs: dict[str, dict] = {}
 MAX_PAGINAS = 200
 MAX_CONVERSACIONES = 6000
 HILOS = 6
+DIAS_ANTES_MENSAJES = 45   # un mensaje de posventa puede llegar semanas después de la venta: se leen las ventas de hasta N días antes del rango y se queda con los chats cuyo primer mensaje cae EN el rango
 MAX_DETALLE = 1500
 TRAMOS_H = [(0.25, "Hasta 15 min"), (1, "15 min a 1 h"), (4, "1 a 4 h"), (24, "4 a 24 h"), (None, "Más de 24 h")]
 DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -236,13 +237,14 @@ def periodo_anterior(desde: str, hasta: str) -> tuple[str, str]:
 
 
 def metricas_respuestas(ml: MLFullClient, cuenta: str, desde: str, hasta: str, con_mensajes: bool = True,
-                        progreso_cb: Callable[[str], None] | None = None, comparar: bool = False) -> dict:
+                        progreso_cb: Callable[[str], None] | None = None, desde2: str | None = None, hasta2: str | None = None) -> dict:
+    """Métricas del período 1 (`desde`→`hasta`); con `desde2`/`hasta2` también las del período 2 (el de comparación, como en Ventas & Rentabilidad)."""
     p = progreso_cb or (lambda t: None)
-    if comparar:
-        pd, ph = periodo_anterior(desde, hasta)
-        p("Período anterior")
-        ant = metricas_respuestas(ml, cuenta, pd, ph, con_mensajes, progreso_cb=None, comparar=False)
-        r = metricas_respuestas(ml, cuenta, desde, hasta, con_mensajes, progreso_cb=progreso_cb, comparar=False)
+    if desde2 and hasta2:
+        pd, ph = desde2, hasta2
+        p("Período 2")
+        ant = metricas_respuestas(ml, cuenta, pd, ph, con_mensajes, progreso_cb=None)
+        r = metricas_respuestas(ml, cuenta, desde, hasta, con_mensajes, progreso_cb=progreso_cb)
         r["anterior"] = {"desde": pd, "hasta": ph, "preguntas_total": ant.get("preguntas_total"), "mensajes_total": ant.get("mensajes_total")}
         return r
     p("Trayendo preguntas")
@@ -265,7 +267,8 @@ def metricas_respuestas(ml: MLFullClient, cuenta: str, desde: str, hasta: str, c
     if con_mensajes:
         p("Trayendo ventas")
         packs: dict[str, str] = {}
-        for o in traer_ordenes(ml, cuenta, desde, hasta):
+        antes = (date.fromisoformat(desde) - timedelta(days=DIAS_ANTES_MENSAJES)).isoformat()
+        for o in traer_ordenes(ml, cuenta, antes, hasta):
             packs.setdefault(str(o.get("pack_id") or o.get("id")), str(o.get("id")))
         lista = list(packs)
         r["mensajes_truncado"] = len(lista) > MAX_CONVERSACIONES
@@ -283,6 +286,7 @@ def metricas_respuestas(ml: MLFullClient, cuenta: str, desde: str, hasta: str, c
             return c
         with ThreadPoolExecutor(HILOS) as ex:
             convs = [c for c in ex.map(leer, lista) if c]
+        convs = [c for c in convs if desde <= c["inicio"][:10] <= hasta]       # por FECHA DEL MENSAJE, no de la venta
         for c in convs:
             c["orden"] = packs.get(c["pack"])
             c["categoria"] = categoria_chat(c["texto"])
@@ -300,26 +304,26 @@ def metricas_respuestas(ml: MLFullClient, cuenta: str, desde: str, hasta: str, c
 MODULO_FOTO = "respuestas_ml"
 
 
-def params_foto(desde: str, hasta: str, mensajes: bool, comparar: bool) -> str:
+def params_foto(desde: str, hasta: str, mensajes: bool, desde2: str | None = None, hasta2: str | None = None) -> str:
     from ml_foto import clave_params
-    return clave_params(d=desde, h=hasta, m=int(mensajes), c=int(comparar))
+    return clave_params(d=desde, h=hasta, m=int(mensajes), **({"a": desde2, "b": hasta2} if desde2 and hasta2 else {}), v=2)
 
 
-def guardar_foto(cuenta: str, desde: str, hasta: str, mensajes: bool, comparar: bool, resultado: dict, duracion: float, sesion_fn=None) -> None:
+def guardar_foto(cuenta: str, desde: str, hasta: str, mensajes: bool, desde2: str | None, hasta2: str | None, resultado: dict, duracion: float, sesion_fn=None) -> None:
     """Guarda el resultado de este período: lo ya pasado no cambia, así no hay que volver a leerlo de ML cada vez que se mira."""
     import ml_foto
     if sesion_fn is None:
         from rentabilidad.db import sesion as sesion_fn
     with sesion_fn() as db:
-        ml_foto.guardar_exito(db, MODULO_FOTO, cuenta, params_foto(desde, hasta, mensajes, comparar), resultado, "ok", 0, duracion, [])
+        ml_foto.guardar_exito(db, MODULO_FOTO, cuenta, params_foto(desde, hasta, mensajes, desde2, hasta2), resultado, "ok", 0, duracion, [])
 
 
-def leer_foto(cuenta: str, desde: str, hasta: str, mensajes: bool, comparar: bool, sesion_fn=None) -> dict:
+def leer_foto(cuenta: str, desde: str, hasta: str, mensajes: bool, desde2: str | None = None, hasta2: str | None = None, sesion_fn=None) -> dict:
     import ml_foto
     if sesion_fn is None:
         from rentabilidad.db import sesion as sesion_fn
     with sesion_fn() as db:
-        v = ml_foto.vista_foto(ml_foto.leer(db, MODULO_FOTO, cuenta, params_foto(desde, hasta, mensajes, comparar)))
+        v = ml_foto.vista_foto(ml_foto.leer(db, MODULO_FOTO, cuenta, params_foto(desde, hasta, mensajes, desde2, hasta2)))
     v["periodo_cerrado"] = hasta < date.today().isoformat()
     return v
 
@@ -333,18 +337,18 @@ def listar_fotos(cuenta: str, sesion_fn=None) -> list[dict]:
         out = []
         for f in fs:
             kv = dict(x.split("=", 1) for x in (f.params or "").split(";") if "=" in x)
-            out.append({"desde": kv.get("d"), "hasta": kv.get("h"), "mensajes": kv.get("m") == "1", "comparar": kv.get("c") == "1", "obtenido_en": f.obtenido_en.isoformat() + "Z"})
+            out.append({"desde": kv.get("d"), "hasta": kv.get("h"), "mensajes": kv.get("m") == "1", "desde2": kv.get("a"), "hasta2": kv.get("b"), "obtenido_en": f.obtenido_en.isoformat() + "Z"})
     return out
 
 
-def iniciar_job(job_id: str, cuenta: str, desde: str, hasta: str, con_mensajes: bool = True, comparar: bool = False, ml: MLFullClient | None = None) -> None:
+def iniciar_job(job_id: str, cuenta: str, desde: str, hasta: str, con_mensajes: bool = True, desde2: str | None = None, hasta2: str | None = None, ml: MLFullClient | None = None) -> None:
     _jobs[job_id] = {"status": "running", "log": [f"Respuestas {cuenta} {desde} → {hasta}"], "result": None, "progress": None}
     try:
         t0 = __import__("time").monotonic()
         res = metricas_respuestas(ml or MLFullClient(), cuenta, desde, hasta, con_mensajes,
-                                  lambda t: _jobs[job_id].update(progress={"current": 0, "total": 1, "label": f"{t} ({cuenta})"}), comparar)
+                                  lambda t: _jobs[job_id].update(progress={"current": 0, "total": 1, "label": f"{t} ({cuenta})"}), desde2, hasta2)
         try:
-            guardar_foto(cuenta, desde, hasta, con_mensajes, comparar, res, round(__import__("time").monotonic() - t0, 1))
+            guardar_foto(cuenta, desde, hasta, con_mensajes, desde2, hasta2, res, round(__import__("time").monotonic() - t0, 1))
             _jobs[job_id]["log"].append("Listo y guardado: la próxima vez que mires este período se abre al instante.")
         except Exception as e:  # noqa: BLE001  (guardar no debe perder el resultado que ya se leyó)
             _jobs[job_id]["log"].append(f"Listo (no se pudo guardar la foto: {type(e).__name__}).")

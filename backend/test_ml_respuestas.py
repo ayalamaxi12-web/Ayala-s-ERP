@@ -57,7 +57,7 @@ def test_periodo_anterior_misma_duracion_y_comparacion():
         if "questions/search" in url:
             return {"total": 1, "questions": [_q(1, "2026-11-02T10:00:00.000-03:00", "2026-11-02T12:00:00.000-03:00")]}
         return {}
-    r = R.metricas_respuestas(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-10", con_mensajes=False, comparar=True)
+    r = R.metricas_respuestas(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-10", con_mensajes=False, desde2="2026-10-22", hasta2="2026-10-31")
     assert r["anterior"]["desde"] == "2026-10-22" and r["anterior"]["preguntas_total"]["preguntas"] == 0 and r["preguntas_total"]["preguntas"] == 1
     assert r["preguntas_series"]["por_semana"][0]["fecha"] == "2026-11-02"
 
@@ -91,9 +91,26 @@ def test_foto_guardada_se_lee_sin_volver_a_ml(sesion_sqlite=None):
             db.commit()
         finally:
             db.close()
-    assert R.leer_foto("IT", "2026-10-01", "2026-10-31", True, True, ses)["existe"] is False
-    R.guardar_foto("IT", "2026-10-01", "2026-10-31", True, True, {"preguntas_total": {"preguntas": 5}}, 1.0, ses)
-    v = R.leer_foto("IT", "2026-10-01", "2026-10-31", True, True, ses)
+    assert R.leer_foto("IT", "2026-10-01", "2026-10-31", True, "2026-09-01", "2026-09-30", ses)["existe"] is False
+    R.guardar_foto("IT", "2026-10-01", "2026-10-31", True, "2026-09-01", "2026-09-30", {"preguntas_total": {"preguntas": 5}}, 1.0, ses)
+    v = R.leer_foto("IT", "2026-10-01", "2026-10-31", True, "2026-09-01", "2026-09-30", ses)
     assert v["existe"] and v["payload"]["preguntas_total"]["preguntas"] == 5 and v["periodo_cerrado"] is True
-    assert R.leer_foto("IT", "2026-10-01", "2026-10-31", False, True, ses)["existe"] is False
+    assert R.leer_foto("IT", "2026-10-01", "2026-10-31", False, "2026-09-01", "2026-09-30", ses)["existe"] is False
     assert R.listar_fotos("IT", ses)[0]["desde"] == "2026-10-01"
+
+
+def test_mensajes_se_filtran_por_fecha_del_mensaje_y_se_leen_ventas_anteriores():
+    pedidos = []
+
+    def get(url, params, headers):
+        if "questions/search" in url:
+            return {"total": 0, "questions": []}
+        if url.endswith("/orders/search"):
+            pedidos.append(params["order.date_created.from"][:10])
+            return {"paging": {"total": 2}, "results": [{"id": 1, "pack_id": 10, "status": "paid"}, {"id": 2, "pack_id": 20, "status": "paid"}]}
+        if "/packs/10/" in url:       # venta vieja, pero el comprador escribe DENTRO del rango
+            return {"messages": [_m(5, "2026-11-05T10:00:00.000-03:00"), _m(115764017, "2026-11-05T11:00:00.000-03:00")]}
+        return {"messages": [_m(5, "2026-10-01T10:00:00.000-03:00")]}      # escribió antes del rango: no cuenta
+    r = R.metricas_respuestas(MLFullClient(get_fn=get, token_fn=lambda c: "t"), "IT", "2026-11-01", "2026-11-17")
+    assert pedidos[0] == "2026-09-17"
+    assert r["mensajes_total"]["conversaciones"] == 1 and r["mensajes_detalle"][0]["fecha"].startswith("2026-11-05")

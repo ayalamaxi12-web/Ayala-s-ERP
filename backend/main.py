@@ -3004,24 +3004,28 @@ async def ml_posventa_status(job_id: str):
     return ml_posventa.estado_job(job_id) or {"status": "not_found"}
 
 @app.post("/ml-respuestas/run")
-async def ml_respuestas_run(background_tasks: BackgroundTasks, cuenta: str, desde: str, hasta: str, mensajes: bool = True, comparar: bool = True):
+async def ml_respuestas_run(background_tasks: BackgroundTasks, cuenta: str, desde: str, hasta: str, mensajes: bool = True, desde2: str | None = None, hasta2: str | None = None):
     """Métricas de respuesta ML (solo lectura): preguntas y mensajes de posventa por mes (tiempos y % respondidas)."""
     _cuenta_valida(cuenta)
     try:
         d, h = date.fromisoformat(desde), date.fromisoformat(hasta)
+        if bool(desde2) != bool(hasta2):
+            raise ValueError
+        if desde2:
+            date.fromisoformat(desde2), date.fromisoformat(hasta2)
     except ValueError:
-        raise HTTPException(status_code=422, detail="Fechas inválidas (usar AAAA-MM-DD).")
+        raise HTTPException(status_code=422, detail="Fechas inválidas (usar AAAA-MM-DD; el período 2 necesita desde y hasta).")
     if h < d or (h - d).days > 400:
         raise HTTPException(status_code=422, detail="Rango inválido (hasta ≥ desde, máximo ~13 meses).")
     job_id = f"mlrespuestas_{int(time.time() * 1000)}"
-    background_tasks.add_task(ml_respuestas.iniciar_job, job_id, cuenta, desde, hasta, mensajes, comparar)
+    background_tasks.add_task(ml_respuestas.iniciar_job, job_id, cuenta, desde, hasta, mensajes, desde2, hasta2)
     return {"job_id": job_id, "status": "started"}
 
 @app.get("/ml-respuestas/foto")
-async def ml_respuestas_foto(cuenta: str, desde: str, hasta: str, mensajes: bool = True, comparar: bool = True):
+async def ml_respuestas_foto(cuenta: str, desde: str, hasta: str, mensajes: bool = True, desde2: str | None = None, hasta2: str | None = None):
     """Foto guardada de ese período (no lee ML). `existe: false` si todavía no se corrió."""
     _cuenta_valida(cuenta)
-    return ml_respuestas.leer_foto(cuenta, desde, hasta, mensajes, comparar)
+    return ml_respuestas.leer_foto(cuenta, desde, hasta, mensajes, desde2, hasta2)
 
 @app.get("/ml-respuestas/fotos")
 async def ml_respuestas_fotos(cuenta: str):
