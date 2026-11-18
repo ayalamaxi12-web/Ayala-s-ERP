@@ -59,3 +59,11 @@ def test_con_una_sola_opcion_destildarla_deja_ninguno():
     cod = ('const trig={textContent:""};const document={querySelector:()=>trig};const renderMSOptions=()=>{};const msState={c:{selected:new Set(),ninguno:false,all:["Unico"]}};\n'
            + '\n'.join(extraer_funcion(src, n) for n in FNS) + '\ntoggleMSValue("c","Unico");console.log(JSON.stringify(getMSValues("c")))')
     assert json.loads(subprocess.run(['node', '-e', cod], capture_output=True, text=True, check=True).stdout) == []
+
+
+def test_el_clic_en_todos_con_todo_tildado_destilda_todo_y_los_botones_ninguno_no_estan_rotos():
+    src = open(INDEX, encoding='utf-8').read()
+    assert 'onclick=\\"' not in src                                              # comillas escapadas en HTML estático rompían el botón «Ninguno»
+    assert src.count('onclick="msNinguno(') >= 14
+    r = js('const f=(x)=>x;clearMS("c");msNinguno("c");const a=sel();clearMS("c");console.log(JSON.stringify({a,b:sel()}))')
+    assert r == {'a': [], 'b': None}                                             # Ninguno → nada pasa; Todos → sin filtro
