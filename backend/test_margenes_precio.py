@@ -27,9 +27,9 @@ def test_margen_web_3_cuotas_al_precio_puesto(monkeypatch):
     m = r.json()["margenes"]
     assert m["ZZ"]["error"] == "sin costo en Ecom"
     w = m["A1"]["web"]
-    # a mano: precio sin IVA 25834,71 - costo 10000 - comisión 6,05 % / 1,21 - cuotas 3 (3,40 × 1,21 = 4,114 %) - IIBB 5 % s/ sin IVA - cheque 1,2 % - costo por orden
+    # a mano (todo lo de la plataforma SIN IVA, ÷ 1,21): precio sin IVA - costo 10000 - comisión 6,05 % - cuotas 3 (3,40 × 1,21 = 4,114 %) - IIBB 5 % s/ sin IVA - cheque 1,2 % s/ con IVA - costo por orden
     p = D("31259"); sin = p / D("1.21")
-    esperado = sin - 10000 - p * D("0.0605") / D("1.21") - p * D("0.04114") - sin * D("0.05") - p * D("0.012") - D("149.12")
+    esperado = sin - 10000 - p * D("0.0605") / D("1.21") - p * D("0.04114") / D("1.21") - sin * D("0.05") - p * D("0.012") - D("149.12")
     assert w["condicion"] == "3" and abs(D(str(w["renta"])) - esperado) < D("0.05"), (w, esperado)
     assert abs(w["pct"] - float(esperado / sin * 100)) < 0.01
     assert "ml" in m["A1"] and m["A1"]["ml"]["condicion"] == "contado"

@@ -143,7 +143,8 @@ def calcular_precio_condicion(
     iibb_pct = PARAMS_ML["iibb"] if iibb_pct is None else iibb_pct
     imp_cheque_pct = PARAMS_ML["cheque"] if imp_cheque_pct is None else imp_cheque_pct
     # `costo_orden` (Bloque 2, PR 4): monto fijo en pesos por orden (ej. costo por orden de Ecom). Con 0 -- el valor por defecto, y el que usa Mercado Libre -- la cuenta es exactamente la de siempre.
-    ivs = _IVA_SERVICIOS_ML if iva_servicios is None else iva_servicios     # 1 = el mercado muestra comisión y envío con el IVA incluido (Frávega): se restan tal cual
+    # Desde 2026-11-17 (Maxx): TODO lo que cobra una plataforma (comisión, cuotas/costo financiero, envío y costo fijo) se toma SIN IVA (÷ 1,21), para todos los mercados.
+    ivs = _IVA_SERVICIOS_ML if iva_servicios is None else iva_servicios
     numerador = costo_sin_iva + envio_real / ivs + costo_orden
     full = (envio_full_pct / 100) if envio_full else Decimal("0")
     if renta_base not in RENTA_BASES:
@@ -156,7 +157,7 @@ def calcular_precio_condicion(
         - (comision_pct / 100) / ivs
         - (iibb_pct / 100) / iva_factor  # IIBB: sobre el precio SIN IVA
         - (imp_cheque_pct / 100)  # imp. cheque: sobre el precio CON IVA
-        - (financiero_pct / 100)
+        - (financiero_pct / 100) / ivs   # cuotas / costo financiero: sin IVA
         - renta_term
         - full
     )
@@ -167,12 +168,12 @@ def _precio_con_costo_fijo(numerador, iva_factor, comision_pct, iibb_pct, imp_ch
     """Con un costo fijo que depende del PRECIO (tramos de Mercado Libre) el precio sale de probar cada tramo: para el tramo i se resuelve con su monto y vale si el precio
     resultante cae dentro del tramo. Como los montos crecen con el tramo, el primer tramo que cumple es el precio mínimo que alcanza la renta."""
     denominador = (
-        (1 / iva_factor) - (comision_pct / 100) / ivs - (iibb_pct / 100) / iva_factor - (imp_cheque_pct / 100) - (financiero_pct / 100) - renta_term - full
+        (1 / iva_factor) - (comision_pct / 100) / ivs - (iibb_pct / 100) / iva_factor - (imp_cheque_pct / 100) - (financiero_pct / 100) / ivs - renta_term - full
     )
     piso = Decimal(0)           # el precio mínimo del tramo actual (el techo del anterior)
     ultimo = None
     for techo, monto in tramos:
-        p = ((numerador + monto) / denominador).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        p = ((numerador + monto / ivs) / denominador).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         ultimo = p
         if techo is None or p < techo:
             # Si con el costo de este tramo el precio queda POR DEBAJO de su piso, el tramo de abajo se pasó de su techo: el precio mínimo que alcanza la renta es el piso (justo

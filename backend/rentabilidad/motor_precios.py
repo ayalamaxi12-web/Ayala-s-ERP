@@ -195,6 +195,17 @@ class Desglose:
     rentabilidad: Decimal
     margen: Decimal  # fracción: 0.301 = 30,1%
     origen_fee: str | None = None  # marketplaces: "historico" | "kg_aforado" | "promedio"
+    iva_cargos_recuperable: Decimal = Decimal(0)  # IVA que traen los cargos de la plataforma (crédito fiscal): `cargos` son lo que cobra la plataforma (con IVA); la rentabilidad descuenta cada uno SIN IVA
+
+
+# Desde 2026-11-17 (Maxx): lo que cobra la plataforma (comisión, cuotas / costo financiero, costo fijo, envío, fee logístico) se toma SIN IVA (÷ 1,21) para sacar el margen, en todos los
+# canales. `cargos` sigue mostrando lo que cobra la plataforma (lo que ML / MP / Frávega informan); el margen usa el valor sin IVA.
+IVA_SERVICIOS = Decimal("1.21")
+CARGOS_PLATAFORMA = frozenset({"comision", "cuotas", "financiera", "costo_fijo", "envio", "fee_logistico"})
+
+
+def _sin_iva(nombre: str, monto: Decimal) -> Decimal:
+    return monto / IVA_SERVICIOS if nombre in CARGOS_PLATAFORMA else monto
 
 
 def _q(x: Decimal) -> Decimal:
@@ -279,11 +290,12 @@ def precio_a_margen(precio: Decimal, e: EntradaMotor, par: ParametrosMotor) -> D
     cargos["imp_cheque"] = p * par.valor(e.canal, "imp_cheque")
     cargos["iibb"] = n * par.valor(e.canal, "iibb")
     cargos["costo"] = e.costo
-    rent = n - sum(cargos.values(), Decimal(0))
+    rent = n - sum((_sin_iva(k, v) for k, v in cargos.items()), Decimal(0))
+    recuperable = sum((v - _sin_iva(k, v) for k, v in cargos.items()), Decimal(0))
     return Desglose(
         canal=e.canal, precio=p, venta_sin_iva=_q(n), cargos={k: _q(v) for k, v in cargos.items()},
         rentabilidad=_q(rent), margen=(rent / n).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP),
-        origen_fee=est.origen_fee,
+        origen_fee=est.origen_fee, iva_cargos_recuperable=_q(recuperable),
     )
 
 
@@ -308,10 +320,10 @@ def margen_a_precio(margen: Decimal, e: EntradaMotor, par: ParametrosMotor, redo
     vistos = set()
     for _ in range(10):
         est = _estructura(p, e, par)
-        denominador = (1 - m) / e.iva_factor - sum(est.pct.values(), Decimal(0)) - cheque - iibb / e.iva_factor
+        denominador = (1 - m) / e.iva_factor - sum((_sin_iva(k, v) for k, v in est.pct.items()), Decimal(0)) - cheque - iibb / e.iva_factor
         if denominador <= 0:
             raise ValueError(f"Margen {m} inalcanzable en {e.canal}: los cargos se comen toda la venta.")
-        nuevo = (e.costo + sum(est.fijos.values(), Decimal(0))) / denominador
+        nuevo = (e.costo + sum((_sin_iva(k, v) for k, v in est.fijos.items()), Decimal(0))) / denominador
         clave = tuple(sorted(est.fijos.items())) + tuple(sorted(est.pct.items()))
         if clave in vistos:
             p = max(p, nuevo)  # oscila entre dos tramos: el más alto cumple el margen

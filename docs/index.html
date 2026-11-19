@@ -3056,8 +3056,8 @@ function cpMargenLocal(calc,orig,meli,T,M,plan,tc){
   const costo=calc.costo_usd!=null&&tc?calc.costo_usd*tc:calc.costo;
   const pc=orig*(1-T/100),pv=pc+(meli||0);   // pc: lo que paga el cliente · pv: precio del vendedor (cliente + crédito de ML)
   if(!(pc>0)||!(pv>0))return null;
-  const mas=1+M.iva_cargos,n=pv/calc.iva;
-  const fijo=cpTramoFijo(M.tramos_costo_fijo,orig)*mas,envio=orig>=M.umbral_envio?(calc.envio||0):0;   // costo fijo y envío: por precio de LISTA
+  const mas=(1+M.iva_cargos)/1.21,n=pv/calc.iva;   // cargos de la plataforma SIN IVA (÷ 1,21), igual que el motor
+  const fijo=cpTramoFijo(M.tramos_costo_fijo,orig)*mas,envio=orig>=M.umbral_envio?(calc.envio||0)/1.21:0;   // costo fijo y envío: por precio de LISTA
   const cuotas=plan==='contado'?0:(M.cuotas[plan]||0);
   const rent=n-(pc*(calc.comision!=null?calc.comision:M.comision)*mas+pc*cuotas*mas+fijo+envio+pv*M.cheque+n*M.iibb+costo);
   return {margen:rent/n*100,rentabilidad:rent};
@@ -5971,10 +5971,12 @@ let ML_COSTO_ORDEN=149.12;
 function mlEnvioRegla(precio,envioReal){return(envioReal!=null&&isFinite(envioReal))?envioReal:(precio>=(S.shippingThreshold||33000)?(S.shippingCost||8500):0);}
 function mlMargenUnico(precio,ivaFactor,costoARS,o){
   const u=o.usar||{},baseSinIva=precio/ivaFactor;
-  const comision=u.com===false?0:precio*o.comPct/100;
-  const costoFijo=u.costoFijo===false?0:ofmPorTramo(precio,ML_COSTO_FIJO.tramos);
-  const cuotas=u.cuotas===false?0:precio*(o.cuotasPct||0)/100;
-  const envio=u.envio===false?0:mlEnvioRegla(precio,o.envioReal);
+  // Desde 2026-11-17 (Maxx): todo lo que cobra la plataforma (comisión, costo fijo, cuotas, envío) se toma SIN IVA (÷ 1,21); cheque e IIBB siguen con sus bases.
+  const ivs=AC_IVA_SERVICIOS_ML;
+  const comision=u.com===false?0:precio*o.comPct/100/ivs;
+  const costoFijo=u.costoFijo===false?0:ofmPorTramo(precio,ML_COSTO_FIJO.tramos)/ivs;
+  const cuotas=u.cuotas===false?0:precio*(o.cuotasPct||0)/100/ivs;
+  const envio=u.envio===false?0:mlEnvioRegla(precio,o.envioReal)/ivs;
   const impCheque=u.cheque===false?0:precio*o.chequePct/100;// sobre precio CON IVA
   const iibb=u.iibb===false?0:baseSinIva*o.iibbPct/100;// sobre precio SIN IVA
   const costoOrden=u.orden===false?0:ML_COSTO_ORDEN;
@@ -7146,9 +7148,9 @@ function ayalaCoreCostoFijo(precio){for(const [t,m] of AC_COSTO_FIJO_TRAMOS)if(t
 let AC_RENTA_BASE='sin_iva';
 function ayalaCoreCalcularPrecioJS(costoSinIvaArs,ivaFactor,envioReal,financieroPct,rentaPct,base){
   const num=costoSinIvaArs+envioReal/AC_IVA_SERVICIOS_ML+AC_COSTO_ORDEN;
-  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(AC_IMPCH_PCT/100)-(financieroPct/100)-(rentaPct/100)/((base||AC_RENTA_BASE)==='sin_iva'?ivaFactor:1);
+  const den=(1/ivaFactor)-(AC_COMISION_PCT/100)/AC_IVA_SERVICIOS_ML-(AC_IIBB_PCT/100)/ivaFactor-(AC_IMPCH_PCT/100)-(financieroPct/100)/AC_IVA_SERVICIOS_ML-(rentaPct/100)/((base||AC_RENTA_BASE)==='sin_iva'?ivaFactor:1);
   let piso=0,p=0;
-  for(const [t,m] of AC_COSTO_FIJO_TRAMOS){p=Math.round((num+m)/den);if(t===null||p<t)return Math.max(p,piso);piso=t;}
+  for(const [t,m] of AC_COSTO_FIJO_TRAMOS){p=Math.round((num+m/AC_IVA_SERVICIOS_ML)/den);if(t===null||p<t)return Math.max(p,piso);piso=t;}
   return p;
 }
 // Desglose de qué se descuenta para llegar al precio -- pedido 2026-09-03
@@ -7173,9 +7175,11 @@ function ayalaCoreDesgloseDesdeP(precio,costoSinIvaArs,ivaFactor,envioReal,finan
   const envioFullMonto=envioFull?-(0.5/100)*precio:0;
   const ivaComision=comision/AC_IVA_SERVICIOS_ML-comision;
   const ivaEnvio=envioFijo/AC_IVA_SERVICIOS_ML-envioFijo;
+  const ivaFinanciero=financiero/AC_IVA_SERVICIOS_ML-financiero;
   const costoFijo=-ayalaCoreCostoFijo(precio),costoOrden=-AC_COSTO_ORDEN;
+  const ivaCostoFijo=costoFijo/AC_IVA_SERVICIOS_ML-costoFijo;
   const ventaSinIva=precio/ivaFactor;
-  const costoSinIvaTotal=-costoSinIvaArs+costoFijo+costoOrden+comision+financiero+envioFijo+iibb+impCheque+envioFullMonto+ivaComision+ivaEnvio;
+  const costoSinIvaTotal=-costoSinIvaArs+costoFijo+costoOrden+comision+financiero+envioFijo+iibb+impCheque+envioFullMonto+ivaComision+ivaEnvio+ivaFinanciero+ivaCostoFijo;
   const rentaMonto=ventaSinIva+costoSinIvaTotal;
   return {precio,comision:-comision,financiero:-financiero,envio:-envioFijo,iibb:-iibb,impCheque:-impCheque,envioFull:-envioFullMonto,costoFijo:-costoFijo,costoOrden:-costoOrden,renta:rentaMonto};
 }
@@ -7570,7 +7574,7 @@ function ayalaCoreVerCuentaBtn(sku,d,c){
 }
 function ayalaCoreCuentaHtml(x){
   const f=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:2}),m=n=>'$ '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}),ivaPct=f((x.iva-1)*100);
-  const T={precio:'Precio de venta',precio_sin_iva:'Precio sin IVA',costo:'Costo del producto',comision:'Comisión',financiero:'Costo financiero',envio:'Envío',iibb:'IIBB',cheque:'Impuesto al cheque',envio_full:'Envío a Bodega Full',costo_orden:'Costo por orden',renta:'Renta'};
+  const T={precio:'Precio de venta',precio_sin_iva:'Precio sin IVA',costo:'Costo del producto',comision:'Comisión',financiero:'Costo financiero',envio:'Envío',iibb:'IIBB',cheque:'Impuesto al cheque',envio_full:'Envío a Bodega Full',costo_orden:'Costo por orden',costo_fijo:'Costo fijo por unidad',renta:'Renta'};
   const filas=x.cu.lineas.map(l=>{
     let calc='',conIva='',sinIva='';
     if(l.clave==='precio'){conIva=m(l.monto);calc='El precio que da la cuenta';}
@@ -7579,7 +7583,7 @@ function ayalaCoreCuentaHtml(x){
     else if(l.clave==='envio'){conIva=m(l.con_iva);sinIva=m(l.monto);calc='envío ÷ 1,21';}
     else if(l.clave==='costo_orden'){sinIva=m(l.monto);calc='monto fijo por orden';}
     else if(l.clave==='renta'){sinIva=m(l.monto);calc=`${f(x.cu.renta_pct_con_iva)} % del precio con IVA · ${f(x.cu.renta_pct_sin_iva)} % del precio sin IVA`;}
-    else{if(l.con_iva!==undefined)conIva=m(l.con_iva);sinIva=m(l.monto);calc=`${f(l.pct)} % × ${l.sobre}${l.clave==='comision'?' ÷ 1,21':''}`;}
+    else{if(l.con_iva!==undefined)conIva=m(l.con_iva);sinIva=m(l.monto);calc=l.clave==='costo_fijo'?'monto fijo por tramo de precio'+(/÷ 1,21/.test(l.iva)?' ÷ 1,21':''):`${f(l.pct)} % × ${l.sobre}${(l.clave==='comision'||l.clave==='financiero')&&/÷ 1,21/.test(l.iva)?' ÷ 1,21':''}`;}
     const signo=l.signo<0?'− ':(l.clave==='renta'?'= ':'');
     return `<tr${l.clave==='renta'?' class="ac-cuenta-total"':''}><td>${signo}${T[l.clave]}</td><td>${acEsc(calc)}</td><td style="text-align:right">${conIva}</td><td style="text-align:right">${sinIva}</td><td>${acEsc(l.iva)}</td></tr>`;
   }).join('');

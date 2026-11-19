@@ -131,3 +131,12 @@ Decisiones de Maxi, ya aplicadas en `mlMargenUnico` (front) y `ml_ofertas.calcul
 - Sigue igual: margen sobre el precio **sin IVA**; IIBB sobre el sin IVA; cheque sobre el precio con IVA.
 - **No cambia ningún precio publicado ni escribe nada:** solo el margen que se **muestra** (baja un poco: suma el costo por orden y, bajo $33.000, ya no hay envío).
 - El motor `motor_precios` de Precios & Márgenes todavía no tiene costo por orden; su paridad con Análisis se verifica con la casilla apagada.
+
+---
+
+## 8. Lo que cobran las plataformas se toma SIN IVA (decisión de Maxx, 2026-11-17)
+- **Regla:** comisión, cuotas / costo financiero, envío y costo fijo de cualquier plataforma (ML, Web / Mercado Pago, Frávega, OnCity, Megatone) se restan **sin IVA (÷ 1,21)**: el IVA que traen esos cargos es crédito fiscal. Es el mismo criterio con el que el margen se saca del precio sin IVA.
+- **Se mantienen igual:** IIBB (5 % sobre el precio sin IVA), impuesto al cheque (1,2 % sobre el precio con IVA) y el costo por orden de Ecom (monto fijo, tal cual).
+- **Qué se muestra:** los cargos siguen mostrando lo que cobra la plataforma (con IVA, igual que ML / MP informan); la cuenta paso a paso trae las columnas «Con IVA» y «Sin IVA (lo que entra en la cuenta)».
+- **Dónde rige:** Motor de Precios (todos los mercados), Precios y ofertas ML, Campañas ML, Análisis de Competencia, Verificar Ecom (márgenes al precio puesto) y el motor de precios de `rentabilidad` (`motor_precios`). Efecto: para la misma renta objetivo los precios que calcula el Motor **bajan**, y para un mismo precio puesto el margen **sube**.
+- **Pendiente:** la rentabilidad REAL de lo ya vendido (comisión y envío que trae Ecom) y su desglose en el Historial de Automatizaciones: ver confirmación de si Ecom trae esos montos con o sin IVA.

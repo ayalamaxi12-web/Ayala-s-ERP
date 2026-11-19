@@ -15,7 +15,7 @@ def test_precio_js_con_iva_es_el_de_siempre_y_sin_iva_cambia_solo_el_termino_de_
     consts = "const AC_IVA_SERVICIOS_ML=1.21,AC_COMISION_PCT=15.32,AC_IIBB_PCT=5,AC_IMPCH_PCT=1.2,AC_COSTO_ORDEN=0,AC_COSTO_FIJO_TRAMOS=[[null,0]];let AC_RENTA_BASE='con_iva';"
     js = consts + _fn(SRC, "ayalaCoreCalcularPrecioJS") + """
 const a=ayalaCoreCalcularPrecioJS(20925,1.105,0,6.8,10), b=ayalaCoreCalcularPrecioJS(20925,1.105,0,6.8,10,'con_iva'), c=ayalaCoreCalcularPrecioJS(20925,1.105,0,6.8,10,'sin_iva');
-const num=20925, den=(1/1.105)-(15.32/100)/1.21-(5/100)/1.105-(1.2/100)-(6.8/100)-(10/100);
+const num=20925, den=(1/1.105)-(15.32/100)/1.21-(5/100)/1.105-(1.2/100)-(6.8/100)/1.21-(10/100);   // cuotas sin IVA desde 2026-11-17
 console.log(JSON.stringify([a,b,c,Math.round(num/den)]));"""
     a, b, c, antes = json.loads(_node(js))
     assert a == b == antes and c < a   # la misma renta nominal sobre el neto son menos pesos

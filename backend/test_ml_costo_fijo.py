@@ -24,7 +24,7 @@ def test_el_precio_cumple_la_renta_con_el_costo_fijo_de_su_tramo():
     for costo in ("3000", "9000", "13000", "20000", "60000"):
         p = _p(costo, costo_fijo_tramos=ac.COSTO_FIJO_ML_TRAMOS)
         fijo = ac.costo_fijo_para_precio(p)
-        sobra = p / D("1.21") - p * D("0.155") / D("1.21") - p / D("1.21") * D("0.05") - p * D("0.012") - D(costo) - ac.COSTO_ORDEN_ECOM_DEFAULT - fijo
+        sobra = p / D("1.21") - p * D("0.155") / D("1.21") - p / D("1.21") * D("0.05") - p * D("0.012") - D(costo) - ac.COSTO_ORDEN_ECOM_DEFAULT - fijo / D("1.21")   # el costo fijo, como todo lo de la plataforma, sin IVA
         assert sobra >= p * D("0.30") - D("1"), (costo, p, fijo)                # alcanza la renta pedida (en el borde de un escalón sobra un poco)
         if p not in (D(15000), D(24000), D(33000)):
             assert abs(sobra - p * D("0.30")) < D("1"), (costo, p, fijo)       # lejos de un escalón da exacto
@@ -45,7 +45,7 @@ def test_el_precio_es_el_minimo_que_alcanza_la_renta_en_el_borde_de_un_tramo():
         assert p >= anterior
         p_menos_uno = p - 1
         fijo = ac.costo_fijo_para_precio(p_menos_uno)
-        sobra = p_menos_uno / D("1.21") - p_menos_uno * D("0.155") / D("1.21") - p_menos_uno / D("1.21") * D("0.05") - p_menos_uno * D("0.012") - D(costo) - ac.COSTO_ORDEN_ECOM_DEFAULT - fijo
+        sobra = p_menos_uno / D("1.21") - p_menos_uno * D("0.155") / D("1.21") - p_menos_uno / D("1.21") * D("0.05") - p_menos_uno * D("0.012") - D(costo) - ac.COSTO_ORDEN_ECOM_DEFAULT - fijo / D("1.21")   # el costo fijo, como todo lo de la plataforma, sin IVA
         assert sobra < p_menos_uno * D("0.30") + D("1")                      # un peso menos ya no alcanza (a menos del redondeo)
 
 
