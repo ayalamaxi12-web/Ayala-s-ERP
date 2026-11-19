@@ -171,6 +171,8 @@ class MLFullClient:
         # `inventory_id` a los que ML respondió 403: se omiten (no tiran toda la lectura) y se informan. `_presupuesto_403` limita las consultas extra para aislarlos.
         self.sin_acceso: list[dict] = []
         self._presupuesto_403 = 150
+        self.items_sin_acceso: list[dict] = []      # publicaciones (`/items`) que ML no dejó leer (403): se saltean y se informan
+        self._presupuesto_items_403 = 300
 
     def _operaciones_lote(self, cuenta: str, headers: dict, lote: list[str], desde: str, hasta: str, tipo: str) -> list[dict] | None:
         """Todas las operaciones de UN lote de `inventory_id` (con paginado `scroll`), reducidas a los campos que se usan. `None` = el lote falló
@@ -265,17 +267,29 @@ class MLFullClient:
         salida = []
         for i in range(0, len(item_ids), 20):
             lote = item_ids[i:i + 20]
-            d = self._get(
-                "https://api.mercadolibre.com/items",
-                {"ids": ",".join(lote),
-                 "attributes": "id,title,inventory_id,seller_custom_field,variations,shipping,attributes"},
-                headers,
-            )
+            d = self._lote_items_full(lote, cuenta, headers)
             for entrada in d:
                 cuerpo = entrada.get("body") if isinstance(entrada, dict) and "body" in entrada else entrada
                 if cuerpo:
                     salida.append(cuerpo)
         return salida
+
+    def _lote_items_full(self, lote: list[str], cuenta: str, headers: dict) -> list:
+        """`GET /items?ids=` de un lote. Basta UNA publicación que ML no deje leer (ajena a la cuenta, bloqueada, en revisión…) para que rechace el lote entero con 403: se parte
+        el lote hasta aislarla, se saltea (queda en `items_sin_acceso`) y el resto se lee igual."""
+        try:
+            return self._get("https://api.mercadolibre.com/items", {"ids": ",".join(lote), "attributes": "id,title,inventory_id,seller_custom_field,variations,shipping,attributes"}, headers) or []
+        except requests.HTTPError as e:
+            if getattr(e.response, "status_code", None) != 403:
+                raise
+            if len(lote) == 1:
+                self.items_sin_acceso.append({"item_id": lote[0], "cuenta": cuenta, "motivo": "ML respondió 403 (sin acceso a esta publicación)"})
+                return []
+            if self._presupuesto_items_403 <= 0:
+                raise
+            self._presupuesto_items_403 -= 2
+            mitad = len(lote) // 2
+            return self._lote_items_full(lote[:mitad], cuenta, headers) + self._lote_items_full(lote[mitad:], cuenta, headers)
 
     def stock_fulfillment(self, inventory_id: str, cuenta: str) -> dict:
         headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
