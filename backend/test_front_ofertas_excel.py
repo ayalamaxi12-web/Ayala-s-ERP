@@ -9,7 +9,7 @@ from test_front_analisis import INDEX, _fn
 
 pytestmark = pytest.mark.skipif(not shutil.which('node'), reason='sin node')
 
-FNS = ('ofxPendientes', 'ofxPuedeEn', 'ofxEstadoFila')
+FNS = ('ofxPendientes', 'ofxPuedeEn', 'ofxAjuste', 'ofxAcepta', 'ofxEstadoFila')
 
 
 def js(cuerpo):
@@ -39,3 +39,9 @@ def test_estado_de_cada_fila_segun_la_campana_elegida():
     assert r == ['lista', 'no', 'pend', 'ok', 'error']          # C no entra en C1 → pendiente; B bloqueada → no se puede
     r = js(f"const OFX={{filas:{json.dumps(FILAS)},sel:null}};console.log(JSON.stringify(OFX.filas.map(f=>ofxEstadoFila(f)[0])))")
     assert r == ['lista', 'no', 'lista', 'ok', 'error']
+
+
+def test_una_fila_que_necesita_ajuste_se_marca_y_al_tildarla_pasa_a_subirse_con_ajuste():
+    filas = [{'mla': 'A', 'bloqueos': [], 'candidatas': [{'id': 'C1', 'ajuste': {'final': 12000}}], 'estado': None}]
+    r = js(f"const OFX={{filas:{json.dumps(filas)},sel:'C1'}};const a=ofxEstadoFila(OFX.filas[0]);OFX.filas[0].ajOk={{C1:true}};console.log(JSON.stringify([a,ofxEstadoFila(OFX.filas[0])]))")
+    assert r == [['ajuste', 'Necesita ajuste'], ['lista', 'Se sube con ajuste']]
