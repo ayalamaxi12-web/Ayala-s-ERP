@@ -42,3 +42,15 @@ def test_el_403_sigue_siendo_un_http_error_para_quien_lo_atrapaba():
     ml = MLOfertasClient(get_fn=get, token_fn=lambda c: "t")
     r = ml._lote_items(["MLA1", "MLA2", "MLA3"], "IT", {})
     assert [x["body"]["id"] for x in r] == ["MLA1", "MLA3"] and ml.items_sin_acceso[0]["item_id"] == "MLA2"
+
+
+def test_detalle_items_un_403_no_tira_la_conciliacion_y_se_informa():
+    def get(url, params, headers):
+        ids = params["ids"].split(",")
+        if "MLA7" in ids:
+            raise MLSinAcceso(url)
+        return [{"code": 200, "body": {"id": i}} for i in ids]
+    ml = MLFullClient(get_fn=get, token_fn=lambda c: "t")
+    r = ml.detalle_items([f"MLA{i}" for i in range(30)], "IT")
+    assert sorted(x["id"] for x in r) == sorted(f"MLA{i}" for i in range(30) if i != 7)
+    assert ml.items_sin_acceso == [{"item_id": "MLA7", "cuenta": "IT", "motivo": "ML respondió 403 (sin acceso a esta publicación)"}]
