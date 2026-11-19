@@ -42,17 +42,19 @@ def test_ml_precio_a_margen_contado_desglosa_cada_cargo(par):
         "comision": d("31194.99"), "cuotas": d("0.00"), "costo_fijo": d("0.00"), "envio": d("29410.00"),
         "imp_cheque": d("2415.10"), "iibb": d("9106.70"), "costo": d("56105.10"), "costo_orden": d("149.12"),
     }
-    assert r.rentabilidad == d("53752.93")
-    assert r.margen == d("0.2951")
+    # Desde 2026-11-17 la plataforma (comisión + envío) se toma sin IVA: (31194,99 + 29410) / 1,21 = 50086,77 en vez de 60604,99 → la rentabilidad sube 10518,22 y `cargos` sigue mostrando lo que cobra ML
+    assert r.rentabilidad == d("64271.16")
+    assert r.margen == d("0.3529")
+    assert r.iva_cargos_recuperable == d("10518.22")
 
 
 def test_ml_tres_cuotas_descuenta_el_cargo_por_cuotas(par):
     r = m.precio_a_margen(d("239645"), _plancha(plan="3"), par)
     assert r.cargos["cuotas"] == d("20369.83")  # 8,5% (criterios)
-    assert r.margen == d("0.2765")
+    assert r.margen == d("0.3461")   # cuotas, comisión y envío sin IVA
 
 
-@pytest.mark.parametrize("plan,precio", [("contado", "203369"), ("3", "254779"), ("6", "293139")])
+@pytest.mark.parametrize("plan,precio", [("contado", "179769"), ("3", "213189"), ("6", "235889")])
 def test_ml_margen_a_precio_cumple_el_margen_pedido(par, plan, precio):
     r = m.margen_a_precio(d("0.30"), _plancha(plan=plan), par)
     assert r.precio == d(precio)
@@ -84,9 +86,9 @@ def test_ml_costo_fijo_de_la_publicacion_tiene_prioridad_sobre_la_tabla(par):
 
 def test_ml_margen_a_precio_recalcula_si_el_precio_cae_en_un_tramo_de_costo_fijo(par):
     r = m.margen_a_precio(d("0.30"), _plancha(costo=d("3000"), envio=d("0")), par)
-    assert r.precio == d("10639")
+    assert r.precio == d("9479")
     assert r.cargos["costo_fijo"] == d("1330.00")
-    assert r.margen == d("0.3002")  # el redondeo a terminación de planilla sube un poco el margen
+    assert r.margen == d("0.3000")  # con los cargos sin IVA el redondeo a terminación de planilla cae justo en el margen pedido
 
 
 def test_ml_categoria_sin_fila_usa_la_comision_general(par):
@@ -110,7 +112,7 @@ def test_web_mp_suma_el_iva_a_comision_y_cuotas(par):
     r = m.precio_a_margen(d("120000"), e, par)
     assert r.cargos["comision"] == d("7260.00")  # 5,00% × 1,21 = 6,05%, igual a lo cobrado en Woo
     assert r.cargos["cuotas"] == d("4936.80")  # 3,40% × 1,21 = 4,11%
-    assert r.margen == d("0.3083")
+    assert r.margen == d("0.3297")   # comisión y cuotas de MP, que ya traen el IVA, se toman sin IVA (÷ 1,21)
 
 
 def test_web_debito_usa_la_tarifa_al_instante(par):

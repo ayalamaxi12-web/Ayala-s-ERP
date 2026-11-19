@@ -251,8 +251,9 @@ def parametros_mercado(mercado: str, filas: list[dict], hoy: date | None = None,
             "financiero": fin, "recargo_cuotas": recargo if mercado == "web" else None, "faltantes": faltantes, "avisos": avisos, "notas": notas, "desglose": desglose}
 
 
-# Mercados cuya comisión y envío se muestran YA CON IVA (Maxx, 2026-10-29): se restan tal cual, sin dividir por 1,21 como en Mercado Libre.
-IVA_SERVICIOS_POR_MERCADO = {"fravega": Decimal("1")}
+# Desde 2026-11-17 (Maxx): lo que cobra CUALQUIER plataforma (comisión, cuotas, envío, costo fijo) se toma SIN IVA (÷ 1,21) para sacar el margen. Antes Frávega se restaba tal cual
+# (Decimal("1")); esa excepción se sacó. El diccionario queda por si algún mercado vuelve a necesitar otro factor.
+IVA_SERVICIOS_POR_MERCADO: dict[str, Decimal] = {}
 
 
 def iva_servicios(mercado: str) -> Decimal:
@@ -293,9 +294,11 @@ def desglose(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: Decimal, en
     cheque = -(cheque_pct / 100) * precio
     full = -(ayala_core.ENVIO_FULL_PCT_DEFAULT / 100) * precio if envio_full else Decimal("0")
     iva_comision = comision / iva_serv - comision
+    iva_financiero = financiero / iva_serv - financiero
     iva_envio = envio / iva_serv - envio
     costo_fijo = ayala_core.costo_fijo_para_precio(precio, costo_fijo_tramos) if costo_fijo_tramos else Decimal(0)
-    renta = precio / iva_factor + (-costo_sin_iva + comision + financiero + envio + iibb + cheque + full + iva_comision + iva_envio - costo_orden - costo_fijo)
+    iva_costo_fijo = (costo_fijo / iva_serv - costo_fijo) if costo_fijo else Decimal(0)
+    renta = precio / iva_factor + (-costo_sin_iva + comision + financiero + envio + iibb + cheque + full + iva_comision + iva_financiero + iva_envio - costo_orden - costo_fijo - iva_costo_fijo)
     return {"costo_fijo": costo_fijo, "comision": -comision, "financiero": -financiero, "envio": -envio, "iibb": -iibb, "imp_cheque": -cheque, "envio_full": -full, "costo_orden": costo_orden, "renta": renta}
 
 
@@ -313,13 +316,13 @@ def cuenta_paso_a_paso(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: D
     cheque = cheque_pct / 100 * precio
     full = ayala_core.ENVIO_FULL_PCT_DEFAULT / 100 * precio if envio_full else Decimal("0")
     costo_fijo = ayala_core.costo_fijo_para_precio(precio, costo_fijo_tramos) if costo_fijo_tramos else Decimal("0")
-    renta = sin_iva - costo_sin_iva - comision / iva_serv - financiero - envio_real / iva_serv - iibb - cheque - full - costo_orden - costo_fijo
+    renta = sin_iva - costo_sin_iva - comision / iva_serv - financiero / iva_serv - envio_real / iva_serv - iibb - cheque - full - costo_orden - costo_fijo / iva_serv
     L = [
         {"clave": "precio", "monto": precio, "iva": "con IVA", "signo": 0},
         {"clave": "precio_sin_iva", "monto": sin_iva, "iva": "sin IVA", "signo": 0, "iva_factor": iva_factor},
         {"clave": "costo", "monto": costo_sin_iva, "iva": "sin IVA", "signo": -1},
         {"clave": "comision", "pct": comision_pct, "sobre": "precio con IVA", "con_iva": comision, "monto": comision / iva_serv, "iva": "se resta tal cual (el mercado ya lo muestra con IVA)" if con_iva_incluido else "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
-        {"clave": "financiero", "pct": financiero_pct, "sobre": "precio con IVA", "con_iva": financiero, "monto": financiero, "iva": "se resta tal cual, sin dividir por IVA", "signo": -1},
+        {"clave": "financiero", "pct": financiero_pct, "sobre": "precio con IVA", "con_iva": financiero, "monto": financiero / iva_serv, "iva": "se resta tal cual (el mercado ya lo muestra con IVA)" if con_iva_incluido else "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
         {"clave": "envio", "con_iva": envio_real, "monto": envio_real / iva_serv, "iva": "se resta tal cual (el mercado ya lo muestra con IVA)" if con_iva_incluido else "sin IVA (÷ 1,21: IVA del servicio)", "signo": -1},
         {"clave": "iibb", "pct": iibb_pct, "sobre": "precio sin IVA", "monto": iibb, "iva": "sin IVA", "signo": -1},
         {"clave": "cheque", "pct": cheque_pct, "sobre": "precio con IVA", "monto": cheque, "iva": "se resta tal cual (sobre el precio con IVA)", "signo": -1},
@@ -329,7 +332,7 @@ def cuenta_paso_a_paso(precio: Decimal, *, costo_sin_iva: Decimal, iva_factor: D
     if costo_orden:
         L.append({"clave": "costo_orden", "monto": costo_orden, "iva": "monto fijo, se resta tal cual", "signo": -1})
     if costo_fijo:
-        L.append({"clave": "costo_fijo", "monto": costo_fijo, "iva": "monto fijo por unidad (tramo de precio de ML), se resta tal cual", "signo": -1})
+        L.append({"clave": "costo_fijo", "con_iva": costo_fijo, "monto": costo_fijo / iva_serv, "iva": "monto fijo por unidad (tramo de precio de ML), " + ("se resta tal cual" if con_iva_incluido else "sin IVA (÷ 1,21: IVA del servicio)"), "signo": -1})
     L.append({"clave": "renta", "monto": renta, "iva": "sin IVA", "signo": 0})
     return {"lineas": L, "renta": renta, "renta_pct_con_iva": renta / precio * 100 if precio else Decimal("0"), "renta_pct_sin_iva": renta / sin_iva * 100 if sin_iva else Decimal("0")}
 

@@ -207,6 +207,9 @@ PARAMS_ML: dict = {
 }
 
 
+IVA_SERVICIOS = Decimal("1.21")      # IVA de lo que cobra la plataforma (comisión, cuotas, envío, costo fijo): siempre 21 %, sin importar la alícuota del producto
+
+
 def _por_tramo(precio: Decimal, tramos: list[tuple[Decimal | None, Decimal]]) -> Decimal:
     """Primer tramo cuyo techo el precio no alcanza; `None` = catch-all."""
     for techo, monto in tramos:
@@ -265,15 +268,17 @@ def calcular_margen_oferta(
     # Criterio de margen §2: comisión ML 15,5% único. `comision_por_dominio`
     # queda como dato (futuro: comisión real por categoría) pero NO se usa.
     comision_pct = params.comision_general
-    comision = (precio_oferta * comision_pct / 100) if params.usar_comision else Decimal(0)
+    # Desde 2026-11-17 (Maxx): todo lo que cobra la plataforma (comisión, costo fijo, cuotas, envío) se toma SIN IVA (÷ 1,21: el IVA del servicio es crédito fiscal).
+    ivs = IVA_SERVICIOS
+    comision = (precio_oferta * comision_pct / 100 / ivs) if params.usar_comision else Decimal(0)
 
-    costo_fijo = _por_tramo(precio_oferta, params.costo_fijo_tramos) if params.usar_costo_fijo else Decimal(0)
+    costo_fijo = (_por_tramo(precio_oferta, params.costo_fijo_tramos) / ivs) if params.usar_costo_fijo else Decimal(0)
 
     cuotas_pct = params.cuotas_pct.get(cuotas_ofrecidas, Decimal(0)) if cuotas_ofrecidas else Decimal(0)
-    cuotas = (precio_oferta * cuotas_pct / 100) if params.usar_cuotas else Decimal(0)
+    cuotas = (precio_oferta * cuotas_pct / 100 / ivs) if params.usar_cuotas else Decimal(0)
 
     # Envío: el REAL de la publicación si se conoce; si no, la regla única ($0 bajo $33.000, $8.500 desde ahí).
-    envio = (envio_real if envio_real is not None else _por_tramo(precio_oferta, params.envio_tramos)) if params.usar_envio else Decimal(0)
+    envio = ((envio_real if envio_real is not None else _por_tramo(precio_oferta, params.envio_tramos)) / ivs) if params.usar_envio else Decimal(0)
     costo_orden = params.costo_orden if params.usar_costo_orden else Decimal(0)
 
     # Corregido 2026-08-27 (Maxx, en vivo): Imp. Cheque va sobre el precio

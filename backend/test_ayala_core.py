@@ -94,7 +94,8 @@ class _MLFalso:
 # las que estaban en la planilla cuando se congeló el ejemplo, antes de
 # la corrección del mismo día (ver Decisiones tomadas en el .md) -- por
 # eso se pasan explícitas acá y no se lee `CUOTAS_PCT_DEFAULT` (que ya
-# tiene las nuevas, 8,9/13,4/17,8/21,6%). ──
+# tiene las nuevas, 8,9/13,4/17,8/21,6%). Desde 2026-11-17 (Maxx) las cuotas / costo financiero se toman SIN IVA (÷ 1,21): los precios con cuotas son los de la fórmula nueva
+# (verificados a mano: p = (costo + envío/1,21) / (1/IVA − comisión/1,21 − IIBB/IVA − cheque − financiero/1,21 − renta)); el contado no cambia. ──
 _COSTO = Decimal("56105.10")
 _IVA_FACTOR = Decimal("1.105")
 _ENVIO = Decimal("29410")
@@ -113,7 +114,7 @@ def test_congelado_reducida():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("5"), renta_pct=Decimal("32"),
     )
-    assert p == Decimal("229015")
+    assert p == Decimal("223491")
 
 
 def test_congelado_3_cuotas_tasa_vieja():
@@ -121,7 +122,7 @@ def test_congelado_3_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("8.4"), renta_pct=Decimal("30"),
     )
-    assert p == Decimal("238525")
+    assert p == Decimal("228638")
 
 
 def test_congelado_6_cuotas_tasa_vieja():
@@ -129,7 +130,7 @@ def test_congelado_6_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("12.3"), renta_pct=Decimal("28"),
     )
-    assert p == Decimal("252771")
+    assert p == Decimal("236876")
 
 
 def test_congelado_9_cuotas_tasa_vieja():
@@ -137,7 +138,7 @@ def test_congelado_9_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("15.7"), renta_pct=Decimal("26"),
     )
-    assert p == Decimal("264408")
+    assert p == Decimal("242666")
 
 
 def test_congelado_12_cuotas_tasa_vieja():
@@ -145,10 +146,11 @@ def test_congelado_12_cuotas_tasa_vieja():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
         financiero_pct=Decimal("19.2"), renta_pct=Decimal("24"),
     )
-    assert p == Decimal("278126")
+    assert p == Decimal("249383")
 
 
 def test_congelado_las_6_condiciones_juntas_con_tasas_vigentes():
+    # Desde 2026-11-17 las cuotas / costo financiero se toman SIN IVA (÷ 1,21), igual que la comisión y el envío: los precios con cuotas bajan (el contado no cambia).
     # Mismo ejemplo, pero llamando al motor completo con las tasas
     # ACTUALES de CUOTAS_PCT_DEFAULT (8,9/13,4/17,8/21,6%) -- no debe dar
     # lo mismo que el ejemplo congelado en las 4 columnas de cuotas
@@ -157,8 +159,8 @@ def test_congelado_las_6_condiciones_juntas_con_tasas_vigentes():
         costo_sin_iva=_COSTO, iva_factor=_IVA_FACTOR, envio_real=_ENVIO,
     )
     assert precios["contado"] == Decimal("200467")
-    assert precios["reducida"] == Decimal("229015")
-    assert precios["3"] != Decimal("238525")  # tasa vigente subió -> precio distinto
+    assert precios["reducida"] == Decimal("223491")
+    assert precios["3"] != Decimal("228638")  # tasa vigente subió -> precio distinto
     assert set(precios) == {"contado", "reducida", "3", "6", "9", "12"}
 
 

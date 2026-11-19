@@ -29,6 +29,8 @@ from ml_ofertas import (
 
 _FAKE_TOKEN_FN = lambda cuenta: "FAKE-TOKEN"
 
+IVS = Decimal("1.21")   # IVA de lo que cobra la plataforma
+
 
 class _CostoProviderFalso:
     def __init__(self, costos: dict):
@@ -59,16 +61,17 @@ def test_formula_canonica_caso_toner():
         domain_id="MLA-TONERS", cuotas_ofrecidas=None, params=params,
     )
     assert r.base_sin_iva == Decimal("33057.85123966942148760330579")
-    assert r.comision == Decimal("6200.0")
+    # Desde 2026-11-17 (Maxx) comisión, costo fijo, cuotas y envío se toman SIN IVA (÷ 1,21).
+    assert r.comision == Decimal("6200.0") / IVS
     assert r.costo_fijo == Decimal(0)
     assert r.cuotas == Decimal(0)
     # 27/10 (Maxi): envío único $8.500 desde $33.000 y costo por orden de Ecom $149,12.
-    assert r.envio == Decimal(8500)
+    assert r.envio == Decimal(8500) / IVS
     assert r.costo_orden == Decimal("149.12")
     assert r.imp_cheque == Decimal("480.0")
     assert r.iibb == Decimal("1652.89256198347107438016529")
-    assert r.margen == r.base_sin_iva - Decimal("6200") - Decimal(8500) - Decimal("480") - r.iibb - Decimal("149.12") - Decimal(15000)
-    assert round(r.margen, 2) == Decimal("1075.84")
+    assert r.margen == r.base_sin_iva - Decimal("6200") / IVS - Decimal(8500) / IVS - Decimal("480") - r.iibb - Decimal("149.12") - Decimal(15000)
+    assert round(r.margen, 2) == Decimal("3627.08")   # 33057,85 − 5123,97 − 7024,79 − 480 − 1652,89 − 149,12 − 15000
 
 
 def test_comision_general_si_el_dominio_no_esta_en_la_tabla():
@@ -77,7 +80,7 @@ def test_comision_general_si_el_dominio_no_esta_en_la_tabla():
         precio_oferta=Decimal(10000), iva_factor=Decimal("1.21"), costo_producto_ars=Decimal(0),
         domain_id="MLA-ALGO-NO-MAPEADO", cuotas_ofrecidas=None, params=params,
     )
-    assert r.comision == Decimal(10000) * params.comision_general / 100
+    assert r.comision == Decimal(10000) * params.comision_general / 100 / IVS
 
 
 def test_comision_unica_15_5_aunque_el_dominio_tenga_otra_en_la_tabla():
@@ -89,7 +92,7 @@ def test_comision_unica_15_5_aunque_el_dominio_tenga_otra_en_la_tabla():
             precio_oferta=Decimal(10000), iva_factor=Decimal("1.21"), costo_producto_ars=Decimal(0),
             domain_id=dominio, cuotas_ofrecidas=None, params=params,
         )
-        assert r.comision == Decimal("1550.0")
+        assert r.comision == Decimal("1550.0") / IVS
 
 
 def test_domain_id_none_usa_comision_general():
@@ -98,7 +101,7 @@ def test_domain_id_none_usa_comision_general():
         precio_oferta=Decimal(10000), iva_factor=Decimal("1.21"), costo_producto_ars=Decimal(0),
         domain_id=None, cuotas_ofrecidas=None, params=params,
     )
-    assert r.comision == Decimal(10000) * params.comision_general / 100
+    assert r.comision == Decimal(10000) * params.comision_general / 100 / IVS
 
 
 def test_costo_fijo_por_tramo_de_precio():
@@ -107,7 +110,7 @@ def test_costo_fijo_por_tramo_de_precio():
              (Decimal(30000), Decimal(3320)), (Decimal(33000), Decimal(0)), (Decimal(50000), Decimal(0))]
     for precio, esperado in casos:
         r = calcular_margen_oferta(precio, Decimal("1.21"), Decimal(0), None, None, params)
-        assert r.costo_fijo == esperado, f"precio={precio}"
+        assert r.costo_fijo == esperado / IVS, f"precio={precio}"
 
 
 def test_envio_por_tramo_de_precio():
@@ -119,9 +122,9 @@ def test_envio_por_tramo_de_precio():
              (Decimal(49999), Decimal(8500)), (Decimal(50000), Decimal(8500))]
     for precio, esperado in casos:
         r = calcular_margen_oferta(precio, Decimal("1.21"), Decimal(0), None, None, params)
-        assert r.envio == esperado, f"precio={precio}"
+        assert r.envio == esperado / IVS, f"precio={precio}"
     # con el envío real de la publicación se usa ese y no la regla
-    assert calcular_margen_oferta(Decimal(40000), Decimal("1.21"), Decimal(0), None, None, params, envio_real=Decimal(6123)).envio == Decimal(6123)
+    assert calcular_margen_oferta(Decimal(40000), Decimal("1.21"), Decimal(0), None, None, params, envio_real=Decimal(6123)).envio == Decimal(6123) / IVS
 
 
 def test_cuotas_suman_solo_si_se_ofrecen():
@@ -129,7 +132,7 @@ def test_cuotas_suman_solo_si_se_ofrecen():
     sin_cuotas = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), None, None, params)
     con_6_cuotas = calcular_margen_oferta(Decimal(10000), Decimal("1.21"), Decimal(0), None, 6, params)
     assert sin_cuotas.cuotas == Decimal(0)
-    assert con_6_cuotas.cuotas == Decimal(10000) * Decimal("12.90") / 100
+    assert con_6_cuotas.cuotas == Decimal(10000) * Decimal("12.90") / 100 / IVS
     assert con_6_cuotas.margen < sin_cuotas.margen
 
 
