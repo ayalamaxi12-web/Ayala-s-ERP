@@ -3989,6 +3989,67 @@ def _ayala_core_precio_vivo_sync(item_ids: list[str], cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()
     return {"resultados": ayala_core.precio_vivo_mlas(ml, item_ids, cuenta)}
 
+MERCADOS_MARGEN = ("ml", "web", "fravega")
+
+
+def _margenes_precio_sync(items: list[dict], condiciones: dict[str, str]) -> dict:
+    """Margen real de cada SKU al PRECIO PUESTO en cada canal (solo lectura): con la misma cuenta que el Motor (`mercados.desglose`: comisión, cuotas de la condición
+    elegida, IIBB, cheque, costo por orden), costo de Ecom × TC y el IVA del SKU. El margen en $ es sobre el precio SIN IVA y el % también. El envío lo trae cada fila."""
+    prov = costos_ecom.proveedores_de_costo_e_iva()
+    try:
+        prov[0].precargar()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"No hay catálogo de costos de Ecom ({type(e).__name__}).")
+    prov[1].precargar()
+    tc = tc_info_rapido()["tc"]
+    mk = {m: _preparar_mercado(m, usar_cheque=mercados_mod.ACTIVOS_POR_DEFECTO[m]["cheque"]) for m in MERCADOS_MARGEN}
+    out: dict[str, dict] = {}
+    for it in items:
+        sku = str(it.get("sku") or "").strip()
+        if not sku:
+            continue
+        costo_usd = prov[0].obtener(sku)
+        iva = prov[1].factor(sku)
+        if costo_usd is None or iva is None:
+            out[sku] = {"error": "sin costo en Ecom" if costo_usd is None else "sin IVA"}
+            continue
+        costo = Decimal(str(costo_usd)) * Decimal(str(tc))
+        fila: dict = {}
+        for m in MERCADOS_MARGEN:
+            precio = Decimal(str(it.get(m) or 0))
+            if precio <= 0:
+                continue
+            par, u, cond = mk[m]["par"], mk[m]["usados"], str(condiciones.get(m) or "contado")
+            if cond not in par["financiero"] or par["comision_pct"] is None:
+                fila[m] = {"error": f"falta dato de {cond} en {par['nombre']}"}
+                continue
+            d = mercados_mod.desglose(
+                precio, costo_sin_iva=costo, iva_factor=iva, envio_real=Decimal(str((it.get("envio") or {}).get(m) or 0)), comision_pct=par["comision_pct"],
+                financiero_pct=par["financiero"][cond], iibb_pct=u["iibb_pct"] if u["iibb"] else Decimal(0), cheque_pct=u["cheque_pct"] if u["cheque"] else Decimal(0),
+                costo_orden=u["costo_orden"] if u["orden"] else Decimal(0), envio_full=False, iva_servicios=mercados_mod.iva_servicios(m),
+                costo_fijo_tramos=par.get("costo_fijo_tramos"))
+            renta, sin_iva = d["renta"], precio / iva
+            fila[m] = {"renta": float(round(renta, 2)), "pct": float(round(renta / sin_iva * 100, 2)) if sin_iva else None, "condicion": cond}
+        out[sku] = fila
+    return {"margenes": out, "tc": float(tc), "condiciones": condiciones}
+
+@app.post("/ayala-core/margenes-precio")
+async def ayala_core_margenes_precio(request: Request):
+    """Body: {"condiciones": {"ml": "contado", "web": "3", "fravega": "contado"}, "items": [{"sku": "...", "ml": 27449, "web": 31259, "fravega": 35949, "envio": {"ml": 0, "fravega": 0}}]}.
+    Devuelve el margen (en $ y % sobre el precio sin IVA) de cada SKU al precio indicado en cada canal. Solo lectura."""
+    try:
+        cuerpo = await request.json()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Body JSON inválido.")
+    items = cuerpo.get("items") or []
+    if not isinstance(items, list) or len(items) > 6000:
+        raise HTTPException(status_code=422, detail="items: lista de hasta 6000 SKU.")
+    cond = {m: str((cuerpo.get("condiciones") or {}).get(m) or ("3" if m == "web" else "contado")) for m in MERCADOS_MARGEN}
+    for m, c in cond.items():
+        if c not in mercados_mod.MERCADOS[m]["condiciones"]:
+            raise HTTPException(status_code=422, detail=f"Condición inválida para {m}: {c!r}.")
+    return await run_in_threadpool(_margenes_precio_sync, items, cond)
+
 @app.get("/ayala-core/mla/precio-vivo")
 async def ayala_core_mla_precio_vivo(item_ids: str, cuenta: str):
     """Precio real en vivo (no tachado) de una o varias publicaciones
