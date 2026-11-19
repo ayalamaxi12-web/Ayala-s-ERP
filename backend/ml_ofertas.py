@@ -1718,7 +1718,10 @@ def ventas_recientes_por_item(ml: MLFullClient, cuenta: str, desde_iso: str, has
     return ultima
 
 
-def costo_envio_real(ml: MLFullClient, cuenta: str, shipping_id) -> dict:
+_costo_por_envio: dict = {}     # shipping_id -> resultado: el costo de un envío ya hecho no cambia, así no se vuelve a pedir a ML
+
+
+def costo_envio_real(ml: MLFullClient, cuenta: str, shipping_id, memo: dict | None = None) -> dict:
     """Costo real de envío que ML le descontó al vendedor en UNA venta
     puntual. Confirmado en vivo 2026-09-01 (MLA680197251, orden
     2000018227607384, cuenta IT): `GET /shipments/{id}` con el header
@@ -1732,12 +1735,17 @@ def costo_envio_real(ml: MLFullClient, cuenta: str, shipping_id) -> dict:
       `list_cost` es lo que ML le descuenta de verdad. Confirmado
       cruzando el detalle real de una venta puntual con Maxx: coincidió
       centavo a centavo ($8.890)."""
+    if memo is not None and shipping_id in memo:
+        return dict(memo[shipping_id])
     headers = {"Authorization": f"Bearer {ml._token(cuenta)}", "x-format-new": "true"}
     d = ml._get(f"https://api.mercadolibre.com/shipments/{shipping_id}", {}, headers) or {}
     lead = d.get("lead_time") or {}
     cost_type = lead.get("cost_type")
     costo = Decimal(str(lead["list_cost"])) if cost_type == "free" and lead.get("list_cost") is not None else Decimal(0)
-    return {"cost_type": cost_type, "costo_envio_real": float(costo)}
+    res = {"cost_type": cost_type, "costo_envio_real": float(costo)}
+    if memo is not None:
+        memo[shipping_id] = res
+    return dict(res)
 
 
 # Cache en memoria del último barrido -- item_id -> {"cuenta", "shipping_id",
@@ -1751,7 +1759,7 @@ def costo_envio_real(ml: MLFullClient, cuenta: str, shipping_id) -> dict:
 _ultima_venta_cache: dict[str, dict] = {}
 
 
-def costo_envio_real_item(ml: MLFullClient, item_id: str, cuenta: str) -> dict | None:
+def costo_envio_real_item(ml: MLFullClient, item_id: str, cuenta: str, memo: dict | None = None) -> dict | None:
     """Resuelve el costo real de envío para UN ítem puntual, usando el
     `shipping_id` congelado por el último `iniciar_job_costos_envio` --
     `None` si ese ítem no vendió nada en la ventana del último barrido
@@ -1759,7 +1767,7 @@ def costo_envio_real_item(ml: MLFullClient, item_id: str, cuenta: str) -> dict |
     entrada = _ultima_venta_cache.get(item_id)
     if not entrada:
         return None
-    costo = costo_envio_real(ml, cuenta, entrada["shipping_id"])
+    costo = costo_envio_real(ml, cuenta, entrada["shipping_id"], memo)
     return {**costo, "orden_id": entrada["orden_id"], "fecha_venta": entrada["fecha"]}
 
 

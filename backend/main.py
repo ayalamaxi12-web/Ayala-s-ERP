@@ -3109,6 +3109,41 @@ def _costo_envio_item_sync(item_id: str, cuenta: str) -> dict:
     ml = ml_ofertas.MLOfertasClient()
     return {"costo_envio_real": ml_ofertas.costo_envio_real_item(ml, item_id, cuenta)}
 
+def _costos_envio_lote_sync(items: list[dict]) -> dict:
+    """Envío real de la ÚLTIMA VENTA de cada publicación pedida (solo lectura), para sumarlo al precio del PM en las ofertas de $33.000 o más. Usa el `shipping_id` que congela el barrido
+    «Actualizar costos de envío reales»: sin barrido no hay referencia. Mismo criterio que Campañas ML (`_campanas_envios_reales`)."""
+    from concurrent.futures import ThreadPoolExecutor
+    pedidos = [(str(i.get("item_id") or ""), i.get("cuenta")) for i in items if i.get("item_id")]
+    est = {"requeridos": len(pedidos), "resueltos": 0, "sin_venta": 0, "barrido_hecho": bool(ml_ofertas._ultima_venta_cache)}
+    if not pedidos or not est["barrido_hecho"]:
+        return {"costos": {}, "estado": est}
+    ml = ml_ofertas.MLOfertasClient()
+
+    def una(p):
+        item, cuenta = p
+        e = ml_ofertas._ultima_venta_cache.get(item)
+        if not e:
+            return item, None
+        try:
+            r = ml_ofertas.costo_envio_real_item(ml, item, cuenta or e.get("cuenta"), ml_ofertas._costo_por_envio)
+        except Exception:  # noqa: BLE001  (una que falla no tira el resto: queda sin referencia)
+            return item, None
+        return item, ({"cost_type": r["cost_type"], "costo_envio_real": r["costo_envio_real"], "fecha_venta": r.get("fecha_venta")} if r else None)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        res = dict(ex.map(una, pedidos))
+    costos = {k: v for k, v in res.items() if v is not None}
+    est["resueltos"], est["sin_venta"] = len(costos), len(pedidos) - len(costos)
+    return {"costos": costos, "estado": est}
+
+@app.post("/ml-ofertas/costos-envio/lote")
+async def ml_ofertas_costos_envio_lote(request: Request):
+    """Body: {"items": [{"item_id": "MLA…", "cuenta": "IT"}]} (hasta 1.000). Devuelve {"costos": {item_id: {cost_type, costo_envio_real, fecha_venta}}, "estado": {...}}."""
+    cuerpo = await request.json()
+    items = cuerpo.get("items") or []
+    if not isinstance(items, list) or len(items) > 1000:
+        raise HTTPException(status_code=422, detail="items: lista de hasta 1000 publicaciones.")
+    return await run_in_threadpool(_costos_envio_lote_sync, items)
+
 @app.get("/ml-ofertas/item/{item_id}/costo-envio")
 async def ml_ofertas_item_costo_envio(item_id: str, cuenta: str):
     return await run_in_threadpool(_costo_envio_item_sync, item_id, cuenta)
