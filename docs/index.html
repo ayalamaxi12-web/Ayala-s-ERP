@@ -2267,9 +2267,13 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
       <span style="display:flex;gap:4px;align-items:center">en <input type="text" id="ofm-alertas-dias" value="30" style="width:34px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;text-align:center"> días</span>
       <button class="btn" onclick="ofmAlertasRun('IT')" id="btn-ofm-alertas-IT">Buscar candidatos Group</button>
       <button class="btn" onclick="ofmAlertasRun('MT')" id="btn-ofm-alertas-MT">Buscar candidatos Arg</button>
+      <span style="width:1px;height:20px;background:var(--border)"></span>
+      <button class="btn" onclick="ofmRelampagoRun('IT')" id="btn-ofm-rel-IT" title="MLA que ML ofrece para las campañas de ofertas relámpago (solo lectura)">⚡ Relámpago Group</button>
+      <button class="btn" onclick="ofmRelampagoRun('MT')" id="btn-ofm-rel-MT" title="MLA que ML ofrece para las campañas de ofertas relámpago (solo lectura)">⚡ Relámpago Arg</button>
       <span id="ofm-alertas-status" style="color:var(--text3)"></span>
     </div>
     <div id="ofm-alertas-log" style="display:none;max-height:90px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:9px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:10px"></div>
+    <div id="ofm-rel-res"></div>
     <div class="table-wrap" id="ofm-alertas-wrap" style="display:none">
       <table id="ofm-alertas-table">
         <thead><tr><th>Cuenta</th><th>MLA</th><th>SKU</th><th>Título</th><th>Ventas periodo</th><th>Stock</th></tr></thead>
@@ -6433,12 +6437,14 @@ function ofgMargenHtml(f,m,costoARS,tc){
 }
 function ofgSinMargen(f,motivo){return `<div class="ofg-nota ofg-nota-info">${ico('alert',16)}<span>${motivo}</span></div>`;}
 // PM del SKU de la publicación: si el SKU del MLA es un SKU madre, se busca también el SKU con el que se calculó (la variante vinculada en Ecom).
-function ofmPmRec(f){const a=f.sku_calculo?S.pmData[normSku(f.sku_calculo)]:null;return a||(f.sku?S.pmData[normSku(f.sku)]:null)||null;}
+function ofmPmRec(f){for(const k of [f.sku_calculo,...(f.skus_pm||[]),f.sku]){const r=k?S.pmData[normSku(k)]:null;if(r)return r;}return null;}
 // Cómo se resolvió el costo cuando el SKU del MLA no lo tenía (SKU madre): vinculación de Ecom o variantes del madre. Se muestra siempre para que se vea de dónde sale.
 function ofmNotaSkuMadre(f){
-  if(f.via_sku==='vinculacion_ecom')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: el costo sale de la <b>variante vinculada en Ecom</b> (${acEsc(f.sku_calculo)})${f.cantidad_vinculada>1?`, × ${f.cantidad_vinculada} unidades por venta`:''}.`);
-  if(f.via_sku==='variantes_iguales')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: todas sus variantes cuestan lo mismo, se usa ese costo.`);
-  if(f.incidencia==='SIN_COSTO'&&(f.variantes_madre||[]).length)return ofgNota('aviso',`SKU madre «${acEsc(f.sku||'—')}»: ${acEsc(f.motivo_sin_costo||'sus variantes cuestan distinto')}. Variantes: ${f.variantes_madre.map(v=>acEsc(v.sku)+(v.costo_usd!=null?' (USD '+v.costo_usd+')':' (sin costo)')).join(', ')}. Vinculá esta publicación a una variante en Ecom para que se calcule.`);
+  const pasos=(f.pasos_costo||[]).length?`<details style="margin-top:4px"><summary style="cursor:pointer">Cómo se buscó el costo</summary><ul style="margin:4px 0 0 16px">${f.pasos_costo.map(x=>`<li>${acEsc(x)}</li>`).join('')}</ul></details>`:'';
+  if(f.via_sku==='vinculacion_ecom')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: el costo sale de la <b>variante vinculada en Ecom</b> (${acEsc(f.sku_calculo)})${f.cantidad_vinculada>1?`, × ${f.cantidad_vinculada} unidades por venta`:''}.${pasos}`);
+  if(f.via_sku==='variante_por_atributos')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: sus variantes cuestan distinto; se tomó la que coincide con el color de la publicación (<b>${acEsc(f.sku_calculo)}</b>).${pasos}`);
+  if(f.via_sku==='variantes_iguales')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: todas sus variantes cuestan lo mismo, se usa ese costo.${pasos}`);
+  if(f.incidencia==='SIN_COSTO'||f.incidencia==='SIN_SKU')return ofgNota('aviso',`${f.sku?`SKU «${acEsc(f.sku)}»`:'Sin SKU'}: no se pudo resolver el costo${f.motivo_sin_costo?' ('+acEsc(f.motivo_sin_costo)+')':''}.${(f.variantes_madre||[]).length?` Variantes: ${f.variantes_madre.map(v=>acEsc(v.sku)+(v.costo_usd!=null?' (USD '+v.costo_usd+')':' (sin costo)')).join(', ')}. Vinculá esta publicación a una variante en Ecom para que se calcule.`:''}${pasos}`);
   return '';
 }
 function ofmRenderGestionarPanel(itemId,promociones){
@@ -6740,7 +6746,7 @@ async function ofmBuscarMLA(){
       precio_normal:d.precio_actual, precio_oferta:null, incidencia:d.incidencia,
       _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva, cuotas_ofrecidas:d.cuotas_ofrecidas,
       costo_envio_real:d.costo_envio_real,
-      sku_calculo:d.sku_calculo, via_sku:d.via_sku, variantes_madre:d.variantes_madre||[], motivo_sin_costo:d.motivo_sin_costo, cantidad_vinculada:d.cantidad_vinculada,
+      sku_calculo:d.sku_calculo, skus_pm:d.skus_pm||[], pasos_costo:d.pasos_costo||[], via_sku:d.via_sku, variantes_madre:d.variantes_madre||[], motivo_sin_costo:d.motivo_sin_costo, cantidad_vinculada:d.cantidad_vinculada,
     };
     if(d.tc)OFM.tc=OFM.tc||d.tc;
     ofmItemAbierto=d.item_id;
@@ -6858,6 +6864,36 @@ function ofxPendientesCSV(){
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const csv=['SKU,MLA,Precio tachado,Precio final,Motivo',...f.map(x=>[x.sku,x.mla,x.tachado,x.final,[...(x.bloqueos||[]),x.mensaje||''].filter(Boolean).join(' | ')].map(q).join(','))].join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download='ofertas_pendientes.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+
+// ── Ofertas relámpago (backend: /ml-ofertas/relampago/*, solo lectura): MLA que ML ofrece como candidatos de las campañas relámpago pendientes o en curso. ──
+let OFM_REL={IT:null,MT:null};
+async function ofmRelampagoRun(cuenta){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const btn=qs('btn-ofm-rel-'+cuenta),status=qs('ofm-alertas-status'),logEl=qs('ofm-alertas-log'),rotulo=`⚡ Relámpago ${etiquetaCuenta(cuenta)}`;
+  btn.disabled=true;btn.textContent='● buscando...';status.textContent=`Buscando relámpagos (${etiquetaCuenta(cuenta)})...`;logEl.style.display='block';logEl.innerHTML='';
+  try{
+    const r=await fetch(`${url}/ml-ofertas/relampago/run?cuenta=${cuenta}`,{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ml-ofertas/relampago/status/${job_id}`,logEl,status,btn,rotulo,res=>{OFM_REL[cuenta]=res;ofmRelampagoPintar();});
+  }catch(e){status.textContent='❌ '+e.message;btn.disabled=false;btn.textContent=rotulo;}
+}
+function ofmRelampagoPintar(){
+  const cont=qs('ofm-rel-res');if(!cont)return;const m=n=>n==null?'—':Number(n).toLocaleString('es-AR',{maximumFractionDigits:0}),pc=n=>n==null?'—':Number(n).toLocaleString('es-AR',{maximumFractionDigits:1})+' %';
+  const bloques=['IT','MT'].filter(c=>OFM_REL[c]).map(c=>{
+    const r=OFM_REL[c];
+    if(r.sin_campanas)return `<div class="card" style="margin:10px 0"><div class="card-title">⚡ Relámpago · ${etiquetaCuenta(c)}</div><p class="ofx-nota">Mercado Libre no tiene campañas relámpago pendientes o en curso para esta cuenta.</p></div>`;
+    const camp=r.campanas.map(x=>`<li><b>${acEsc(x.nombre)}</b> (${acEsc(x.status||'')}${x.desde?' · '+acEsc(String(x.desde).slice(0,10))+' a '+acEsc(String(x.hasta||'').slice(0,10)):''}): <b>${x.candidatos}</b> MLA disponibles</li>`).join('');
+    return `<div class="card" style="margin:10px 0"><div class="card-title">⚡ Relámpago · ${etiquetaCuenta(c)} · ${r.filas.length} MLA disponibles</div><ul class="ofx-nota" style="margin:0 0 8px 16px">${camp}</ul>
+      <div class="ofx-fila" style="margin:0 0 6px"><button type="button" class="btn" onclick="ofmRelampagoCsv('${c}')">⬇ CSV</button></div>
+      <div class="table-wrap" style="max-height:480px;overflow:auto"><table class="ofm-tabla"><thead><tr><th>Campaña</th><th>MLA</th><th>SKU</th><th>Título</th><th>Precio actual</th><th>Precio sugerido</th><th>Desc.</th><th>Rango que acepta ML</th><th>Stock pedido</th><th>Stock tuyo</th><th>Estado</th></tr></thead><tbody>${r.filas.map(f=>`<tr><td>${acEsc(f.campana)}</td><td><a href="${acEsc(f.permalink||('https://articulo.mercadolibre.com.ar/'+f.item_id))}" target="_blank" rel="noopener">${acEsc(f.item_id)}</a></td><td>${acEsc(f.sku||'sin SKU')}</td><td title="${acEsc(f.titulo)}">${acEsc((f.titulo||'').slice(0,50))}</td><td style="text-align:right">${m(f.precio_actual)}</td><td style="text-align:right"><b>${m(f.precio_sugerido||f.precio_max)}</b></td><td style="text-align:right">${pc(f.desc_sugerido_pct)}</td><td style="text-align:right">${f.precio_min!=null||f.precio_max!=null?m(f.precio_min)+' – '+m(f.precio_max):'—'}</td><td style="text-align:right">${f.stock_pedido_min!=null||f.stock_pedido_max!=null?m(f.stock_pedido_min)+' – '+m(f.stock_pedido_max):'—'}</td><td style="text-align:right;${f.stock_disponible===0?'color:var(--error-texto);font-weight:700':''}">${f.stock_disponible==null?'—':f.stock_disponible}</td><td>${acEsc(f.estado_publicacion||'')}</td></tr>`).join('')}</tbody></table></div></div>`;}).join('');
+  cont.innerHTML=bloques;
+}
+function ofmRelampagoCsv(c){
+  const r=OFM_REL[c];if(!r||!r.filas.length)return;const cols=['campana','item_id','sku','titulo','precio_actual','precio_original','precio_sugerido','precio_min','precio_max','desc_sugerido_pct','stock_pedido_min','stock_pedido_max','stock_disponible','estado_publicacion'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+cols.join(';')+'\n'+r.filas.map(f=>cols.map(k=>q(f[k])).join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));a.download=`relampago_${c}.csv`;a.click();
 }
 
 // ── Fase 2 — alertas: SKUs candidatos a oferta y no la tienen ──

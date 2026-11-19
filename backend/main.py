@@ -2956,6 +2956,18 @@ async def ml_ofertas_foto_actualizar(background_tasks: BackgroundTasks):
 async def ml_ofertas_status(job_id: str):
     return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
 
+@app.post("/ml-ofertas/relampago/run")
+async def ml_ofertas_relampago_run(background_tasks: BackgroundTasks, cuenta: str):
+    """MLA que ML ofrece para ofertas relámpago (solo lectura): por cada campaña relámpago pendiente o en curso, sus candidatos con precio sugerido, stock pedido y datos de la publicación."""
+    _cuenta_valida(cuenta)
+    job_id = f"mlrelampago_{int(time.time() * 1000)}"
+    background_tasks.add_task(ml_ofertas.iniciar_job_relampago, job_id, cuenta)
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/ml-ofertas/relampago/status/{job_id}")
+async def ml_ofertas_relampago_status(job_id: str):
+    return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
+
 @app.post("/ml-ofertas/alertas/run")
 async def ml_ofertas_alertas_run(
     background_tasks: BackgroundTasks, cuenta: str, item_ids_con_oferta: str,
@@ -3119,11 +3131,17 @@ def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
     run, que por diseño solo trae publicaciones que ya tienen algo)."""
     ml = ml_ofertas.MLOfertasClient()
     tc = tc_bna_requerido()
-    def _vinculacion(iid):      # lo que Ecom tiene vinculado a ese MLA (variante exacta si es un SKU madre); sin Ecom se sigue sin esto
-        from rentabilidad.ingesta_ecom_api import EcomApiClient
-        return ml_full.EcomFullAdapter(EcomApiClient()).factor_pack(iid)
+    _ecom = {}
+
+    def _adaptador():
+        if "a" not in _ecom:
+            from rentabilidad.ingesta_ecom_api import EcomApiClient
+            _ecom["a"] = ml_full.EcomFullAdapter(EcomApiClient())
+        return _ecom["a"]
     try:
-        r = ml_ofertas.resolver_item_para_gestion(ml, *costos_ecom.proveedores_de_costo_e_iva(), item_id, cuenta, tc, vinculacion_fn=_vinculacion)
+        r = ml_ofertas.resolver_item_para_gestion(ml, *costos_ecom.proveedores_de_costo_e_iva(), item_id, cuenta, tc,
+                                                  vinculacion_fn=lambda iid: _adaptador().factor_pack(iid),      # lo que Ecom tiene vinculado a ese MLA
+                                                  variantes_vivo_fn=lambda sku: _adaptador().variantes_con_costo(sku))   # variantes del madre leídas de Ecom en el momento
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudo consultar Mercado Libre: {e}")
     if not r.get("encontrado"):

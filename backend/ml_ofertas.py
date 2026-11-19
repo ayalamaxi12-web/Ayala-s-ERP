@@ -345,6 +345,21 @@ class MLOfertasClient(MLFullClient):
             params = {**params, "search_after": cursor}
         return salida
 
+    def items_candidatos_promocion(self, promotion_id: str, promotion_type: str, cuenta: str, tope: int = 3000) -> list[dict]:
+        """Ítems de la cuenta que ML ofrece como CANDIDATOS (`status=candidate`) a una campaña, paginando con `search_after` hasta `tope`. Solo lectura."""
+        headers = {"Authorization": f"Bearer {self._token(cuenta)}"}
+        params = {"promotion_type": promotion_type, "app_version": "v2", "status": "candidate", "limit": 50}
+        salida: list[dict] = []
+        while len(salida) < tope:
+            d = self._get(f"https://api.mercadolibre.com/seller-promotions/promotions/{promotion_id}/items", params, headers) or {}
+            resultados = d.get("results") or []
+            salida.extend(resultados)
+            cursor = (d.get("paging") or {}).get("searchAfter")
+            if not cursor or not resultados:
+                break
+            params = {**params, "search_after": cursor}
+        return salida[:tope]
+
     def contar_items_promocion(self, promotion_id: str, promotion_type: str, cuenta: str, status: str) -> int | None:
         """Cantidad de ítems de la cuenta en una campaña con ese estado (`candidate` = elegibles, `started` = ya aceptados),
         leyendo `paging.total` con `limit=1` (una llamada, sin traer los ítems). None si ML no informa el total."""
@@ -1415,43 +1430,105 @@ def _armar_fila(
     return fila, incidencia_dict
 
 
-def resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml: str | None, item_id: str, vinculacion_fn=None) -> dict:
+def _norm_txt(t) -> str:
+    import unicodedata
+    return re.sub(r"[^a-z0-9]+", " ", unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode().lower()).strip()
+
+
+def _variantes_por_atributos(variantes: list[dict], d: dict | None) -> list[dict]:
+    """De las variantes de Ecom (con `atributos`), las que coinciden con ESTA publicación de ML: todas las opciones de la variante (ej. «Negro», «Blanco») aparecen en el título o en los
+    atributos de la publicación. Si coincide más de una o ninguna, la persona decide: no se elige al azar."""
+    if not d:
+        return []
+    texto = " " + _norm_txt(d.get("title")) + " " + " ".join(_norm_txt(a.get("value_name")) for a in (d.get("attributes") or []) if isinstance(a, dict)) + " "
+    out = []
+    for v in variantes:
+        opciones = [_norm_txt(a.get("options")) for a in (v.get("atributos") or []) if a.get("options")]
+        if opciones and all((" " + o + " ") in texto for o in opciones):
+            out.append(v)
+    return out
+
+
+def resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml: str | None, item_id: str, vinculacion_fn=None, variantes_vivo_fn=None, item: dict | None = None) -> dict:
     """Costo (USD, por venta) e IVA de una publicación. Primero el SKU que trae el MLA en ML. Si ese SKU no tiene costo (típico de un SKU MADRE: en Ecom el costo está en sus
-    variantes) o el MLA no trae SKU, se resuelve así:
-      1. **Vinculación de Ecom** (`vinculacion_fn(item_id)` → lo que Ecom tiene vinculado a ese MLA): si es UNA variante, su SKU y su costo (× la cantidad que trae la vinculación).
-      2. **Variantes del SKU madre**: si todas tienen el mismo costo, ese; si difieren, no se elige una al azar y se devuelven para mostrarlas.
-    Devuelve {sku_calculo, costo_usd, iva_factor, via, variantes_madre, incidencia, motivo}."""
-    out = {"sku_calculo": sku_ml, "costo_usd": None, "iva_factor": None, "via": None, "variantes_madre": [], "incidencia": None, "motivo": None}
+    variantes) o el MLA no trae SKU, se resuelve así (cada paso queda en `pasos` para que la pantalla muestre por qué):
+      1. **Vinculación de Ecom** (`vinculacion_fn(item_id)`): si el MLA está vinculado a UNA variante, su SKU y su costo (× la cantidad que trae la vinculación).
+      2. **Variantes del SKU madre**: las de la foto de costos guardada o, si esa foto todavía no las trae, las leídas de Ecom EN VIVO (`variantes_vivo_fn(sku)`).
+         Si todas cuestan lo mismo, ese costo. Si cuestan distinto, la que coincide con el color / atributos de la publicación (título y atributos de ML); si no hay una sola, no se elige al azar.
+    Devuelve {sku_calculo, skus_pm, costo_usd, iva_factor, via, variantes_madre, incidencia, motivo, pasos}."""
+    out = {"sku_calculo": sku_ml, "skus_pm": [], "costo_usd": None, "iva_factor": None, "via": None, "variantes_madre": [], "incidencia": None, "motivo": None, "pasos": []}
+    pasos = out["pasos"]
     if sku_ml:
         costo = costo_provider.obtener(sku_ml)
         iva = iva_provider.factor(sku_ml)
         if costo is not None:
             out.update(costo_usd=costo, iva_factor=iva, via="sku_ml", incidencia=None if iva is not None else "SIN_IVA")
             return out
+        pasos.append(f"El SKU de la publicación en ML ({sku_ml}) no tiene costo propio en el catálogo de Ecom.")
+    else:
+        pasos.append("La publicación no tiene SKU cargado en ML.")
     # 1) Vinculación de Ecom
     pack = None
-    if vinculacion_fn is not None:
+    if vinculacion_fn is None:
+        pasos.append("Vinculación de Ecom: no se consultó.")
+    else:
         try:
             pack = vinculacion_fn(item_id)
-        except Exception:  # noqa: BLE001  (sin vinculación se sigue con las variantes del madre)
-            pack = None
-    variantes = list(getattr(pack, "variantes", None) or [])
-    if len(variantes) == 1 and variantes[0].get("sku"):
-        v = variantes[0]
+            if pack is None:
+                pasos.append("Vinculación de Ecom: la publicación no está vinculada a ningún producto de Ecom.")
+        except Exception as e:  # noqa: BLE001
+            pasos.append(f"Vinculación de Ecom: no se pudo consultar ({type(e).__name__}).")
+    variantes_v = list(getattr(pack, "variantes", None) or [])
+    if pack is not None and not variantes_v:
+        padre = ", ".join(sorted(getattr(pack, "item_sku", {}) or {})) or "?"
+        pasos.append(f"Vinculación de Ecom: está vinculada al producto {padre} pero no a una variante puntual.")
+    if len(variantes_v) == 1 and variantes_v[0].get("sku"):
+        v = variantes_v[0]
         costo, iva = costo_provider.obtener(v["sku"]), iva_provider.factor(v["sku"])
         qty = int(v.get("qty") or 1)
         if costo is not None:
-            out.update(sku_calculo=v["sku"], costo_usd=costo * qty, iva_factor=iva, via="vinculacion_ecom", cantidad_vinculada=qty,
+            out.update(sku_calculo=v["sku"], skus_pm=[v["sku"]], costo_usd=costo * qty, iva_factor=iva, via="vinculacion_ecom", cantidad_vinculada=qty,
                        incidencia=None if iva is not None else "SIN_IVA")
             return out
+        pasos.append(f"La variante vinculada ({v['sku']}) no tiene costo cargado en Ecom.")
+    elif len(variantes_v) > 1:
+        pasos.append(f"Vinculación de Ecom: {len(variantes_v)} variantes vinculadas, no se sabe cuál corresponde.")
     # 2) Variantes del SKU madre
-    hijas = costo_provider.variantes_de(sku_ml) if sku_ml and hasattr(costo_provider, "variantes_de") else []
-    out["variantes_madre"] = [{"sku": h, "costo_usd": c} for h, c in hijas]
-    costos = {c for _, c in hijas if c is not None}
-    if len(costos) == 1 and all(c is not None for _, c in hijas):
-        h0 = hijas[0][0]
-        iva = iva_provider.factor(h0) or iva_provider.factor(sku_ml)
-        out.update(sku_calculo=sku_ml, costo_usd=next(iter(costos)), iva_factor=iva, via="variantes_iguales", incidencia=None if iva is not None else "SIN_IVA")
+    variantes: list[dict] = []
+    if sku_ml:
+        hijas = costo_provider.variantes_de(sku_ml) if hasattr(costo_provider, "variantes_de") else []
+        variantes = [{"sku": h, "costo_usd": c, "atributos": []} for h, c in hijas]
+        if variantes:
+            pasos.append(f"Variantes del SKU madre en el catálogo guardado de Ecom: {len(variantes)}.")
+        elif variantes_vivo_fn is not None:
+            try:
+                variantes = list(variantes_vivo_fn(sku_ml) or [])
+                pasos.append(f"Variantes del SKU madre leídas de Ecom en vivo: {len(variantes)}." if variantes else "El SKU de la publicación no tiene variantes con SKU propio en Ecom (¿no existe ese SKU en Ecom?).")
+            except Exception as e:  # noqa: BLE001
+                pasos.append(f"No se pudieron leer las variantes en Ecom ({type(e).__name__}).")
+        else:
+            pasos.append("La foto de costos guardada todavía no trae las variantes de este SKU (se completa con el próximo refresco).")
+    out["variantes_madre"] = [{"sku": v["sku"], "costo_usd": v.get("costo_usd")} for v in variantes]
+    if variantes:
+        out["skus_pm"] = [v["sku"] for v in variantes]
+    con_costo = [v for v in variantes if v.get("costo_usd") is not None]
+    costos = {v["costo_usd"] for v in con_costo}
+    elegida, via = None, None
+    if variantes and len(con_costo) == len(variantes) and len(costos) == 1:
+        elegida, via = variantes[0], "variantes_iguales"
+    else:
+        coinciden = _variantes_por_atributos(variantes, item)
+        if len(coinciden) == 1 and coinciden[0].get("costo_usd") is not None:
+            elegida, via = coinciden[0], "variante_por_atributos"
+            pasos.append(f"Entre las variantes, la que coincide con el color / atributos de la publicación es {elegida['sku']}.")
+        elif variantes:
+            pasos.append("No se pudo elegir una variante: " + ("varias coinciden con la publicación." if len(coinciden) > 1 else "ninguna coincide con el color / atributos de la publicación."))
+    if elegida is not None:
+        iva = iva_provider.factor(elegida["sku"]) or (iva_provider.factor(sku_ml) if sku_ml else None)
+        out.update(sku_calculo=elegida["sku"] if via == "variante_por_atributos" else sku_ml, skus_pm=[elegida["sku"]] + [v["sku"] for v in variantes if v is not elegida],
+                   costo_usd=elegida["costo_usd"], iva_factor=iva, via=via, incidencia=None if iva is not None else "SIN_IVA")
+        if via == "variante_por_atributos":
+            out["skus_pm"] = [elegida["sku"]]
         return out
     if not sku_ml:
         out.update(incidencia="SIN_SKU")
@@ -1461,12 +1538,12 @@ def resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml: str | N
             out["motivo"] = costo_provider._catalogo_fn().motivo_sin_costo(sku_ml)
         except Exception:  # noqa: BLE001
             out["motivo"] = None
-        if len(costos) > 1:
+        if len({v["costo_usd"] for v in con_costo}) > 1:
             out["motivo"] = "es un SKU madre y sus variantes cuestan distinto: no se elige una al azar"
     return out
 
 
-def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider, item_id: str, cuenta: str, tc: Decimal, vinculacion_fn=None) -> dict:
+def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider, item_id: str, cuenta: str, tc: Decimal, vinculacion_fn=None, variantes_vivo_fn=None) -> dict:
     """Trae UN ítem puntual y resuelve costo (Ecom) / IVA -- para el
     buscador de "MLA sin oferta activa" (armar la fila a mano en vez de
     sacarla del escaneo de campañas). Misma resolución de incidencia que
@@ -1477,12 +1554,12 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
     if not d.get("id"):
         return {"encontrado": False}
     sku_ml = _sku_de_item(d)  # ver el comentario en `_armar_fila` -- mismo fallback
-    r = resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml, item_id, vinculacion_fn)
+    r = resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml, item_id, vinculacion_fn, variantes_vivo_fn, d)
     costo_usd, iva_factor, incidencia = r["costo_usd"], r["iva_factor"], r["incidencia"]
     return {
         "encontrado": True, "item_id": d["id"], "cuenta": cuenta, "sku": sku_ml, "titulo": d.get("title", ""),
         "permalink": d.get("permalink"), "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
-        "sku_calculo": r["sku_calculo"], "via_sku": r["via"], "variantes_madre": r["variantes_madre"], "motivo_sin_costo": r["motivo"],
+        "sku_calculo": r["sku_calculo"], "skus_pm": r["skus_pm"], "pasos_costo": r["pasos"], "via_sku": r["via"], "variantes_madre": r["variantes_madre"], "motivo_sin_costo": r["motivo"],
         "cantidad_vinculada": r.get("cantidad_vinculada"),
         "costo_sin_iva": costo_usd, "iva_factor": iva_factor, "tc": tc, "incidencia": incidencia,
         "cuotas_ofrecidas": _cuotas_sin_interes(d),
@@ -1943,6 +2020,62 @@ def iniciar_job_alertas(job_id: str, cuenta: str, item_ids_con_oferta: list, dia
         _jobs[job_id]["log"].append(f"Listo: {len(candidatos)} candidatos encontrados.")
     except Exception as e:
         _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["log"].append(f"Error: {e}")
+
+
+def _num_o_none(v):
+    try:
+        return None if v is None else float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def detectar_relampago(ml: MLOfertasClient, cuenta: str, progreso_cb: Callable[[int, int, str], None] | None = None) -> dict:
+    """MLA de la cuenta que ML ofrece para OFERTAS RELÁMPAGO (`LIGHTNING`): por cada campaña relámpago de la cuenta (pendiente o en curso) trae sus candidatos (`status=candidate`) con lo que ML
+    informa de cada uno (precio mínimo / máximo / sugerido de la oferta, stock pedido) más título, SKU, precio y stock de la publicación. Solo lectura: no anota nada en ML."""
+    campanas = [c for c in ml.promociones_seller(cuenta) if c.get("type") == "LIGHTNING" and c.get("id") and c.get("status") in ("pending", "started", "candidate")]
+    filas: list[dict] = []
+    resumen: list[dict] = []
+    for k, c in enumerate(campanas, start=1):
+        if progreso_cb:
+            progreso_cb(k - 1, len(campanas) or 1, f"Mirando «{c.get('name') or c['id']}»")
+        cands = ml.items_candidatos_promocion(c["id"], "LIGHTNING", cuenta)
+        resumen.append({"id": c["id"], "nombre": c.get("name") or c["id"], "status": c.get("status"), "desde": c.get("start_date") or c.get("date_from"),
+                        "hasta": c.get("finish_date") or c.get("date_to") or c.get("end_date"), "candidatos": len(cands)})
+        ids = [x.get("id") for x in cands if x.get("id")]
+        detalles = {d.get("id"): d for d in ml.detalle_items_ofertas(ids, cuenta)} if ids else {}
+        for x in cands:
+            d = detalles.get(x.get("id")) or {}
+            original = _num_o_none(x.get("original_price")) or _num_o_none(d.get("price"))
+            sugerido = _num_o_none(x.get("suggested_discounted_price"))
+            maximo, minimo = _num_o_none(x.get("max_discounted_price")), _num_o_none(x.get("min_discounted_price"))
+            ref = sugerido or maximo
+            stock_pedido = x.get("stock") if isinstance(x.get("stock"), dict) else {}
+            filas.append({
+                "campana_id": c["id"], "campana": c.get("name") or c["id"], "item_id": x.get("id"), "sku": _sku_de_item(d) if d else None, "titulo": d.get("title", ""), "permalink": d.get("permalink"),
+                "precio_actual": _num_o_none(d.get("price")), "precio_original": original, "precio_sugerido": sugerido, "precio_max": maximo, "precio_min": minimo,
+                "desc_sugerido_pct": round((1 - ref / original) * 100, 1) if ref and original else None,
+                "stock_pedido_min": _num_o_none(stock_pedido.get("min")), "stock_pedido_max": _num_o_none(stock_pedido.get("max")), "stock_disponible": d.get("available_quantity"),
+                "estado_publicacion": d.get("status"),
+            })
+    if progreso_cb:
+        progreso_cb(len(campanas), len(campanas) or 1, "Listo")
+    # sin stock o pausadas igual se listan (con su estado) para que se vea por qué no sirven
+    filas.sort(key=lambda f: (f["campana"], -(f["desc_sugerido_pct"] or 0), f["item_id"] or ""))
+    return {"cuenta": cuenta, "campanas": resumen, "filas": filas, "sin_campanas": not campanas}
+
+
+def iniciar_job_relampago(job_id: str, cuenta: str, ml: MLOfertasClient | None = None) -> None:
+    _jobs[job_id] = {"status": "running", "log": [f"Buscando MLA disponibles para ofertas relámpago ({cuenta})..."], "result": None, "progress": None}
+
+    def _prog(a, t, label):
+        _jobs[job_id]["progress"] = {"current": a, "total": t, "label": f"{label} ({cuenta})"}
+    try:
+        r = detectar_relampago(ml or MLOfertasClient(), cuenta, _prog)
+        _jobs[job_id].update(status="done", result=r, progress=None)
+        _jobs[job_id]["log"].append("No hay campañas relámpago pendientes o en curso en esta cuenta." if r["sin_campanas"] else f"Listo: {len(r['filas'])} MLA disponibles en {len(r['campanas'])} campaña(s) relámpago.")
+    except Exception as e:  # noqa: BLE001
+        _jobs[job_id].update(status="error", progress=None)
         _jobs[job_id]["log"].append(f"Error: {e}")
 
 
