@@ -55,10 +55,15 @@ class CatalogoCostos:
     ambiguos: dict[str, list[Decimal]] = field(default_factory=dict)  # SKU con variantes de costo distinto
     sin_costo: set[str] = field(default_factory=set)  # SKU en Ecom sin costo cargado (0 / vacío)
     iva: dict[str, Decimal] = field(default_factory=dict)  # SKU → factor de IVA (1,21 / 1,105)
+    hijas: dict[str, list[str]] = field(default_factory=dict)  # SKU madre → SKU de sus variantes con SKU propio
     obtenido_en: float = 0.0
 
     def costo(self, sku: str) -> Decimal | None:
         return self.costos.get((sku or "").strip())
+
+    def variantes_de(self, sku: str) -> list[tuple[str, Decimal | None]]:
+        """[(sku_variante, costo USD o None si no tiene)] de un SKU madre; vacío si no tiene variantes con SKU propio (o la foto es de antes de guardarlas)."""
+        return [(h, self.costos.get(h)) for h in self.hijas.get((sku or "").strip(), [])]
 
     def factor_iva(self, sku: str) -> Decimal | None:
         return self.iva.get((sku or "").strip())
@@ -121,6 +126,8 @@ def armar_catalogo(productos: list[dict]) -> CatalogoCostos:
                 propias.append((vsku, _dec(v.get("cost"))))
             else:
                 sin_sku_propio.append(_dec(v.get("cost")))
+        if sku and propias:
+            cat.hijas[sku] = [vsku for vsku, _ in propias]
         for vsku, costo in propias:
             if costo > 0:
                 cat.costos[vsku] = costo
@@ -209,13 +216,14 @@ def catalogo_a_json(cat: CatalogoCostos) -> str:
     return json.dumps({
         "costos": {k: str(v) for k, v in cat.costos.items()}, "iva": {k: str(v) for k, v in cat.iva.items()},
         "ambiguos": {k: [str(x) for x in v] for k, v in cat.ambiguos.items()}, "sin_costo": sorted(cat.sin_costo),
+        "hijas": cat.hijas,
     }, separators=(",", ":"))
 
 
 def _armar(d: dict, obtenido_en: float) -> CatalogoCostos:
     return CatalogoCostos(
         costos={k: Decimal(v) for k, v in d["costos"].items()}, iva={k: Decimal(v) for k, v in d["iva"].items()},
-        ambiguos={k: [Decimal(x) for x in v] for k, v in d["ambiguos"].items()}, sin_costo=set(d["sin_costo"]), obtenido_en=obtenido_en)
+        ambiguos={k: [Decimal(x) for x in v] for k, v in d["ambiguos"].items()}, sin_costo=set(d["sin_costo"]), hijas={k: list(v) for k, v in (d.get("hijas") or {}).items()}, obtenido_en=obtenido_en)
 
 
 def guardar_snapshot(cat: CatalogoCostos, origen: str, duracion_seg: float, db_factory: Callable = _sesion_default) -> None:
@@ -501,6 +509,9 @@ class CostoEcomProvider:
 
     def obtener(self, sku: str) -> Decimal | None:
         return self.obtener_con_origen(sku)[0]
+
+    def variantes_de(self, sku: str) -> list[tuple[str, Decimal | None]]:
+        return self._catalogo_fn().variantes_de(sku)
 
     def obtener_con_origen(self, sku: str) -> tuple[Decimal | None, str | None]:
         costo = self._catalogo_fn().costo(sku)

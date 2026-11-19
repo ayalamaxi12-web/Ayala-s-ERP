@@ -1415,7 +1415,58 @@ def _armar_fila(
     return fila, incidencia_dict
 
 
-def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider, item_id: str, cuenta: str, tc: Decimal) -> dict:
+def resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml: str | None, item_id: str, vinculacion_fn=None) -> dict:
+    """Costo (USD, por venta) e IVA de una publicación. Primero el SKU que trae el MLA en ML. Si ese SKU no tiene costo (típico de un SKU MADRE: en Ecom el costo está en sus
+    variantes) o el MLA no trae SKU, se resuelve así:
+      1. **Vinculación de Ecom** (`vinculacion_fn(item_id)` → lo que Ecom tiene vinculado a ese MLA): si es UNA variante, su SKU y su costo (× la cantidad que trae la vinculación).
+      2. **Variantes del SKU madre**: si todas tienen el mismo costo, ese; si difieren, no se elige una al azar y se devuelven para mostrarlas.
+    Devuelve {sku_calculo, costo_usd, iva_factor, via, variantes_madre, incidencia, motivo}."""
+    out = {"sku_calculo": sku_ml, "costo_usd": None, "iva_factor": None, "via": None, "variantes_madre": [], "incidencia": None, "motivo": None}
+    if sku_ml:
+        costo = costo_provider.obtener(sku_ml)
+        iva = iva_provider.factor(sku_ml)
+        if costo is not None:
+            out.update(costo_usd=costo, iva_factor=iva, via="sku_ml", incidencia=None if iva is not None else "SIN_IVA")
+            return out
+    # 1) Vinculación de Ecom
+    pack = None
+    if vinculacion_fn is not None:
+        try:
+            pack = vinculacion_fn(item_id)
+        except Exception:  # noqa: BLE001  (sin vinculación se sigue con las variantes del madre)
+            pack = None
+    variantes = list(getattr(pack, "variantes", None) or [])
+    if len(variantes) == 1 and variantes[0].get("sku"):
+        v = variantes[0]
+        costo, iva = costo_provider.obtener(v["sku"]), iva_provider.factor(v["sku"])
+        qty = int(v.get("qty") or 1)
+        if costo is not None:
+            out.update(sku_calculo=v["sku"], costo_usd=costo * qty, iva_factor=iva, via="vinculacion_ecom", cantidad_vinculada=qty,
+                       incidencia=None if iva is not None else "SIN_IVA")
+            return out
+    # 2) Variantes del SKU madre
+    hijas = costo_provider.variantes_de(sku_ml) if sku_ml and hasattr(costo_provider, "variantes_de") else []
+    out["variantes_madre"] = [{"sku": h, "costo_usd": c} for h, c in hijas]
+    costos = {c for _, c in hijas if c is not None}
+    if len(costos) == 1 and all(c is not None for _, c in hijas):
+        h0 = hijas[0][0]
+        iva = iva_provider.factor(h0) or iva_provider.factor(sku_ml)
+        out.update(sku_calculo=sku_ml, costo_usd=next(iter(costos)), iva_factor=iva, via="variantes_iguales", incidencia=None if iva is not None else "SIN_IVA")
+        return out
+    if not sku_ml:
+        out.update(incidencia="SIN_SKU")
+    else:
+        out.update(incidencia="SIN_COSTO")
+        try:
+            out["motivo"] = costo_provider._catalogo_fn().motivo_sin_costo(sku_ml)
+        except Exception:  # noqa: BLE001
+            out["motivo"] = None
+        if len(costos) > 1:
+            out["motivo"] = "es un SKU madre y sus variantes cuestan distinto: no se elige una al azar"
+    return out
+
+
+def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider, item_id: str, cuenta: str, tc: Decimal, vinculacion_fn=None) -> dict:
     """Trae UN ítem puntual y resuelve costo (Ecom) / IVA -- para el
     buscador de "MLA sin oferta activa" (armar la fila a mano en vez de
     sacarla del escaneo de campañas). Misma resolución de incidencia que
@@ -1426,20 +1477,13 @@ def resolver_item_para_gestion(ml: MLOfertasClient, costo_provider, iva_provider
     if not d.get("id"):
         return {"encontrado": False}
     sku_ml = _sku_de_item(d)  # ver el comentario en `_armar_fila` -- mismo fallback
-    incidencia = None
-    costo_usd = iva_factor = None
-    if not sku_ml:
-        incidencia = "SIN_SKU"
-    else:
-        costo_usd = costo_provider.obtener(sku_ml)
-        iva_factor = iva_provider.factor(sku_ml)
-        if costo_usd is None:
-            incidencia = "SIN_COSTO"
-        elif iva_factor is None:
-            incidencia = "SIN_IVA"
+    r = resolver_costo_e_iva_con_madre(costo_provider, iva_provider, sku_ml, item_id, vinculacion_fn)
+    costo_usd, iva_factor, incidencia = r["costo_usd"], r["iva_factor"], r["incidencia"]
     return {
         "encontrado": True, "item_id": d["id"], "cuenta": cuenta, "sku": sku_ml, "titulo": d.get("title", ""),
         "permalink": d.get("permalink"), "domain_id": d.get("domain_id"), "precio_actual": d.get("price"),
+        "sku_calculo": r["sku_calculo"], "via_sku": r["via"], "variantes_madre": r["variantes_madre"], "motivo_sin_costo": r["motivo"],
+        "cantidad_vinculada": r.get("cantidad_vinculada"),
         "costo_sin_iva": costo_usd, "iva_factor": iva_factor, "tc": tc, "incidencia": incidencia,
         "cuotas_ofrecidas": _cuotas_sin_interes(d),
         "costo_envio_real": costo_envio_real_item(ml, item_id, cuenta),

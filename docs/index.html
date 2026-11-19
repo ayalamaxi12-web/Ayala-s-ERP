@@ -6428,6 +6428,15 @@ function ofgMargenHtml(f,m,costoARS,tc){
     <p class="ofg-fuente">Costo del producto: USD ${f._costoUnitSinIva.toFixed(2)} × TC ${fmtN(tc)} = ${ofgPesos(costoARS)} (catálogo de Ecom, SKU ${acEsc(f.sku||'sin SKU')}).</p></details>`;
 }
 function ofgSinMargen(f,motivo){return `<div class="ofg-nota ofg-nota-info">${ico('alert',16)}<span>${motivo}</span></div>`;}
+// PM del SKU de la publicación: si el SKU del MLA es un SKU madre, se busca también el SKU con el que se calculó (la variante vinculada en Ecom).
+function ofmPmRec(f){const a=f.sku_calculo?S.pmData[normSku(f.sku_calculo)]:null;return a||(f.sku?S.pmData[normSku(f.sku)]:null)||null;}
+// Cómo se resolvió el costo cuando el SKU del MLA no lo tenía (SKU madre): vinculación de Ecom o variantes del madre. Se muestra siempre para que se vea de dónde sale.
+function ofmNotaSkuMadre(f){
+  if(f.via_sku==='vinculacion_ecom')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: el costo sale de la <b>variante vinculada en Ecom</b> (${acEsc(f.sku_calculo)})${f.cantidad_vinculada>1?`, × ${f.cantidad_vinculada} unidades por venta`:''}.`);
+  if(f.via_sku==='variantes_iguales')return ofgNota('ok',`SKU madre «${acEsc(f.sku||'—')}»: todas sus variantes cuestan lo mismo, se usa ese costo.`);
+  if(f.incidencia==='SIN_COSTO'&&(f.variantes_madre||[]).length)return ofgNota('aviso',`SKU madre «${acEsc(f.sku||'—')}»: ${acEsc(f.motivo_sin_costo||'sus variantes cuestan distinto')}. Variantes: ${f.variantes_madre.map(v=>acEsc(v.sku)+(v.costo_usd!=null?' (USD '+v.costo_usd+')':' (sin costo)')).join(', ')}. Vinculá esta publicación a una variante en Ecom para que se calcule.`);
+  return '';
+}
 function ofmRenderGestionarPanel(itemId,promociones){
   const cont=qs('ofm-gestionar-'+itemId);if(!cont)return;
   const f=ofmFilaPorId[itemId];
@@ -6444,7 +6453,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
   const precioActual=descuentoActivo?descuentoActivo.precio:(f.precio_oferta||f.precio_normal||0);
   const tachadoActual=descuentoActivo?descuentoActivo.precio_tachado:(f.precio_normal||precioActual);
   const campanaActiva=promociones.find(p=>p.promotion_type==='SELLER_CAMPAIGN'&&/oferta tradicional/i.test(p.nombre||''));
-  const pmRec=f.sku?S.pmData[normSku(f.sku)]:null;
+  const pmRec=ofmPmRec(f);
   const pmDisponible=pmRec&&pmRec.ml>0;
   const precioPmActual=pmDisponible?pmRec.ml:(campanaActiva?campanaActiva.precio:(f.precio_oferta||f.precio_normal||0));
   // El campo «Precio final» arranca con el precio del PM ya ajustado (primero cuotas, después envío real, igual que el backend); sigue editable.
@@ -6456,6 +6465,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
   precioPmAjustado=Math.round(precioPmAjustado+costoEnvioAplicable);
 
   const notas=[];
+  const notaMadre=ofmNotaSkuMadre(f);if(notaMadre)notas.push(notaMadre);
   notas.push(pmDisponible?ofgNota('ok',`Precio del PM (${acEsc(pmRec.pmName||pmRec.pm)}): <b>${ofgPesos(pmRec.ml)}</b>. El campo puede mostrar otro número si suma cuotas o envío; podés editarlo.`)
     :ofgNota('aviso',`Sin dato del PM para el SKU «${acEsc(f.sku||'sin SKU')}»: conectá su Sheet en Configuración o cargalo a mano.`));
   if(f.cuotas_ofrecidas)notas.push(cuotasRecargoPct!=null?ofgNota('aviso',`En <b>${f.cuotas_ofrecidas} cuotas sin interés</b>: ML cobra ${cuotasRecargoPct} %, ya sumado al precio.`)
@@ -6473,7 +6483,7 @@ function ofmRenderGestionarPanel(itemId,promociones){
     .map(([t,v])=>`<span class="ofg-dato"><span>${t}</span><b>${ofgPesos(v||0)}</b></span>`).join('');
 
   cont.innerHTML=`<div class="ofg">
-    <div class="ofg-cab"><div><h3 class="ofg-tit">${acEsc(f.titulo||itemId)}</h3><div class="ofg-sub">${acEsc(itemId)} · SKU ${acEsc(f.sku||'—')} · ${etiquetaCuenta(f.cuenta)}</div></div><div class="ofg-datos">${chips}${ofgCuotasSelHtml(f,itemId)}</div></div>
+    <div class="ofg-cab"><div><h3 class="ofg-tit">${acEsc(f.titulo||itemId)}</h3><div class="ofg-sub"><a href="${acEsc(f.permalink||('https://articulo.mercadolibre.com.ar/'+itemId))}" target="_blank" rel="noopener" title="Abrir la publicación en Mercado Libre">${acEsc(itemId)} ↗</a> · SKU ${acEsc(f.sku||'—')}${f.sku_calculo&&f.sku_calculo!==f.sku?` → ${acEsc(f.sku_calculo)}`:''} · ${etiquetaCuenta(f.cuenta)}</div></div><div class="ofg-datos">${chips}${ofgCuotasSelHtml(f,itemId)}</div></div>
     <div class="ofg-tabs" role="tablist" aria-label="Qué querés hacer con esta publicación" onkeydown="ofgTabKey(event,'${itemId}')">${tabs}</div>
     ${panel('trad',`<p class="ofg-lead">Mete la publicación en tu campaña mensual con el precio del PM como precio final; el tachado se calcula con el descuento que pongas.</p>
       <div class="ofg-notas">${notas.join('')}</div>
@@ -6568,7 +6578,7 @@ function ofmSimularActivar(itemId){
     else if(descPct>=80)avisos.push(`Descuento de ${descPct.toFixed(1)} %: ML exige menos de 80 %; así como está probablemente lo rechace.`);
   }
   const av=avisos.map(t=>ofgNota('aviso',t)).join('');
-  if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}).`);return;}
+  if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}${f.motivo_sin_costo?' · '+acEsc(f.motivo_sin_costo):''}).`);return;}
   const tc=ofmTc();if(!tc){out.innerHTML=av+ofgSinMargen(f,'Sin TC del BNA (ni guardado): no se puede simular el margen.');return;}
   const costoARS=f._costoUnitSinIva*tc;
   out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,ofgCuotas(itemId)),costoARS,tc);
@@ -6623,7 +6633,7 @@ function ofmSimularCampana(itemId){
     const descPct=(tachado-precio)/tachado*100;
     if(descPct<10||descPct>=80)av=ofgNota('aviso',`Descuento de ${descPct.toFixed(1)} %: las campañas propias exigen entre 10 % y 80 %.`);
   }
-  if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}).`);return;}
+  if(f._costoUnitSinIva==null){out.innerHTML=av+ofgSinMargen(f,`Sin costo/IVA: no se puede simular el margen (SKU: ${acEsc(f.sku||'sin SKU')}${f.motivo_sin_costo?' · '+acEsc(f.motivo_sin_costo):''}).`);return;}
   const tc=ofmTc();if(!tc){out.innerHTML=av+ofgSinMargen(f,'Sin TC del BNA (ni guardado): no se puede simular el margen.');return;}
   const costoARS=f._costoUnitSinIva*tc;
   out.innerHTML=av+ofgMargenHtml(f,margenParaFila(f,precio,costoARS,f.domain_id,ofgCuotas(itemId)),costoARS,tc);
@@ -6726,6 +6736,7 @@ async function ofmBuscarMLA(){
       precio_normal:d.precio_actual, precio_oferta:null, incidencia:d.incidencia,
       _ivaFactor:d.iva_factor, _costoUnitSinIva:d.costo_sin_iva, cuotas_ofrecidas:d.cuotas_ofrecidas,
       costo_envio_real:d.costo_envio_real,
+      sku_calculo:d.sku_calculo, via_sku:d.via_sku, variantes_madre:d.variantes_madre||[], motivo_sin_costo:d.motivo_sin_costo, cantidad_vinculada:d.cantidad_vinculada,
     };
     if(d.tc)OFM.tc=OFM.tc||d.tc;
     ofmItemAbierto=d.item_id;
