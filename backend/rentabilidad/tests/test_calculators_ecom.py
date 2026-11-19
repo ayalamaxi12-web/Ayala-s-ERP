@@ -106,3 +106,19 @@ def test_av_es_rentabilidad_sobre_precio_sin_iva_no_sobre_neto_de_cargos(db_sess
     r = calc.calcular(linea)
     assert r.pct_rentabilidad == r.rentabilidad / Decimal("100000")
     assert r.pct_rentabilidad != 1 - (r.costo_total / r.neto)  # la fórmula vieja daba otro número
+
+
+def test_desde_el_18_11_comision_y_envio_entran_sin_iva_y_antes_como_siempre(db_session):
+    from datetime import date
+    from rentabilidad.calculators import LineaEcomInput, RentabilidadEcomCalculator
+    from .conftest import d
+    base = dict(numero_orden="1", costo_sin_iva=d("10"), comision_venta=d("1210"), costo_envio=d("605"), precio_sin_iva=d("10000"), precio_final=d("12100"), tc=d("1000"),
+                costo_operacion=d("0"))
+    calc = RentabilidadEcomCalculator(db_session)
+    viejo = calc.calcular(LineaEcomInput(**base, fecha=date(2026, 11, 17)))
+    sin_fecha = calc.calcular(LineaEcomInput(**base))
+    nuevo = calc.calcular(LineaEcomInput(**base, fecha=date(2026, 11, 18)))
+    assert viejo.neto == sin_fecha.neto and not viejo.cargos_sin_iva and viejo.comision_neta == d("1210")
+    # Z = Q − M − O − S − T: la diferencia es el IVA de la comisión y del envío (1815 − 1500 = 315)
+    assert nuevo.cargos_sin_iva and nuevo.comision_neta == d("1210") / d("1.21") and nuevo.envio_neto == d("605") / d("1.21")
+    assert abs((nuevo.neto - viejo.neto) - d("315")) < d("0.000001") and abs((nuevo.rentabilidad - viejo.rentabilidad) - d("315")) < d("0.000001")

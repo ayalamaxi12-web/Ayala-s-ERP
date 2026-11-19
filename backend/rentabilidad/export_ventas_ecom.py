@@ -17,11 +17,16 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from .calculators import IVA_CARGOS, cargos_sin_iva_desde
 from .models import ParametroTasa, VentaEcom
 
 # (título de la columna en el reporte, campo de venta_ecom | función)
 _TOTAL_IMPUESTOS = "__total_impuestos"
 _COSTO_OPERACION = "__costo_operacion"
+_COMISION_NETA = "__comision_neta"
+_ENVIO_NETO = "__envio_neto"
+_IVA_CARGOS = "__iva_cargos"
+_CRITERIO = "__criterio_cargos"
 COLUMNAS: list[tuple[str, str]] = [
     ("Numero Orden", "numero_orden"),
     ("Sku's Vendidos", "skus_vendidos"),
@@ -72,6 +77,12 @@ COLUMNAS: list[tuple[str, str]] = [
     ("Precio De Venta", "precio_de_venta_roto"),
     ("Rentabilidad Real", "rentabilidad_real"),
     ("% Rentabilidad", "pct_rentabilidad"),
+    # Cuenta desglosada (18/11/2026, Maxx): al FINAL para no mover las columnas de siempre. Cada cargo de la plataforma con IVA (tal como lo informa ML / MP / Frávega) y lo que
+    # realmente entra en la cuenta. Rentabilidad = Precio SIN IVA − Costo Total − Comision SIN IVA − Costo Envio SIN IVA − imp ch − IIBB − Costo por Operacion Ecom.
+    ("Comision Venta SIN IVA", _COMISION_NETA),
+    ("Costo Envio SIN IVA", _ENVIO_NETO),
+    ("IVA de cargos recuperable", _IVA_CARGOS),
+    ("Criterio de cargos", _CRITERIO),
 ]
 
 # Columnas que la corrida no completa (salen vacías) y por qué.
@@ -97,6 +108,21 @@ def _valor(v):
     return v
 
 
+def _cargos(v: VentaEcom, campo: str):
+    """Comisión y envío tal como entran en la cuenta: sin IVA (÷ 1,21) en las ventas desde el 18/11/2026; antes, como se calculaban (con el monto que trae Ecom)."""
+    if v.neto is None:
+        return None
+    sin_iva = cargos_sin_iva_desde(v.fecha_creacion_venta)
+    com, env = v.comision_venta or Decimal(0), v.costo_envio or Decimal(0)
+    if campo == _CRITERIO:
+        return "sin IVA (÷ 1,21)" if sin_iva else "como trae Ecom (anterior al 18/11/2026)"
+    if campo == _COMISION_NETA:
+        return (com / IVA_CARGOS if sin_iva else com).quantize(Decimal("0.01"))
+    if campo == _ENVIO_NETO:
+        return (env / IVA_CARGOS if sin_iva else env).quantize(Decimal("0.01"))
+    return ((com + env) - (com + env) / IVA_CARGOS).quantize(Decimal("0.01")) if sin_iva else Decimal("0.00")
+
+
 def _fila(v: VentaEcom, costo_operacion: Decimal | None) -> dict:
     fila = {}
     for titulo, campo in COLUMNAS:
@@ -104,6 +130,8 @@ def _fila(v: VentaEcom, costo_operacion: Decimal | None) -> dict:
             # R = U − Q en el origen (IVA contenido en el precio)
             valor = (v.precio_final - v.precio_sin_iva) if v.total_impuestos is None and v.precio_final is not None \
                 and v.precio_sin_iva is not None else v.total_impuestos
+        elif campo in (_COMISION_NETA, _ENVIO_NETO, _IVA_CARGOS, _CRITERIO):
+            valor = _cargos(v, campo)
         elif campo == _COSTO_OPERACION:
             # Monto fijo por orden (`costo_operacion_ecom`) que ya está
             # descontado en el Neto (Z); vacío si la orden no se calculó.

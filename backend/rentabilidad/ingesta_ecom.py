@@ -151,6 +151,7 @@ class FilaEcom:
             precio_sin_iva=self.precio_sin_iva,
             precio_final=self.precio_final,
             tc=self.tc,
+            fecha=self.fecha_creacion,
         )
 
 
