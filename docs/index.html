@@ -1066,6 +1066,9 @@ body[data-nuevo] .section-hdr.full-titulo{flex-wrap:nowrap;align-items:center;ga
 .full-pie-arriba{margin:0 0 12px}
 /* Las tablas anchas de Full ML scrollean DENTRO de su caja (alto de la ventana): la barra de desplazamiento lateral y el encabezado quedan siempre a la vista. */
 body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.table-wrap{max-height:calc(100vh - 9rem);overflow:auto}
+/* Precios y ofertas ML: la tabla scrollea por dentro y el encabezado queda fijo, así al bajar se sigue viendo qué número es cada columna */
+body[data-nuevo] #ofm-table-wrap>.table-wrap{max-height:calc(100vh - 9rem);overflow:auto}
+body[data-nuevo] #ofm-table-wrap>.table-wrap thead th{position:sticky;top:0;z-index:2}
 body[data-nuevo] #page-full-ml :is(#full-conciliar-wrap,#full-reposicion-wrap)>.table-wrap thead th{position:sticky;top:0;z-index:2}
 .fr-barra{flex-wrap:wrap;gap:8px}
 .fr-barra #full-repo-pdf-status{order:10;flex:1 1 100%;font-size:var(--fs-tabla);color:var(--texto-suave)}
@@ -2227,6 +2230,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div id="ofm-chips" class="ofm-chips" role="group" aria-label="Filtros activos" style="display:none"></div>
 
   <div id="ofm-table-wrap" style="display:none">
+    <p id="ofm-envio-ref" class="ofx-nota" role="status"></p>
     <div class="table-wrap"><table id="ofm-table" class="ofm-tabla"><thead><tr><th scope="col">Oferta</th><th scope="col">MLA</th><th scope="col">SKU</th><th scope="col">Campaña</th><th scope="col" class="ofm-num">Precio</th><th scope="col" class="ofm-num" title="Precio base del PM si es cuota simple, o + el % real que cobra ML por esa cuota, comparado contra el precio de oferta">PM esperado</th><th scope="col" class="ofm-num">Margen</th><th scope="col"><span class="ofm-sr">Acciones</span></th></tr></thead><tbody id="ofm-tbody"></tbody></table></div>
     <nav class="ofm-pag" id="ofm-pag" aria-label="Paginación de ofertas"></nav>
   </div>
@@ -6119,6 +6123,7 @@ function ofmOnResult(result){
   });
   qs('ofm-stats-wrap').style.display='grid';qs('ofm-filters').style.display='flex';qs('ofm-table-wrap').style.display='block';
   ofmTab(ofmTabCuenta);
+  ofmEnviosRefCargar();
 }
 function ofmTab(cuenta){
   ofmTabCuenta=cuenta;
@@ -6137,26 +6142,46 @@ function ofmTab(cuenta){
 // otra pantalla, aclarado por Maxx: "la regla es subir lineal lo que me
 // cobra ML en %"). Sin PM o sin % conocido para esa cantidad de cuotas ->
 // null, no se puede chequear esa fila.
+const OFM_ENVIO_REF={};      // item_id → {cost_type,costo_envio_real,fecha_venta} de su última venta (del backend)
+let OFM_ENVIO_ESTADO=null;   // {requeridos,resueltos,sin_venta,barrido_hecho}
+function ofmEnvioTitulo(f){const e=ofmEnvioParaEsperado(f);return e?`PM de Ecom + envío ${fmt$(e.monto)} (${e.origen})`:'PM de Ecom (sin envío: la oferta no llega al umbral de envío gratis)';}
+function ofmEnvioParaEsperado(f){
+  const px=Number(f.precio_oferta||f.precio_normal||0);if(px<(S.shippingThreshold||33000))return null;
+  const g=f.costo_envio_real;
+  if(g&&g.cost_type)return{monto:g.cost_type==='free'?(Number(g.costo_envio_real)||0):0,origen:'real (Gestionar)'};
+  const r=OFM_ENVIO_REF[f.item_id];
+  if(r)return{monto:r.cost_type==='free'?(Number(r.costo_envio_real)||0):0,origen:'real de su última venta'+(r.fecha_venta?' ('+String(r.fecha_venta).slice(0,10)+')':'')};
+  return{monto:S.shippingCost||8500,origen:'estimado: no tiene venta reciente de referencia'};
+}
+async function ofmEnviosRefCargar(){
+  const url=getBackendUrl();if(!url||!ofmResult)return;
+  const umb=S.shippingThreshold||33000,pedir=ofmResult.filas.filter(f=>Number(f.precio_oferta||f.precio_normal||0)>=umb&&!(f.item_id in OFM_ENVIO_REF));
+  const nota=qs('ofm-envio-ref');
+  if(!pedir.length){ofmEnvioRefNota();return;}
+  try{
+    const r=await fetch(url+'/ml-ofertas/costos-envio/lote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:pedir.map(f=>({item_id:f.item_id,cuenta:f.cuenta}))})});
+    if(!r.ok)throw new Error('Error '+r.status);
+    const d=await r.json();Object.assign(OFM_ENVIO_REF,d.costos||{});OFM_ENVIO_ESTADO=d.estado||null;
+    ofmRender();
+  }catch(e){if(nota)nota.textContent='No se pudo traer el envío de referencia ('+e.message+'): se usa el estimado de '+fmt$(S.shippingCost||8500)+'.';}
+  ofmEnvioRefNota();
+}
+function ofmEnvioRefNota(){
+  const el=qs('ofm-envio-ref');if(!el||!ofmResult)return;const umb=S.shippingThreshold||33000;
+  const filas=ofmResult.filas.filter(f=>Number(f.precio_oferta||f.precio_normal||0)>=umb),conRef=filas.filter(f=>f.item_id in OFM_ENVIO_REF).length;
+  el.innerHTML=`Para comparar con el PM de Ecom (que viene sin envío) se suma el envío a las ofertas de ${fmt$(umb)} o más: <b>${conRef}</b> con el real de su última venta y <b>${filas.length-conRef}</b> con el estimado de ${fmt$(S.shippingCost||8500)}`+(OFM_ENVIO_ESTADO&&!OFM_ENVIO_ESTADO.barrido_hecho?' (todavía no corriste «Actualizar costos de envío reales» al final de la página: hasta entonces todas usan el estimado)':'')+'.';
+}
 function ofmPrecioEsperadoPM(f){
   const pm=S.pmData[normSku(f.sku||'')];
   if(!pm||!pm.ml)return null;
   const n=f.cuotas_ofrecidas;
   let p=n?pm.ml*(1+(CUOTAS_PCT_ML[n]||0)/100):pm.ml;
   if(n&&CUOTAS_PCT_ML[n]===undefined)return null;
-  // Corregido 2026-09-09 (Maxx, en vivo, caso real $66.629 en 3 cuotas):
-  // el panel "Gestionar" YA tiene un mecanismo mas preciso para el envio
-  // (costo real por publicacion, ver costo_envio_real/ofmSimularCampana) --
-  // este filtro masivo NO lo tiene disponible (el escaneo en bloque a
-  // proposito no lo trae, es caro por publicacion). Sumar un estimado
-  // plano ($8500, mismo criterio que calcExp() en Verificar ML) generaba
-  // un "PM esperado" mas caro que el numero real que da Gestionar, sin
-  // ser el mismo calculo -- mejor no inventarlo aca: si hay costo real ya
-  // resuelto para esta fila (abriste Gestionar antes) se usa ese, si no,
-  // el envio queda afuera de esta comparacion rapida (el numero preciso
-  // sigue estando en "Gestionar").
-  if(f.costo_envio_real&&f.costo_envio_real.cost_type==='free'){
-    p+=Number(f.costo_envio_real.costo_envio_real)||0;
-  }
+  // El PM de Ecom viene SIN envío: en las ofertas que llegan al umbral de envío gratis (S.shippingThreshold, $33.000) el precio de ML trae el envío adentro, así que se le suma al PM
+  // para saber si de verdad difiere. Monto: el real de la última venta de esa publicación (el de Gestionar si ya lo abriste; si no, el del barrido «Actualizar costos de envío reales»);
+  // si no hay venta de referencia, el estimado de siempre (S.shippingCost, $8.500). Bajo el umbral no se suma nada.
+  const env=ofmEnvioParaEsperado(f);
+  if(env)p+=env.monto;
   return Math.round(p);
 }
 function ofmTipoLabel(f){if(f.tipo_oferta==='PRICE_DISCOUNT')return'Descuento propio';if(f.tipo_oferta==='SELLER_CAMPAIGN'||f.tipo_oferta==='SELLER_COUPON_CAMPAIGN')return'Campaña propia';return'Campaña de ML'+(f.nombre_campana?` (${f.nombre_campana})`:'');}
@@ -6293,7 +6318,7 @@ function ofmRender(){
       <td>${f.sku||f.sku_ml?acEsc(f.sku||f.sku_ml):'<span style="color:var(--red)">sin SKU</span>'}</td>
       <td>${ofmTipoBadge(f)}</td>
       <td class="ofm-num"><span class="ofm-card-precio-normal">$${fmtN(Math.round(f.precio_normal||0))}</span> <b class="ofm-precio-oferta">$${fmtN(Math.round(f.precio_oferta||0))}</b> <span class="ofm-card-desc">${f.descuento_pct!=null?'-'+f.descuento_pct.toFixed(1)+'%':'—'}</span> ${f.cuotas_ofrecidas?`<span class="badge badge-blue">${f.cuotas_ofrecidas}x</span>`:'<span class="badge badge-gray">Contado</span>'}</td>
-      <td class="ofm-num"><b>${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'sin PM'}</b> <span class="badge ${pmDifiere?'badge-red':'badge-gray'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</span></td>
+      <td class="ofm-num" title="${acEsc(ofmEnvioTitulo(f))}"><b>${f._pmEsperado!=null?'$'+fmtN(f._pmEsperado):'sin PM'}</b>${f._pmEsperado!=null&&ofmEnvioParaEsperado(f)&&ofmEnvioParaEsperado(f).origen.startsWith('estimado')?'<sup title="envío estimado">~</sup>':''} <span class="badge ${pmDifiere?'badge-red':'badge-gray'}">${f._pmDiffPct!==null?(f._pmDiffPct>0?'+':'')+f._pmDiffPct.toFixed(1)+'%':'—'}</span></td>
       <td class="ofm-num" style="color:${margenColor}">${m&&m.margenPct!==null?fmtN(Math.round(m.margen))+' ('+(m.margenPct*100).toFixed(1)+'%)':acEsc(f.incidencia||'—')}</td>
       <td><button type="button" class="btn-xs" onclick="ofmToggleGestionar(this,'${acEsc(f.item_id)}')">⚙ Gestionar</button></td>
     </tr>`;
