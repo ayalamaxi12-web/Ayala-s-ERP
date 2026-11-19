@@ -3119,8 +3119,11 @@ def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
     run, que por diseño solo trae publicaciones que ya tienen algo)."""
     ml = ml_ofertas.MLOfertasClient()
     tc = tc_bna_requerido()
+    def _vinculacion(iid):      # lo que Ecom tiene vinculado a ese MLA (variante exacta si es un SKU madre); sin Ecom se sigue sin esto
+        from rentabilidad.ingesta_ecom_api import EcomApiClient
+        return ml_full.EcomFullAdapter(EcomApiClient()).factor_pack(iid)
     try:
-        r = ml_ofertas.resolver_item_para_gestion(ml, *costos_ecom.proveedores_de_costo_e_iva(), item_id, cuenta, tc)
+        r = ml_ofertas.resolver_item_para_gestion(ml, *costos_ecom.proveedores_de_costo_e_iva(), item_id, cuenta, tc, vinculacion_fn=_vinculacion)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"No se pudo consultar Mercado Libre: {e}")
     if not r.get("encontrado"):
@@ -3129,6 +3132,7 @@ def _buscar_item_sync(item_id: str, cuenta: str) -> dict:
     r["costo_sin_iva"] = float(r["costo_sin_iva"]) if r["costo_sin_iva"] is not None else None
     r["iva_factor"] = float(r["iva_factor"]) if r["iva_factor"] is not None else None
     r["tc"] = float(r["tc"])
+    r["variantes_madre"] = [{"sku": v["sku"], "costo_usd": float(v["costo_usd"]) if v["costo_usd"] is not None else None} for v in r.get("variantes_madre") or []]
     return r
 
 @app.get("/ml-ofertas/item/{item_id}/buscar")
