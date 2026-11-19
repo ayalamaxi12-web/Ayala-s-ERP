@@ -151,6 +151,37 @@ def _entrada_promo(p: dict) -> tuple[str | None, str | None]:
     return p.get("promotion_id") or p.get("id"), p.get("status")
 
 
+def _agregar_ajustes(f: dict, margen_en=None) -> None:
+    """Por cada campaña donde puede entrar, si el final del Excel queda fuera de lo que ML acepta en ESA campaña (más barato que su mínimo = demasiado descuento; o más caro
+    que su máximo = poco descuento) arma el AJUSTE: el precio más cercano que ML sí acepta, el % de descuento que queda, el máximo que acepta ML y el margen con ese precio.
+    No cambia nada: solo le permite a la persona tildar «subir con este ajuste» en la pantalla."""
+    tachado, final = f.get("tachado"), f.get("final")
+    if not (tachado and final and 0 < final < tachado):
+        return
+    for c in f.get("candidatas", []):
+        try:
+            mn = float(c["min"]) if c.get("min") is not None else None
+            mx = float(c["max"]) if c.get("max") is not None else None
+        except (TypeError, ValueError):
+            continue
+        nuevo, motivo = None, None
+        if mn is not None and final < mn:
+            nuevo, motivo = mn, "min"
+        elif mx is not None and final > mx:
+            nuevo, motivo = mx, "max"
+        if nuevo is None or not (0 < nuevo < tachado):
+            continue
+        aj = {"final": round(nuevo, 2), "desc_pct": round((1 - nuevo / tachado) * 100, 1), "motivo": motivo,
+              "desc_max_pct": round((1 - mn / tachado) * 100, 1) if mn is not None and 0 < mn < tachado else None,
+              "desc_min_pct": round((1 - mx / tachado) * 100, 1) if mx is not None and 0 < mx < tachado else None,
+              "margen_pct": None, "margen_ars": None}
+        if margen_en is not None:
+            r = margen_en(nuevo)
+            aj["margen_pct"] = float(r.margen_pct * 100) if r.margen_pct is not None else None
+            aj["margen_ars"] = float(r.margen)
+        c["ajuste"] = aj
+
+
 def analizar(
     ml: MLOfertasClient, cuenta: str, filas: list[dict], costo_provider=None, iva_provider=None, tc: Decimal | None = None,
     params: ParametrosMargen | None = None, progreso_cb: Callable[[int, int, str], None] | None = None,
@@ -212,16 +243,21 @@ def analizar(
                 f["candidatas"].append({"id": pid, "status": st, "min": p.get("min_discounted_price"), "max": p.get("max_discounted_price")})
         # margen: solo avisa
         f["margen_pct"] = None
+        margen_en = None
         if costo_provider and iva_provider and tc and sku_ml and f["final"]:
             costo_usd, iva = costo_provider.obtener(sku_ml), iva_provider.factor(sku_ml)
             if costo_usd is None or iva is None:
                 f["avisos"].append("No pude calcular el margen: falta el costo o el IVA del SKU.")
             else:
+                margen_en = lambda precio, _c=costo_usd * tc, _i=iva, _d=d: calcular_margen_oferta(  # noqa: E731
+                    Decimal(str(precio)), _i, _c, _d.get("domain_id"), _cuotas_sin_interes(_d), params)
                 r = calcular_margen_oferta(Decimal(str(f["final"])), iva, costo_usd * tc, d.get("domain_id"), _cuotas_sin_interes(d), params)
                 f["margen_pct"] = float(r.margen_pct * 100) if r.margen_pct is not None else None
                 f["margen_ars"] = float(r.margen)
                 if r.margen < 0:
                     f["avisos"].append(f"Con ese precio final se pierde plata: margen {f['margen_pct']:.1f} % (${float(r.margen):,.0f} por venta).".replace(",", "."))
+
+        _agregar_ajustes(f, margen_en)
 
     ok = [f for f in filas if not f["bloqueos"]]
     campanas = []
@@ -266,6 +302,8 @@ def _chequear_fila(f: dict, promotion_id: str) -> str | None:
         return "Esta publicación no puede participar en esa campaña."
     if cand.get("min") is not None and f["final"] < float(cand["min"]):
         return f"No se puede ir a ese precio: el mínimo que acepta ML en esta campaña es ${float(cand['min']):,.0f}.".replace(",", ".")
+    if cand.get("max") is not None and f["final"] > float(cand["max"]):
+        return f"No se puede ir a ese precio: el máximo que acepta ML en esta campaña es ${float(cand['max']):,.0f}.".replace(",", ".")
     return None
 
 
@@ -302,14 +340,15 @@ def aplicar(
                 "Operador": operador, "Origen": "Excel (lote)",
             })
         if r.get("ok"):
-            resultados.append({**base, "estado": "ok", "mensaje": "Aplicada." + (" " + r["aviso"] if r.get("aviso") else ""), "precio": r.get("precio"), "tachado": r.get("original_price")})
+            resultados.append({**base, "estado": "ok", "mensaje": ("Aplicada con el ajuste que acepta ML." if f.get("ajustado") else "Aplicada.") + (" " + r["aviso"] if r.get("aviso") else ""),
+                               "precio": r.get("precio"), "tachado": r.get("original_price")})
             historial.append({
                 "Fecha": _hoy(), "Cuenta": cuenta, "Item ID": f["mla"], "SKU": f.get("sku", ""), "Accion": "Activar en campaña",
                 "Tipo/Promocion": f"SELLER_CAMPAIGN ({r.get('nombre_campana') or promotion_id})", "Precio Anterior": f.get("precio_actual", ""),
                 "Precio Nuevo": f"{r.get('precio')} (tachado {r.get('original_price')})",
                 "Margen % Resultante": round(f["margen_pct"], 1) if f.get("margen_pct") is not None else "",
                 "Bajo Umbral": "Sí" if (f.get("margen_pct") is not None and f["margen_pct"] < 0) else "No",
-                "Operador": operador, "Origen": "Excel (lote)",
+                "Operador": operador, "Origen": "Excel (lote, ajustado a lo que acepta ML)" if f.get("ajustado") else "Excel (lote)",
             })
         else:
             resultados.append({**base, "estado": "error", "mensaje": r.get("error") or "ML no la aceptó."})

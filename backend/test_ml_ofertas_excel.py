@@ -342,3 +342,43 @@ def test_el_excel_anota_el_mayorista_sacado_en_el_historial():
 def test_si_no_hay_mayorista_no_manda_nada():
     estado = {"mayorista": False, "posts": []}
     assert _ml_mayorista(estado).sacar_precios_mayoristas("MLA1", "IT") == {"ok": True, "sacados": []} and estado["posts"] == []
+
+
+# ── ajustes que pide ML (se tildan en la pantalla, sin volver a bajar ni subir el Excel) ──
+
+def test_el_analisis_arma_el_ajuste_cuando_el_final_queda_fuera_de_lo_que_acepta_ml_en_esa_campana():
+    filas = [_fila(2, "SKU-1", "MLA1", 20000, 10000), _fila(3, "SKU-1", "MLA3", 20000, 18000)]
+    esc = _escenario()
+    esc._p["MLA3"] = [{"id": "C1", "type": "SELLER_CAMPAIGN", "status": "candidate", "min_discounted_price": 12000, "max_discounted_price": 16000}]
+    r = mx.analizar(esc, "IT", filas, _Costo(), _Iva(), Decimal("1000"))
+    f = {x["mla"]: x for x in r["filas"]}
+    c1 = next(c for c in f["MLA1"]["candidatas"] if c["id"] == "C1")
+    aj = c1["ajuste"]
+    assert aj["motivo"] == "min" and aj["final"] == 12000.0 and aj["desc_pct"] == 40.0 and aj["desc_max_pct"] == 40.0
+    assert aj["margen_pct"] is not None and aj["margen_ars"] > 0                       # margen con el precio ajustado, sin llamar a nada más
+    assert "ajuste" not in next(c for c in f["MLA1"]["candidatas"] if c["id"] == "C2")    # la otra campaña no tiene límites: sin ajuste
+    aj3 = f["MLA3"]["candidatas"][0]["ajuste"]
+    assert aj3["motivo"] == "max" and aj3["final"] == 16000.0 and aj3["desc_min_pct"] == 20.0
+    sin_ajuste = mx.analizar(_escenario(), "IT", [_fila(2, "SKU-1", "MLA1", 20000, 15000)])["filas"][0]       # 15.000 está entre 12.000 y 16.000
+    assert all("ajuste" not in c for c in sin_ajuste["candidatas"])
+
+
+def test_aplicar_con_el_ajuste_tildado_sube_el_precio_que_acepta_ml_y_lo_anota():
+    ml = _ml_escritura(lambda u, h, b: {"price": b["deal_price"], "original_price": 20000.0})
+    f = _aptas("MLA1")[0]
+    f["candidatas"] = [{"id": "C1", "status": "candidate", "min": 12000, "max": None}]
+    f.update(final=12000.0, ajustado=True)
+    guardado = []
+    r = mx.aplicar(ml, "IT", "C1", [f], historial_cb=guardado.extend)
+    assert r["resultados"][0]["estado"] == "ok" and "ajuste que acepta ML" in r["resultados"][0]["mensaje"]
+    assert _post.calls[0]["deal_price"] == 12000.0
+    assert guardado[0]["Origen"] == "Excel (lote, ajustado a lo que acepta ML)"
+
+
+def test_un_ajuste_que_igual_queda_fuera_de_los_limites_se_sigue_rechazando_antes_de_llamar_a_ml():
+    ml = _ml_escritura(lambda u, h, b: {"price": b["deal_price"], "original_price": 20000.0})
+    f = _aptas("MLA1")[0]
+    f["candidatas"] = [{"id": "C1", "status": "candidate", "min": None, "max": 16000}]
+    f.update(final=18000.0, ajustado=True)                       # arriba del máximo
+    r = mx.aplicar(ml, "IT", "C1", [f])["resultados"][0]
+    assert r["estado"] == "pendiente" and "máximo" in r["mensaje"] and _post.calls == []

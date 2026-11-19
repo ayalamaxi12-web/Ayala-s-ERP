@@ -340,6 +340,8 @@ input[type=date]:focus,input[type=text]:focus,select.fi:focus{border-color:var(-
 .ofx-chip[data-e="no"],.ofx-chip[data-e="error"]{background:var(--error-fondo);color:var(--error-texto)}
 .ofx-chip[data-e="pend"]{background:var(--aviso-fondo);color:var(--aviso-texto);box-shadow:inset 0 0 0 1px var(--aviso-borde)}
 .ofx-chip[data-e="lista"]{background:var(--celeste-100);color:var(--tinta)}
+.ofx-chip[data-e="ajuste"]{background:var(--aviso-fondo);color:var(--aviso-texto);box-shadow:inset 0 0 0 1px var(--aviso-borde)}
+.ofx-aj{margin:12px 0;padding:12px;border-radius:var(--r-recuadro);background:var(--aviso-fondo);box-shadow:inset 0 0 0 1px var(--aviso-borde)}.ofx-aj h4{margin:0 0 4px;font-size:14px}.ofx-aj .ofx-nota{margin:0 0 8px}.ofx-aj td.neg{color:var(--error-texto);font-weight:700}
 .ofx-al{margin:0;padding-left:16px}.ofx-al li{margin:2px 0}
 .ofx-al .ofx-bloq{color:var(--error-texto)}.ofx-al .ofx-avis{color:var(--aviso-texto)}
 #ofx-tbody td{white-space:normal;vertical-align:top}#ofx-tbody td:last-child{min-width:260px}
@@ -2249,11 +2251,13 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
     <div id="ofx-estado" role="status" aria-live="polite" class="ofx-nota"></div>
     <div id="ofx-res" class="ofx-res">
       <div id="ofx-resumen" class="ofx-resumen"></div>
+      <div id="ofx-resumen-camp" class="ofx-resumen" role="status" aria-live="polite"></div>
       <fieldset class="ofx-camp"><legend>Elegí la oferta (campaña propia)</legend><div id="ofx-campanas"></div>
         <label class="ofx-mayor"><input type="checkbox" id="ofx-mayorista"> Sacar el precio mayorista si hace falta (solo se saca cuando ML no deja poner el tachado por eso; queda anotado en el historial)</label>
         <div class="ofx-fila" style="margin:10px 0 0"><button type="button" class="btn primary" id="ofx-aplicar" onclick="ofxAplicar()" disabled>Aplicar</button>
         <button type="button" class="btn" onclick="ofxPendientesCSV()">Bajar las pendientes (CSV)</button></div></fieldset>
-      <div class="ofx-fila"><label>Ver<select id="ofx-filtro" class="fi" onchange="ofxRenderTabla()"><option value="todas">Todas</option><option value="lista">Se pueden aplicar</option><option value="aviso">Con aviso</option><option value="no">No se puede</option><option value="ok">Aplicadas</option><option value="pend">Pendientes</option></select></label></div>
+      <div id="ofx-ajustes"></div>
+      <div class="ofx-fila"><label>Ver<select id="ofx-filtro" class="fi" onchange="ofxRenderTabla()"><option value="todas">Todas</option><option value="lista">Se pueden aplicar</option><option value="ajuste">Necesitan ajuste</option><option value="aviso">Con aviso</option><option value="no">No se puede</option><option value="ok">Aplicadas</option><option value="pend">Pendientes</option></select></label></div>
       <div class="table-wrap"><table class="ofm-tabla"><thead><tr><th scope="col">Fila</th><th scope="col">MLA</th><th scope="col">SKU</th><th scope="col">Tachado</th><th scope="col">Final</th><th scope="col">Margen</th><th scope="col">Estado</th><th scope="col">Alertas</th></tr></thead><tbody id="ofx-tbody"></tbody></table></div>
     </div>
   </div></details>
@@ -6779,6 +6783,29 @@ async function ofxAnalizar(){
 }
 function ofxPendientes(){return OFX.filas.filter(f=>f.estado!=='ok'&&!(f.bloqueos||[]).length);}
 function ofxPuedeEn(f,cid){return (f.candidatas||[]).some(c=>c.id===cid);}
+// Ajuste que pide ML en ESA campaña (precio más cercano que acepta, % de descuento máximo y margen con ese precio). Se sube solo si la persona tilda la casilla.
+function ofxAjuste(f,cid){const c=(f.candidatas||[]).find(x=>x.id===cid);return c&&c.ajuste?c.ajuste:null;}
+function ofxAcepta(f,cid){return !!(f.ajOk&&f.ajOk[cid]);}
+function ofxListas(cid){return ofxPendientes().filter(f=>ofxPuedeEn(f,cid)&&(!ofxAjuste(f,cid)||ofxAcepta(f,cid)));}
+function ofxNecesitanAjuste(cid){return ofxPendientes().filter(f=>ofxPuedeEn(f,cid)&&ofxAjuste(f,cid));}
+function ofxTildar(mla,v){const f=OFX.filas.find(x=>x.mla===mla);if(!f||!OFX.sel)return;f.ajOk=f.ajOk||{};f.ajOk[OFX.sel]=!!v;ofxBoton();ofxRenderAjustes();ofxRenderTabla();ofxResumenCampana();}
+function ofxTildarTodos(v){if(!OFX.sel)return;ofxNecesitanAjuste(OFX.sel).forEach(f=>{f.ajOk=f.ajOk||{};f.ajOk[OFX.sel]=!!v;});ofxBoton();ofxRenderAjustes();ofxRenderTabla();ofxResumenCampana();}
+function ofxResumenCampana(){
+  const el=qs('ofx-resumen-camp');if(!el)return;if(!OFX.sel){el.innerHTML='';return;}
+  const pend=ofxPendientes(),pueden=pend.filter(f=>ofxPuedeEn(f,OFX.sel)),ajuste=pueden.filter(f=>ofxAjuste(f,OFX.sel)),tal=pueden.length-ajuste.length,tild=ajuste.filter(f=>ofxAcepta(f,OFX.sel)).length,fuera=pend.length-pueden.length;
+  el.innerHTML=`En esta campaña: <b>${tal}</b> se pueden subir tal cual`+(ajuste.length?` · <b>${ajuste.length}</b> necesitan ajuste (${tild} tildadas)`:'')+(fuera?` · <b>${fuera}</b> no entran`:'');
+}
+function ofxRenderAjustes(){
+  const cont=qs('ofx-ajustes');if(!cont)return;const lista=OFX.sel?ofxNecesitanAjuste(OFX.sel):[];
+  if(!lista.length){cont.innerHTML='';return;}
+  const m=n=>n==null?'—':Number(n).toLocaleString('es-AR',{maximumFractionDigits:0}),pc=n=>n==null?'—':Number(n).toLocaleString('es-AR',{maximumFractionDigits:1})+' %';
+  cont.innerHTML=`<div class="ofx-aj"><h4>Mercado Libre no acepta ${lista.length===1?'este precio':'estos '+lista.length+' precios'} tal cual</h4>
+    <p class="ofx-nota">Para esta campaña ML limita el descuento. Acá ves el precio más cercano que sí acepta y el margen que te queda: tildá las que querés subir con ese ajuste (el tachado no cambia). Las que no tildes quedan pendientes.</p>
+    <div class="ofx-fila" style="margin:0 0 6px"><button type="button" class="btn" onclick="ofxTildarTodos(true)">Tildar todas</button><button type="button" class="btn" onclick="ofxTildarTodos(false)">Destildar todas</button></div>
+    <div class="table-wrap"><table class="ofm-tabla"><thead><tr><th scope="col">Subir</th><th scope="col">MLA</th><th scope="col">SKU</th><th scope="col">Tachado</th><th scope="col">Final del Excel</th><th scope="col">Desc. del Excel</th><th scope="col">Desc. que acepta ML</th><th scope="col">Final con ajuste</th><th scope="col">Margen con ajuste</th></tr></thead><tbody>${lista.map(f=>{const a=ofxAjuste(f,OFX.sel),dEx=f.tachado?(1-f.final/f.tachado)*100:null,neg=a.margen_ars!=null&&a.margen_ars<0;
+      const acepta=a.motivo==='min'?a.desc_max_pct:a.desc_min_pct;
+      return `<tr><td><input type="checkbox" aria-label="Subir ${acEsc(f.mla)} con el ajuste" ${ofxAcepta(f,OFX.sel)?'checked':''} onchange="ofxTildar('${acEsc(f.mla)}',this.checked)"></td><td>${acEsc(f.mla)}</td><td>${acEsc(f.sku)}</td><td>${m(f.tachado)}</td><td>${m(f.final)}</td><td>${pc(dEx)}</td><td>${a.motivo==='min'?'hasta ':'desde '}${pc(acepta)}</td><td><b>${m(a.final)}</b> <small>(${pc(a.desc_pct)})</small></td><td class="${neg?'neg':''}">${a.margen_pct==null?'sin costo':pc(a.margen_pct)+' · $'+m(a.margen_ars)}</td></tr>`;}).join('')}</tbody></table></div></div>`;
+}
 function ofxRender(){
   const pend=ofxPendientes(),aplicadas=OFX.filas.filter(f=>f.estado==='ok').length,bloq=OFX.filas.filter(f=>(f.bloqueos||[]).length).length;
   const sinCamp=pend.filter(f=>!OFX.campanas.some(c=>ofxPuedeEn(f,c.id))).length;
@@ -6789,20 +6816,21 @@ function ofxRender(){
     return `<label class="ofx-opt" data-cero="${n?0:1}"><input type="radio" name="ofx-camp" value="${acEsc(c.id)}" ${n?'':'disabled'} ${OFX.sel===c.id?'checked':''} onchange="ofxElegir(this.value)"><span><b>${acEsc(c.nombre)}</b> <span style="color:var(--texto-suave)">(${acEsc(c.status||'')}${vig})</span><br><span class="ofx-n">${n}</span> de ${pend.length} pendientes pueden participar</span></label>`;}).join('');
   ofxBoton();ofxRenderTabla();
 }
-function ofxElegir(cid){OFX.sel=cid;ofxBoton();ofxRenderTabla();}
+function ofxElegir(cid){OFX.sel=cid;ofxBoton();ofxRenderAjustes();ofxRenderTabla();ofxResumenCampana();}
 function ofxBoton(){
-  const b=qs('ofx-aplicar'),n=OFX.sel?ofxPendientes().filter(f=>ofxPuedeEn(f,OFX.sel)).length:0;
-  b.disabled=!n||OFX.ocupado;b.textContent=n?`Aplicar ${n} en esta campaña`:'Elegí una campaña para aplicar';
+  const b=qs('ofx-aplicar'),n=OFX.sel?ofxListas(OFX.sel).length:0,aj=OFX.sel?ofxListas(OFX.sel).filter(f=>ofxAjuste(f,OFX.sel)).length:0;
+  b.disabled=!n||OFX.ocupado;b.textContent=n?`Aplicar ${n} en esta campaña`+(aj?` (${aj} con ajuste)`:''):'Elegí una campaña para aplicar';
 }
 function ofxEstadoFila(f){
   if(f.estado==='ok')return['ok','Aplicada'];if(f.estado==='error')return['error','Error'];
   if((f.bloqueos||[]).length)return['no','No se puede'];
   if(OFX.sel&&!ofxPuedeEn(f,OFX.sel))return['pend','No entra en esta campaña'];
+  if(OFX.sel&&ofxAjuste(f,OFX.sel))return ofxAcepta(f,OFX.sel)?['lista','Se sube con ajuste']:['ajuste','Necesita ajuste'];
   return f.estado==='pendiente'?['pend','Pendiente']:['lista','Se puede aplicar'];
 }
 function ofxRenderTabla(){
   const fl=qs('ofx-filtro').value,m=n=>n==null?'—':n.toLocaleString('es-AR');
-  const filas=OFX.filas.filter(f=>{const e=ofxEstadoFila(f)[0];return fl==='todas'||(fl==='lista'&&e==='lista')||(fl==='aviso'&&(f.avisos||[]).length)||(fl==='no'&&e==='no')||(fl==='ok'&&e==='ok')||(fl==='pend'&&(e==='pend'||e==='error'));});
+  const filas=OFX.filas.filter(f=>{const e=ofxEstadoFila(f)[0];return fl==='todas'||(fl==='lista'&&e==='lista')||(fl==='ajuste'&&e==='ajuste')||(fl==='aviso'&&(f.avisos||[]).length)||(fl==='no'&&e==='no')||(fl==='ok'&&e==='ok')||(fl==='pend'&&(e==='pend'||e==='error'));});
   qs('ofx-tbody').innerHTML=filas.length?filas.map(f=>{const[e,t]=ofxEstadoFila(f);
     const al=[...(f.bloqueos||[]).map(x=>`<li class="ofx-bloq">${acEsc(x)}</li>`),...(f.mensaje&&f.estado!=='ok'?[`<li class="ofx-bloq">${acEsc(f.mensaje)}</li>`]:[]),...(f.avisos||[]).map(x=>`<li class="ofx-avis">${acEsc(x)}</li>`)].join('');
     return `<tr><td>${f.fila}</td><td>${acEsc(f.mla)}</td><td>${acEsc(f.sku)}</td><td>${m(f.tachado)}</td><td>${m(f.final)}</td><td>${f.margen_pct==null?'—':f.margen_pct.toFixed(1)+' %'}</td><td><span class="ofx-chip" data-e="${e}">${t}</span></td><td>${al?`<ul class="ofx-al">${al}</ul>`:''}</td></tr>`;}).join('')
@@ -6810,8 +6838,9 @@ function ofxRenderTabla(){
 }
 async function ofxAplicar(){
   if(OFX.ocupado||!OFX.sel)return;const op=ofmRequireOperador();if(!op)return;
-  const camp=OFX.campanas.find(c=>c.id===OFX.sel),filas=ofxPendientes().filter(f=>ofxPuedeEn(f,OFX.sel));if(!filas.length)return;
-  if(!confirm(`Vas a aplicar ${filas.length} ofertas en «${camp.nombre}» (cuenta ${OFX.cuenta==='IT'?'Group':'Arg'}), con el tachado y el final del Excel.\nEsto cambia precios en Mercado Libre.`+(qs('ofx-mayorista')?.checked?'\nSi alguna tiene precio mayorista y ML no deja poner el tachado, se le SACA el mayorista (no se recupera solo).':'')+' ¿Seguimos?'))return;
+  const camp=OFX.campanas.find(c=>c.id===OFX.sel),filas=ofxListas(OFX.sel).map(f=>{const a=ofxAjuste(f,OFX.sel);return a?{...f,excel_final:f.final,final:a.final,ajustado:true}:f;});if(!filas.length)return;
+  const nAj=filas.filter(f=>f.ajustado).length;
+  if(!confirm(`Vas a aplicar ${filas.length} ofertas en «${camp.nombre}» (cuenta ${OFX.cuenta==='IT'?'Group':'Arg'}), con el tachado y el final del Excel.`+(nAj?`\n${nAj} de ellas con el ajuste que acepta ML (precio más cercano al del Excel).`:'')+`\nEsto cambia precios en Mercado Libre.`+(qs('ofx-mayorista')?.checked?'\nSi alguna tiene precio mayorista y ML no deja poner el tachado, se le SACA el mayorista (no se recupera solo).':'')+' ¿Seguimos?'))return;
   OFX.ocupado=true;ofxBoton();
   try{
     const j=await cpPost('/ml-ofertas/excel/aplicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuenta:OFX.cuenta,promotion_id:OFX.sel,operador:op,sacar_mayorista:!!qs('ofx-mayorista')?.checked,filas})});
@@ -6820,7 +6849,7 @@ async function ofxAplicar(){
     OFX.filas.forEach(f=>{const x=por[f.mla];if(x){f.estado=x.estado;f.mensaje=x.mensaje;}});
     const ok=r.resultados.filter(x=>x.estado==='ok').length;
     ofxEstado(`Listo: ${ok} aplicadas, ${r.resultados.length-ok} quedaron pendientes.`+(r.cortado_por_verificacion?' ML pidió una verificación de seguridad (QR/cara): hacela a mano y volvé a aplicar las que faltan.':'')+(r.aviso_historial?' No se pudo anotar en «Historial Ofertas ML».':''));
-    OFX.sel=null;
+    OFX.sel=null;ofxRenderAjustes();ofxResumenCampana();
   }catch(e){ofxEstado('No se pudo aplicar: '+e.message);toast(e.message,'error');}
   finally{OFX.ocupado=false;ofxRender();}
 }
