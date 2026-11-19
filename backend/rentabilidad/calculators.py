@@ -7,6 +7,7 @@ Ninguna tasa vive hardcodeada acá — todas salen de `parametro_tasa`
 (prohibición técnica #1). Todo en `Decimal` (prohibición #2).
 """
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -147,6 +148,16 @@ class RentabilidadTacticaCalculator:
 # valor. Detectar y reportar N≠0 como incidencia informativa es del validador
 # (Etapa 8, control V-11), no de este calculador.
 
+# Desde el 18/11/2026 (Maxx): la comisión de venta y el costo de envío que trae Ecom (con el IVA incluido, tal como los informan ML / MP / Frávega) se toman SIN IVA
+# (÷ 1,21) para sacar la rentabilidad. Rige por la FECHA DE LA VENTA: las anteriores se calculan como siempre (el histórico no cambia).
+CORTE_CARGOS_SIN_IVA = date(2026, 11, 18)
+IVA_CARGOS = Decimal("1.21")
+
+
+def cargos_sin_iva_desde(fecha: date | None) -> bool:
+    return fecha is not None and fecha >= CORTE_CARGOS_SIN_IVA
+
+
 @dataclass
 class LineaEcomInput:
     numero_orden: str  # A
@@ -160,6 +171,8 @@ class LineaEcomInput:
     # vigente sembrado en `parametro_tasa`; los casos históricos (E-1..E-3,
     # layout sin OP) pasan 0 explícito.
     costo_operacion: Decimal | None = None
+    # Fecha de la venta: define si rige el criterio «cargos sin IVA» (ver `CORTE_CARGOS_SIN_IVA`). None = como siempre.
+    fecha: date | None = None
 
 
 @dataclass
@@ -173,6 +186,9 @@ class ResultadoEcom:
     facturacion_usd: Decimal  # AF = U / AM
     pct_rentabilidad: Decimal  # AV = AB / Q (rentabilidad / precio SIN IVA), 0 ante error — CRITERIOS_MARGEN §1
     costo_operacion: Decimal = Decimal(0)  # OP efectivamente descontado
+    comision_neta: Decimal = Decimal(0)  # M tal como entra en Z: sin IVA (÷ 1,21) desde el corte, igual a M antes
+    envio_neto: Decimal = Decimal(0)  # O tal como entra en Z
+    cargos_sin_iva: bool = False  # True si se aplicó el criterio nuevo a esta venta
 
 
 class RentabilidadEcomCalculator:
@@ -190,8 +206,10 @@ class RentabilidadEcomCalculator:
         # Paso 2-3
         S = U * imp_cheque_tasa
         T = Q * iibb_tasa
-        # Paso 4
-        Z = Q - M - O - S - T - OP
+        # Paso 4. Desde el corte, comisión y envío (que traen el IVA) entran sin IVA.
+        sin_iva = cargos_sin_iva_desde(linea.fecha)
+        Mn, On = (M / IVA_CARGOS, O / IVA_CARGOS) if sin_iva else (M, O)
+        Z = Q - Mn - On - S - T - OP
         # Paso 5
         AA = G * AM
         # Paso 6 — resultado del motor
@@ -208,7 +226,7 @@ class RentabilidadEcomCalculator:
         return ResultadoEcom(
             imp_cheque=S, iibb=T, neto=Z, costo_total=AA, rentabilidad=AB,
             rentabilidad_usd=AE, facturacion_usd=AF, pct_rentabilidad=AV,
-            costo_operacion=OP,
+            costo_operacion=OP, comision_neta=Mn, envio_neto=On, cargos_sin_iva=sin_iva,
         )
 
 

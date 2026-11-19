@@ -35,8 +35,9 @@ def test_columnas_en_el_orden_del_reporte_y_valores(db_session):
     res = ex.exportar_ventas(db_session, P, dia=date(2026, 10, 2))
     assert res["total"] == 2 and [f["Numero Orden"] for f in res["filas"]] == ["1", "2"]
     f = res["filas"][0]
-    assert list(f) == res["columnas"] and len(res["columnas"]) == 49
-    assert res["columnas"][0] == "Numero Orden" and res["columnas"][-1] == "% Rentabilidad"
+    assert list(f) == res["columnas"] and len(res["columnas"]) == 53
+    assert res["columnas"][0] == "Numero Orden" and res["columnas"][48] == "% Rentabilidad"      # las 49 de siempre, en su lugar
+    assert res["columnas"][49:] == ["Comision Venta SIN IVA", "Costo Envio SIN IVA", "IVA de cargos recuperable", "Criterio de cargos"]   # las nuevas, al final
     assert f["FechaCreacionVenta"] == "2026-10-02" and f["Precio Final"] == 12100.0
     assert f["Total Impuestos"] == 2100.0  # Precio Final − Precio SIN IVA
     assert f["Costo por Operacion Ecom"] == 149.12
@@ -100,3 +101,15 @@ def test_datos_informativos_de_la_orden_de_la_api():
         "estado_venta": "Abierta", "fecha_pago": None, "medio_de_cobro": None, "retenciones": None,
         "usuario_integracion": None, "entrega_envio": None,
     }
+
+
+def test_cuenta_desglosada_sin_iva_desde_el_18_11_y_como_siempre_antes(db_session):
+    _venta(db_session, "viejo", date(2026, 11, 17), comision_venta=d("1210"), costo_envio=d("605"))
+    _venta(db_session, "nuevo", date(2026, 11, 18), comision_venta=d("1210"), costo_envio=d("605"))
+    db_session.flush()
+    filas = {f["Numero Orden"]: f for f in ex.exportar_ventas(db_session, P)["filas"]}
+    v, n = filas["viejo"], filas["nuevo"]
+    assert (v["Comision Venta SIN IVA"], v["Costo Envio SIN IVA"], v["IVA de cargos recuperable"]) == (1210.0, 605.0, 0.0)
+    assert v["Criterio de cargos"] == "como trae Ecom (anterior al 18/11/2026)"
+    assert (n["Comision Venta SIN IVA"], n["Costo Envio SIN IVA"], n["IVA de cargos recuperable"]) == (1000.0, 500.0, 315.0)   # 1210/1,21 · 605/1,21 · (1815 − 1500)
+    assert n["Criterio de cargos"] == "sin IVA (÷ 1,21)"

@@ -483,7 +483,7 @@ def _clasificar_fila_ecom(
     resultado = None if fila.incidencia else RentabilidadEcomCalculator(db).calcular(LineaEcomInput(
         numero_orden=fila.numero_orden, costo_sin_iva=fila.costo_sin_iva,
         comision_venta=fila.comision_venta, costo_envio=fila.costo_envio,
-        precio_sin_iva=fila.precio_sin_iva, precio_final=fila.precio_final, tc=fila.tc,
+        precio_sin_iva=fila.precio_sin_iva, precio_final=fila.precio_final, tc=fila.tc, fecha=fila.fecha_creacion,
     ))
 
     # §8.1 paso 2: la cascada arranca por la lista COMPLETA de SKUs (la
@@ -643,7 +643,7 @@ def recalcular_venta_ecom(db: Session, venta: VentaEcom) -> None:
     r = RentabilidadEcomCalculator(db).calcular(LineaEcomInput(
         numero_orden=venta.numero_orden, costo_sin_iva=venta.costo_sin_iva,
         comision_venta=venta.comision_venta, costo_envio=venta.costo_envio,
-        precio_sin_iva=venta.precio_sin_iva, precio_final=venta.precio_final, tc=venta.tc,
+        precio_sin_iva=venta.precio_sin_iva, precio_final=venta.precio_final, tc=venta.tc, fecha=venta.fecha_creacion_venta,
     ))
     venta.imp_cheque, venta.iibb, venta.neto = r.imp_cheque, r.iibb, r.neto
     venta.costo_total, venta.rentabilidad = r.costo_total, r.rentabilidad
