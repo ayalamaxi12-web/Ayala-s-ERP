@@ -79,3 +79,36 @@ console.log(JSON.stringify([ofmPmRec(a),ofmPmRec({sku:'X'}),ofmNotaSkuMadre(a),o
     assert r[0] == {'ml': 722656} and r[1] is None
     assert 'variante vinculada en Ecom' in r[2] and 'AURI-EPGMR035-NEGRO' in r[2]
     assert 'cuestan distinto' in r[3] and 'A-N (USD 10)' in r[3] and 'A-B (sin costo)' in r[3] and r[4] == ''
+
+
+def test_si_la_foto_no_trae_las_variantes_se_leen_de_ecom_en_vivo_y_los_pasos_explican_todo():
+    c = CostoEcomProvider(lambda: CatalogoCostos())            # foto sin el madre ni variantes
+    i = SimpleNamespace(factor=lambda sku: D("1.21"))
+    vivo = lambda sku: [{"sku": "AURI-N", "costo_usd": D("10"), "atributos": []}, {"sku": "AURI-B", "costo_usd": D("10"), "atributos": []}]
+    r = mo.resolver_costo_e_iva_con_madre(c, i, "AURI-EPGMR035", "MLA1", lambda iid: None, vivo)
+    assert r["via"] == "variantes_iguales" and r["costo_usd"] == D("10") and r["skus_pm"] == ["AURI-N", "AURI-B"]
+    txt = " | ".join(r["pasos"])
+    assert "no tiene costo propio" in txt and "no está vinculada" in txt and "en vivo: 2" in txt
+
+
+def test_variantes_de_costo_distinto_se_elige_la_que_coincide_con_el_color_de_la_publicacion():
+    c = CostoEcomProvider(lambda: CatalogoCostos())
+    i = SimpleNamespace(factor=lambda sku: D("1.21"))
+    vivo = lambda sku: [{"sku": "AURI-N", "costo_usd": D("10"), "atributos": [{"name": "Color", "options": "Negro"}]},
+                        {"sku": "AURI-B", "costo_usd": D("12"), "atributos": [{"name": "Color", "options": "Blanco"}]}]
+    item = {"title": "Auricular Epgmr035 Gaming Con Microfono Stereo Negro Negro", "attributes": [{"value_name": "Negro"}]}
+    r = mo.resolver_costo_e_iva_con_madre(c, i, "AURI-EPGMR035", "MLA1", None, vivo, item)
+    assert r["via"] == "variante_por_atributos" and r["sku_calculo"] == "AURI-N" and r["costo_usd"] == D("10") and r["skus_pm"] == ["AURI-N"]
+    # sin color que la distinga (o dos coinciden) no se elige
+    r2 = mo.resolver_costo_e_iva_con_madre(c, i, "AURI-EPGMR035", "MLA1", None, vivo, {"title": "Auricular genérico"})
+    assert r2["incidencia"] == "SIN_COSTO" and any("ninguna coincide" in p for p in r2["pasos"])
+    r3 = mo.resolver_costo_e_iva_con_madre(c, i, "AURI-EPGMR035", "MLA1", None, vivo, {"title": "Auricular Negro Blanco"})
+    assert r3["incidencia"] == "SIN_COSTO" and any("varias coinciden" in p for p in r3["pasos"])
+
+
+def test_si_ecom_falla_el_paso_queda_anotado_y_no_se_cae():
+    c = CostoEcomProvider(lambda: CatalogoCostos())
+    i = SimpleNamespace(factor=lambda sku: D("1.21"))
+    def roto(sku): raise RuntimeError("sin red")
+    r = mo.resolver_costo_e_iva_con_madre(c, i, "X", "MLA1", lambda iid: (_ for _ in ()).throw(RuntimeError("caído")), roto)
+    assert r["incidencia"] == "SIN_COSTO" and any("RuntimeError" in p for p in r["pasos"])

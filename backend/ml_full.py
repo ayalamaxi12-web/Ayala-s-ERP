@@ -48,6 +48,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Callable
 
 import requests
@@ -647,6 +648,17 @@ query($sku: String!) {
 }
 """
 
+_QUERY_PRODUCTO_COSTOS = """
+query($sku: String!) {
+  products {
+    readBySku(sku: $sku) {
+      sku tax
+      variants { sku cost variantAttributes { name options } }
+    }
+  }
+}
+"""
+
 _QUERY_ML_LISTING = """
 query($id: ID!) {
   mlListings {
@@ -720,6 +732,23 @@ class EcomFullAdapter:
             data = self._cliente.graphql(_QUERY_PRODUCT_STOCK, {"sku": sku})
             self._producto_cache[sku] = data.get("products", {}).get("readBySku")
         return self._producto_cache[sku]
+
+    def variantes_con_costo(self, sku: str) -> list[dict]:
+        """Variantes de un SKU madre LEÍDAS DE ECOM EN VIVO (un solo producto, una llamada): [{"sku", "costo_usd", "atributos": [{"name","options"}]}]. Sirve cuando la foto de costos guardada
+        todavía no trae las variantes de ese madre. Una variante sin SKU propio se omite (su costo ya es el del madre)."""
+        data = self._cliente.graphql(_QUERY_PRODUCTO_COSTOS, {"sku": sku})
+        prod = (data.get("products") or {}).get("readBySku") or {}
+        out = []
+        for v in prod.get("variants") or []:
+            vsku = (v.get("sku") or "").strip()
+            if not vsku or vsku == sku:
+                continue
+            try:
+                costo = Decimal(str(v.get("cost"))) if v.get("cost") is not None else None
+            except Exception:  # noqa: BLE001
+                costo = None
+            out.append({"sku": vsku, "costo_usd": costo if costo and costo > 0 else None, "atributos": v.get("variantAttributes") or []})
+        return out
 
     def _stock_en_deposito(self, sku: str, deposito_id: str, parent_sku: str | None = None) -> int | None:
         """`parent_sku` -- cuando `sku` es una variante puntual (color,
