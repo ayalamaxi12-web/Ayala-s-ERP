@@ -354,7 +354,14 @@ def resolver_precio_real(ml, item_id: str, cuenta: str, d: dict) -> tuple[Decima
         promos = ml.promociones_item(item_id, cuenta) or []
     except Exception:
         promos = []
-    activas = [p for p in promos if p.get("status") == "started"]
+    # Solo cuentan las promociones que CAMBIAN el precio (traen `price` > 0). Un cupón del vendedor (`SELLER_COUPON_CAMPAIGN`, ej. «Fieles Global») está «started» pero no trae
+    # precio: tomarlo hacía que el precio actual diera $0 en todas las publicaciones que lo tienen (visto en el Motor de Precios, 2026-11-24).
+    def _precio_promo(p):
+        try:
+            return Decimal(str(p.get("price") or 0))
+        except Exception:  # noqa: BLE001
+            return Decimal(0)
+    activas = [p for p in promos if p.get("status") == "started" and _precio_promo(p) > 0]
     if activas:
         mejor = min(activas, key=lambda p: Decimal(str(p.get("price") or 0)))
         tachado = mejor.get("original_price")
