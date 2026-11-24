@@ -1272,6 +1272,16 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <button class="btn" id="ventas-tab-btn-hist" onclick="goVentasTab('hist')" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent)">📊 Histórico</button>
   <button class="btn" id="ventas-tab-btn-vivo" onclick="goVentasTab('vivo')" style="border-radius:6px 6px 0 0;border-bottom:2px solid transparent;opacity:.6">🔴 En Vivo</button>
 </div>
+<details class="ofm-sec" id="rq-sec" style="margin:0 0 12px"><summary>🔄 Rechequear ventas contra Ecom (agrega las que faltan al ERP y al Sheet)</summary><div class="ofm-sec-c">
+  <p class="ofx-nota">Si los números del ERP dan menos que Mercado Libre: esto le vuelve a pedir a Ecom <b>todas</b> las órdenes del período y agrega <b>solo las que faltan</b> en el ERP y en el Sheet «Historial Automatizaciones» (las que ya están no se tocan). Primero revisa y te muestra qué falta; recién cuando confirmás agrega.</p>
+  <div class="ofx-fila"><label>Desde<input type="date" id="rq-desde" class="fi"></label><label>Hasta<input type="date" id="rq-hasta" class="fi"></label>
+    <label>Pestaña del Sheet <small>(solo si no la encuentra sola)</small><input type="text" id="rq-pestana" class="fi" placeholder="se detecta sola"></label>
+    <button type="button" class="btn" onclick="rechequeoPeriodoAnterior()" title="El último ciclo 23 → 22 ya cerrado">Último período cerrado</button>
+    <label style="flex-direction:row;align-items:center;gap:6px" title="Trae la comisión y el fee REALES de Frávega (Seller Center, con las cookies de Railway) y pisa sus filas en el Sheet con esa comisión, sin duplicar"><input type="checkbox" id="rq-fravega" checked> También cerrar Frávega (comisión real)</label>
+    <button type="button" class="btn primary" id="rq-revisar" onclick="rechequeoRevisar()">Revisar (no escribe nada)</button></div>
+  <div id="rq-estado" role="status" aria-live="polite" class="ofx-nota"></div>
+  <div id="rq-res"></div>
+</div></details>
 <div id="dash-filters-bar" class="dash-filters">
   <div class="filter-group"><span class="filter-label p1">● Desde</span><input type="date" id="f-desde"></div>
   <div class="filter-group"><span class="filter-label p1">Hasta</span><input type="date" id="f-hasta"></div>
@@ -5541,6 +5551,74 @@ function respuestasPintar(){
   <div class="card"><div class="card-title">Detalle de conversaciones</div>${rsFiltroHtml('m')}<div class="table-wrap" style="max-height:520px;overflow:auto"><table class="ofm-tabla" id="rs-t-m"></table></div></div>`:''}`;
   rsSeriesDibujar('p',r.preguntas_series);rsDetallePintar('p');
   if(tieneMsj){rsSeriesDibujar('m',r.mensajes_series);rsDetallePintar('m');}
+}
+
+
+// ── Rechequeo de ventas contra Ecom (backend: /rentabilidad/rechequeo/ecom): revisa y, al confirmar, agrega SOLO las órdenes que faltan en el ERP y en el Sheet «Historial Automatizaciones». ──
+let RQ={revision:null};
+function rechequeoPeriodoAnterior(){
+  // Último ciclo 23 → 22 ya cerrado (mismo cálculo que el backend): el ciclo en curso es el que contiene a «ayer» (o a hoy si ayer fue el 22); el cerrado es el anterior.
+  const hoy=new Date(),ay=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-1),ref=ay.getDate()===22?hoy:ay;
+  const inicioActual=ref.getDate()>=23?new Date(ref.getFullYear(),ref.getMonth(),23):new Date(ref.getFullYear(),ref.getMonth()-1,23);
+  const fin=new Date(inicioActual.getFullYear(),inicioActual.getMonth(),inicioActual.getDate()-1),desde=new Date(fin.getFullYear(),fin.getMonth()-1,23);
+  const f=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  qs('rq-desde').value=f(desde);qs('rq-hasta').value=f(fin);
+}
+function rechequeoMon(n){return n==null?'—':'$'+Math.round(n).toLocaleString('es-AR');}
+async function rechequeoPoll(job_id,etiqueta){
+  const url=getBackendUrl();
+  for(let i=0;i<400;i++){
+    const j=await (await fetch(`${url}/rentabilidad/rechequeo/ecom/status/${job_id}`)).json();
+    if(j.status==='done')return j.result;
+    if(j.status==='error')throw new Error((j.log||[]).slice(-1)[0]||'Falló');
+    if(j.status==='not_found')throw new Error('El servidor se reinició y perdió el proceso: volvé a revisar.');
+    qs('rq-estado').textContent=etiqueta+' '+((j.log||[]).slice(-1)[0]||'');
+    await new Promise(r=>setTimeout(r,3000));
+  }
+  throw new Error('Tardó demasiado.');
+}
+async function rechequeoRevisar(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  if(!qs('rq-desde').value)rechequeoPeriodoAnterior();
+  const btn=qs('rq-revisar');btn.disabled=true;qs('rq-res').innerHTML='';RQ.revision=null;qs('rq-estado').textContent='Iniciando…';
+  try{
+    const r=await fetch(url+'/rentabilidad/rechequeo/ecom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({desde:qs('rq-desde').value,hasta:qs('rq-hasta').value,pestana:(qs('rq-pestana').value||'').trim()||null,cerrar_fravega:!!qs('rq-fravega').checked})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();const res=await rechequeoPoll(job_id,'Revisando:');
+    RQ.revision=job_id;qs('rq-estado').textContent='';rechequeoPintar(res);
+  }catch(e){qs('rq-estado').textContent='No se pudo revisar: '+e.message;}
+  finally{btn.disabled=false;}
+}
+function rechequeoFravegaHtml(r){
+  const f=r.fravega;if(!f||!f.pedido)return '';
+  if(r.ejecutado){
+    if(f.ok===false)return `<p class="ofx-nota" style="color:var(--error-texto)"><b>⚠ Frávega NO se cerró:</b> ${acEsc(f.error||'')}. Renová las cookies <code>FRAVEGA_SELLER_*</code> en Railway y volvé a revisar: las filas de Frávega siguen con la comisión estimada.</p>`;
+    return `<p class="ofx-nota">🟣 <b>Frávega cerrada:</b> ${f.ordenes_con_comision_real} órdenes con comisión real · ${f.ventas_actualizadas_en_erp} ventas actualizadas en el ERP · <b>${r.fravega_pisadas_en_sheet||0} filas pisadas en el Sheet</b> (sin duplicar) · ${f.siguen_estimadas} siguen con comisión estimada (esperan su liquidación)${f.canceladas_observadas?` · ${f.canceladas_observadas} observadas (canceladas en Frávega y cobradas en Ecom)`:''}.</p>`;
+  }
+  if(!f.ok)return `<p class="ofx-nota" style="color:var(--error-texto)"><b>⚠ No pude entrar al Seller Center de Frávega:</b> ${acEsc(f.error||'')}. Si confirmás, se agregan las órdenes que faltan pero Frávega no se cierra (quedan con la comisión estimada).</p>`;
+  return `<p class="ofx-nota">🟣 Frávega: ${f.orden_ecom} órdenes cobradas en el rango, <b>${f.se_cierran}</b> van a quedar con la comisión REAL (${f.ordenes_en_proxima_liquidacion} órdenes en «Próxima liquidación»). Sus filas que ya están en el Sheet (${r.fravega_a_pisar_en_sheet} hoy con comisión real) se <b>pisan</b>, no se duplican.</p>`;
+}
+function rechequeoPintar(r){
+  const falta=r.faltan_en_erp+r.reactivadas_en_erp+r.faltan_en_sheet;
+  const k=(t,v,sub)=>`<div class="card" style="min-width:150px;flex:1;margin:0"><div class="ofx-nota">${t}</div><div style="font-size:22px;font-weight:700">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}</div>`;
+  qs('rq-res').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">${k('Órdenes en Ecom',r.en_ecom,r.cobradas+' cobradas · '+r.sin_cobrar_excluidas+' sin cobrar ('+rechequeoMon(r.facturacion_sin_cobrar)+')')}${k('Faltan en el ERP',r.faltan_en_erp,r.reactivadas_en_erp?r.reactivadas_en_erp+' estaban sin cobrar y ahora están cobradas':'')}${k('Faltan en el Sheet',r.faltan_en_sheet,'pestaña «'+acEsc(r.pestana)+'» · '+rechequeoMon(r.facturacion_faltante_sheet)+' facturados · rentabilidad '+rechequeoMon(r.rentabilidad_faltante_sheet))}</div>
+  ${rechequeoFravegaHtml(r)}
+  ${r.costo_cero?`<p class="ofx-nota">⚠ ${r.costo_cero} órdenes con costo 0 (probable SKU madre): entran sin calcular, revisalas a mano.</p>`:''}
+  ${r.ejecutado?`<p class="ofx-nota" style="color:var(--ok-texto)"><b>Listo: se agregaron ${r.agregadas_a_erp} al ERP y ${r.agregadas_al_sheet} al Sheet.</b> Recargá la página (Ctrl+F5) para ver los números nuevos.</p>`
+   :falta?`<div class="ofx-fila"><button type="button" class="btn primary" id="rq-confirmar" onclick="rechequeoConfirmar()">Agregar las que faltan (${r.faltan_en_erp+r.reactivadas_en_erp} al ERP · ${r.faltan_en_sheet} al Sheet)</button></div>`:'<p class="ofx-nota">✅ No falta ninguna: el ERP y el Sheet ya tienen todas las órdenes cobradas de este período.</p>'}
+  ${r.detalle&&r.detalle.length?`<div class="table-wrap" style="max-height:360px;overflow:auto"><table class="ofm-tabla"><thead><tr><th>Orden</th><th>Fecha</th><th>Canal</th><th>Estado de pago</th><th style="text-align:right">Facturación</th><th style="text-align:right">Rentabilidad</th><th>Qué pasa</th></tr></thead><tbody>${r.detalle.map(x=>`<tr><td>${acEsc(x.orden)}</td><td>${acEsc(x.fecha||'')}</td><td>${acEsc(x.canal||'')}</td><td>${acEsc(x.estado_pago||'')}</td><td style="text-align:right">${rechequeoMon(x.facturacion)}</td><td style="text-align:right">${rechequeoMon(x.rentabilidad)}</td><td>${acEsc(x.motivo)}</td></tr>`).join('')}</tbody></table></div>${r.detalle_total>r.detalle.length?`<p class="ofx-nota">Se muestran ${r.detalle.length} de ${r.detalle_total}.</p>`:''}`:''}`;
+}
+async function rechequeoConfirmar(){
+  const url=getBackendUrl();if(!url||!RQ.revision)return;
+  if(!confirm('Vas a agregar al ERP y al Sheet «Historial Automatizaciones» SOLO las órdenes que faltan (las que ya están no se tocan).'+(qs('rq-fravega').checked?'\nTambién se cierra Frávega: se trae su comisión real y sus filas en el Sheet se PISAN con esa comisión (no se duplican).':'')+'\n¿Seguimos?'))return;
+  const b=qs('rq-confirmar');if(b)b.disabled=true;qs('rq-estado').textContent='Agregando…';
+  try{
+    const r=await fetch(url+'/rentabilidad/rechequeo/ecom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ejecutar:true,revision_id:RQ.revision})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();const res=await rechequeoPoll(job_id,'Agregando:');
+    RQ.revision=null;qs('rq-estado').textContent='';rechequeoPintar({...res,detalle:[],ejecutado:true,pestana:res.pestana});
+    try{localStorage.removeItem('dash_cache');}catch(e){}
+  }catch(e){qs('rq-estado').textContent='No se pudo agregar: '+e.message;if(b)b.disabled=false;}
 }
 
 // ── Candidatos a Full (backend: ml_full_candidatos.py): publicaciones activas con ventas que todavía no son de Full. Solo lectura. ──

@@ -1404,3 +1404,148 @@ def reporte_ecom_ventas(
         + (f" (datos hasta {cierre.hasta.isoformat()})." if cierre else ".")
     ]
     return res
+
+
+# ══════════════════════════════════════════════════════
+# RECHEQUEO DE VENTAS ECOM (pedido de Maxx, 2026-11-24): vuelve a pedirle a Ecom todas las órdenes de un rango y agrega SOLO las que faltan en el ERP (`venta_ecom`) y en el
+# Sheet «Historial Automatizaciones». Dos pasos: revisar (no escribe nada) y confirmar. Ver `rechequeo_ecom.py`.
+# ══════════════════════════════════════════════════════
+
+_rechequeos: dict[str, dict] = {}            # job_id -> {"status", "log", "result"}
+_rechequeo_pendiente: dict[str, dict] = {}   # job_id de la revisión -> lo calculado (en memoria), para confirmar sin volver a pedirle todo a Ecom
+_VIGENCIA_REVISION_SEG = 60 * 60
+
+
+class RechequeoIn(BaseModel):
+    desde: date | None = None          # por defecto, el último ciclo 23 → 22 ya cerrado
+    hasta: date | None = None
+    ejecutar: bool = False
+    revision_id: str | None = None     # con ejecutar=True: el job_id de la revisión que se confirma
+    pestana: str | None = None         # pestaña de ventas del Sheet (si se omite se detecta por sus encabezados)
+    cerrar_fravega: bool = True        # también trae la comisión REAL de Frávega (Seller Center) y PISA sus filas en el Sheet
+
+
+def _log_rechequeo(job_id: str, msg: str) -> None:
+    _rechequeos[job_id]["log"].append(msg)
+
+
+def _fravega_en_revision(cerrar: bool, frescas) -> dict:
+    """Solo lectura: ¿se puede entrar al Seller Center de Frávega con las cookies actuales? ¿cuántas de sus órdenes del rango van a quedar con la comisión real?"""
+    from . import fravega_seller
+    from .rechequeo_ecom import es_fravega
+    if not cerrar:
+        return {"pedido": False}
+    out = {"pedido": True, "ok": False, "error": None, "ordenes_en_proxima_liquidacion": 0, "se_cierran": 0, "orden_ecom": sum(1 for f in frescas if es_fravega(f) and not f.excluido)}
+    try:
+        ordenes = fravega_seller.traer_proxima_liquidacion()
+    except (fravega_seller.FravegaNoConfigurado, fravega_seller.SesionFravegaVencida) as e:
+        out["error"] = str(e)
+        return out
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+    vigentes = {o.orden for o in ordenes if o.estado != fravega_seller.ESTADO_DEVUELTA and o.comision > 0}
+    out.update(ok=True, ordenes_en_proxima_liquidacion=len(ordenes),
+               se_cierran=sum(1 for f in frescas if es_fravega(f) and not f.excluido and f.orden_externa in vigentes))
+    return out
+
+
+def _job_revisar_rechequeo(job_id: str, desde: date, hasta: date, pestana: str | None, cerrar_fravega: bool = True) -> None:
+    from .rechequeo_ecom import HojaSheet, comparar_y_aplicar, costo_operacion_vigente
+    try:
+        tc = _resolver_tc(None)
+        _log_rechequeo(job_id, f"Pidiéndole a Ecom las órdenes del {desde} al {hasta} (puede tardar unos minutos)...")
+        with sesion() as db:
+            ingesta = EcomApiAdapter().periodo(desde, hasta, tc)
+            _log_rechequeo(job_id, f"Ecom devolvió {len(ingesta.lineas) + len(ingesta.excluidas_por_estado_pago) + len(ingesta.incidencias_costo)} órdenes: calculando...")
+            iva_provider, providers = IvaProvider(consultar=_consultar_catalogo_tactica_con_cache()), _providers_ecom(_fetch_fn_con_cache())
+            resultado = construir_filas_ecom(db, ingesta, iva_provider, **providers)
+            if cerrar_fravega:
+                _log_rechequeo(job_id, "Probando el acceso al Seller Center de Frávega...")
+            fravega = _fravega_en_revision(cerrar_fravega, resultado.filas)
+            _log_rechequeo(job_id, "Leyendo el Sheet «Historial Automatizaciones»...")
+            gc = gsheets.get_client()
+            hoja = HojaSheet.detectar(gc, pestana=pestana)
+            res = comparar_y_aplicar(db, resultado.filas, hoja, desde, hasta, False, costo_operacion_vigente(db))
+            db.rollback()       # revisar NO guarda nada
+        res["costo_cero"] = len(ingesta.incidencias_costo)
+        res["con_error"] = [list(x) for x in list(ingesta.ilegibles)[:20]]
+        res["fravega"] = fravega
+        _rechequeo_pendiente[job_id] = {"frescas": resultado.filas, "ingesta": ingesta, "iva": iva_provider, "providers": providers, "cerrar_fravega": cerrar_fravega,
+                                        "desde": desde, "hasta": hasta, "pestana": hoja.titulo, "en": time.time()}
+        _rechequeos[job_id].update(status="done", result=res)
+        _log_rechequeo(job_id, f"Revisión lista: faltan {res['faltan_en_erp']} en el ERP y {res['faltan_en_sheet']} en el Sheet.")
+    except Exception as e:  # noqa: BLE001
+        _rechequeos[job_id].update(status="error")
+        _log_rechequeo(job_id, f"Error: {type(e).__name__}: {e}")
+
+
+def _job_confirmar_rechequeo(job_id: str, revision_id: str) -> None:
+    from .rechequeo_ecom import HojaSheet, comparar_y_aplicar, costo_operacion_vigente
+    try:
+        p = _rechequeo_pendiente.pop(revision_id)
+        fravega: dict = {"pedido": bool(p["cerrar_fravega"])}
+        frescas = p["frescas"]
+        if p["cerrar_fravega"]:
+            # 1) Frávega: la comisión y el fee REALES de «Próxima liquidación» pasan a `liquidacion_fravega` y a las ventas ya guardadas (se confirma en su propia transacción).
+            from . import fravega_seller
+            from .persistencia import sincronizar_proxima_liquidacion, ventas_fravega_estimadas
+            _log_rechequeo(job_id, "Cerrando Frávega: trayendo la comisión real del Seller Center...")
+            try:
+                ordenes = fravega_seller.traer_proxima_liquidacion()
+                with sesion() as db:
+                    r = sincronizar_proxima_liquidacion(db, ordenes)
+                    db.flush()
+                    fravega.update(ok=True, ordenes_con_comision_real=r.ordenes_en_liquidacion, ventas_actualizadas_en_erp=len(r.ventas_actualizadas),
+                                   canceladas_observadas=len(r.canceladas_observadas), siguen_estimadas=len(ventas_fravega_estimadas(db)))
+                # 2) Las filas de este rango se vuelven a armar (sin pedirle nada a Ecom) para que las de Frávega salgan con la comisión real.
+                with sesion() as db:
+                    frescas = construir_filas_ecom(db, p["ingesta"], p["iva"], **p["providers"]).filas
+                    db.rollback()
+            except (fravega_seller.FravegaNoConfigurado, fravega_seller.SesionFravegaVencida) as e:
+                fravega.update(ok=False, error=str(e))
+                _log_rechequeo(job_id, f"Frávega NO se cerró: {e}")
+            except Exception as e:  # noqa: BLE001
+                fravega.update(ok=False, error=f"{type(e).__name__}: {e}")
+                _log_rechequeo(job_id, f"Frávega NO se cerró: {type(e).__name__}: {e}")
+        _log_rechequeo(job_id, "Agregando las que faltan...")
+        gc = gsheets.get_client()
+        hoja = HojaSheet.detectar(gc, pestana=p["pestana"])          # se vuelve a leer: si n8n agregó algo mientras tanto, no se duplica
+        with sesion() as db:
+            res = comparar_y_aplicar(db, frescas, hoja, p["desde"], p["hasta"], True, costo_operacion_vigente(db), pisar_fravega=bool(p["cerrar_fravega"] and fravega.get("ok")))
+        res["fravega"] = fravega
+        _rechequeos[job_id].update(status="done", result=res)
+        _log_rechequeo(job_id, f"Listo: {res['agregadas_a_erp']} agregadas al ERP y {res['agregadas_al_sheet']} al Sheet; {res.get('fravega_pisadas_en_sheet', 0)} filas de Frávega pisadas.")
+    except Exception as e:  # noqa: BLE001
+        _rechequeos[job_id].update(status="error")
+        _log_rechequeo(job_id, f"Error: {type(e).__name__}: {e}")
+
+
+@router.post("/rechequeo/ecom")
+def rechequeo_ecom(payload: RechequeoIn) -> dict:
+    """`ejecutar=False` (por defecto): revisa y cuenta lo que falta, sin escribir nada. `ejecutar=True` + `revision_id`: agrega lo que esa revisión encontró (vale 60 min)."""
+    if payload.ejecutar:
+        p = _rechequeo_pendiente.get(payload.revision_id or "")
+        if p is None or time.time() - p["en"] > _VIGENCIA_REVISION_SEG:
+            raise HTTPException(409, "Primero hay que revisar (esa revisión no existe, ya se usó o pasó más de una hora): volvé a apretar «Revisar».")
+        job_id = f"rechequeo_c_{int(time.time() * 1000)}"
+        _rechequeos[job_id] = {"status": "running", "log": [], "result": None}
+        threading.Thread(target=_job_confirmar_rechequeo, args=(job_id, payload.revision_id), daemon=True).start()
+        return {"job_id": job_id}
+    from .rechequeo_ecom import ultimo_ciclo_cerrado
+    desde, hasta = payload.desde, payload.hasta
+    if not desde or not hasta:
+        desde, hasta = ultimo_ciclo_cerrado()
+    if hasta < desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    if (hasta - desde).days > 100:
+        raise HTTPException(422, "El rango es demasiado largo (máximo ~3 meses por vez).")
+    job_id = f"rechequeo_r_{int(time.time() * 1000)}"
+    _rechequeos[job_id] = {"status": "running", "log": [], "result": None}
+    threading.Thread(target=_job_revisar_rechequeo, args=(job_id, desde, hasta, payload.pestana, payload.cerrar_fravega), daemon=True).start()
+    return {"job_id": job_id, "desde": desde.isoformat(), "hasta": hasta.isoformat()}
+
+
+@router.get("/rechequeo/ecom/status/{job_id}")
+def rechequeo_ecom_status(job_id: str) -> dict:
+    return _rechequeos.get(job_id) or {"status": "not_found"}
