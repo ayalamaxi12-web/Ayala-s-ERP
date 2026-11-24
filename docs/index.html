@@ -1277,6 +1277,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="ofx-fila"><label>Desde<input type="date" id="rq-desde" class="fi"></label><label>Hasta<input type="date" id="rq-hasta" class="fi"></label>
     <label>Pestaña del Sheet <small>(solo si no la encuentra sola)</small><input type="text" id="rq-pestana" class="fi" placeholder="se detecta sola"></label>
     <button type="button" class="btn" onclick="rechequeoPeriodoAnterior()" title="El último ciclo 23 → 22 ya cerrado">Último período cerrado</button>
+    <label style="flex-direction:row;align-items:center;gap:6px" title="Trae la comisión y el fee REALES de Frávega (Seller Center, con las cookies de Railway) y pisa sus filas en el Sheet con esa comisión, sin duplicar"><input type="checkbox" id="rq-fravega" checked> También cerrar Frávega (comisión real)</label>
     <button type="button" class="btn primary" id="rq-revisar" onclick="rechequeoRevisar()">Revisar (no escribe nada)</button></div>
   <div id="rq-estado" role="status" aria-live="polite" class="ofx-nota"></div>
   <div id="rq-res"></div>
@@ -5581,17 +5582,27 @@ async function rechequeoRevisar(){
   if(!qs('rq-desde').value)rechequeoPeriodoAnterior();
   const btn=qs('rq-revisar');btn.disabled=true;qs('rq-res').innerHTML='';RQ.revision=null;qs('rq-estado').textContent='Iniciando…';
   try{
-    const r=await fetch(url+'/rentabilidad/rechequeo/ecom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({desde:qs('rq-desde').value,hasta:qs('rq-hasta').value,pestana:(qs('rq-pestana').value||'').trim()||null})});
+    const r=await fetch(url+'/rentabilidad/rechequeo/ecom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({desde:qs('rq-desde').value,hasta:qs('rq-hasta').value,pestana:(qs('rq-pestana').value||'').trim()||null,cerrar_fravega:!!qs('rq-fravega').checked})});
     if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
     const{job_id}=await r.json();const res=await rechequeoPoll(job_id,'Revisando:');
     RQ.revision=job_id;qs('rq-estado').textContent='';rechequeoPintar(res);
   }catch(e){qs('rq-estado').textContent='No se pudo revisar: '+e.message;}
   finally{btn.disabled=false;}
 }
+function rechequeoFravegaHtml(r){
+  const f=r.fravega;if(!f||!f.pedido)return '';
+  if(r.ejecutado){
+    if(f.ok===false)return `<p class="ofx-nota" style="color:var(--error-texto)"><b>⚠ Frávega NO se cerró:</b> ${acEsc(f.error||'')}. Renová las cookies <code>FRAVEGA_SELLER_*</code> en Railway y volvé a revisar: las filas de Frávega siguen con la comisión estimada.</p>`;
+    return `<p class="ofx-nota">🟣 <b>Frávega cerrada:</b> ${f.ordenes_con_comision_real} órdenes con comisión real · ${f.ventas_actualizadas_en_erp} ventas actualizadas en el ERP · <b>${r.fravega_pisadas_en_sheet||0} filas pisadas en el Sheet</b> (sin duplicar) · ${f.siguen_estimadas} siguen con comisión estimada (esperan su liquidación)${f.canceladas_observadas?` · ${f.canceladas_observadas} observadas (canceladas en Frávega y cobradas en Ecom)`:''}.</p>`;
+  }
+  if(!f.ok)return `<p class="ofx-nota" style="color:var(--error-texto)"><b>⚠ No pude entrar al Seller Center de Frávega:</b> ${acEsc(f.error||'')}. Si confirmás, se agregan las órdenes que faltan pero Frávega no se cierra (quedan con la comisión estimada).</p>`;
+  return `<p class="ofx-nota">🟣 Frávega: ${f.orden_ecom} órdenes cobradas en el rango, <b>${f.se_cierran}</b> van a quedar con la comisión REAL (${f.ordenes_en_proxima_liquidacion} órdenes en «Próxima liquidación»). Sus filas que ya están en el Sheet (${r.fravega_a_pisar_en_sheet} hoy con comisión real) se <b>pisan</b>, no se duplican.</p>`;
+}
 function rechequeoPintar(r){
   const falta=r.faltan_en_erp+r.reactivadas_en_erp+r.faltan_en_sheet;
   const k=(t,v,sub)=>`<div class="card" style="min-width:150px;flex:1;margin:0"><div class="ofx-nota">${t}</div><div style="font-size:22px;font-weight:700">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}</div>`;
   qs('rq-res').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">${k('Órdenes en Ecom',r.en_ecom,r.cobradas+' cobradas · '+r.sin_cobrar_excluidas+' sin cobrar ('+rechequeoMon(r.facturacion_sin_cobrar)+')')}${k('Faltan en el ERP',r.faltan_en_erp,r.reactivadas_en_erp?r.reactivadas_en_erp+' estaban sin cobrar y ahora están cobradas':'')}${k('Faltan en el Sheet',r.faltan_en_sheet,'pestaña «'+acEsc(r.pestana)+'» · '+rechequeoMon(r.facturacion_faltante_sheet)+' facturados · rentabilidad '+rechequeoMon(r.rentabilidad_faltante_sheet))}</div>
+  ${rechequeoFravegaHtml(r)}
   ${r.costo_cero?`<p class="ofx-nota">⚠ ${r.costo_cero} órdenes con costo 0 (probable SKU madre): entran sin calcular, revisalas a mano.</p>`:''}
   ${r.ejecutado?`<p class="ofx-nota" style="color:var(--ok-texto)"><b>Listo: se agregaron ${r.agregadas_a_erp} al ERP y ${r.agregadas_al_sheet} al Sheet.</b> Recargá la página (Ctrl+F5) para ver los números nuevos.</p>`
    :falta?`<div class="ofx-fila"><button type="button" class="btn primary" id="rq-confirmar" onclick="rechequeoConfirmar()">Agregar las que faltan (${r.faltan_en_erp+r.reactivadas_en_erp} al ERP · ${r.faltan_en_sheet} al Sheet)</button></div>`:'<p class="ofx-nota">✅ No falta ninguna: el ERP y el Sheet ya tienen todas las órdenes cobradas de este período.</p>'}
@@ -5599,7 +5610,7 @@ function rechequeoPintar(r){
 }
 async function rechequeoConfirmar(){
   const url=getBackendUrl();if(!url||!RQ.revision)return;
-  if(!confirm('Vas a agregar al ERP y al Sheet «Historial Automatizaciones» SOLO las órdenes que faltan (las que ya están no se tocan).\n¿Seguimos?'))return;
+  if(!confirm('Vas a agregar al ERP y al Sheet «Historial Automatizaciones» SOLO las órdenes que faltan (las que ya están no se tocan).'+(qs('rq-fravega').checked?'\nTambién se cierra Frávega: se trae su comisión real y sus filas en el Sheet se PISAN con esa comisión (no se duplican).':'')+'\n¿Seguimos?'))return;
   const b=qs('rq-confirmar');if(b)b.disabled=true;qs('rq-estado').textContent='Agregando…';
   try{
     const r=await fetch(url+'/rentabilidad/rechequeo/ecom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ejecutar:true,revision_id:RQ.revision})});

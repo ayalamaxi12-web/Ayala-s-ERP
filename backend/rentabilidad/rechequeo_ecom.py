@@ -7,6 +7,9 @@ muestra menos que la plataforma de Mercado Libre. Este módulo vuelve a pedirle 
   actual. Nada más se toca: las órdenes que ya están no se recalculan.
 - **Sheet**: las órdenes cobradas (las que exporta `/reporte/ecom/ventas`) cuyo «Numero Orden» no está en la hoja, con las MISMAS columnas, ubicadas por el título del encabezado.
 
+Frávega (2026-11-24): con las cookies del Seller Center al día, al confirmar también se «cierra» Frávega: se trae la comisión y el fee logístico REALES de «Próxima liquidación»
+(`persistencia.sincronizar_proxima_liquidacion`) y las filas de Frávega que ya estaban en el Sheet se **PISAN** con la versión que trae la comisión real (no se duplican).
+
 Dos pasos: primero se revisa (no escribe nada) y la persona confirma; recién ahí se agrega.
 """
 from __future__ import annotations
@@ -20,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from .cierre_ecom_diario import ayer_en_argentina, ciclo_de
 from .export_ventas_ecom import COLUMNAS, _fila
+from .ingesta_ecom import ORIGEN_COMISION_ESTIMADO_FRAVEGA
 from .models import ParametroTasa, VentaEcom
 from .regimen import periodo_de_rango
 
@@ -47,7 +51,11 @@ class HojaSheet:
         self.ws = ws
         self.encabezados = [str(c).strip() for c in (ws.row_values(1) or [])]
         idx = self.encabezados.index(COL_CLAVE)
-        self.numeros = {norm_orden(x) for x in ws.col_values(idx + 1)[1:] if str(x).strip()}
+        self.filas_por_numero: dict[str, list[int]] = {}
+        for n, x in enumerate(ws.col_values(idx + 1)[1:], start=2):
+            if str(x).strip():
+                self.filas_por_numero.setdefault(norm_orden(x), []).append(n)
+        self.numeros = set(self.filas_por_numero)
 
     @property
     def titulo(self) -> str:
@@ -58,6 +66,17 @@ class HojaSheet:
         if valores:
             self.ws.append_rows(valores, value_input_option="USER_ENTERED")
         return len(valores)
+
+    def actualizar(self, items: list[tuple[int, dict]]) -> int:
+        """PISA las filas indicadas (n.º de fila en el Sheet, valores por título de columna). Por lotes; no agrega ni borra filas."""
+        from gspread.utils import rowcol_to_a1
+        if not items:
+            return 0
+        ultima = len(self.encabezados)
+        datos = [{"range": f"{rowcol_to_a1(r, 1)}:{rowcol_to_a1(r, ultima)}", "values": [[f.get(t, "") if f.get(t) is not None else "" for t in self.encabezados]]} for r, f in items]
+        for i in range(0, len(datos), 200):
+            self.ws.batch_update(datos[i:i + 200], value_input_option="USER_ENTERED")
+        return len(items)
 
     @classmethod
     def detectar(cls, gc, sheet_id: str = HISTORIAL_AUTOMATIZACIONES_ID, pestana: str | None = None) -> "HojaSheet":
@@ -83,7 +102,11 @@ def _etiqueta_periodo(fecha: date | None) -> str | None:
     return periodo_de_rango(*ciclo_de(fecha)) if fecha else None
 
 
-def comparar_y_aplicar(db: Session, frescas: list[VentaEcom], hoja, desde: date, hasta: date, ejecutar: bool, costo_operacion: Decimal | None = None) -> dict:
+def es_fravega(v: VentaEcom) -> bool:
+    return bool(v.origen_comision) and "FRAVEGA" in str(v.origen_comision).upper()
+
+
+def comparar_y_aplicar(db: Session, frescas: list[VentaEcom], hoja, desde: date, hasta: date, ejecutar: bool, costo_operacion: Decimal | None = None, pisar_fravega: bool = True) -> dict:
     """`frescas`: las ventas que devolvió Ecom para el rango, ya calculadas (en memoria). Con `ejecutar=False` solo cuenta; con `ejecutar=True` agrega a `venta_ecom` y a la hoja."""
     en_db = {norm_orden(v.numero_orden): v for v in db.query(VentaEcom).filter(VentaEcom.fecha_creacion_venta >= desde, VentaEcom.fecha_creacion_venta <= hasta).all()}
     nuevas_db, reactivadas = [], []
@@ -96,6 +119,10 @@ def comparar_y_aplicar(db: Session, frescas: list[VentaEcom], hoja, desde: date,
             reactivadas.append((viejo, f))
     cobradas = [f for f in frescas if not f.excluido and f.neto is not None]
     faltan_sheet = [f for f in cobradas if norm_orden(f.numero_orden) not in hoja.numeros]
+    # Frávega con comisión REAL que ya está en el Sheet: se PISA (la fila vieja pudo haberse escrito con la comisión estimada).
+    filas_sheet = getattr(hoja, "filas_por_numero", {})
+    fravega_real = [f for f in cobradas if es_fravega(f) and f.origen_comision != ORIGEN_COMISION_ESTIMADO_FRAVEGA]
+    fravega_a_pisar = [f for f in fravega_real if norm_orden(f.numero_orden) in filas_sheet] if pisar_fravega else []
 
     def _item(f: VentaEcom, motivo: str) -> dict:
         return {"orden": f.numero_orden, "fecha": f.fecha_creacion_venta.isoformat() if f.fecha_creacion_venta else None, "canal": f.canal_de_venta, "estado_pago": f.estado_pago,
@@ -109,6 +136,9 @@ def comparar_y_aplicar(db: Session, frescas: list[VentaEcom], hoja, desde: date,
         "facturacion_sin_cobrar": float(sum((f.precio_final or 0) for f in excluidas)),
         "ya_en_erp": len(frescas) - len(nuevas_db), "faltan_en_erp": len(nuevas_db), "reactivadas_en_erp": len(reactivadas),
         "ya_en_sheet": len(cobradas) - len(faltan_sheet), "faltan_en_sheet": len(faltan_sheet),
+        "fravega_cobradas": sum(1 for f in cobradas if es_fravega(f)), "fravega_con_comision_real": len(fravega_real),
+        "fravega_con_comision_estimada": sum(1 for f in cobradas if es_fravega(f) and f.origen_comision == ORIGEN_COMISION_ESTIMADO_FRAVEGA),
+        "fravega_a_pisar_en_sheet": len(fravega_a_pisar),
         "facturacion_faltante_sheet": float(sum((f.precio_final or 0) for f in faltan_sheet)),
         "rentabilidad_faltante_sheet": float(sum((f.rentabilidad or 0) for f in faltan_sheet)),
         "detalle": detalle[:MUESTRA], "detalle_total": len(detalle),
@@ -124,6 +154,8 @@ def comparar_y_aplicar(db: Session, frescas: list[VentaEcom], hoja, desde: date,
         db.flush()
         res["agregadas_a_erp"] = len(nuevas_db) + len(reactivadas)
         res["agregadas_al_sheet"] = hoja.agregar([_fila(f, costo_operacion) for f in faltan_sheet])
+        pisadas = [(n, _fila(f, costo_operacion)) for f in fravega_a_pisar for n in filas_sheet[norm_orden(f.numero_orden)]]
+        res["fravega_pisadas_en_sheet"] = hoja.actualizar(pisadas) if pisadas else 0
     return res
 
 

@@ -21,8 +21,13 @@ def _v(orden, dia=date(2026, 11, 5), excluido=False, estado="Cobrado", **k):
 
 
 class _Hoja:
-    def __init__(self, numeros, encabezados=("Numero Orden", "Precio Final", "Comision Venta SIN IVA", "Columna Nueva")):
-        self.numeros, self.encabezados, self.titulo, self.escritas = set(numeros), list(encabezados), "Ecom", []
+    def __init__(self, numeros, encabezados=("Numero Orden", "Precio Final", "Comision Venta", "Comision Venta SIN IVA", "Columna Nueva"), filas=None):
+        self.numeros, self.encabezados, self.titulo, self.escritas, self.pisadas = set(numeros), list(encabezados), "Ecom", [], []
+        self.filas_por_numero = filas if filas is not None else {n: [i + 2] for i, n in enumerate(sorted(self.numeros))}
+
+    def actualizar(self, items):
+        self.pisadas += items
+        return len(items)
 
     def agregar(self, filas):
         self.escritas += filas
@@ -118,3 +123,56 @@ def test_confirmar_sin_revision_previa_da_409():
     assert c.post("/rentabilidad/rechequeo/ecom", json={"ejecutar": True, "revision_id": "nada"}).status_code == 409
     assert c.post("/rentabilidad/rechequeo/ecom", json={"desde": "2026-11-05", "hasta": "2026-11-01"}).status_code == 422
     assert c.get("/rentabilidad/rechequeo/ecom/status/x").json() == {"status": "not_found"}
+
+
+def test_frávega_con_comision_real_pisa_la_fila_del_sheet_en_vez_de_duplicarla(db_session):
+    ahora_real = _v("F1", canal_de_venta="Fravega", origen_comision="LIQUIDACION_FRAVEGA", orden_externa="F-1", comision_venta=d("3000"), fecha_creacion_venta=date(2026, 11, 20))
+    estimada = _v("F2", canal_de_venta="Fravega", origen_comision="ESTIMADO_FRAVEGA", orden_externa="F-2")
+    ml = _v("M1")
+    hoja = _Hoja({"F1", "F2", "M1"}, filas={"F1": [5, 9], "F2": [6], "M1": [7]})
+    r = rc.comparar_y_aplicar(db_session, [ahora_real, estimada, ml], hoja, date(2026, 10, 23), date(2026, 11, 22), ejecutar=True)
+    assert r["faltan_en_sheet"] == 0 and r["agregadas_al_sheet"] == 0                           # ninguna se duplica
+    assert r["fravega_con_comision_real"] == 1 and r["fravega_con_comision_estimada"] == 1 and r["fravega_a_pisar_en_sheet"] == 1 and r["fravega_pisadas_en_sheet"] == 2
+    assert sorted(n for n, _ in hoja.pisadas) == [5, 9]                                         # solo la de comisión real (y todas sus filas); ni la estimada ni la de ML
+    assert all(f["Numero Orden"] == "F1" and f["Comision Venta"] == 3000.0 for _, f in hoja.pisadas)
+    assert hoja.escritas == []
+
+
+def test_si_frávega_no_se_cerro_no_se_pisa_nada(db_session):
+    real = _v("F1", canal_de_venta="Fravega", origen_comision="LIQUIDACION_FRAVEGA", orden_externa="F-1")
+    hoja = _Hoja({"F1"})
+    r = rc.comparar_y_aplicar(db_session, [real], hoja, date(2026, 10, 23), date(2026, 11, 22), ejecutar=True, pisar_fravega=False)
+    assert r["fravega_a_pisar_en_sheet"] == 0 and r["fravega_pisadas_en_sheet"] == 0 and hoja.pisadas == []
+
+
+def test_la_hoja_real_pisa_por_lotes_sin_agregar_filas():
+    class _WSX:
+        title = "Ecom"
+        def __init__(self): self.lotes = []
+        def row_values(self, n): return ["Numero Orden", "Precio Final", "Comision Venta"]
+        def col_values(self, n): return ["Numero Orden", "A", "F1", "F1"]
+        def batch_update(self, datos, value_input_option=None): self.lotes.append((datos, value_input_option))
+    ws = _WSX()
+    h = rc.HojaSheet(ws)
+    assert h.filas_por_numero == {"A": [2], "F1": [3, 4]}
+    assert h.actualizar([(3, {"Numero Orden": "F1", "Precio Final": 100.0, "Comision Venta": 5.0}), (4, {"Numero Orden": "F1", "Comision Venta": 5.0})]) == 2
+    datos, modo = ws.lotes[0]
+    assert modo == "USER_ENTERED" and datos[0] == {"range": "A3:C3", "values": [["F1", 100.0, 5.0]]} and datos[1]["range"] == "A4:C4" and datos[1]["values"] == [["F1", "", 5.0]]
+
+
+def test_revision_de_frávega_avisa_si_la_sesion_vencio_y_cuenta_cuantas_se_cierran(monkeypatch):
+    from decimal import Decimal as D
+    from rentabilidad import api, fravega_seller as fs
+    f1 = _v("F1", canal_de_venta="Fravega", origen_comision="ESTIMADO_FRAVEGA", orden_externa="F-1")
+    f2 = _v("F2", canal_de_venta="Fravega", origen_comision="ESTIMADO_FRAVEGA", orden_externa="F-2")
+    ml = _v("M1")
+    ordenes = [fs.OrdenProximaLiquidacion("F-1", "Facturada", date(2026, 11, 5), D(100), D(20), D(5), D(0), D(75)),
+               fs.OrdenProximaLiquidacion("F-2", "Devuelta", date(2026, 11, 5), D(100), D(20), D(5), D(0), D(75))]
+    monkeypatch.setattr(fs, "traer_proxima_liquidacion", lambda: ordenes)
+    r = api._fravega_en_revision(True, [f1, f2, ml])
+    assert r["ok"] and r["orden_ecom"] == 2 and r["se_cierran"] == 1 and r["ordenes_en_proxima_liquidacion"] == 2         # la devuelta queda estimada
+    def vencida(): raise fs.SesionFravegaVencida("renová las cookies")
+    monkeypatch.setattr(fs, "traer_proxima_liquidacion", vencida)
+    r2 = api._fravega_en_revision(True, [f1])
+    assert not r2["ok"] and "cookies" in r2["error"]
+    assert api._fravega_en_revision(False, [f1]) == {"pedido": False}
