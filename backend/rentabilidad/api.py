@@ -1404,3 +1404,95 @@ def reporte_ecom_ventas(
         + (f" (datos hasta {cierre.hasta.isoformat()})." if cierre else ".")
     ]
     return res
+
+
+# ══════════════════════════════════════════════════════
+# RECHEQUEO DE VENTAS ECOM (pedido de Maxx, 2026-11-24): vuelve a pedirle a Ecom todas las órdenes de un rango y agrega SOLO las que faltan en el ERP (`venta_ecom`) y en el
+# Sheet «Historial Automatizaciones». Dos pasos: revisar (no escribe nada) y confirmar. Ver `rechequeo_ecom.py`.
+# ══════════════════════════════════════════════════════
+
+_rechequeos: dict[str, dict] = {}            # job_id -> {"status", "log", "result"}
+_rechequeo_pendiente: dict[str, dict] = {}   # job_id de la revisión -> lo calculado (en memoria), para confirmar sin volver a pedirle todo a Ecom
+_VIGENCIA_REVISION_SEG = 60 * 60
+
+
+class RechequeoIn(BaseModel):
+    desde: date | None = None          # por defecto, el último ciclo 23 → 22 ya cerrado
+    hasta: date | None = None
+    ejecutar: bool = False
+    revision_id: str | None = None     # con ejecutar=True: el job_id de la revisión que se confirma
+    pestana: str | None = None         # pestaña de ventas del Sheet (si se omite se detecta por sus encabezados)
+
+
+def _log_rechequeo(job_id: str, msg: str) -> None:
+    _rechequeos[job_id]["log"].append(msg)
+
+
+def _job_revisar_rechequeo(job_id: str, desde: date, hasta: date, pestana: str | None) -> None:
+    from .rechequeo_ecom import HojaSheet, comparar_y_aplicar, costo_operacion_vigente
+    try:
+        tc = _resolver_tc(None)
+        _log_rechequeo(job_id, f"Pidiéndole a Ecom las órdenes del {desde} al {hasta} (puede tardar unos minutos)...")
+        with sesion() as db:
+            ingesta = EcomApiAdapter().periodo(desde, hasta, tc)
+            _log_rechequeo(job_id, f"Ecom devolvió {len(ingesta.lineas) + len(ingesta.excluidas_por_estado_pago) + len(ingesta.incidencias_costo)} órdenes: calculando...")
+            resultado = construir_filas_ecom(db, ingesta, IvaProvider(consultar=_consultar_catalogo_tactica_con_cache()), **_providers_ecom(_fetch_fn_con_cache()))
+            _log_rechequeo(job_id, "Leyendo el Sheet «Historial Automatizaciones»...")
+            gc = gsheets.get_client()
+            hoja = HojaSheet.detectar(gc, pestana=pestana)
+            res = comparar_y_aplicar(db, resultado.filas, hoja, desde, hasta, False, costo_operacion_vigente(db))
+            db.rollback()       # revisar NO guarda nada
+        res["costo_cero"] = len(ingesta.incidencias_costo)
+        res["con_error"] = [list(x) for x in list(ingesta.ilegibles)[:20]]
+        _rechequeo_pendiente[job_id] = {"frescas": resultado.filas, "desde": desde, "hasta": hasta, "pestana": hoja.titulo, "en": time.time()}
+        _rechequeos[job_id].update(status="done", result=res)
+        _log_rechequeo(job_id, f"Revisión lista: faltan {res['faltan_en_erp']} en el ERP y {res['faltan_en_sheet']} en el Sheet.")
+    except Exception as e:  # noqa: BLE001
+        _rechequeos[job_id].update(status="error")
+        _log_rechequeo(job_id, f"Error: {type(e).__name__}: {e}")
+
+
+def _job_confirmar_rechequeo(job_id: str, revision_id: str) -> None:
+    from .rechequeo_ecom import HojaSheet, comparar_y_aplicar, costo_operacion_vigente
+    try:
+        p = _rechequeo_pendiente.pop(revision_id)
+        _log_rechequeo(job_id, "Agregando las que faltan...")
+        gc = gsheets.get_client()
+        hoja = HojaSheet.detectar(gc, pestana=p["pestana"])          # se vuelve a leer: si n8n agregó algo mientras tanto, no se duplica
+        with sesion() as db:
+            res = comparar_y_aplicar(db, p["frescas"], hoja, p["desde"], p["hasta"], True, costo_operacion_vigente(db))
+        _rechequeos[job_id].update(status="done", result=res)
+        _log_rechequeo(job_id, f"Listo: {res['agregadas_a_erp']} agregadas al ERP y {res['agregadas_al_sheet']} al Sheet.")
+    except Exception as e:  # noqa: BLE001
+        _rechequeos[job_id].update(status="error")
+        _log_rechequeo(job_id, f"Error: {type(e).__name__}: {e}")
+
+
+@router.post("/rechequeo/ecom")
+def rechequeo_ecom(payload: RechequeoIn) -> dict:
+    """`ejecutar=False` (por defecto): revisa y cuenta lo que falta, sin escribir nada. `ejecutar=True` + `revision_id`: agrega lo que esa revisión encontró (vale 60 min)."""
+    if payload.ejecutar:
+        p = _rechequeo_pendiente.get(payload.revision_id or "")
+        if p is None or time.time() - p["en"] > _VIGENCIA_REVISION_SEG:
+            raise HTTPException(409, "Primero hay que revisar (esa revisión no existe, ya se usó o pasó más de una hora): volvé a apretar «Revisar».")
+        job_id = f"rechequeo_c_{int(time.time() * 1000)}"
+        _rechequeos[job_id] = {"status": "running", "log": [], "result": None}
+        threading.Thread(target=_job_confirmar_rechequeo, args=(job_id, payload.revision_id), daemon=True).start()
+        return {"job_id": job_id}
+    from .rechequeo_ecom import ultimo_ciclo_cerrado
+    desde, hasta = payload.desde, payload.hasta
+    if not desde or not hasta:
+        desde, hasta = ultimo_ciclo_cerrado()
+    if hasta < desde:
+        raise HTTPException(422, "'hasta' no puede ser anterior a 'desde'.")
+    if (hasta - desde).days > 100:
+        raise HTTPException(422, "El rango es demasiado largo (máximo ~3 meses por vez).")
+    job_id = f"rechequeo_r_{int(time.time() * 1000)}"
+    _rechequeos[job_id] = {"status": "running", "log": [], "result": None}
+    threading.Thread(target=_job_revisar_rechequeo, args=(job_id, desde, hasta, payload.pestana), daemon=True).start()
+    return {"job_id": job_id, "desde": desde.isoformat(), "hasta": hasta.isoformat()}
+
+
+@router.get("/rechequeo/ecom/status/{job_id}")
+def rechequeo_ecom_status(job_id: str) -> dict:
+    return _rechequeos.get(job_id) or {"status": "not_found"}
