@@ -797,3 +797,18 @@ def test_listar_skus_excel_incluye_los_que_no_tienen_precios_sin_repetir_y_en_or
     ]
     assert listar_skus_excel_matias(filas) == ["FAN-MIST-STAND-16I", "PLANCHA-SUB-GORRA"]
     assert "FAN-MIST-STAND-16I" not in parsear_precios_excel_matias(filas)   # sin precios: no está en `precios`, pero sí en la lista
+
+
+def test_resolver_precio_real_ignora_un_cupon_del_vendedor_que_no_trae_precio():
+    # Caso real 2026-11-24: la publicación tiene el cupón «Fieles Global» (SELLER_COUPON_CAMPAIGN) «started» y SIN precio: antes daba $0 en todo el Motor de Precios.
+    ml = _MLFalso({"IT": [{"id": "MLA1", "price": 320320, "original_price": None}]}, promos_por_item={
+        "MLA1": [{"type": "SELLER_COUPON_CAMPAIGN", "status": "started", "price": None, "original_price": None}],
+    })
+    d = {"id": "MLA1", "price": 320320, "original_price": None}
+    precio, tachado = resolver_precio_real(ml, "MLA1", "IT", d)
+    assert precio == Decimal("320320") and tachado is None
+    # con un cupón Y una oferta de precio activas, manda la oferta de precio
+    ml2 = _MLFalso({"IT": [{"id": "MLA1", "price": 320320, "original_price": None}]}, promos_por_item={
+        "MLA1": [{"type": "SELLER_COUPON_CAMPAIGN", "status": "started", "price": None}, {"type": "PRICE_DISCOUNT", "status": "started", "price": 285425, "original_price": 380567}],
+    })
+    assert resolver_precio_real(ml2, "MLA1", "IT", d) == (Decimal("285425"), Decimal("380567"))
