@@ -4156,9 +4156,10 @@ async function intelCargarReferencias(rango){const r=rango||INTEL_RANGO_REFS,row
 const AC={ml:{},ctx:null,ctxAbierto:{},ctxCargando:false,data:null,filas:[],vend:new Set(),page:1,pageSize:40,cargando:false,cargado:false,sim:{},otrosAb:{},otrosPanel:{},skuPorKey:{},abierto:null,keys:[],histAb:{},modo:'sku',catAb:{},catSort:'sub',ev:{dias:30,tipos:new Set(),fuertes:false,max:200}};
 function acEsc(t){return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Nuestro precio "comparable" contra una publicación por `c` unidades: precio × c (+ envío desde el umbral), igual que Competidores ("Mi Precio = PM×Cant+Envío").
-function acComparable(X,c,ctx){const t=(X||0)*(c>0?c:1);return t>=ctx.umbral?t+ctx.envio:t;}
+// `sinEnvio`: el precio ya es el FINAL de venta (lo escribió la persona en «Jugar mi precio»): no se le suma el envío. Solo el PM de Ecom viene sin envío y lo necesita.
+function acComparable(X,c,ctx,sinEnvio){const t=(X||0)*(c>0?c:1);return(!sinEnvio&&t>=ctx.umbral)?t+ctx.envio:t;}
 // Precio por unidad que deja nuestro comparable IGUAL al precio de una publicación (por `c` unidades). En la franja [umbral, umbral+envío) no existe uno exacto: se toma el más cercano por debajo del umbral.
-function acPrecioParaIgualar(precioComp,c,ctx){c=c>0?c:1;if(precioComp<ctx.umbral)return Math.round(precioComp/c);if(precioComp-ctx.envio>=ctx.umbral)return Math.round((precioComp-ctx.envio)/c);return Math.round((ctx.umbral-1)/c);}
+function acPrecioParaIgualar(precioComp,c,ctx,sinEnvio){c=c>0?c:1;if(sinEnvio||precioComp<ctx.umbral)return Math.round(precioComp/c);if(precioComp-ctx.envio>=ctx.umbral)return Math.round((precioComp-ctx.envio)/c);return Math.round((ctx.umbral-1)/c);}
 function acAgregar(f){const vis=f.Rey.concat(f.Media,f.Barato,f.Otros);f.refs=vis;
   const dif=vis.map(r=>r._diff).filter(x=>x!=null),mg=vis.map(r=>r._mg).filter(x=>x!=null);
   f._minDif=dif.length?Math.min(...dif):null;f._mgMin=mg.length?Math.min(...mg):null;
@@ -4216,7 +4217,7 @@ function acLinea(l,ctx){const k=l.key,pm=ctx.pm[k]||null,sku=(AC.skuPorKey&&AC.s
 const AC_ROL_ORDEN={Rey:0,Media:1,Barato:2};
 function acRolRank(r){return r in AC_ROL_ORDEN?AC_ROL_ORDEN[r]:9;}
 function acJugarCalcular(f,sim,ctx){
-  const qm=sim.q>0?sim.q:1,ex=(sim.extra||[]).map(l=>acLinea(l,ctx)),combo=ex.length>0,x0=acPrecioUnit(sim,f,'contado');
+  const qm=sim.q>0?sim.q:1,ex=(sim.extra||[]).map(l=>acLinea(l,ctx)),combo=ex.length>0,x0=acPrecioUnit(sim,f,'contado'),sinEnv=sim.px.contado>0;   // precio escrito a mano = precio final de venta (sin sumarle envío)
   const out={ok:x0>0,qm,combo,extras:ex,x0,formas:[],rivales:[],masBaratos:0,total:0,pubs:0,sinCosto:false};if(!out.ok)return out;
   const costoOk=f.costoUsd>0&&ctx.tc>0&&ex.every(e=>e.costoUsd>0);out.sinCosto=!costoOk;
   const otros=ex.reduce((s,e)=>s+e.x*e.q,0),netoOtros=ex.reduce((s,e)=>s+e.x*e.q/e.iva,0),costoTot=(f.costoUsd*qm+ex.reduce((s,e)=>s+e.costoUsd*e.q,0))*ctx.tc;
@@ -4228,14 +4229,14 @@ function acJugarCalcular(f,sim,ctx){
   if(!combo){
     const por=new Map();
     f.Rey.concat(f.Media,f.Barato,f.Otros).filter(r=>r.precio>0).forEach(r=>{
-      const c=r.cantidad>0?r.cantidad:1,qeq=sim.q>0?sim.q:c,su=r.precio*qeq/c,mio=acComparable(x0,qeq,ctx);   // a igual cantidad: su precio escalado a mis unidades (lineal)
-      const v={id:r.id,rol:r.rol||'',entidad:r.entidad,precio:r.precio,cantidad:c,qeq,su,mio,difPct:(su-mio)/mio*100,masBarato:su<mio,igualar:acPrecioParaIgualar(su,qeq,ctx)};
+      const c=r.cantidad>0?r.cantidad:1,qeq=sim.q>0?sim.q:c,su=r.precio*qeq/c,mio=acComparable(x0,qeq,ctx,sinEnv);   // a igual cantidad: su precio escalado a mis unidades (lineal)
+      const v={id:r.id,rol:r.rol||'',entidad:r.entidad,precio:r.precio,cantidad:c,qeq,su,mio,difPct:(su-mio)/mio*100,masBarato:su<mio,igualar:acPrecioParaIgualar(su,qeq,ctx,sinEnv)};
       out.pubs++;const k=acNormBusq(r.entidad)||r.id,g=por.get(k);
       if(!g)por.set(k,{mejor:v,rol:v.rol,pubs:1});else{g.pubs++;if(v.su<g.mejor.su)g.mejor=v;if(acRolRank(v.rol)<acRolRank(g.rol))g.rol=v.rol;}});
     out.rivales=[...por.values()].map(g=>Object.assign({},g.mejor,{rol:g.rol,pubs:g.pubs})).sort((a,b)=>acRolRank(a.rol)-acRolRank(b.rol)||a.su-b.su);   // UN rival por vendedor (su publicación más barata)
     out.total=out.rivales.length;out.masBaratos=out.rivales.filter(r=>r.masBarato).length;
   }else if(sim.rivalCombo>0){
-    const mio=acComparable(Tc,1,ctx);out.rivalCombo={precio:sim.rivalCombo,mio,difPct:(sim.rivalCombo-mio)/mio*100,masBarato:sim.rivalCombo<mio,igualarX:Math.round((acPrecioParaIgualar(sim.rivalCombo,1,ctx)-otros)/qm)};
+    const mio=acComparable(Tc,1,ctx,sinEnv);out.rivalCombo={precio:sim.rivalCombo,mio,difPct:(sim.rivalCombo-mio)/mio*100,masBarato:sim.rivalCombo<mio,igualarX:Math.round((acPrecioParaIgualar(sim.rivalCombo,1,ctx,sinEnv)-otros)/qm)};
   }
   return out;
 }

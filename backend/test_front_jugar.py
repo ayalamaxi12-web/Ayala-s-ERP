@@ -86,10 +86,10 @@ def test_cantidad_N_multiplica_precio_y_costo_y_escala_al_rival_a_igual_cantidad
     c = r['formas'][0]
     assert r['qm'] == 2 and c['T'] == 40000 and abs(c['m'] - _motor(40000, 20000, 1.21, None)) < 1e-4           # margen del pack: precio y costo × 2
     a, b = r['rivales'][0], r['rivales'][1]
-    assert a['entidad'] == 'GEOTEK' and a['su'] == 49980 and a['mio'] == 48500 and a['masBarato'] is False        # su ×1 escalado a ×2 vs mi ×2 (+ envío desde $33.000)
-    assert b['entidad'] == 'ELEPHANT' and b['su'] == 52000 and b['mio'] == 48500
+    assert a['entidad'] == 'GEOTEK' and a['su'] == 49980 and a['mio'] == 40000 and a['masBarato'] is False        # su ×1 escalado a ×2 vs mi ×2: el precio escrito a mano ya es el final, sin sumarle envío
+    assert b['entidad'] == 'ELEPHANT' and b['su'] == 52000 and b['mio'] == 40000
     auto = _js({'op': 'calcular', 'f': f, 'sim': _sim(px={'contado': 20000})})
-    assert auto['rivales'][0]['mio'] == 20000 and auto['rivales'][1]['mio'] == 48500                               # auto: cada rival a SU cantidad (como antes)
+    assert auto['rivales'][0]['mio'] == 20000 and auto['rivales'][1]['mio'] == 40000                               # auto: cada rival a SU cantidad (como antes), sin envío sobre el precio escrito
 
 
 def test_el_caso_del_usuario_mi_1_unidad_contra_su_pack_x2_ya_no_parece_ganar():
@@ -115,7 +115,7 @@ def test_combo_contra_el_combo_del_rival_cargado_a_mano():
     r = _js({'op': 'calcular', 'f': _fila(), 'sim': _sim(px={'contado': 20000}, extra=[{'key': 'pv-2', 'q': 1, 'x': 14000}], rivalCombo=30000),
              'pm': {'pv-2': {'ml': 15000}}, 'costos': {'pv-2': 6}})
     rc = r['rivalCombo']
-    assert rc['mio'] == 34000 + 8500 and rc['masBarato'] is True and round(rc['difPct'], 1) == -29.4     # 34.000 ≥ $33.000: mi comparable suma el envío, como siempre
+    assert rc['mio'] == 34000 and rc['masBarato'] is True and round(rc['difPct'], 1) == -11.8     # precio escrito a mano = final de venta: no se le suma el envío
     assert rc['igualarX'] == 16000                                           # para igualar 30.000 con el otro SKU a 14.000, este tiene que ir a 16.000
 
 
@@ -165,3 +165,14 @@ def test_comparable_suma_envio_desde_el_umbral_y_multiplica_por_cantidad():
 def test_sin_precio_pm_y_sin_precio_propio_no_calcula():
     r = _js({'op': 'calcular', 'f': _fila(pmML=None), 'sim': _sim()})
     assert r['ok'] is False
+
+
+def test_precio_escrito_a_mano_es_el_final_de_venta_no_se_le_suma_el_envio_pero_el_pm_si():
+    # Caso real 2026-11-24: ×4 a $10.749 = $42.996 (≥ $33.000) comparaba contra $51.496 por sumarle los $8.500 de envío y siempre quedaba «más caro».
+    f = _fila(Rey=[_ref('A', 'Rey', 51496, 4, 'TECNOVIBEARG')], Barato=[_ref('B', 'Barato', 71192, 4, 'WTP')], pmML=10749)
+    propio = _js({'op': 'calcular', 'f': f, 'sim': _sim(q=4, px={'contado': 10749})})
+    a = propio['rivales'][0]
+    assert a['mio'] == 42996 and a['su'] == 51496 and a['masBarato'] is False and round(a['difPct'], 1) == 19.8
+    assert a['igualar'] == 12874                                              # para igualar su precio hay que ir a 51.496 ÷ 4, sin restarle envío
+    pm = _js({'op': 'calcular', 'f': f, 'sim': _sim(q=4)})                    # sin precio escrito: sigue al PM de Ecom, que viene SIN envío → se le suma
+    assert pm['rivales'][0]['mio'] == 42996 + 8500
