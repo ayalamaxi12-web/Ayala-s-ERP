@@ -31,6 +31,7 @@ import ml_ofertas_excel
 import ml_campanas_participar
 import ml_full_candidatos
 import ml_posventa
+import ecom_br_stock
 import ml_respuestas
 from ml_full_foto import router as ml_full_foto_router
 from proyeccion_transito import router as transito_router
@@ -2955,6 +2956,62 @@ async def ml_ofertas_foto_actualizar(background_tasks: BackgroundTasks):
 @app.get("/ml-ofertas/status/{job_id}")
 async def ml_ofertas_status(job_id: str):
     return ml_ofertas.estado_job(job_id) or {"status": "not_found"}
+
+# ══════════════════════════════════════════════════════
+# VERIFICAR ECOM BR — stock del Ecom de Brasil. ETAPA 1: solo lectura (bajar base y simular un Excel). La escritura (etapa 2) NO existe todavía:
+# está bloqueada por la compuerta de escritura de docs/business/COMERCIAL/00_LEEME.md §5. Ver `ecom_br_stock.py` y docs/business/ECOM_BR_STOCK.md.
+# ══════════════════════════════════════════════════════
+
+@app.get("/ecom-br/estado")
+async def ecom_br_estado():
+    return {"configurado": ecom_br_stock.credenciales_configuradas(), "deposito_disponible": ecom_br_stock.deposito_disponible(), "catalogo": ecom_br_stock.resumen_catalogo(),
+            "escritura_habilitada": False, "etapa": 1}
+
+@app.post("/ecom-br/config")
+async def ecom_br_config(request: Request):
+    """Body: {"deposito_disponible": "Good Storage Jaguaré"} -- depósito en el que la cantidad del Excel es DISPONIBLE."""
+    cuerpo = await request.json()
+    try:
+        v = ecom_br_stock.guardar_deposito_disponible(str(cuerpo.get("deposito_disponible") or ""))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"deposito_disponible": v}
+
+def _ecom_br_exigir_credenciales():
+    if not ecom_br_stock.credenciales_configuradas():
+        raise HTTPException(status_code=409, detail="Faltan las variables ECOM_BR_EMAIL y ECOM_BR_PASSWORD en Railway.")
+
+@app.post("/ecom-br/base/run")
+async def ecom_br_base_run(background_tasks: BackgroundTasks):
+    """Baja el catálogo fresco de Ecom Brasil y arma el Excel «Base Stock» (solo lectura)."""
+    _ecom_br_exigir_credenciales()
+    job_id = f"ecombr_base_{int(time.time() * 1000)}"
+    background_tasks.add_task(ecom_br_stock.iniciar_base, job_id)
+    return {"job_id": job_id}
+
+@app.post("/ecom-br/base/descargar")
+async def ecom_br_base_descargar(request: Request):
+    cuerpo = await request.json()
+    datos = ecom_br_stock.archivo_base(str(cuerpo.get("job_id") or ""))
+    if datos is None:
+        raise HTTPException(status_code=404, detail="Ese archivo ya no está disponible (pasaron más de 30 minutos o el servidor se reinició): volvé a apretar «Bajar base».")
+    return Response(content=datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="base_stock_ecom_br.xlsx"'})
+
+@app.post("/ecom-br/excel/simular")
+async def ecom_br_excel_simular(background_tasks: BackgroundTasks, archivo: UploadFile = File(...)):
+    """Lee el Excel y muestra qué pasaría (estado por fila, stock y disponible actual, disponible pedido, diferencia). NO escribe nada."""
+    _ecom_br_exigir_credenciales()
+    contenido = await archivo.read()
+    if not contenido:
+        raise HTTPException(status_code=422, detail="El archivo está vacío.")
+    job_id = f"ecombr_sim_{int(time.time() * 1000)}"
+    background_tasks.add_task(ecom_br_stock.iniciar_simulacion, job_id, contenido)
+    return {"job_id": job_id}
+
+@app.get("/ecom-br/status/{job_id}")
+async def ecom_br_status(job_id: str):
+    return ecom_br_stock.estado_job(job_id) or {"status": "not_found"}
 
 @app.post("/ml-ofertas/relampago/run")
 async def ml_ofertas_relampago_run(background_tasks: BackgroundTasks, cuenta: str):

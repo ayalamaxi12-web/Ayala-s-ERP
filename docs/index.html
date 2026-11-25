@@ -1119,6 +1119,7 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div class="sidebar-section">
     <div class="sidebar-section-label">Gestión de Precios</div>
     <a href="#" class="sidebar-item" data-page="verificar-ecom" onclick="goPage('verificar-ecom',this);return false;"><span class="icon" data-ico="cart" aria-hidden="true"></span>Verificar Ecom</a>
+    <a href="#" class="sidebar-item" data-page="verificar-ecom-br" onclick="goPage('verificar-ecom-br',this);return false;"><span class="icon" data-ico="warehouse" aria-hidden="true"></span>Verificar Ecom BR</a>
     <a href="#" class="sidebar-item" data-page="verificar-tactica" onclick="goPage('verificar-tactica',this);return false;"><span class="icon" data-ico="check-circle" aria-hidden="true"></span>Verificar Táctica</a>
   </div>
   <div class="sidebar-section">
@@ -1962,6 +1963,31 @@ body[data-nuevo] #page-full-ml .fr-filtro[aria-pressed="true"]{background:var(--
   <div id="rs-res"></div>
 </div>
 
+<!-- VERIFICAR ECOM BR: stock del Ecom de Brasil (otra instancia de EcomExperts, con sus propias claves). ETAPA 1: solo lectura. -->
+<div id="page-verificar-ecom-br" class="page">
+  <div class="cr-cab"><div><h2 class="cr-tit">Verificar Ecom BR</h2><p class="cr-sub">Stock del Ecom de Brasil (otra instancia del mismo sistema, con sus propias claves). Bajás la base en Excel, cargás las cantidades nuevas y ves qué cambiaría antes de tocar nada.</p></div></div>
+  <div class="ofg-nota ofg-nota-aviso"><span><b>Etapa 1: solo lectura.</b> Esta pantalla no escribe nada en el Ecom de Brasil. «Confirmar y aplicar», el historial y «Deshacer» llegan en la etapa 2, que además necesita habilitar la escritura (compuerta de escritura de Comercial).</span></div>
+  <div class="card" style="margin-bottom:14px"><div class="card-title">Conexión</div>
+    <div id="ebr-estado" class="ofx-nota">Cargando…</div>
+    <div class="ofx-fila"><label>Depósito en el que la cantidad es DISPONIBLE<input type="text" id="ebr-deposito" class="fi" style="min-width:280px" placeholder="Good Storage Jaguaré"></label><button type="button" class="btn" onclick="ecomBrGuardarDeposito()">Guardar</button></div>
+    <p class="ofx-nota">En ese depósito la cantidad del Excel es lo que muestra Ecom como disponible (stock total − reservado): al aplicar se le suma lo reservado. En los demás depósitos se escribe el valor tal cual.</p>
+  </div>
+  <div class="card" style="margin-bottom:14px"><div class="card-title">1 · Bajar base</div>
+    <p class="ofx-nota">Excel con una fila por variante y depósito: SKU variante, SKU producto, Título, Depósito, Stock depósito, Reservado, Disponible y «Cantidad nueva» (vacía, para completar).</p>
+    <div class="ofx-fila"><button type="button" class="btn primary" id="ebr-bajar" onclick="ecomBrBajarBase()">⬇ Bajar base</button><span id="ebr-bajar-st" role="status" aria-live="polite" class="ofx-nota"></span></div>
+  </div>
+  <div class="card" style="margin-bottom:14px"><div class="card-title">2 · Subir Excel (vista previa, no escribe nada)</div>
+    <p class="ofx-nota">Las filas con «Cantidad nueva» vacía no se tocan; un 0 pone el stock en cero. Cantidades enteras y sin puntos de miles (1.000 se rechaza por ambigua).</p>
+    <div class="ofx-fila"><label>Excel (.xlsx)<input type="file" id="ebr-archivo" accept=".xlsx" class="fi"></label><button type="button" class="btn primary" id="ebr-simular" onclick="ecomBrSimular()">Simular</button><span id="ebr-sim-st" role="status" aria-live="polite" class="ofx-nota"></span></div>
+    <div id="ebr-log" style="display:none;max-height:90px;overflow-y:auto;font-size:11px;color:var(--texto-suave);margin:6px 0"></div>
+  </div>
+  <div id="ebr-res"></div>
+  <div class="card" style="opacity:.75"><div class="card-title">3 · Aplicar (etapa 2, todavía no disponible)</div>
+    <p class="ofx-nota">«Confirmar y aplicar» (en segundo plano, con respaldo del stock previo y verificación después de cada producto), el historial de corridas y «Deshacer corrida» se agregan en la etapa 2, solo para operadores autorizados.</p>
+    <div class="ofx-fila"><button type="button" class="btn" disabled>Confirmar y aplicar</button><button type="button" class="btn" disabled>Historial de corridas</button><button type="button" class="btn" disabled>Deshacer corrida</button></div>
+  </div>
+</div>
+
 <!-- ACCESOS: usuarios y módulos que ve cada uno (solo admin) -->
 <div id="page-accesos" class="page">
   <div class="cr-cab"><div><h2 class="cr-tit">Accesos</h2><p class="cr-sub">Creá usuarios y tildá a qué módulos entra cada uno: en su ERP solo van a aparecer los tildados. Los administradores ven todo.</p></div></div>
@@ -2619,7 +2645,7 @@ function ico(n,sz){sz=sz||16;return `<svg aria-hidden="true" focusable="false" w
 function icoHidratar(root){(root||document).querySelectorAll('[data-ico]').forEach(e=>{if(!e.firstChild)e.innerHTML=ico(e.getAttribute('data-ico'),parseInt(e.getAttribute('data-size'))||18);});}
 icoHidratar();
 const MODULO_MK={'verificar-ml':'ml','full-ml':'ml','ofertas-margen':'ml','ofertas-ml':'ml','campanas-ml':'ml','analisis-competencia':'ml','fravega':'fravega','megatone':'megatone','oncity':'oncity'};   // páginas de la sección Mercado Libre → tema ml (barra «GLOBAL × Mercado Libre», ítem activo, botones y encabezados en amarillo/azul de ML); los demás marketplaces, cuando existan sus módulos
-const PAGINAS_ESTILO_NUEVO=new Set(['ventas-hoy','ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','fravega','megatone','oncity','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
+const PAGINAS_ESTILO_NUEVO=new Set(['ventas-hoy','ayala-core','pricing','verificar-ecom','verificar-tactica','dashboard','historico','cobranzas','brasil','fravega','megatone','oncity','analisis-competencia','verificar-ml','full-ml','ofertas-margen','ofertas-ml','campanas-ml','intel-entidades','intel-referencias','intel-mix','distribucion','proyeccion','config','reglas','mltools','verificar-ecom-br']);   // páginas con la capa de estilo compartida (body[data-nuevo]); el resto sigue con el estilo oscuro viejo hasta su PR
 
 // Rename visual de cuentas -- pedido de Maxx 2026-09-17: "IT"/"MT" pasan a
 // verse como "Group"/"Arg" en pantalla. SOLO texto visible -- las claves
@@ -2920,6 +2946,7 @@ function goPage(page,el){
   if(PAGINAS_ESTILO_NUEVO.has(page))document.body.dataset.nuevo='1';else delete document.body.dataset.nuevo;
   {const tm=qs('tb-modulo');if(tm)tm.textContent=el?el.textContent.replace('⧉','').trim():'';}
   qs('dash-filters-bar').style.display=(DASH_PAGES.includes(page)&&page!=='brasil'&&page!=='dashboard')?'flex':'none';
+  {const rq=qs('rq-sec');if(rq)rq.style.display=(page==='dashboard'&&ventasTab==='hist')?'':'none';}      // el rechequeo de ventas solo se ve en Ventas & Rentabilidad
   qs('brasil-filters-bar').style.display=page==='brasil'?'flex':'none';
   qs('rent-query-bar').style.display=(page==='dashboard'&&VENTAS_EN_VIVO)?'block':'none';
   qs('ventas-tabs-bar').style.display=(page==='dashboard'&&VENTAS_EN_VIVO)?'flex':'none';
@@ -2938,6 +2965,7 @@ function goPage(page,el){
   if(page==='brasil'&&!brLoaded)loadBrasil();
   if(page==='verificar-ecom')renderEcom();
   if(page==='verificar-ml')renderML();
+  if(page==='verificar-ecom-br')ecomBrIniciar();
   if(page==='verificar-tactica')renderTactica();
   if(page==='analisis-competencia')acEntrar();
   if(page==='intel-entidades'&&!entidadesPageLoaded)loadEntidadesPage();
@@ -5619,6 +5647,81 @@ async function rechequeoConfirmar(){
     RQ.revision=null;qs('rq-estado').textContent='';rechequeoPintar({...res,detalle:[],ejecutado:true,pestana:res.pestana});
     try{localStorage.removeItem('dash_cache');}catch(e){}
   }catch(e){qs('rq-estado').textContent='No se pudo agregar: '+e.message;if(b)b.disabled=false;}
+}
+
+
+// ── Verificar Ecom BR (backend: ecom_br_stock.py, /ecom-br/*). ETAPA 1: solo lectura (bajar base y simular un Excel). No existe ninguna llamada que escriba en el Ecom de Brasil. ──
+let EBR={sim:null};
+async function ecomBrIniciar(){
+  const url=getBackendUrl(),el=qs('ebr-estado');if(!el)return;
+  if(!url){el.textContent='Configurá la URL del backend primero.';return;}
+  try{
+    const e=await (await fetch(url+'/ecom-br/estado')).json();
+    qs('ebr-deposito').value=e.deposito_disponible||'';
+    const c=e.catalogo;
+    el.innerHTML=`${e.configurado?'<span class="ofx-chip" data-e="ok">Credenciales de Brasil cargadas</span>':'<span class="ofx-chip" data-e="no">Faltan ECOM_BR_EMAIL / ECOM_BR_PASSWORD en Railway</span>'} · ${c?`catálogo leído ${acEsc(new Date(c.obtenido_en).toLocaleString('es-AR'))}: ${c.productos} productos, ${c.variantes} variantes, ${c.depositos.length} depósitos (${c.depositos.map(acEsc).join(', ')})`:'todavía no se leyó el catálogo en esta sesión del servidor'}`;
+  }catch(err){el.textContent='No se pudo consultar el backend: '+err.message;}
+}
+async function ecomBrGuardarDeposito(){
+  const url=getBackendUrl(),v=(qs('ebr-deposito').value||'').trim();if(!url||!v){toast('Escribí el nombre del depósito','error');return;}
+  try{const r=await fetch(url+'/ecom-br/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deposito_disponible:v})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));toast('Depósito guardado');ecomBrIniciar();}catch(e){toast('No se guardó: '+e.message,'error');}
+}
+async function ecomBrBajarBase(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const btn=qs('ebr-bajar'),st=qs('ebr-bajar-st'),log=qs('ebr-log'),rot='⬇ Bajar base';
+  btn.disabled=true;btn.textContent='● bajando...';st.textContent='Iniciando…';log.style.display='block';log.innerHTML='';
+  try{
+    const r=await fetch(url+'/ecom-br/base/run',{method:'POST'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ecom-br/status/${job_id}`,log,st,btn,rot,async res=>{
+      try{const d=await fetch(url+'/ecom-br/base/descargar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_id})});
+        if(!d.ok)throw new Error((await d.json().catch(()=>({}))).detail||('Error '+d.status));
+        const a=document.createElement('a');a.href=URL.createObjectURL(await d.blob());a.download=`base_stock_ecom_br_${new Date().toISOString().slice(0,10)}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+        st.textContent=`Listo: ${res.filas} filas (${res.variantes} variantes). Se descargó el Excel.`;ecomBrIniciar();}catch(e){st.textContent='No se pudo descargar: '+e.message;}
+    });
+  }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent=rot;}
+}
+async function ecomBrSimular(){
+  const url=getBackendUrl();if(!url){alert('Configurá la URL del backend primero');return;}
+  const f=qs('ebr-archivo').files[0];if(!f){toast('Elegí el Excel primero','error');return;}
+  const btn=qs('ebr-simular'),st=qs('ebr-sim-st'),log=qs('ebr-log');
+  btn.disabled=true;btn.textContent='● simulando...';st.textContent='Subiendo…';log.style.display='block';log.innerHTML='';qs('ebr-res').innerHTML='';
+  try{
+    const fd=new FormData();fd.append('archivo',f);
+    const r=await fetch(url+'/ecom-br/excel/simular',{method:'POST',body:fd});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||('Error '+r.status));
+    const{job_id}=await r.json();
+    pollFullJob(`${url}/ecom-br/status/${job_id}`,log,st,btn,'Simular',res=>{EBR.sim=res;ecomBrPintar();st.textContent='Listo: vista previa abajo. No se escribió nada.';});
+  }catch(e){st.textContent='No se pudo: '+e.message;btn.disabled=false;btn.textContent='Simular';}
+}
+const EBR_ESTADO={cambia:['lista','Cambiaría'],sin_cambio:['ok','Sin cambio'],error:['no','Con error']};
+function ecomBrPintar(){
+  const r=EBR.sim,cont=qs('ebr-res');if(!r)return;
+  if(r.errores&&r.errores.length){cont.innerHTML=`<div class="card" style="margin-bottom:14px"><div class="ofx-bloq">${r.errores.map(acEsc).join('<br>')}</div></div>`;return;}
+  const s=r.resumen,k=(t,v,sub,col)=>`<div class="card" style="min-width:140px;flex:1;margin:0"><div class="ofx-nota">${t}</div><div style="font-size:22px;font-weight:700;${col?'color:var(--'+col+')':''}">${v}</div>${sub?`<div class="ofx-nota">${sub}</div>`:''}</div>`;
+  cont.innerHTML=`<div class="card" style="margin-bottom:14px"><div class="card-title">Vista previa (no se escribió nada)</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 10px">${k('Cambiarían',s.a_cambiar,s.variantes+' variantes · '+s.productos+' productos')}${k('Sin cambio',s.sin_cambio)}${k('Con error',s.con_error,'no se aplicarían',s.con_error?'error-texto':'')}${k('Con aviso',s.con_aviso)}${k('Sin cantidad',s.omitidas_sin_cantidad,'filas que no se tocan')}</div>
+    <p class="ofx-nota">Disponible = lo que muestra Ecom (stock total − reservado). En «${acEsc(s.deposito_disponible)}» la cantidad pedida es disponible y se escribiría cantidad + reservado; en los demás depósitos, el valor tal cual. Stock leído de Ecom ${acEsc(new Date(r.catalogo_obtenido_en).toLocaleString('es-AR'))}.</p>
+    <div class="ofx-fila"><label>Ver<select id="ebr-filtro" class="fi" onchange="ecomBrTabla()"><option value="todas">Todas</option><option value="cambia">Cambiarían</option><option value="sin_cambio">Sin cambio</option><option value="error">Con error</option><option value="aviso">Con aviso</option></select></label><label>Buscar<input id="ebr-buscar" class="fi" placeholder="SKU, título o depósito" oninput="ecomBrTabla()"></label><button type="button" class="btn" onclick="ecomBrCsv()">⬇ CSV de la vista previa</button><span id="ebr-n" class="ofx-nota"></span></div>
+    <div class="table-wrap" id="ebr-tw"><table class="ofm-tabla"><thead><tr><th>Fila</th><th>SKU variante</th><th>Título</th><th>Depósito</th><th>Estado</th><th style="text-align:right">Stock actual</th><th style="text-align:right">Reservado</th><th style="text-align:right">Disponible actual</th><th style="text-align:right">Disponible pedido</th><th style="text-align:right">Diferencia</th><th style="text-align:right">Se escribiría</th><th>Detalle</th></tr></thead><tbody id="ebr-tb"></tbody></table></div></div>`;
+  ecomBrTabla();
+}
+function ecomBrFiltradas(){
+  const r=EBR.sim;if(!r)return[];const fl=(qs('ebr-filtro')||{}).value||'todas',b=((qs('ebr-buscar')||{}).value||'').toLowerCase().trim();
+  return r.filas.filter(f=>(fl==='todas'||f.estado===fl||(fl==='aviso'&&f.avisos&&f.avisos.length))&&(!b||[f.sku,f.titulo,f.deposito].some(x=>String(x||'').toLowerCase().includes(b))));
+}
+function ecomBrTabla(){
+  const filas=ecomBrFiltradas(),n=x=>x==null?'—':Number(x).toLocaleString('es-AR');
+  qs('ebr-n').textContent=`${filas.length} de ${EBR.sim.filas.length}`;
+  qs('ebr-tb').innerHTML=filas.slice(0,500).map(f=>{const[e,t]=EBR_ESTADO[f.estado]||['pend',f.estado],dif=f.diferencia;
+    return `<tr><td>${f.fila}</td><td>${acEsc(f.sku)}</td><td title="${acEsc(f.titulo)}">${acEsc((f.titulo||'').slice(0,40))}</td><td>${acEsc(f.deposito)}</td><td><span class="ofx-chip" data-e="${e}">${t}</span></td><td style="text-align:right">${n(f.stock_actual)}</td><td style="text-align:right">${n(f.reservado)}</td><td style="text-align:right">${n(f.disponible_actual)}</td><td style="text-align:right"><b>${n(f.disponible_pedido)}</b></td><td style="text-align:right;${dif>0?'color:var(--ok-texto)':dif<0?'color:var(--error-texto)':''}">${dif==null?'—':(dif>0?'+':'')+n(dif)}</td><td style="text-align:right">${n(f.stock_a_escribir)}</td><td style="white-space:normal;max-width:360px;${f.estado==='error'?'color:var(--error-texto)':''}">${acEsc(f.mensaje||'')}</td></tr>`;}).join('')||'<tr><td colspan="12" style="text-align:center;padding:18px;color:var(--texto-suave)">No hay filas con ese filtro.</td></tr>';
+  if(filas.length>500)qs('ebr-n').textContent+=' (se muestran 500; el CSV trae todas las filtradas)';
+}
+function ecomBrCsv(){
+  const filas=ecomBrFiltradas();if(!filas.length)return;const cols=['fila','sku','titulo','deposito','estado','stock_actual','reservado','disponible_actual','disponible_pedido','diferencia','stock_a_escribir','mensaje'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+cols.join(';')+'\n'+filas.map(f=>cols.map(c=>q(f[c])).join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));a.download='vista_previa_ecom_br.csv';a.click();
 }
 
 // ── Candidatos a Full (backend: ml_full_candidatos.py): publicaciones activas con ventas que todavía no son de Full. Solo lectura. ──
@@ -8486,6 +8589,7 @@ function goVentasTab(tab){
   bh.style.borderBottomColor=tab==='hist'?'var(--accent)':'transparent';bh.style.opacity=tab==='hist'?'1':'.6';
   bv.style.borderBottomColor=tab==='vivo'?'var(--accent)':'transparent';bv.style.opacity=tab==='vivo'?'1':'.6';
   qs('dash-filters-bar').style.display=tab==='hist'?'flex':'none';
+  {const rq=qs('rq-sec');if(rq)rq.style.display=tab==='hist'?'':'none';}
   qs('vivo-filters-bar').style.display=tab==='vivo'?'flex':'none';
   qs('page-dashboard').style.display=tab==='hist'?'flex':'none';
   qs('page-dashboard-vivo').style.display=tab==='vivo'?'flex':'none';

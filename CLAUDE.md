@@ -129,6 +129,7 @@ Sidebar pages, grouped by what they do:
 - **Ventas & Rentabilidad / Histórico / Cobranzas / Brasil** — sales dashboards built from the
   `DASH_SHEET_ID` sheet (multiple monthly tabs listed in `DASH_SHEETS`), with client-side filtering
   (date range, canal, categoria, PM, SKU) and Chart.js visualizations.
+- **Verificar Ecom BR** — stock del Ecom de Brasil (otra instancia de EcomExperts; credenciales `ECOM_BR_EMAIL`/`ECOM_BR_PASSWORD`; `backend/ecom_br_stock.py`, `/ecom-br/*`; ver `docs/business/ECOM_BR_STOCK.md`). **Etapa 1 = solo lectura** (bajar base en Excel y simular un Excel de cantidades nuevas); la escritura (etapa 2) está bloqueada por la compuerta de `docs/business/COMERCIAL/00_LEEME.md` §5 hasta que se la habilite expresamente.
 - **Verificar Ecom / Táctica / ML** — the price-reconciliation pages described above (Ecom's
   comparison table has Web and Fravega price-list columns built in — those are not separate pages);
   each has its own `render*()` function, its own sort/pagination state on `S`, and (for Ecom/ML)

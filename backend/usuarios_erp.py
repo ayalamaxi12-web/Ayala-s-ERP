@@ -27,7 +27,7 @@ MODULOS = [
     ("dashboard", "Ventas & Rentabilidad", "Dashboard"), ("ventas-hoy", "Ventas de hoy", "Dashboard"), ("historico", "Histórico de Unidades", "Dashboard"),
     ("cobranzas", "Cobranzas", "Dashboard"), ("brasil", "Brasil", "Dashboard"),
     ("ayala-core", "Motor de Precios", "Ayala Core"),
-    ("verificar-ecom", "Verificar Ecom", "Gestión de Precios"), ("verificar-tactica", "Verificar Táctica", "Gestión de Precios"),
+    ("verificar-ecom", "Verificar Ecom", "Gestión de Precios"), ("verificar-ecom-br", "Verificar Ecom BR", "Gestión de Precios"), ("verificar-tactica", "Verificar Táctica", "Gestión de Precios"),
     ("full-ml", "Full ML", "Mercado Libre"), ("posventa-ml", "Posventa ML", "Mercado Libre"), ("ofertas-margen", "Precios y ofertas ML", "Mercado Libre"), ("campanas-ml", "Campañas ML", "Mercado Libre"),
     ("analisis-competencia", "Análisis de Competencia", "Mercado Libre"),
     ("fravega", "Frávega", "Otros markets"), ("megatone", "Megatone", "Otros markets"), ("oncity", "OnCity", "Otros markets"),
